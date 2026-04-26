@@ -17,8 +17,8 @@ export class GamePackLoader {
   /** 包的基础路径（相对于站点根目录） */
   private basePath: string;
 
-  constructor(basePath: string = '/packs') {
-    this.basePath = basePath;
+  constructor(basePath?: string) {
+    this.basePath = basePath ?? `${import.meta.env.BASE_URL}packs`.replace(/\/\//g, '/');
   }
 
   /** 加载指定 Game Pack — 返回完整的运行时 GamePack 对象 */
