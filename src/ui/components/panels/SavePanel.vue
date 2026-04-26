@@ -764,6 +764,57 @@ if (githubSync?.isConfigured()) {
   })();
 }
 
+// ─── LAN Sync ────────────────────────────────────────────────
+
+import type { LanSyncService } from '@/engine/sync/lan-sync';
+
+const lanSync = inject<LanSyncService>('lanSync');
+const lanAvailable = ref(false);
+const lanEnabled = ref(lanSync?.isEnabled() ?? true);
+const lanStatus = ref('');
+const lanBusy = ref(false);
+
+if (lanSync) {
+  void lanSync.isAvailable().then((v) => { lanAvailable.value = v; });
+}
+
+function lanToggle(): void {
+  lanEnabled.value = !lanEnabled.value;
+  lanSync?.setEnabled(lanEnabled.value);
+}
+
+async function lanUpload(): Promise<void> {
+  if (!lanSync || lanBusy.value) return;
+  lanBusy.value = true;
+  lanStatus.value = '';
+  try {
+    const result = await lanSync.upload();
+    const kb = Math.round(result.size / 1024);
+    lanStatus.value = `已上传 (${kb} KB)`;
+    eventBus.emit('ui:toast', { type: 'success', message: `内网中继已上传 ${kb} KB`, duration: 2000 });
+  } catch (err) {
+    lanStatus.value = err instanceof Error ? err.message : '上传失败';
+  } finally {
+    lanBusy.value = false;
+  }
+}
+
+async function lanDownload(): Promise<void> {
+  if (!lanSync || lanBusy.value) return;
+  lanBusy.value = true;
+  lanStatus.value = '';
+  try {
+    await lanSync.download();
+    sessionStorage.setItem('aga_post_import_resume', '1');
+    eventBus.emit('ui:toast', { type: 'success', message: '内网存档恢复成功，即将刷新…', duration: 2000 });
+    setTimeout(() => window.location.reload(), 1500);
+  } catch (err) {
+    lanStatus.value = err instanceof Error ? err.message : '下载失败';
+  } finally {
+    lanBusy.value = false;
+  }
+}
+
 // ─── UI state ─────────────────────────────────────────────────
 
 const showSettings = ref(false);
@@ -887,6 +938,33 @@ const showSettings = ref(false);
 
             <p v-if="ghStatus.stage === 'error'" class="gh-error">{{ ghStatus.message }}</p>
             <p v-else-if="ghStatus.stage !== 'idle' && ghStatus.stage !== 'done' && ghStatus.message" class="gh-status-msg">{{ ghStatus.message }}</p>
+          </div>
+
+          <!-- ── LAN Sync (dev mode only) ── -->
+          <div v-if="lanAvailable" class="gh-section">
+            <div class="gh-header">
+              <p class="settings-title">内网中继</p>
+              <label class="lan-toggle-label">
+                <input type="checkbox" :checked="lanEnabled" @change="lanToggle" class="lan-toggle-cb" />
+                <span class="lan-toggle-text">{{ lanEnabled ? '已启用' : '已关闭' }}</span>
+              </label>
+            </div>
+            <template v-if="lanEnabled">
+              <p class="settings-hint">
+                同一 WiFi 下的设备可通过此中继互传存档。数据仅存在于开发服务器内存中，关闭终端即清除。
+              </p>
+              <div class="gh-actions" style="margin-top: 8px">
+                <button class="gh-action-btn gh-action-btn--up" :disabled="lanBusy" @click="lanUpload">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
+                  {{ lanBusy ? '处理中…' : '上传到中继' }}
+                </button>
+                <button class="gh-action-btn gh-action-btn--down" :disabled="lanBusy" @click="lanDownload">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
+                  {{ lanBusy ? '处理中…' : '从中继下载' }}
+                </button>
+              </div>
+              <p v-if="lanStatus" class="gh-status-msg">{{ lanStatus }}</p>
+            </template>
           </div>
 
           <!-- 2026-04-14 Phase 5：自定义预设独立导出/导入（创意素材包） -->
@@ -1380,6 +1458,19 @@ const showSettings = ref(false);
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .gh-copy-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); color: var(--color-text-primary, #e0e0e8); }
+.lan-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.lan-toggle-cb {
+  accent-color: var(--color-success, #22c55e);
+}
+.lan-toggle-text {
+  color: var(--color-text-secondary, #8888a0);
+}
 .gh-error {
   margin: 6px 0 0;
   font-size: 0.72rem;

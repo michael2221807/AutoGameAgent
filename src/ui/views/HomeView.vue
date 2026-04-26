@@ -478,10 +478,14 @@ onMounted(async () => {
       避免视觉上双重标题。Modal 仍有右上角关闭按钮（closable 默认 true）。
     -->
     <Modal v-model="showApiModal" width="760px">
-      <APIPanel />
+      <div class="modal-panel-wrap">
+        <APIPanel />
+      </div>
     </Modal>
     <Modal v-model="showSettingsModal" width="760px">
-      <SettingsPanel />
+      <div class="modal-panel-wrap">
+        <SettingsPanel />
+      </div>
     </Modal>
 
     <!-- Cloud Sync modal -->
@@ -1001,6 +1005,21 @@ onMounted(async () => {
     width: 100%;
     text-align: center;
   }
+}
+
+/* ── Panel-in-modal override ──
+   SettingsPanel/APIPanel use `position: absolute; inset: 0` for the game layout.
+   Inside a modal we need them to flow normally instead. */
+.modal-panel-wrap {
+  position: relative;
+  height: 70vh;
+}
+.modal-panel-wrap :deep(.settings-panel),
+.modal-panel-wrap :deep(.api-panel) {
+  position: absolute;
+  inset: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* ── Cloud Sync ── */

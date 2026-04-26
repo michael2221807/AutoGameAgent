@@ -94,6 +94,7 @@ import { SaveManager } from './engine/persistence/save-manager';
 import { BackupService } from './engine/persistence/backup-service';
 import { ImageAssetCache } from './engine/image/asset-cache';
 import { GitHubSyncService } from './engine/sync/github-sync';
+import { LanSyncService } from './engine/sync/lan-sync';
 import { PromptStorage } from './engine/prompt/prompt-storage';
 import { VectorStore } from './engine/memory/engram/vector-store';
 import { CustomPresetStore } from './engine/persistence/custom-preset-store';
@@ -575,6 +576,9 @@ async function bootstrap(): Promise<void> {
 
   const githubSync = new GitHubSyncService(backupService);
   app.provide('githubSync', githubSync);
+
+  const lanSync = new LanSyncService(backupService);
+  app.provide('lanSync', lanSync);
 
   // ── 2026-04-14：AI 助手 service ──
   // 复用现有 aiService（按 usageType='assistant' 路由 API 配置）。
