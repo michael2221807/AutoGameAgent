@@ -119,15 +119,22 @@ export class GitHubSyncService {
     const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
     const { owner, repo } = this.resolveTarget();
 
-    emit('downloading', '正在从 GitHub 下载…');
+    emit('downloading', '正在获取下载地址…');
 
-    // Use raw media type to support files > 1MB (Contents API returns encoding: "none" for large files)
-    const res = await fetch(`${API}/repos/${owner}/${repo}/contents/${SAVE_PATH}`, {
-      headers: {
-        Authorization: `Bearer ${this.getToken()}`,
-        Accept: 'application/vnd.github.raw+json',
-        'X-GitHub-Api-Version': API_VERSION,
-      },
+    // Step 1: Get file metadata (includes download_url, works for any file size)
+    const meta = await this.get<{ download_url: string }>(
+      `/repos/${owner}/${repo}/contents/${SAVE_PATH}`,
+    );
+
+    if (!meta.download_url) {
+      throw new Error('无法获取文件下载地址');
+    }
+
+    emit('downloading', '正在下载存档…');
+
+    // Step 2: Fetch raw content from raw.githubusercontent.com (no size limit, no encoding issues)
+    const res = await fetch(meta.download_url, {
+      headers: { Authorization: `Bearer ${this.getToken()}` },
     });
     if (!res.ok) throw new ApiError(res.status, await safeBody(res));
 
