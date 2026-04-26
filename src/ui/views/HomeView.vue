@@ -30,6 +30,8 @@ import { useEngineStateStore } from '@/engine/stores/engine-state';
 import Modal from '@/ui/components/common/Modal.vue';
 import APIPanel from '@/ui/components/panels/APIPanel.vue';
 import SettingsPanel from '@/ui/components/panels/SettingsPanel.vue';
+import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
+import { eventBus } from '@/engine/core/event-bus';
 
 const router = useRouter();
 const engineState = useEngineStateStore();
@@ -253,6 +255,76 @@ async function tryAutoResumeAfterImport(): Promise<void> {
   await loadProfileSlot(profile, slot);
 }
 
+// ─── GitHub Cloud Sync ───────────────────────────────────────
+
+const githubSync = inject<GitHubSyncService>('githubSync');
+const showSyncModal = ref(false);
+const ghToken = ref(githubSync?.getToken() ?? '');
+const ghRepoName = ref(githubSync?.getRepoName() ?? 'aga-cloud-save');
+const ghStatus = ref<SyncStatus>({ stage: 'idle', message: '' });
+const ghConnected = ref(false);
+const ghOwner = ref('');
+const ghCloudInfo = ref<{ exists: boolean; updatedAt?: string; sizeKB?: number } | null>(null);
+const ghShowToken = ref(false);
+
+const ghEditingRepo = ref(false);
+const ghBusy = () => ['checking', 'uploading', 'downloading'].includes(ghStatus.value.stage);
+
+async function ghSwitchRepo(): Promise<void> {
+  if (!githubSync || ghBusy()) return;
+  githubSync.setRepoName(ghRepoName.value);
+  ghEditingRepo.value = false;
+  ghCloudInfo.value = null;
+  ghStatus.value = { stage: 'checking', message: '检查新仓库…' };
+  const result = await githubSync.validate();
+  if (result.ok) {
+    ghStatus.value = { stage: 'idle', message: '' };
+    try { ghCloudInfo.value = await githubSync.getCloudInfo(); } catch { ghCloudInfo.value = null; }
+  } else {
+    ghStatus.value = { stage: 'error', message: result.error ?? '仓库不可访问' };
+  }
+}
+
+async function ghConnect(): Promise<void> {
+  if (!githubSync || !ghToken.value.trim()) return;
+  githubSync.setToken(ghToken.value);
+  githubSync.setRepoName(ghRepoName.value);
+  ghStatus.value = { stage: 'checking', message: '验证连接…' };
+  const result = await githubSync.validate();
+  if (result.ok) {
+    ghConnected.value = true;
+    ghOwner.value = githubSync.getOwner();
+    ghStatus.value = { stage: 'idle', message: '' };
+    try { ghCloudInfo.value = await githubSync.getCloudInfo(); } catch { ghCloudInfo.value = null; }
+  } else {
+    ghStatus.value = { stage: 'error', message: result.error ?? '连接失败' };
+  }
+}
+
+async function ghDownloadToLocal(): Promise<void> {
+  if (!githubSync || ghBusy()) return;
+  try {
+    await githubSync.download((s) => { ghStatus.value = s; });
+    sessionStorage.setItem('aga_post_import_resume', '1');
+    eventBus.emit('ui:toast', { type: 'success', message: '云存档恢复成功，即将刷新…', duration: 2000 });
+    setTimeout(() => window.location.reload(), 1500);
+  } catch (err) {
+    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : '下载失败' };
+  }
+}
+
+// Auto-connect on mount if previously configured
+if (githubSync?.isConfigured()) {
+  void (async () => {
+    const result = await githubSync.validate();
+    if (result.ok) {
+      ghConnected.value = true;
+      ghOwner.value = githubSync.getOwner();
+      try { ghCloudInfo.value = await githubSync.getCloudInfo(); } catch { /* */ }
+    }
+  })();
+}
+
 onMounted(async () => {
   if (profileManager) {
     profiles.value = profileManager.listProfiles();
@@ -308,6 +380,14 @@ onMounted(async () => {
           <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
         </svg>
         设置
+      </button>
+      <button class="btn btn-ghost" @click="showSyncModal = true" :disabled="isLoading">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+          <path d="M8 0a8.2 8.2 0 0 0-2.6.4.75.75 0 0 0 .5 1.42A6.7 6.7 0 0 1 8 1.5a6.5 6.5 0 0 1 0 13 6.7 6.7 0 0 1-2.1-.34.75.75 0 0 0-.5 1.42A8.2 8.2 0 0 0 8 16a8 8 0 1 0 0-16"/>
+          <path d="M5.97 4.22a.75.75 0 0 0-1.06 1.06L6.44 6.8H.75a.75.75 0 0 0 0 1.5h5.69L4.91 9.84a.75.75 0 1 0 1.06 1.06l2.75-2.75a.75.75 0 0 0 .22-.53V7.5a.75.75 0 0 0-.22-.53z"/>
+        </svg>
+        云存档
+        <span v-if="ghConnected" class="sync-dot" />
       </button>
     </nav>
 
@@ -388,6 +468,115 @@ onMounted(async () => {
     </Modal>
     <Modal v-model="showSettingsModal" width="760px">
       <SettingsPanel />
+    </Modal>
+
+    <!-- Cloud Sync modal -->
+    <Modal v-model="showSyncModal" width="420px">
+      <div class="sync-modal">
+        <!-- Header -->
+        <div class="sync-modal-header">
+          <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" class="sync-modal-icon">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          <div>
+            <h3 class="sync-modal-title">云存档</h3>
+            <p class="sync-modal-sub">跨设备同步你的游戏存档</p>
+          </div>
+        </div>
+
+        <!-- Not connected: config form -->
+        <template v-if="!ghConnected">
+          <div class="sync-form">
+            <div class="sync-field">
+              <label class="sync-label">Personal Access Token</label>
+              <div class="sync-token-row">
+                <input
+                  :type="ghShowToken ? 'text' : 'password'"
+                  class="sync-input sync-input--mono"
+                  v-model="ghToken"
+                  placeholder="github_pat_..."
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                <button class="sync-eye" @click="ghShowToken = !ghShowToken" tabindex="-1">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z"/><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="sync-field">
+              <label class="sync-label">仓库名称</label>
+              <input class="sync-input" v-model="ghRepoName" placeholder="aga-cloud-save" spellcheck="false" />
+            </div>
+          </div>
+          <p class="sync-footnote">
+            需要一个 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" class="sync-link">Fine-grained Token</a>，
+            权限 Contents Read &amp; Write，仅限同步仓库。仓库需提前手动创建。
+          </p>
+          <button class="sync-connect-btn" @click="ghConnect" :disabled="ghBusy() || !ghToken.trim()">
+            <template v-if="ghStatus.stage === 'checking'">
+              <span class="sync-spinner" /> 验证中…
+            </template>
+            <template v-else>连接 GitHub</template>
+          </button>
+        </template>
+
+        <!-- Connected: sync actions -->
+        <template v-else>
+          <div class="sync-status-card">
+            <div class="sync-status-left">
+              <div class="sync-avatar">{{ ghOwner.charAt(0).toUpperCase() }}</div>
+              <div class="sync-meta">
+                <span class="sync-username">{{ ghOwner }}</span>
+                <div class="sync-repo-row">
+                  <template v-if="!ghEditingRepo">
+                    <span class="sync-reponame">{{ ghRepoName }}</span>
+                    <button class="sync-repo-edit" @click="ghEditingRepo = true" title="更换仓库">
+                      <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758z"/></svg>
+                    </button>
+                  </template>
+                  <template v-else>
+                    <input class="sync-repo-input" v-model="ghRepoName" spellcheck="false" @keydown.enter="ghSwitchRepo" />
+                    <button class="sync-repo-confirm" @click="ghSwitchRepo" :disabled="ghBusy()">
+                      <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0"/></svg>
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <button class="sync-disconnect" @click="ghConnected = false; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" title="断开连接">
+              断开
+            </button>
+          </div>
+
+          <div class="sync-cloud-card">
+            <template v-if="ghCloudInfo?.exists">
+              <div class="sync-cloud-label">云端存档</div>
+              <div class="sync-cloud-detail">
+                {{ ghCloudInfo.updatedAt ? new Date(ghCloudInfo.updatedAt).toLocaleString() : '未知时间' }}
+                <span class="sync-cloud-size">{{ ghCloudInfo.sizeKB ?? 0 }} KB</span>
+              </div>
+            </template>
+            <template v-else-if="ghCloudInfo">
+              <div class="sync-cloud-label">云端暂无存档</div>
+              <div class="sync-cloud-detail">上传后即可在其他设备下载</div>
+            </template>
+            <template v-else>
+              <div class="sync-cloud-label">正在检查云端…</div>
+            </template>
+          </div>
+
+          <div class="sync-actions">
+            <button class="sync-action sync-action--download" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghDownloadToLocal">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
+              {{ ghStatus.stage === 'downloading' ? '下载中…' : '下载到本地' }}
+            </button>
+          </div>
+        </template>
+
+        <!-- Status / error -->
+        <p v-if="ghStatus.stage === 'error'" class="sync-error">{{ ghStatus.message }}</p>
+        <p v-else-if="!['idle','done'].includes(ghStatus.stage) && ghStatus.message" class="sync-progress">{{ ghStatus.message }}</p>
+      </div>
     </Modal>
   </div>
 </template>
@@ -787,5 +976,300 @@ onMounted(async () => {
     width: 100%;
     text-align: center;
   }
+}
+
+/* ── Cloud Sync ── */
+.sync-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-sage-400);
+  margin-left: 2px;
+  vertical-align: middle;
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 50%, transparent);
+}
+.sync-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sync-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sync-modal-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+.sync-modal-title {
+  font-family: var(--font-serif-cjk);
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--color-text);
+  margin: 0;
+}
+.sync-modal-sub {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin: 2px 0 0;
+}
+.sync-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sync-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  letter-spacing: 0.03em;
+}
+.sync-input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--duration-normal) var(--ease-out);
+}
+.sync-input:focus {
+  border-color: color-mix(in oklch, var(--color-sage-400) 40%, var(--color-border));
+}
+.sync-input--mono { font-family: var(--font-mono); font-size: 0.78rem; }
+.sync-token-row {
+  display: flex;
+  gap: 4px;
+}
+.sync-token-row .sync-input { flex: 1; }
+.sync-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color var(--duration-normal) var(--ease-out), color var(--duration-normal) var(--ease-out);
+}
+.sync-eye:hover { border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border)); color: var(--color-text-secondary); }
+.sync-footnote {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+.sync-link {
+  color: var(--color-sage-400);
+  text-decoration: none;
+}
+.sync-link:hover { text-decoration: underline; }
+.sync-connect-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: var(--color-sage-400);
+  color: var(--color-bg);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-normal) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+.sync-connect-btn:hover:not(:disabled) { background: var(--color-sage-300); }
+.sync-connect-btn:active:not(:disabled) { transform: scale(0.98); }
+.sync-connect-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Connected state */
+.sync-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+.sync-status-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sync-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--color-sage-400) 15%, var(--color-surface));
+  color: var(--color-sage-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-serif-cjk);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.sync-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sync-username {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.sync-reponame {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+.sync-repo-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sync-repo-edit {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color var(--duration-normal) var(--ease-out);
+}
+.sync-repo-edit:hover { color: var(--color-text-secondary); }
+.sync-repo-input {
+  width: 130px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  background: var(--color-bg);
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
+  border-radius: 5px;
+  color: var(--color-text);
+  outline: none;
+}
+.sync-repo-confirm {
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  background: none;
+  border: none;
+  color: var(--color-sage-400);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color var(--duration-normal) var(--ease-out);
+}
+.sync-repo-confirm:hover { color: var(--color-sage-300); }
+.sync-repo-confirm:disabled { opacity: 0.4; cursor: default; }
+.sync-disconnect {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color var(--duration-normal) var(--ease-out), color var(--duration-normal) var(--ease-out);
+}
+.sync-disconnect:hover {
+  border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-border));
+  color: var(--color-danger);
+}
+
+/* Cloud info card */
+.sync-cloud-card {
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+.sync-cloud-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.sync-cloud-detail {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+.sync-cloud-size {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+/* Action buttons */
+.sync-actions {
+  display: flex;
+  gap: 8px;
+}
+.sync-action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--duration-normal) var(--ease-out),
+              background var(--duration-normal) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
+}
+.sync-action:hover:not(:disabled) {
+  background: var(--color-surface-elevated);
+}
+.sync-action:active:not(:disabled) { transform: scale(0.98); }
+.sync-action:disabled { opacity: 0.35; cursor: default; }
+.sync-action--download:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--color-sage-400) 40%, var(--color-border));
+}
+.sync-action--download svg { color: var(--color-sage-400); }
+
+/* Status messages */
+.sync-error {
+  font-size: 0.78rem;
+  color: var(--color-danger, #e05c5c);
+  margin: 0;
+}
+.sync-progress {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+.sync-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: home-spin 1.2s linear infinite;
 }
 </style>

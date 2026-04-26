@@ -93,6 +93,7 @@ import { ProfileManager } from './engine/persistence/profile-manager';
 import { SaveManager } from './engine/persistence/save-manager';
 import { BackupService } from './engine/persistence/backup-service';
 import { ImageAssetCache } from './engine/image/asset-cache';
+import { GitHubSyncService } from './engine/sync/github-sync';
 import { PromptStorage } from './engine/prompt/prompt-storage';
 import { VectorStore } from './engine/memory/engram/vector-store';
 import { CustomPresetStore } from './engine/persistence/custom-preset-store';
@@ -571,6 +572,9 @@ async function bootstrap(): Promise<void> {
   app.provide('embedder', embedder);
   app.provide('backupService', backupService);
   app.provide('customPresetStore', customPresetStore);
+
+  const githubSync = new GitHubSyncService(backupService);
+  app.provide('githubSync', githubSync);
 
   // ── 2026-04-14：AI 助手 service ──
   // 复用现有 aiService（按 usageType='assistant' 路由 API 配置）。

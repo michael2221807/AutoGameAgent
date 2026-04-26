@@ -666,6 +666,90 @@ async function executeImport(): Promise<void> {
   }
 }
 
+// ─── GitHub Cloud Sync ───────────────────────────────────────
+
+import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
+
+const githubSync = inject<GitHubSyncService>('githubSync');
+const ghToken = ref(githubSync?.getToken() ?? '');
+const ghOwner = ref(githubSync?.getOwner() ?? '');
+const ghRepoName = ref(githubSync?.getRepoName() ?? 'aga-cloud-save');
+const ghStatus = ref<SyncStatus>({ stage: 'idle', message: '' });
+const ghUsername = ref('');
+const ghShowToken = ref(false);
+const ghCloudInfo = ref<{ exists: boolean; updatedAt?: string; sizeKB?: number } | null>(null);
+
+async function ghSaveToken(): Promise<void> {
+  if (!githubSync) return;
+  githubSync.setToken(ghToken.value);
+  if (ghOwner.value.trim()) githubSync.setOwner(ghOwner.value);
+  githubSync.setRepoName(ghRepoName.value);
+  if (!ghToken.value.trim()) {
+    ghUsername.value = '';
+    ghCloudInfo.value = null;
+    return;
+  }
+  ghStatus.value = { stage: 'checking', message: '验证连接…' };
+  const result = await githubSync.validate();
+  if (result.ok) {
+    ghUsername.value = githubSync.getOwner();
+    ghOwner.value = ghUsername.value;
+    ghStatus.value = { stage: 'idle', message: '' };
+    eventBus.emit('ui:toast', { type: 'success', message: `已连接 GitHub: ${ghUsername.value}`, duration: 2000 });
+    void ghRefreshCloudInfo();
+  } else {
+    ghUsername.value = '';
+    ghStatus.value = { stage: 'error', message: result.error ?? '验证失败' };
+  }
+}
+
+async function ghRefreshCloudInfo(): Promise<void> {
+  if (!githubSync || !ghToken.value) return;
+  try {
+    ghCloudInfo.value = await githubSync.getCloudInfo();
+  } catch {
+    ghCloudInfo.value = null;
+  }
+}
+
+const ghBusy = () => ['checking', 'uploading', 'downloading'].includes(ghStatus.value.stage);
+
+async function ghUpload(): Promise<void> {
+  if (!githubSync || ghBusy()) return;
+  try {
+    await githubSync.upload((s) => { ghStatus.value = s; });
+    void ghRefreshCloudInfo();
+  } catch (err) {
+    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : '上传失败' };
+  }
+}
+
+const ghShowDownloadConfirm = ref(false);
+
+async function ghDownload(): Promise<void> {
+  if (!githubSync || ghBusy()) return;
+  ghShowDownloadConfirm.value = false;
+  try {
+    await githubSync.download((s) => { ghStatus.value = s; });
+    sessionStorage.setItem('aga_post_import_resume', '1');
+    eventBus.emit('ui:toast', { type: 'success', message: '云存档恢复成功，即将刷新…', duration: 2000 });
+    setTimeout(() => window.location.reload(), 1500);
+  } catch (err) {
+    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : '下载失败' };
+  }
+}
+
+// Auto-validate on mount if token exists
+if (githubSync?.isConfigured()) {
+  void (async () => {
+    const result = await githubSync.validate();
+    if (result.ok) {
+      ghUsername.value = githubSync.getOwner();
+      void ghRefreshCloudInfo();
+    }
+  })();
+}
+
 // ─── UI state ─────────────────────────────────────────────────
 
 const showSettings = ref(false);
@@ -722,6 +806,70 @@ const showSettings = ref(false);
               </button>
             </div>
             <p v-if="backupImportError" class="backup-error">{{ backupImportError }}</p>
+          </div>
+
+          <!-- ── GitHub Cloud Sync ── -->
+          <div class="gh-section">
+            <div class="gh-header">
+              <p class="settings-title">GitHub 云存档</p>
+              <span v-if="ghUsername" class="gh-badge">{{ ghUsername }}</span>
+            </div>
+
+            <!-- 未连接：配置表单 -->
+            <template v-if="!ghUsername">
+              <p class="gh-hint">
+                将完整存档同步到你的 GitHub 私有仓库。需要
+                <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" class="link-subtle">Personal Access Token</a>
+                （Fine-grained, Contents Read &amp; Write）。
+              </p>
+              <div class="gh-form">
+                <div class="gh-field">
+                  <label class="gh-label">Token</label>
+                  <div class="gh-token-row">
+                    <input :type="ghShowToken ? 'text' : 'password'" class="gh-input gh-input--mono" v-model="ghToken" placeholder="github_pat_..." spellcheck="false" autocomplete="off" />
+                    <button class="gh-eye" @click="ghShowToken = !ghShowToken" :title="ghShowToken ? '隐藏' : '显示'">
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z" /><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4" /></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="gh-field">
+                  <label class="gh-label">仓库</label>
+                  <input class="gh-input" v-model="ghRepoName" placeholder="aga-cloud-save" spellcheck="false" />
+                </div>
+                <button class="gh-connect-btn" @click="ghSaveToken" :disabled="ghStatus.stage === 'checking' || !ghToken.trim()">
+                  {{ ghStatus.stage === 'checking' ? '验证中…' : '连接' }}
+                </button>
+              </div>
+            </template>
+
+            <!-- 已连接：同步操作 -->
+            <template v-else>
+              <div class="gh-cloud-row">
+                <div class="gh-cloud-meta">
+                  <span v-if="ghCloudInfo?.exists" class="gh-cloud-info">
+                    云端: {{ ghCloudInfo.updatedAt ? new Date(ghCloudInfo.updatedAt).toLocaleString() : '未知' }}
+                    · {{ ghCloudInfo.sizeKB ?? 0 }} KB
+                  </span>
+                  <span v-else-if="ghCloudInfo" class="gh-cloud-info gh-cloud-empty">云端暂无存档</span>
+                </div>
+                <div class="gh-actions">
+                  <button class="gh-action-btn gh-action-btn--up" :disabled="ghBusy()" @click="ghUpload">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
+                    {{ ghStatus.stage === 'uploading' ? '上传中…' : '上传' }}
+                  </button>
+                  <button class="gh-action-btn gh-action-btn--down" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghShowDownloadConfirm = true">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
+                    {{ ghStatus.stage === 'downloading' ? '下载中…' : '下载' }}
+                  </button>
+                  <button class="gh-action-btn gh-action-btn--disconnect" @click="ghUsername = ''; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" title="断开连接">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06"/></svg>
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <p v-if="ghStatus.stage === 'error'" class="gh-error">{{ ghStatus.message }}</p>
+            <p v-else-if="ghStatus.stage !== 'idle' && ghStatus.stage !== 'done' && ghStatus.message" class="gh-status-msg">{{ ghStatus.message }}</p>
           </div>
 
           <!-- 2026-04-14 Phase 5：自定义预设独立导出/导入（创意素材包） -->
@@ -933,6 +1081,17 @@ const showSettings = ref(false);
         </button>
       </template>
     </Modal>
+
+    <!-- GitHub download confirm -->
+    <Modal v-model="ghShowDownloadConfirm" title="从 GitHub 下载存档" width="400px">
+      <p class="confirm-text" style="color: var(--color-danger, #ef4444)">
+        此操作将<strong>覆盖本地所有数据</strong>（存档、设置、图片）。不可撤销。
+      </p>
+      <template #footer>
+        <button class="btn-modal btn-modal--secondary" @click="ghShowDownloadConfirm = false">取消</button>
+        <button class="btn-modal btn-modal--danger" @click="ghDownload">确认下载并覆盖</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -1042,6 +1201,7 @@ const showSettings = ref(false);
 
 .backup-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding-top: 10px;
@@ -1059,6 +1219,153 @@ const showSettings = ref(false);
   color: var(--color-danger, #e05c5c);
   width: 100%;
 }
+
+/* ── GitHub Sync ── */
+.gh-section {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  margin-top: 10px;
+}
+.gh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.gh-header .settings-title { margin: 0; }
+.gh-hint {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #8888a0);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+.gh-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 8px;
+  align-items: center;
+}
+.gh-field {
+  display: contents;
+}
+.gh-label {
+  grid-column: 1;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #8888a0);
+  margin-bottom: -4px;
+}
+.gh-input {
+  grid-column: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 0.78rem;
+  color: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.gh-input:focus { border-color: rgba(255,255,255,0.25); }
+.gh-input--mono { font-family: monospace; font-size: 0.72rem; }
+.gh-token-row {
+  grid-column: 1;
+  display: flex;
+  gap: 4px;
+}
+.gh-token-row .gh-input { flex: 1; }
+.gh-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  color: var(--color-text-secondary, #8888a0);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.gh-eye:hover { background: rgba(255,255,255,0.1); }
+.gh-connect-btn {
+  grid-column: 2;
+  grid-row: 2 / 4;
+  align-self: stretch;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: var(--color-text-primary, #e0e0e8);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.gh-connect-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+.gh-connect-btn:disabled { opacity: 0.4; cursor: default; }
+.gh-badge {
+  font-size: 0.7rem;
+  color: var(--color-success, #22c55e);
+  background: rgba(34,197,94,0.1);
+  border-radius: 10px;
+  padding: 2px 10px;
+  letter-spacing: 0.02em;
+}
+.gh-cloud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.gh-cloud-meta { flex: 1; min-width: 0; }
+.gh-cloud-info {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #8888a0);
+}
+.gh-cloud-empty { font-style: italic; }
+.gh-actions {
+  display: flex;
+  gap: 4px;
+}
+.gh-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: var(--color-text-primary, #e0e0e8);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.gh-action-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); }
+.gh-action-btn:disabled { opacity: 0.35; cursor: default; }
+.gh-action-btn--up:hover:not(:disabled) { border-color: rgba(96,165,250,0.4); color: #93bbfc; }
+.gh-action-btn--down:hover:not(:disabled) { border-color: rgba(34,197,94,0.4); color: #6ee7a0; }
+.gh-action-btn--disconnect {
+  padding: 5px 6px;
+  color: var(--color-text-secondary, #8888a0);
+}
+.gh-action-btn--disconnect:hover:not(:disabled) { border-color: rgba(239,68,68,0.4); color: #f87171; }
+.gh-error {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--color-danger, #e05c5c);
+}
+.gh-status-msg {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #8888a0);
+}
+.link-subtle {
+  color: var(--color-accent, #60a5fa);
+  text-decoration: none;
+}
+.link-subtle:hover { text-decoration: underline; }
 
 /* ── Slot list ── */
 .slot-list {
