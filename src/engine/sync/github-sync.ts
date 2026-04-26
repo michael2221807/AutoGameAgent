@@ -119,27 +119,27 @@ export class GitHubSyncService {
     const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
     const { owner, repo } = this.resolveTarget();
 
-    emit('downloading', '正在获取下载地址…');
+    emit('downloading', '正在获取文件信息…');
 
-    // Step 1: Get file metadata (includes download_url, works for any file size)
-    const meta = await this.get<{ download_url: string }>(
-      `/repos/${owner}/${repo}/contents/${SAVE_PATH}`,
-    );
-
-    if (!meta.download_url) {
-      throw new Error('无法获取文件下载地址');
-    }
+    // Step 1: Get file SHA from Contents API (works for any size, only returns metadata)
+    const meta = await this.get<{ sha: string }>(`/repos/${owner}/${repo}/contents/${SAVE_PATH}`);
 
     emit('downloading', '正在下载存档…');
 
-    // Step 2: Fetch raw content from raw.githubusercontent.com
-    // download_url already contains auth token in query string — do NOT send Authorization header (triggers CORS preflight → 403)
-    const res = await fetch(meta.download_url);
-    if (!res.ok) throw new ApiError(res.status, await safeBody(res));
+    // Step 2: Fetch full content via Git Blobs API
+    // Unlike Contents API (encoding:"none" for >1MB) and raw.githubusercontent.com (CORS blocked for private repos),
+    // Blobs API always returns base64 content up to 100MB, and runs on api.github.com (CORS safe).
+    const blob = await this.get<{ content: string; encoding: string }>(
+      `/repos/${owner}/${repo}/git/blobs/${meta.sha}`,
+    );
+
+    if (blob.encoding !== 'base64') {
+      throw new Error(`Blob API 返回了非预期编码: ${blob.encoding}`);
+    }
 
     emit('downloading', '正在恢复本地数据…');
-    const blob = await res.blob();
-    await this.backup.importAll(blob);
+    const json = base64ToUtf8(blob.content);
+    await this.backup.importAll(new Blob([json], { type: 'application/json' }));
     emit('done', '下载并恢复完成');
   }
 
@@ -235,6 +235,14 @@ function utf8ToBase64(str: string): string {
   return btoa(bin);
 }
 
+
+function base64ToUtf8(b64: string): string {
+  const cleaned = b64.replace(/\s/g, '');
+  const bin = atob(cleaned);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
 
 async function safeBody(res: Response): Promise<string> {
   try { return await res.text(); } catch { return ''; }
