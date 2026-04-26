@@ -132,10 +132,9 @@ export class GitHubSyncService {
 
     emit('downloading', '正在下载存档…');
 
-    // Step 2: Fetch raw content from raw.githubusercontent.com (no size limit, no encoding issues)
-    const res = await fetch(meta.download_url, {
-      headers: { Authorization: `Bearer ${this.getToken()}` },
-    });
+    // Step 2: Fetch raw content from raw.githubusercontent.com
+    // download_url already contains auth token in query string — do NOT send Authorization header (triggers CORS preflight → 403)
+    const res = await fetch(meta.download_url);
     if (!res.ok) throw new ApiError(res.status, await safeBody(res));
 
     emit('downloading', '正在恢复本地数据…');
