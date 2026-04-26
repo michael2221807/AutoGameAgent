@@ -267,6 +267,20 @@ const ghOwner = ref('');
 const ghCloudInfo = ref<{ exists: boolean; updatedAt?: string; sizeKB?: number } | null>(null);
 const ghShowToken = ref(false);
 
+function ghCopyToken(): void {
+  const token = githubSync?.getToken() ?? ghToken.value;
+  if (!token.trim()) return;
+  const ta = document.createElement('textarea');
+  ta.value = token;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  eventBus.emit('ui:toast', { type: 'success', message: 'Token 已复制', duration: 1200 });
+}
+
 const ghEditingRepo = ref(false);
 const ghBusy = () => ['checking', 'uploading', 'downloading'].includes(ghStatus.value.stage);
 
@@ -498,8 +512,11 @@ onMounted(async () => {
                   spellcheck="false"
                   autocomplete="off"
                 />
-                <button class="sync-eye" @click="ghShowToken = !ghShowToken" tabindex="-1">
+                <button class="sync-eye" @click="ghShowToken = !ghShowToken" tabindex="-1" title="显示/隐藏">
                   <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z"/><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4"/></svg>
+                </button>
+                <button class="sync-eye" @click="ghCopyToken()" tabindex="-1" title="复制 Token" :disabled="!ghToken.trim()">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
                 </button>
               </div>
             </div>
@@ -545,6 +562,14 @@ onMounted(async () => {
             </div>
             <button class="sync-disconnect" @click="ghConnected = false; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" title="断开连接">
               断开
+            </button>
+          </div>
+
+          <div class="sync-token-copy-row">
+            <span class="sync-token-preview">Token: {{ ghToken.slice(0, 10) }}···{{ ghToken.slice(-4) }}</span>
+            <button class="sync-token-copy-btn" @click="ghCopyToken()" title="复制 Token">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
+              复制 Token
             </button>
           </div>
 
@@ -1191,6 +1216,40 @@ onMounted(async () => {
 .sync-disconnect:hover {
   border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-border));
   color: var(--color-danger);
+}
+
+/* Token copy row (connected state) */
+.sync-token-copy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.sync-token-preview {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+.sync-token-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color var(--duration-normal) var(--ease-out), color var(--duration-normal) var(--ease-out);
+}
+.sync-token-copy-btn:hover {
+  border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
+  color: var(--color-text);
 }
 
 /* Cloud info card */

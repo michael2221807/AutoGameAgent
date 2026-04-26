@@ -120,17 +120,20 @@ export class GitHubSyncService {
     const { owner, repo } = this.resolveTarget();
 
     emit('downloading', '正在从 GitHub 下载…');
-    const file = await this.get<{ content: string; encoding: string }>(
-      `/repos/${owner}/${repo}/contents/${SAVE_PATH}`,
-    );
 
-    if (file.encoding !== 'base64') {
-      throw new Error(`不支持的编码: ${file.encoding}`);
-    }
+    // Use raw media type to support files > 1MB (Contents API returns encoding: "none" for large files)
+    const res = await fetch(`${API}/repos/${owner}/${repo}/contents/${SAVE_PATH}`, {
+      headers: {
+        Authorization: `Bearer ${this.getToken()}`,
+        Accept: 'application/vnd.github.raw+json',
+        'X-GitHub-Api-Version': API_VERSION,
+      },
+    });
+    if (!res.ok) throw new ApiError(res.status, await safeBody(res));
 
     emit('downloading', '正在恢复本地数据…');
-    const json = base64ToUtf8(file.content);
-    await this.backup.importAll(new Blob([json], { type: 'application/json' }));
+    const blob = await res.blob();
+    await this.backup.importAll(blob);
     emit('done', '下载并恢复完成');
   }
 
@@ -226,13 +229,6 @@ function utf8ToBase64(str: string): string {
   return btoa(bin);
 }
 
-function base64ToUtf8(b64: string): string {
-  // GitHub Contents API returns base64 with embedded newlines
-  const bin = atob(b64.replace(/\s/g, ''));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
 
 async function safeBody(res: Response): Promise<string> {
   try { return await res.text(); } catch { return ''; }

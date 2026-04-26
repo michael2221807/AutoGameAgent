@@ -714,6 +714,20 @@ async function ghRefreshCloudInfo(): Promise<void> {
 
 const ghBusy = () => ['checking', 'uploading', 'downloading'].includes(ghStatus.value.stage);
 
+function ghCopyToken(): void {
+  const token = githubSync?.getToken() ?? ghToken.value;
+  if (!token.trim()) return;
+  const ta = document.createElement('textarea');
+  ta.value = token;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  eventBus.emit('ui:toast', { type: 'success', message: 'Token 已复制', duration: 1200 });
+}
+
 async function ghUpload(): Promise<void> {
   if (!githubSync || ghBusy()) return;
   try {
@@ -852,6 +866,9 @@ const showSettings = ref(false);
                   </span>
                   <span v-else-if="ghCloudInfo" class="gh-cloud-info gh-cloud-empty">云端暂无存档</span>
                 </div>
+                <button class="gh-copy-btn" @click="ghCopyToken" title="复制 Token 到剪贴板">
+                  <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
+                </button>
                 <div class="gh-actions">
                   <button class="gh-action-btn gh-action-btn--up" :disabled="ghBusy()" @click="ghUpload">
                     <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
@@ -1351,6 +1368,18 @@ const showSettings = ref(false);
   color: var(--color-text-secondary, #8888a0);
 }
 .gh-action-btn--disconnect:hover:not(:disabled) { border-color: rgba(239,68,68,0.4); color: #f87171; }
+.gh-copy-btn {
+  display: flex;
+  align-items: center;
+  padding: 5px 6px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  color: var(--color-text-secondary, #8888a0);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.gh-copy-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); color: var(--color-text-primary, #e0e0e8); }
 .gh-error {
   margin: 6px 0 0;
   font-size: 0.72rem;
