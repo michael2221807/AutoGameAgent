@@ -1,0 +1,3 @@
+{
+  "$comment": "架构决策 2026-04-07（STEP-04）：引擎路径是 Engine-Game Pack 静态契约，由 DEFAULT_ENGINE_PATHS 在代码中声明。Game Pack 通过修改 state-schema.json 中的字段名/结构来定制内容，不需要在此覆盖路径。本文件保留为空占位，不会被引擎读取。"
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "NpcBehaviorConfig",
+  "$description": "NPC 跟随/留守/游荡行为规则。在 afterCommands 钩子中检测玩家位置变更后执行。类型从 NPC 对象的 '类型' 字段读取（与 opening.md / core.md 的 NPC 数据契约一致）。",
+  "npcTypes": {
+    "typeField": "类型",
+    "defaultType": "路人",
+    "types": {
+      "重点": { "onPlayerLeave": "stay" },
+      "次要": { "onPlayerLeave": "stay" },
+      "路人": { "onPlayerLeave": "stay" },
+      "同伴": { "onPlayerLeave": "follow-or-wander", "wanderLabel": "四处走动" }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "id": "privacyProfileRepair",
+  "modules": [
+    { "promptId": "privacyRepair", "role": "system", "order": 0, "depth": 0 }
+  ]
+}

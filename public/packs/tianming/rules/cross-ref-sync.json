@@ -1,0 +1,18 @@
+{
+  "$schema": "IntegrityRule[]",
+  "$description": "跨引用双向同步规则。目前配置：NPC 的 '位置' 字段 ↔ 地点的 'NPC' 列表。当 AI 只更新一侧时，CrossRefSyncModule 在 afterCommands 钩子中自动补齐另一侧。",
+  "rules": [
+    {
+      "id": "npc-location-sync",
+      "description": "NPC.位置 ↔ 地点.NPC 双向同步",
+      "module": "bidirectional-ref-sync",
+      "config": {
+        "entityPath": "社交.关系",
+        "entityRefField": "位置",
+        "targetBasePath": "世界.地点信息",
+        "targetListField": "NPC",
+        "entityIdField": "名称"
+      }
+    }
+  ]
+}

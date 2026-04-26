@@ -1,0 +1,9 @@
+{
+  "id": "openingSceneStep2",
+  "$comment": "§4.1c 分步开局第2步 — 基于第1步的正文，生成 commands/mid_term_memory/action_options/semantic_memory。第1步的响应由 CharacterInitPipeline 作为 assistant 消息注入到 messages 末尾，AI 据此产生结构化数据。narratorFrame 作为最前置的身份/语境框架。2026-04-19 命令合并契约：step1 flow 里含有 opening.md，AI 会可靠地返回完整 §1-§11 初始化 commands；step2 看到 step1 已经在 history 里完成初始化，通常只返回 scene-specific delta（时间推进、状态、NPC 记忆）。CharacterInitPipeline.generateOpeningSceneSplit() 现在会同时 executeBatch(parsed1.commands) + executeBatch(parsed2.commands)，两批都跑（step1 先，step2 后）。因此 step2 **可以**继续只发 delta —— init 已由 step1 commands 兜底；如果以后决定 step2 自己重发 init，也可以（后一个 set 覆盖前一个，语义不变）。",
+  "modules": [
+    { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
+    { "promptId": "opening", "role": "system", "order": 0, "depth": 0 },
+    { "promptId": "splitGenStep2", "role": "system", "order": 1, "depth": 0 }
+  ]
+}

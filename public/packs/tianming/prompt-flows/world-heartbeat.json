@@ -1,0 +1,6 @@
+{
+  "id": "worldHeartbeat",
+  "modules": [
+    { "promptId": "worldHeartbeat", "role": "system", "order": 0, "depth": 0 }
+  ]
+}

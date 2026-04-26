@@ -1,0 +1,277 @@
+/**
+ * 世界心跳子流水线 — 周期性世界模拟
+ *
+ * 设计目的：
+ * 让游戏世界在玩家不参与时也有"生命力"。
+ * 定期选择一批 NPC，通过 AI 模拟他们的自主行为，
+ * 生成世界事件（如 NPC 之间的互动、位置变化、状态变化）。
+ *
+ * 触发时机：
+ * 由主流水线根据回合计数或游戏时间间隔触发。
+ * 典型配置：每 5-10 个回合执行一次。
+ *
+ * NPC 选择策略：
+ * 1. 排除与玩家同一位置的 NPC（他们已在主回合中参与互动）
+ * 2. 优先选择最近未被心跳处理过的 NPC（轮转公平性）
+ * 3. 限制每次处理的 NPC 数量（避免 AI 调用过大）
+ *
+ * 流程：
+ * 1. 筛选候选 NPC
+ * 2. 组装 worldHeartbeat prompt flow（包含 NPC 信息和世界状态）
+ * 3. 调用 AI 生成世界事件
+ * 4. 解析响应中的 commands 并通过 CommandExecutor 执行
+ *
+ * 对应 STEP-02 §3.11 World Heartbeat。
+ */
+import type { StateManager } from '../../core/state-manager';
+import type { CommandExecutor } from '../../core/command-executor';
+import type { AIService } from '../../ai/ai-service';
+import type { ResponseParser } from '../../ai/response-parser';
+import type { PromptAssembler } from '../../prompt/prompt-assembler';
+import type { GamePack } from '../../types';
+import type { EnginePathConfig } from '../types';
+import {
+  emitPromptAssemblyDebug,
+  emitPromptResponseDebug,
+  extractThinkingFromRaw,
+} from '../../core/prompt-debug';
+import { appendChangesToLastNarrative } from '../../audit/audit-append';
+import { buildEnvironmentBlock } from '../../prompt/environment-block';
+
+/** 每次心跳最多处理的 NPC 数量，控制 AI 调用的 token 消耗 */
+const MAX_NPCS_PER_HEARTBEAT = 5;
+
+export class WorldHeartbeatPipeline {
+  constructor(
+    private stateManager: StateManager,
+    private commandExecutor: CommandExecutor,
+    private aiService: AIService,
+    private responseParser: ResponseParser,
+    private promptAssembler: PromptAssembler,
+    private gamePack: GamePack,
+    private paths: EnginePathConfig,
+  ) {}
+
+  /**
+   * 执行世界心跳
+   *
+   * 返回 true 表示心跳产生了状态变更，false 表示跳过或无变更。
+   */
+  async execute(): Promise<boolean> {
+    const flow = this.gamePack.promptFlows['worldHeartbeat'];
+    if (!flow) {
+      console.warn('[WorldHeartbeat] No "worldHeartbeat" prompt flow found in Game Pack');
+      return false;
+    }
+
+    const candidates = this.selectCandidateNpcs();
+    if (candidates.length === 0) {
+      console.log('[WorldHeartbeat] No candidate NPCs for heartbeat');
+      return false;
+    }
+
+    try {
+      const variables = this.buildHeartbeatVariables(candidates);
+      const assembled = this.promptAssembler.assemble(flow, variables);
+      const generationId = `worldHeartbeat_${Date.now()}`;
+
+      // §G3: 世界心跳子管线的组装可见于 PromptAssemblyPanel
+      emitPromptAssemblyDebug({
+        flow: 'worldHeartbeat',
+        variables,
+        messages: assembled.messages,
+        messageSources: assembled.messageSources,
+        generationId,
+      });
+
+      const rawResponse = await this.aiService.generate({
+        messages: assembled.messages,
+        usageType: 'world_heartbeat',
+      });
+
+      emitPromptResponseDebug({
+        flow: 'worldHeartbeat',
+        generationId,
+        thinking: extractThinkingFromRaw(rawResponse),
+        rawResponse,
+      });
+
+      const parsed = this.responseParser.parse(rawResponse);
+
+      let commandCount = 0;
+      let success = true;
+      if (parsed.commands && parsed.commands.length > 0) {
+        commandCount = parsed.commands.length;
+        const result = this.commandExecutor.executeBatch(parsed.commands);
+        success = !result.hasErrors;
+        console.log(
+          `[WorldHeartbeat] Executed ${commandCount} commands, ` +
+          `${success ? 'all succeeded' : 'with errors'}`,
+        );
+        appendChangesToLastNarrative(
+          this.stateManager,
+          this.paths,
+          'worldHeartbeat',
+          result.changeLog.changes,
+        );
+      } else {
+        console.log('[WorldHeartbeat] AI returned no commands');
+      }
+
+      // 写入执行历史 — 字段名与 HeartbeatPanel normalizer 对齐
+      const roundNum = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
+      const npcNames = candidates.map((n) => String(n['名称'] ?? '')).filter(Boolean);
+      this.stateManager.push(this.paths.heartbeatHistory, {
+        timestamp: new Date().toLocaleString(),
+        回合: roundNum,
+        result: commandCount > 0
+          ? `更新了 ${npcNames.join('、')} 的状态（${commandCount} 条命令）`
+          : `无状态变更（${npcNames.join('、')}）`,
+        成功: success,
+      }, 'system');
+
+      return true;
+    } catch (err) {
+      console.error('[WorldHeartbeat] Pipeline execution failed:', err);
+      return false;
+    }
+  }
+
+  /**
+   * 筛选候选 NPC — 选出适合参与世界心跳的 NPC
+   *
+   * 排除规则：
+   * 1. 与玩家同一位置（已在主回合参与互动）
+   * 2. 不活跃/已死亡状态的 NPC
+   */
+  private selectCandidateNpcs(): Record<string, unknown>[] {
+    const npcList = this.findNpcList();
+    if (!npcList) return [];
+
+    const playerLocation = this.getPlayerLocation();
+
+    const candidates = npcList.filter((npc) => {
+      const npcLocation = String(npc['当前位置'] ?? npc['currentLocation'] ?? '');
+      const isAlive = npc['已死亡'] !== true && npc['isDead'] !== true;
+
+      // 排除与玩家同位置的 NPC
+      if (playerLocation && npcLocation === playerLocation) return false;
+      // 排除已死亡的 NPC
+      if (!isAlive) return false;
+      // Phase 6.2: 排除心跳锁定的 NPC（用户在 UI 中手动锁定，保持其状态不被 AI 修改）
+      if (npc['心跳锁定'] === true) return false;
+
+      return true;
+    });
+
+    /*
+     * 从候选池中随机选取最多 MAX_NPCS_PER_HEARTBEAT 个
+     * 使用 Fisher-Yates 洗牌的前 N 项，避免全量洗牌的开销
+     */
+    return this.sampleArray(candidates, MAX_NPCS_PER_HEARTBEAT);
+  }
+
+  /**
+   * 构建心跳 prompt 的模板变量
+   *
+   * 变量名与 `prompts/worldHeartbeat.md` 中的 `{{NPC_BLOCKS}}` / `{{CONTEXT_BLOCK}}` 占位符严格一致。
+   *
+   * - `NPC_BLOCKS`：每个候选 NPC 的多字段摘要（名称/位置/类型/在做事项等），供 AI 代入视角
+   * - `CONTEXT_BLOCK`：游戏时间 + 玩家位置等时空约束，限制 AI 生成的 NPC 状态合理性
+   */
+  private buildHeartbeatVariables(npcs: Record<string, unknown>[]): Record<string, string> {
+    const f = this.paths.npcFieldNames;
+    const npcBlocks = npcs.map((npc) => {
+      const name = String(npc[f.name] ?? npc['name'] ?? '未知');
+      const location = String(npc[f.location] ?? '未知');
+      const type = String(npc[f.type] ?? '');
+      const desc = String(npc[f.appearance] ?? npc[f.description] ?? '');
+      const body = String(npc[f.bodyDescription] ?? '');
+      const outfit = String(npc[f.outfitStyle] ?? '');
+      const thought = String(npc[f.innerThought] ?? '');
+      const doing = String(npc[f.currentActivity] ?? '');
+      const traits = Array.isArray(npc[f.personalityTraits])
+        ? (npc[f.personalityTraits] as string[]).join('、')
+        : '';
+
+      const lines: string[] = [`### ${name}`];
+      if (type) lines.push(`- 类型: ${type}`);
+      lines.push(`- 当前位置: ${location}`);
+      if (desc) lines.push(`- 外貌描述: ${desc}`);
+      if (body) lines.push(`- 身材描写: ${body}`);
+      if (outfit) lines.push(`- 衣着风格: ${outfit}`);
+      if (traits) lines.push(`- 性格: ${traits}`);
+      if (thought) lines.push(`- 内心想法: ${thought}`);
+      if (doing) lines.push(`- 在做事项: ${doing}`);
+      return lines.join('\n');
+    });
+
+    const timeInfo = this.getGameTimeString();
+    const playerLoc = this.getPlayerLocation() ?? '';
+    const contextLines: string[] = [];
+    if (timeInfo) contextLines.push(`游戏时间: ${timeInfo}`);
+    if (playerLoc) contextLines.push(`玩家当前位置: ${playerLoc}`);
+
+    // P2 env-tags port (2026-04-19): inject env block so NPCs can react to
+    // weather / festival / environment in their "在做事项" / "内心想法"
+    // updates. Heartbeat itself does NOT emit env/weather/festival writes —
+    // those are main-round's responsibility (see worldHeartbeat.md disclaimer).
+    const environmentBlock = buildEnvironmentBlock({
+      weather: this.stateManager.get<unknown>(this.paths.weather),
+      festival: this.stateManager.get<unknown>(this.paths.festival),
+      environment: this.stateManager.get<unknown>(this.paths.environmentTags),
+    });
+
+    return {
+      NPC_BLOCKS: npcBlocks.join('\n\n'),
+      CONTEXT_BLOCK: contextLines.join('\n'),
+      ENVIRONMENT_BLOCK: environmentBlock,
+    };
+  }
+
+  /** 从状态树中查找 NPC 列表（路径由 EnginePathConfig 配置） */
+  private findNpcList(): Record<string, unknown>[] | null {
+    const list = this.stateManager.get<unknown>(this.paths.npcList);
+    if (Array.isArray(list)) {
+      return list.filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === 'object',
+      );
+    }
+    return null;
+  }
+
+  /** 获取玩家当前位置 */
+  private getPlayerLocation(): string | null {
+    const loc = this.stateManager.get<string>(this.paths.playerLocation);
+    return typeof loc === 'string' && loc ? loc : null;
+  }
+
+  /** 获取游戏时间的文本表示 */
+  private getGameTimeString(): string {
+    const timeObj = this.stateManager.get<Record<string, unknown>>(this.paths.gameTime);
+    if (timeObj && typeof timeObj === 'object') {
+      return Object.entries(timeObj)
+        .map(([k, v]) => `${k}:${String(v)}`)
+        .join(' ');
+    }
+    return '';
+  }
+
+  /**
+   * 从数组中随机采样 n 个元素
+   * 不修改原数组，使用 Fisher-Yates 部分洗牌
+   */
+  private sampleArray<T>(arr: T[], n: number): T[] {
+    if (arr.length <= n) return [...arr];
+
+    const copy = [...arr];
+    const result: T[] = [];
+    for (let i = 0; i < n; i++) {
+      const j = i + Math.floor(Math.random() * (copy.length - i));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+      result.push(copy[i]);
+    }
+    return result;
+  }
+}

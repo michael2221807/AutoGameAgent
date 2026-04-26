@@ -1,0 +1,7 @@
+{
+  "id": "longTermCompact",
+  "$comment": "长期记忆二级精炼 flow — 当长期记忆溢出 longTermCap 时触发。纯一次性精炼任务，不需要 narratorFrame / chatHistory。",
+  "modules": [
+    { "promptId": "longTermCompact", "role": "system", "order": 0, "depth": 0 }
+  ]
+}

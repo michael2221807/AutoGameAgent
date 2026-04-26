@@ -1,0 +1,25 @@
+{
+  "$comment": "Required-field contract for FieldCompletenessValidator. Consumed by FieldRepairPipeline to auto-fill missing fields after every AI turn. Fields listed here are expected to be non-empty strings / non-NaN numbers / non-empty arrays; placeholders ('待生成', '暂无', '未知' etc.) are treated as missing. NSFW-only paths live under each entity's `nsfw` array and are only validated when 系统.nsfwMode=true. Privacy 私密信息 has its own deeper per-field contract in PrivacyProfileValidator — this file intentionally does NOT duplicate it; we only flag 私密信息's mere existence here and let the specialist validator run next.",
+  "npc": {
+    "always": [
+      "名称",
+      "描述",
+      "外貌描述",
+      "身材描写",
+      "衣着风格",
+      "性别",
+      "年龄",
+      "背景",
+      "性格特征"
+    ],
+    "nsfw": [
+      "私密信息"
+    ]
+  },
+  "player": {
+    "always": [],
+    "nsfw": [
+      "角色.身体"
+    ]
+  }
+}

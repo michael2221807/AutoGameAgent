@@ -1,0 +1,7 @@
+{
+  "id": "midTermRefine",
+  "$comment": "中期→长期精炼子管线 flow。本 flow 不含 chatHistory（纯一次性精炼任务），不需要 narratorFrame / core / historyFraming，只加载精炼任务本身的 prompt。",
+  "modules": [
+    { "promptId": "midTermRefine", "role": "system", "order": 0, "depth": 0 }
+  ]
+}

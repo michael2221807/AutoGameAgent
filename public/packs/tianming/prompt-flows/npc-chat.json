@@ -1,0 +1,8 @@
+{
+  "id": "npcChat",
+  "$comment": "§7.2 NPC 私聊 flow — 独立于主回合，仅包含 npcChat 提示词。不引入 core.md（主回合规则与判定说明对私聊无用，徒增 token）。context 通过 {{NPC_PROFILE}}/{{GAME_TIME}}/{{PLAYER_NAME}}/{{PLAYER_LOCATION}}/{{WORLD_DESCRIPTION}}/{{SHORT_TERM_MEMORY}}/{{CHAT_HISTORY}}/{{USER_INPUT}}/{{NPC_NAME}} 模板变量注入，由 NpcChatPipeline 负责装填。narratorFrame 作为身份/语境框架前置加载（2026-04-11 add）。",
+  "modules": [
+    { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
+    { "promptId": "npcChat", "role": "system", "order": 0, "depth": 0 }
+  ]
+}

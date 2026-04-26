@@ -1,0 +1,1370 @@
+<script setup lang="ts">
+/**
+ * GameVariablePanel — STEP-03B M4.3 Layer 2 统一数据编辑中心。
+ *
+ * 已实现：树导航、按路径字段列表、搜索（浅层 flatten）、简单类型内联编辑、
+ * SchemaForm 编辑对象、与 `getStateSchema()` 对比的「重置」提示。
+ * Phase 6.3 新增：导出 JSON + 统计 Modal + 每字段复制按钮。
+ */
+import { ref, computed } from 'vue';
+import { useGameState } from '@/ui/composables/useGameState';
+import { useConfig } from '@/ui/composables/useConfig';
+import SearchInput from '@/ui/components/common/SearchInput.vue';
+import Modal from '@/ui/components/common/Modal.vue';
+import SchemaForm from '@/ui/components/editing/SchemaForm.vue';
+import { eventBus } from '@/engine/core/event-bus';
+
+const { isLoaded, tree, get, setValue } = useGameState();
+const { getStateSchema } = useConfig();
+
+// ─── Tree navigation ───
+
+const selectedPath = ref<string>('');
+const breadcrumb = computed<string[]>(() =>
+  selectedPath.value ? selectedPath.value.split('.') : [],
+);
+
+/** Children of the currently selected path */
+interface TreeNode {
+  key: string;
+  fullPath: string;
+  type: string;
+  childCount: number;
+  preview: string;
+}
+
+const currentChildren = computed<TreeNode[]>(() => {
+  const value = selectedPath.value ? get<unknown>(selectedPath.value) : tree.value;
+  if (!value || typeof value !== 'object') return [];
+
+  // 统一处理：对象和数组都展示其子项为可导航节点
+  const entries: Array<[string, unknown]> = Array.isArray(value)
+    ? value.map((v, i) => [String(i), v])
+    : Object.entries(value as Record<string, unknown>);
+
+  return entries
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([key, val]) => {
+      const fullPath = selectedPath.value ? `${selectedPath.value}.${key}` : key;
+      const type = getValueType(val);
+      let childCount = 0;
+      if (val && typeof val === 'object') {
+        childCount = Array.isArray(val) ? val.length : Object.keys(val as Record<string, unknown>).length;
+      }
+      const preview = summarizeNode(key, val);
+      return { key, fullPath, type, childCount, preview };
+    });
+});
+
+/**
+ * 安全截断 —— 超过 n 个字符则切到 n 并追加 `…`
+ *
+ * 2026-04-13 fix：之前各 preview 函数直接用 `s.slice(0, N)` 静默截断，
+ * 不加省略号。当真实数据的字符数恰好等于 N+1（比如"中国·云南省·昆明市·翠湖宾馆·总统套房B"
+ * 共 21 字符，slice(0,20) 恰好切掉尾部 "B"），用户看 preview 以为数据就是这样，
+ * 实则数据里还有内容。修复：统一走此工具函数，保证超长时一定显示 `…`。
+ */
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+/** 为 tree node 生成人类可读的摘要文本 */
+function summarizeNode(_key: string, val: unknown): string {
+  if (val === null || val === undefined) return 'null';
+  if (typeof val !== 'object') {
+    return truncate(String(val), 40);
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) return '(空)';
+    const first = val[0];
+    if (first && typeof first === 'object' && !Array.isArray(first)) {
+      const o = first as Record<string, unknown>;
+      const name = o['名称'] ?? o['name'] ?? o['标题'] ?? o['title'] ?? o['id'] ?? o['subject'];
+      if (name) return `${val.length} 项 · 首项: ${truncate(String(name), 40)}`;
+    }
+    return `${val.length} 项`;
+  }
+  const obj = val as Record<string, unknown>;
+  const nameField = obj['名称'] ?? obj['name'] ?? obj['姓名'] ?? obj['标题'] ?? obj['描述'];
+  if (nameField && typeof nameField === 'string') return truncate(nameField, 40);
+  const keys = Object.keys(obj);
+  if (keys.length === 0) return '(空)';
+  const first = obj[keys[0]];
+  if (typeof first === 'string') return `${keys[0]}: ${truncate(first, 35)}`;
+  if (typeof first === 'number') return `${keys[0]}: ${first}`;
+  return `${keys.length} 字段`;
+}
+
+/** Navigate into a tree key */
+function navigateTo(path: string): void {
+  selectedPath.value = path;
+}
+
+/** Navigate via breadcrumb */
+function navigateBreadcrumb(index: number): void {
+  if (index < 0) {
+    selectedPath.value = '';
+  } else {
+    selectedPath.value = breadcrumb.value.slice(0, index + 1).join('.');
+  }
+}
+
+// ─── Field display and editing ───
+
+interface FieldEntry {
+  key: string;
+  path: string;
+  value: unknown;
+  type: string;
+  isComplex: boolean;
+  defaultValue: unknown;
+  isDifferentFromDefault: boolean;
+}
+
+/** Get the resolved field list for the current path */
+const fieldEntries = computed<FieldEntry[]>(() => {
+  const value = selectedPath.value ? get<unknown>(selectedPath.value) : tree.value;
+  if (!value || typeof value !== 'object') return [];
+
+  const obj = Array.isArray(value) ? Object.fromEntries(value.map((v, i) => [String(i), v])) : value as Record<string, unknown>;
+  const schema = getSubSchema(selectedPath.value);
+  const defaultObj = getSchemaDefaults(schema);
+
+  return Object.keys(obj)
+    .sort()
+    .map((key) => {
+      const path = selectedPath.value ? `${selectedPath.value}.${key}` : key;
+      const val = obj[key];
+      const type = getValueType(val);
+      const isComplex = type === 'object' || type === 'array';
+      const defVal = defaultObj[key];
+      const isDifferentFromDefault = defVal !== undefined && JSON.stringify(val) !== JSON.stringify(defVal);
+      return { key, path, value: val, type, isComplex, defaultValue: defVal, isDifferentFromDefault };
+    });
+});
+
+// ─── Search ───
+
+const searchQuery = ref('');
+
+interface SearchResult {
+  path: string;
+  value: unknown;
+  type: string;
+}
+
+/** Flatten state tree into dot-path entries for search */
+function flattenTree(obj: unknown, prefix: string, results: SearchResult[], maxDepth: number): void {
+  if (maxDepth <= 0 || !obj || typeof obj !== 'object') return;
+
+  const record = obj as Record<string, unknown>;
+  for (const [key, val] of Object.entries(record)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    const type = getValueType(val);
+    results.push({ path, value: val, type });
+
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      flattenTree(val, path, results, maxDepth - 1);
+    }
+  }
+}
+
+const searchResults = computed<SearchResult[]>(() => {
+  if (!searchQuery.value.trim()) return [];
+  const q = searchQuery.value.trim().toLowerCase();
+  const all: SearchResult[] = [];
+  flattenTree(tree.value, '', all, 6);
+  return all.filter((r) => r.path.toLowerCase().includes(q)).slice(0, 100);
+});
+
+const isSearching = computed(() => searchQuery.value.trim().length > 0);
+
+function navigateToSearchResult(path: string): void {
+  const segments = path.split('.');
+  if (segments.length > 1) {
+    selectedPath.value = segments.slice(0, -1).join('.');
+  } else {
+    selectedPath.value = '';
+  }
+  searchQuery.value = '';
+}
+
+// ─── Inline editing ───
+
+const editingPath = ref<string | null>(null);
+const editValue = ref('');
+
+function startEdit(field: FieldEntry): void {
+  if (field.isComplex) {
+    // 数组和无 schema properties 的对象：导航进去（tree view 已支持数组）
+    // SchemaForm 只能编辑有 properties 的 object schema，对数组会渲染空 modal
+    const subSchema = getSubSchema(field.path);
+    const hasProperties = !!(subSchema['properties'] && Object.keys(subSchema['properties'] as object).length > 0);
+    if (!hasProperties) {
+      navigateTo(field.path);
+      return;
+    }
+    openSchemaEdit(field.path, field.key);
+    return;
+  }
+  if (field.type === 'string') {
+    openStringEdit(field);
+    return;
+  }
+  editingPath.value = field.path;
+  editValue.value = field.type === 'boolean' ? '' : String(field.value ?? '');
+}
+
+function commitEdit(field: FieldEntry): void {
+  if (!editingPath.value) return;
+  let parsed: unknown;
+  switch (field.type) {
+    case 'number':
+      parsed = Number(editValue.value);
+      if (isNaN(parsed as number)) parsed = 0;
+      break;
+    case 'boolean':
+      parsed = !(field.value as boolean);
+      break;
+    default:
+      parsed = editValue.value;
+  }
+  setValue(field.path, parsed);
+  editingPath.value = null;
+  eventBus.emit('ui:toast', { type: 'success', message: '值已更新', duration: 1200 });
+}
+
+function cancelEdit(): void {
+  editingPath.value = null;
+}
+
+function toggleBoolean(field: FieldEntry): void {
+  setValue(field.path, !(field.value as boolean));
+  eventBus.emit('ui:toast', { type: 'success', message: '值已更新', duration: 1200 });
+}
+
+const pendingResetField = ref<FieldEntry | null>(null);
+
+function confirmResetField(field: FieldEntry): void {
+  pendingResetField.value = field;
+}
+
+function executeResetField(): void {
+  if (!pendingResetField.value) return;
+  setValue(pendingResetField.value.path, pendingResetField.value.defaultValue);
+  eventBus.emit('ui:toast', { type: 'info', message: '已重置为默认值', duration: 1200 });
+  pendingResetField.value = null;
+}
+
+function cancelReset(): void {
+  pendingResetField.value = null;
+}
+
+// ─── String edit modal ───
+
+const showStringModal = ref(false);
+const stringEditPath = ref('');
+const stringEditKey = ref('');
+const stringEditValue = ref('');
+
+function openStringEdit(field: FieldEntry): void {
+  stringEditPath.value = field.path;
+  stringEditKey.value = field.key;
+  stringEditValue.value = String(field.value ?? '');
+  showStringModal.value = true;
+}
+
+function saveStringEdit(): void {
+  setValue(stringEditPath.value, stringEditValue.value);
+  showStringModal.value = false;
+  eventBus.emit('ui:toast', { type: 'success', message: '值已更新', duration: 1200 });
+}
+
+// ─── SchemaForm modal for complex types ───
+
+const showSchemaModal = ref(false);
+const schemaModalPath = ref('');
+const schemaModalTitle = ref('');
+const schemaModalData = ref<unknown>({});
+
+function openSchemaEdit(path: string, title: string): void {
+  const data = get<unknown>(path);
+  schemaModalPath.value = path;
+  schemaModalTitle.value = `编辑: ${title}`;
+  schemaModalData.value = data != null ? JSON.parse(JSON.stringify(data)) : {};
+  showSchemaModal.value = true;
+}
+
+function onSchemaUpdate(newValue: unknown): void {
+  schemaModalData.value = newValue;
+}
+
+function saveSchemaEdit(): void {
+  setValue(schemaModalPath.value, schemaModalData.value);
+  showSchemaModal.value = false;
+  eventBus.emit('ui:toast', { type: 'success', message: '数据已保存', duration: 1500 });
+}
+
+// ─── Raw JSON editor modal ───
+
+const showJsonEditor = ref(false);
+const jsonEditorPath = ref('');
+const jsonEditorTitle = ref('');
+const jsonEditorText = ref('');
+const jsonEditorError = ref('');
+
+function openJsonEditor(path: string): void {
+  const val = get<unknown>(path);
+  jsonEditorPath.value = path;
+  jsonEditorTitle.value = path || '根';
+  jsonEditorText.value = JSON.stringify(val, null, 2) ?? '{}';
+  jsonEditorError.value = '';
+  showJsonEditor.value = true;
+}
+
+function validateJsonEditor(): void {
+  try {
+    JSON.parse(jsonEditorText.value);
+    jsonEditorError.value = '';
+  } catch (e) {
+    jsonEditorError.value = e instanceof Error ? e.message : '格式错误';
+  }
+}
+
+const jsonEditorValid = computed(() => !jsonEditorError.value && jsonEditorText.value.trim().length > 0);
+
+function saveJsonEditor(): void {
+  try {
+    const parsed = JSON.parse(jsonEditorText.value);
+    setValue(jsonEditorPath.value, parsed);
+    showJsonEditor.value = false;
+    eventBus.emit('ui:toast', { type: 'success', message: 'JSON 已保存', duration: 1500 });
+  } catch (e) {
+    jsonEditorError.value = e instanceof Error ? e.message : '格式错误';
+  }
+}
+
+function formatJsonEditor(): void {
+  try {
+    const parsed = JSON.parse(jsonEditorText.value);
+    jsonEditorText.value = JSON.stringify(parsed, null, 2);
+    jsonEditorError.value = '';
+  } catch { /* keep as-is if invalid */ }
+}
+
+// ─── Helpers ───
+
+function getValueType(val: unknown): string {
+  if (val === null || val === undefined) return 'null';
+  if (Array.isArray(val)) return 'array';
+  return typeof val;
+}
+
+function displayValue(val: unknown): string {
+  if (val === null || val === undefined) return 'null';
+  if (typeof val === 'boolean') return val ? 'true' : 'false';
+  if (typeof val === 'object') {
+    if (Array.isArray(val)) {
+      if (val.length === 0) return '[ ] (空数组)';
+      const preview = val.slice(0, 2).map((item) => {
+        if (typeof item === 'string') return `"${truncate(item, 40)}"`;
+        if (item && typeof item === 'object') {
+          const o = item as Record<string, unknown>;
+          const name = o['名称'] ?? o['name'] ?? o['标题'] ?? o['id'];
+          if (name) return truncate(String(name), 40);
+          const firstVal = Object.values(o)[0];
+          return typeof firstVal === 'string' ? truncate(firstVal, 30) : '{…}';
+        }
+        return String(item);
+      }).join(', ');
+      return `[${val.length} 项] ${preview}${val.length > 2 ? ', …' : ''}`;
+    }
+    const obj = val as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return '{ } (空对象)';
+    const preview = keys.slice(0, 3).map((k) => {
+      const v = obj[k];
+      if (typeof v === 'string') return `${k}: "${truncate(v, 30)}"`;
+      if (typeof v === 'number' || typeof v === 'boolean') return `${k}: ${v}`;
+      return `${k}: …`;
+    }).join(', ');
+    return `{${keys.length}} ${preview}${keys.length > 3 ? ', …' : ''}`;
+  }
+  return truncate(String(val), 80);
+}
+
+function typeColor(type: string): string {
+  switch (type) {
+    case 'string': return 'oklch(0.723 0.191 149.58)';
+    case 'number': return 'oklch(0.623 0.168 259.09)';
+    case 'boolean': return 'oklch(0.748 0.153 68.85)';
+    case 'object': return 'oklch(0.585 0.208 277.12)';
+    case 'array': return '#e879a0';
+    case 'null': return '#8888a0';
+    default: return '#8888a0';
+  }
+}
+
+/** Get sub-schema for a dot-path */
+function getSubSchema(dotPath: string): Record<string, unknown> {
+  const schema = getStateSchema();
+  if (!dotPath) return schema;
+  const segments = dotPath.split('.');
+  let current: Record<string, unknown> = schema;
+  for (const seg of segments) {
+    const props = current['properties'] as Record<string, Record<string, unknown>> | undefined;
+    if (props?.[seg]) {
+      current = props[seg];
+    } else {
+      return {};
+    }
+  }
+  return current;
+}
+
+/** Extract default values from schema properties */
+function getSchemaDefaults(schema: Record<string, unknown>): Record<string, unknown> {
+  const props = schema['properties'] as Record<string, Record<string, unknown>> | undefined;
+  if (!props) return {};
+  const defaults: Record<string, unknown> = {};
+  for (const [key, fieldSchema] of Object.entries(props)) {
+    if ('default' in fieldSchema) {
+      defaults[key] = fieldSchema['default'];
+    }
+  }
+  return defaults;
+}
+
+const modalSchema = computed(() => getSubSchema(schemaModalPath.value));
+
+// ─── Phase 6.3: Export JSON ───────────────────────────────────
+
+function exportStateJson(): void {
+  const data = {
+    saveData: tree.value,
+    exportedAt: new Date().toISOString(),
+  };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `game-state-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  eventBus.emit('ui:toast', { type: 'success', message: '状态已导出', duration: 1500 });
+}
+
+// ─── Phase 6.3: Stats Modal ───────────────────────────────────
+
+const showStatsModal = ref(false);
+
+function countLeafNodes(obj: unknown): number {
+  if (obj === null || obj === undefined) return 1;
+  if (typeof obj !== 'object') return 1;
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return 1;
+    return obj.reduce((sum, item) => sum + countLeafNodes(item), 0);
+  }
+  const record = obj as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length === 0) return 1;
+  return keys.reduce((sum, k) => sum + countLeafNodes(record[k]), 0);
+}
+
+function treeDepth(obj: unknown, depth = 0): number {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return depth;
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return depth + 1;
+    return Math.max(...obj.map((item) => treeDepth(item, depth + 1)));
+  }
+  const record = obj as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length === 0) return depth + 1;
+  return Math.max(...keys.map((k) => treeDepth(record[k], depth + 1)));
+}
+
+const stateStats = computed(() => {
+  const json = JSON.stringify(tree.value);
+  const sizeKb = (json.length / 1024).toFixed(1);
+  const leafCount = countLeafNodes(tree.value);
+  const depth = treeDepth(tree.value);
+  const rootKeys = tree.value ? Object.keys(tree.value as Record<string, unknown>).length : 0;
+  return { sizeKb, leafCount, depth, rootKeys };
+});
+
+// ─── Phase 6.3: Copy field value ─────────────────────────────
+
+async function copyFieldValue(path: string): Promise<void> {
+  const val = get<unknown>(path);
+  const text = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // Fallback for non-secure contexts
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    eventBus.emit('ui:toast', { type: 'success', message: '已复制', duration: 1000 });
+  } catch {
+    eventBus.emit('ui:toast', { type: 'error', message: '复制失败', duration: 1500 });
+  }
+}
+</script>
+
+<template>
+  <div class="gv-panel">
+    <template v-if="isLoaded">
+      <!-- ─── Header ─── -->
+      <header class="panel-header">
+        <h2 class="panel-title">游戏变量</h2>
+        <div class="header-actions">
+          <button class="btn btn--ghost btn--sm" @click="showStatsModal = true" title="数据统计">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+            统计
+          </button>
+          <button class="btn btn--primary btn--sm" @click="exportStateJson" title="导出完整状态 JSON">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+            导出 JSON
+          </button>
+        </div>
+      </header>
+
+      <!-- ─── Search bar ─── -->
+      <SearchInput v-model="searchQuery" placeholder="搜索路径或值…" :debounce-ms="200" />
+
+      <!-- ─── Search results overlay ─── -->
+      <div v-if="isSearching" class="search-results">
+        <div class="search-results-header">
+          搜索结果 ({{ searchResults.length }})
+        </div>
+        <div v-if="searchResults.length" class="search-result-list">
+          <div
+            v-for="result in searchResults"
+            :key="result.path"
+            class="search-result-item"
+            @click="navigateToSearchResult(result.path)"
+          >
+            <span class="result-path">{{ result.path }}</span>
+            <span class="result-value" :style="{ color: typeColor(result.type) }">
+              {{ displayValue(result.value) }}
+            </span>
+          </div>
+        </div>
+        <p v-else class="empty-hint">没有匹配结果</p>
+      </div>
+
+      <!-- ─── Main content (hidden during search) ─── -->
+      <div v-else class="gv-content">
+        <!-- Breadcrumb + JSON edit action -->
+        <div class="breadcrumb-bar">
+          <nav class="breadcrumb" aria-label="路径导航">
+            <button class="breadcrumb-item breadcrumb-item--root" @click="navigateBreadcrumb(-1)">
+              根
+            </button>
+            <template v-for="(segment, idx) in breadcrumb" :key="idx">
+              <span class="breadcrumb-sep">/</span>
+              <button
+                :class="['breadcrumb-item', { 'breadcrumb-item--active': idx === breadcrumb.length - 1 }]"
+                @click="navigateBreadcrumb(idx)"
+              >
+                {{ segment }}
+              </button>
+            </template>
+          </nav>
+          <button
+            v-if="selectedPath"
+            class="btn btn--ghost btn--sm"
+            title="以 JSON 方式编辑当前路径"
+            @click="openJsonEditor(selectedPath)"
+          >
+            { } JSON
+          </button>
+        </div>
+
+        <!-- Two-column layout -->
+        <div class="gv-columns">
+          <!-- Left: tree navigation -->
+          <aside class="tree-nav">
+            <div
+              v-for="child in currentChildren"
+              :key="child.fullPath"
+              :class="['tree-node', { 'tree-node--selected': selectedPath === child.fullPath, 'tree-node--navigable': child.type === 'object' || child.type === 'array' }]"
+              :title="child.type === 'object' ? '点击展开此分类' : child.type === 'array' ? '点击查看列表内容' : '点击编辑此字段'"
+              @click="(child.type === 'object' || child.type === 'array') ? navigateTo(child.fullPath) : startEdit({ key: child.key, path: child.fullPath, value: get(child.fullPath), type: child.type, isComplex: false, defaultValue: undefined, isDifferentFromDefault: false })"
+            >
+              <span :class="['tree-node-icon', `tree-node-icon--${child.type}`]">
+                <svg v-if="child.type === 'object'" viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/></svg>
+                <svg v-else-if="child.type === 'array'" viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M2 4a1 1 0 100-2 1 1 0 000 2zm3.75-1.5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zM3 8a1 1 0 10-2 0 1 1 0 002 0zm-1 5a1 1 0 100-2 1 1 0 000 2z"/></svg>
+                <span v-else class="tree-node-dot" :style="{ background: typeColor(child.type) }" />
+              </span>
+              <span class="tree-node-name">{{ child.key }}</span>
+              <span class="tree-node-preview" :style="{ color: (child.type === 'object' || child.type === 'array') ? '#8888a0' : typeColor(child.type) }">
+                {{ child.preview }}
+              </span>
+              <span v-if="child.type === 'object' || child.type === 'array'" class="tree-node-arrow">›</span>
+            </div>
+            <p v-if="!currentChildren.length" class="empty-hint">此路径下无数据</p>
+          </aside>
+
+          <!-- Right: field list for selected path -->
+          <main class="field-list">
+            <div v-if="!selectedPath" class="field-list-hint">
+              <p>选择左侧的分类以查看和编辑字段</p>
+            </div>
+            <template v-else>
+              <div
+                v-for="field in fieldEntries"
+                :key="field.path"
+                class="field-row"
+              >
+                <div class="field-key-area">
+                  <span class="field-key">{{ field.key }}</span>
+                  <span class="field-type-tag" :style="{ color: typeColor(field.type), borderColor: typeColor(field.type) }">
+                    {{ field.type }}
+                  </span>
+                </div>
+
+                <div class="field-value-area">
+                  <!-- Boolean toggle -->
+                  <template v-if="field.type === 'boolean'">
+                    <button
+                      :class="['bool-toggle', { 'bool-toggle--true': field.value }]"
+                      @click="toggleBoolean(field)"
+                    >
+                      {{ field.value ? 'true' : 'false' }}
+                    </button>
+                  </template>
+
+                  <!-- Inline editing for string/number -->
+                  <template v-else-if="editingPath === field.path">
+                    <input
+                      v-model="editValue"
+                      :type="field.type === 'number' ? 'number' : 'text'"
+                      class="inline-edit"
+                      @keydown.enter="commitEdit(field)"
+                      @keydown.escape="cancelEdit"
+                      @blur="commitEdit(field)"
+                    />
+                  </template>
+
+                  <!-- Complex type (object/array) — click to navigate into tree -->
+                  <template v-else-if="field.isComplex">
+                    <button class="complex-btn" @click="navigateTo(field.path)">
+                      {{ displayValue(field.value) }}
+                    </button>
+                  </template>
+
+                  <!-- Display value — double-click to edit -->
+                  <template v-else>
+                    <span
+                      class="field-value"
+                      :style="{ color: typeColor(field.type) }"
+                      @dblclick="startEdit(field)"
+                      title="双击编辑"
+                    >
+                      {{ displayValue(field.value) }}
+                    </span>
+                  </template>
+
+                  <!-- Copy button -->
+                  <button
+                    class="copy-btn"
+                    title="复制此字段值"
+                    @click.stop="copyFieldValue(field.path)"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+                  </button>
+                  <!-- Reset (separated, with confirmation) -->
+                  <button
+                    v-if="field.isDifferentFromDefault"
+                    class="reset-btn"
+                    title="重置为默认值（需确认）"
+                    @click.stop="confirmResetField(field)"
+                  >
+                    ↩
+                  </button>
+                </div>
+              </div>
+              <p v-if="!fieldEntries.length" class="empty-hint">此路径下无字段</p>
+            </template>
+          </main>
+        </div>
+      </div>
+    </template>
+
+    <div v-else class="empty-state">
+      <p>尚未加载游戏数据</p>
+    </div>
+
+    <!-- ─── Stats Modal ─── -->
+    <Modal v-model="showStatsModal" title="状态树统计" width="360px">
+      <div class="stats-grid">
+        <div class="stats-row">
+          <span class="stats-label">估算大小</span>
+          <span class="stats-value">{{ stateStats.sizeKb }} KB</span>
+        </div>
+        <div class="stats-row">
+          <span class="stats-label">叶字段总数</span>
+          <span class="stats-value">{{ stateStats.leafCount.toLocaleString() }}</span>
+        </div>
+        <div class="stats-row">
+          <span class="stats-label">最大深度</span>
+          <span class="stats-value">{{ stateStats.depth }} 层</span>
+        </div>
+        <div class="stats-row">
+          <span class="stats-label">根节点数</span>
+          <span class="stats-value">{{ stateStats.rootKeys }}</span>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="showStatsModal = false">关闭</button>
+        <button class="btn-primary" @click="exportStateJson; showStatsModal = false">导出 JSON</button>
+      </template>
+    </Modal>
+
+    <!-- ─── String Edit Modal ─── -->
+    <Modal v-model="showStringModal" :title="`编辑: ${stringEditKey}`" width="560px">
+      <textarea
+        v-model="stringEditValue"
+        class="string-edit-textarea"
+        rows="8"
+        spellcheck="false"
+      />
+      <template #footer>
+        <button class="btn-secondary" @click="showStringModal = false">取消</button>
+        <button class="btn-primary" @click="saveStringEdit">保存</button>
+      </template>
+    </Modal>
+
+    <!-- ─── SchemaForm Modal ─── -->
+    <Modal v-model="showSchemaModal" :title="schemaModalTitle" width="600px">
+      <SchemaForm
+        :schema="modalSchema"
+        :value="schemaModalData"
+        @update:value="onSchemaUpdate"
+      />
+      <template #footer>
+        <button class="btn-secondary" @click="showSchemaModal = false">取消</button>
+        <button class="btn-primary" @click="saveSchemaEdit">保存</button>
+      </template>
+    </Modal>
+
+    <!-- ─── Reset Confirmation ─── -->
+    <Modal :model-value="!!pendingResetField" @update:model-value="cancelReset" title="确认重置" width="400px">
+      <p v-if="pendingResetField" style="font-size: 0.88rem; line-height: 1.6; margin: 0;">
+        确定要将 <code style="color: var(--color-primary);">{{ pendingResetField.path }}</code> 重置为默认值吗？此操作不可撤销。
+      </p>
+      <template #footer>
+        <button class="btn-secondary" @click="cancelReset">取消</button>
+        <button class="btn-primary" style="background:var(--color-danger);border-color:var(--color-danger);" @click="executeResetField">确认重置</button>
+      </template>
+    </Modal>
+
+    <!-- ─── Raw JSON Editor Modal ─── -->
+    <Modal v-model="showJsonEditor" :title="`JSON 编辑: ${jsonEditorTitle}`" width="680px">
+      <div class="json-editor">
+        <div class="json-toolbar">
+          <button class="btn btn--ghost btn--sm" @click="formatJsonEditor">格式化</button>
+          <span v-if="jsonEditorError" class="json-error-badge">JSON 无效</span>
+          <span v-else class="json-ok-badge">JSON 有效</span>
+        </div>
+        <textarea
+          v-model="jsonEditorText"
+          class="json-textarea"
+          :class="{ 'json-textarea--error': jsonEditorError }"
+          spellcheck="false"
+          @input="validateJsonEditor"
+        />
+        <p v-if="jsonEditorError" class="json-error-msg">{{ jsonEditorError }}</p>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="showJsonEditor = false">取消</button>
+        <button class="btn-primary" :disabled="!jsonEditorValid" @click="saveJsonEditor">保存</button>
+      </template>
+    </Modal>
+  </div>
+</template>
+
+<style scoped>
+.gv-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px var(--sidebar-right-reserve, 40px) 20px var(--sidebar-left-reserve, 40px);
+  transition: padding-left var(--duration-open) var(--ease-droplet), padding-right var(--duration-open) var(--ease-droplet);
+  height: 100%;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* btn helpers reused from other panels */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.btn--sm { padding: 5px 10px; }
+.btn--primary {
+  color: var(--color-text-bone);
+  background: var(--color-primary, #6366f1);
+}
+.btn--primary:hover { background: var(--color-primary-hover, #4f46e5); }
+.btn--ghost {
+  color: var(--color-text-secondary, #8888a0);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--color-border, #2a2a3a);
+}
+.btn--ghost:hover { color: var(--color-text, #e0e0e6); }
+
+.panel-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text, #e0e0e6);
+}
+
+/* ── Search results ── */
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.search-results-header {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #8888a0);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.search-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  gap: 12px;
+}
+.search-result-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.result-path {
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--color-text, #e0e0e6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.result-value {
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  opacity: 0.8;
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Main content ── */
+.gv-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
+/* ── Breadcrumb bar ── */
+.breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.breadcrumb {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+}
+
+.breadcrumb-item {
+  padding: 2px 6px;
+  font-size: 0.78rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--color-primary, #6366f1);
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+.breadcrumb-item:hover {
+  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+}
+.breadcrumb-item--root {
+  color: var(--color-text-secondary, #8888a0);
+}
+.breadcrumb-item--active {
+  color: var(--color-text, #e0e0e6);
+  font-weight: 600;
+  cursor: default;
+}
+
+.breadcrumb-sep {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #8888a0);
+  opacity: 0.5;
+}
+
+/* ── Two-column layout ── */
+.gv-columns {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Left: tree nav ── */
+.tree-nav {
+  width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.12s ease;
+}
+.tree-node:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.tree-node--selected {
+  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+}
+
+.tree-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  flex-shrink: 0;
+}
+.tree-node-icon--object { color: var(--color-amber-300); }
+.tree-node-icon--array { color: var(--color-sage-400); }
+.tree-node-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.tree-node-name {
+  color: var(--color-text, #e0e0e6);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-node-count {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-text-secondary, #8888a0);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.tree-node-preview {
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.tree-node-arrow {
+  flex-shrink: 0;
+  font-size: 1rem;
+  color: var(--color-text-muted, #55556a);
+  transition: transform var(--duration-fast, 120ms) var(--ease-out),
+              color var(--duration-fast, 120ms) var(--ease-out);
+}
+.tree-node--navigable {
+  cursor: pointer;
+}
+.tree-node--navigable:hover .tree-node-arrow {
+  transform: translateX(2px);
+  color: var(--color-sage-400);
+}
+
+/* ── Right: field list ── */
+.field-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.field-list-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary, #8888a0);
+  font-size: 0.85rem;
+}
+
+.field-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  gap: 12px;
+}
+.field-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.field-key-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.field-key {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text, #e0e0e6);
+}
+
+.field-type-tag {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border: 1px solid;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+  min-width: 48px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.field-value-area {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.field-value {
+  font-size: 0.82rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ── Inline edit ── */
+.inline-edit {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 0.82rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--color-text, #e0e0e6);
+  background: var(--color-bg, #0f0f14);
+  border: 1px solid var(--color-sage-400, #91c49b);
+  border-radius: 5px;
+  outline: none;
+  max-width: 200px;
+}
+
+.string-edit-textarea {
+  width: 100%;
+  min-height: 160px;
+  padding: 12px;
+  font-size: 0.84rem;
+  font-family: var(--font-serif-cjk);
+  line-height: 1.7;
+  color: var(--color-text, #e0e0e6);
+  background: var(--color-bg, #0f0f14);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 8px;
+  outline: none;
+  resize: vertical;
+}
+.string-edit-textarea:focus {
+  border-color: var(--color-sage-400);
+}
+
+/* ── Boolean toggle ── */
+.bool-toggle {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-danger, #ef4444);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.bool-toggle--true {
+  color: var(--color-success, #22c55e);
+  border-color: color-mix(in oklch, var(--color-success) 25%, transparent);
+  background: color-mix(in oklch, var(--color-success) 8%, transparent);
+}
+
+/* ── Complex value button ── */
+.complex-btn {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--color-sage-400);
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  text-align: right;
+}
+.complex-btn:hover {
+  background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+}
+
+/* ── Copy button ── */
+.copy-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--color-text-secondary, #8888a0);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.field-row:hover .copy-btn { opacity: 1; }
+.copy-btn:hover {
+  color: var(--color-text, #e0e0e6);
+  background: rgba(255,255,255,0.08);
+}
+
+/* ── Stats modal ── */
+.stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 6px;
+}
+.stats-label {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary, #8888a0);
+}
+.stats-value {
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--color-primary, #6366f1);
+}
+
+/* ── Reset button ── */
+.reset-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.75rem;
+  color: var(--color-warning, #f59e0b);
+  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-amber-400) 20%, transparent);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.reset-btn:hover {
+  background: var(--color-warning, #f59e0b);
+  color: var(--color-bg);
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text-bone);
+  background: var(--color-primary, #6366f1);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btn-primary:hover { background: var(--color-primary-hover, #4f46e5); }
+
+.btn-secondary {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #8888a0);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-secondary:hover { color: var(--color-text, #e0e0e6); border-color: var(--color-primary, #6366f1); }
+
+/* ── Empty ── */
+.empty-hint {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary, #8888a0);
+  opacity: 0.6;
+  text-align: center;
+  padding: 16px;
+  margin: 0;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary, #8888a0);
+  font-size: 0.88rem;
+}
+
+/* ── Scrollbar ── */
+.tree-nav::-webkit-scrollbar,
+.field-list::-webkit-scrollbar,
+.search-results::-webkit-scrollbar { width: 4px; }
+.tree-nav::-webkit-scrollbar-track,
+.field-list::-webkit-scrollbar-track,
+.search-results::-webkit-scrollbar-track { background: transparent; }
+.tree-nav::-webkit-scrollbar-thumb,
+.field-list::-webkit-scrollbar-thumb,
+.search-results::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 2px; }
+
+/* ── JSON Editor Modal ── */
+.json-editor { display: flex; flex-direction: column; gap: 8px; }
+.json-toolbar { display: flex; align-items: center; gap: 8px; }
+.json-error-badge {
+  padding: 2px 8px; font-size: 0.68rem; font-weight: 600;
+  background: color-mix(in oklch, var(--color-danger) 12%, transparent); color: var(--color-danger-hover);
+  border-radius: 4px;
+}
+.json-ok-badge {
+  padding: 2px 8px; font-size: 0.68rem; font-weight: 600;
+  background: color-mix(in oklch, var(--color-success) 12%, transparent); color: var(--color-success);
+  border-radius: 4px;
+}
+.json-textarea {
+  width: 100%; min-height: 320px; max-height: 500px;
+  padding: 12px; font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem; line-height: 1.55; tab-size: 2;
+  color: var(--color-text, #e8e8f0);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 8px; resize: vertical;
+  transition: border-color 0.15s;
+}
+.json-textarea:focus { outline: none; border-color: var(--color-primary, #6366f1); }
+.json-textarea--error { border-color: var(--color-danger) !important; }
+.json-error-msg {
+  margin: 0; font-size: 0.72rem; color: var(--color-danger-hover); line-height: 1.4;
+  padding: 4px 8px; background: color-mix(in oklch, var(--color-danger) 6%, transparent);
+  border-radius: 4px;
+}
+
+</style>

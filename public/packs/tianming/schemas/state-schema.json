@@ -1,0 +1,711 @@
+{
+  "$comment": "AutoGameAgent Game Pack Schema Contract v3.1 — 字段名是引擎契约，不可随意重命名。v3.0：六维属性（体质/直觉/悟性/气运/魅力/心性）、角色.身份节、角色.效果、背包货币对象化、世界.地点信息数组化、游戏时间增加小时/分钟。v3.1：世界.天气/节日/环境 env-tags 字段（2026-04-19 MRJH port），无 expiry，每回合 AI 强制 re-emit set 命令。",
+  "schemaVersion": "3.1",
+  "type": "object",
+  "properties": {
+
+    "元数据": {
+      "type": "object",
+      "properties": {
+        "游戏包名称": { "type": "string",  "default": "天命" },
+        "回合序号":   { "type": "number",  "default": 0 },
+        "叙事历史":   { "type": "array",   "default": [] },
+        "推理历史": {
+          "type": "array",
+          "default": [],
+          "$comment": "Sprint CoT-2: FIFO ring of captured <thinking> block contents. ReasoningIngestStage writes here; ContextAssemblyStage reads last entry as {{PREV_THINKING}}. Ring size configurable via 系统.设置.cot.reasoningRingSize (default 3). Stripped from GAME_STATE_JSON via PROMPT_ALWAYS_STRIP_PATHS to avoid duplication."
+        },
+        "剧情规划": {
+          "type": "string",
+          "default": "",
+          "$comment": "Sprint CoT-2: optional <story_plan> content captured from AI output."
+        },
+        "女主规划": {
+          "type": "object",
+          "default": { "stageProgression": [], "heroineEntries": [], "interactionEvents": [], "scenePlans": [] },
+          "$comment": "Heroine/protagonist plan — managed via PromptPanel 剧情规划 tab. Injected into AI context as 女主剧情规划 piece."
+        },
+        "当前行动选项": {
+          "type": "array",
+          "default": []
+        }
+      }
+    },
+
+    "角色": {
+      "type": "object",
+      "properties": {
+
+        "基础信息": {
+          "type": "object",
+          "x-assistant-editable": true,
+          "x-assistant-label": "角色基础信息",
+          "$comment": "引擎契约字段 — 姓名/当前位置/年龄/性别 路径由 DEFAULT_ENGINE_PATHS 固定，不可改名",
+          "properties": {
+            "姓名":     { "type": "string", "default": "" },
+            "当前位置": { "type": "string", "default": "未知之地" },
+            "年龄":     { "type": "number", "default": 20 },
+            "性别":     { "type": "string", "default": "" },
+            "特质":     { "type": "string", "default": "", "$comment": "创角选择的特质名称（如「坚毅」「迅捷」）" }
+          }
+        },
+
+        "身份": {
+          "type": "object",
+          "x-assistant-editable": true,
+          "x-assistant-label": "角色身份",
+          "$comment": "创角只读元数据 — 由 AI 初始化命令写入，游戏中不再更改",
+          "properties": {
+            "出身":     { "type": "string",  "default": "" },
+            "天赋档次": { "type": "string",  "default": "" },
+            "天赋":     { "type": "array",   "default": [], "$comment": "天赋名称列表 [string]" },
+            "种族":     { "type": "string",  "default": "人族" },
+            "出生日期": {
+              "type": "object",
+              "default": {},
+              "properties": {
+                "年": { "type": "number" },
+                "月": { "type": "number" },
+                "日": { "type": "number" }
+              }
+            },
+            "先天六维": {
+              "type": "object",
+              "$comment": "创角时由天赋档次积分分配，只读基线（1–10）",
+              "default": {},
+              "properties": {
+                "体质": { "type": "number", "default": 5 },
+                "直觉": { "type": "number", "default": 5 },
+                "悟性": { "type": "number", "default": 5 },
+                "气运": { "type": "number", "default": 5 },
+                "魅力": { "type": "number", "default": 5 },
+                "心性": { "type": "number", "default": 5 }
+              }
+            }
+          }
+        },
+
+        "属性": {
+          "type": "object",
+          "x-display": "stat-section",
+          "$comment": "六维后天属性 — 引擎通过 x-display 扫描渲染进度条。字段名由 Game Pack 定义（天命使用六维），上限均为 20",
+          "properties": {
+            "体质": { "type": "number", "default": 5, "x-display": "stat-bar", "x-max": 20, "x-order": 1 },
+            "直觉": { "type": "number", "default": 5, "x-display": "stat-bar", "x-max": 20, "x-order": 2 },
+            "悟性": { "type": "number", "default": 5, "x-display": "stat-bar", "x-max": 20, "x-order": 3 },
+            "气运": { "type": "number", "default": 5, "x-display": "stat-bar", "x-max": 20, "x-order": 4 },
+            "魅力": { "type": "number", "default": 5, "x-display": "stat-bar", "x-max": 20, "x-order": 5 },
+            "心性": { "type": "number", "default": 5, "x-display": "stat-bar", "x-max": 20, "x-order": 6 }
+          }
+        },
+
+        "可变属性": {
+          "type": "object",
+          "x-assistant-editable": true,
+          "x-assistant-label": "可变属性（声望/地位/体力/精力）",
+          "$comment": "运行时可变的非六维属性（体力/精力/声望/地位）",
+          "properties": {
+            "地位": {
+              "type": "object",
+              "default": { "名称": "还未揭露", "描述": "" },
+              "properties": {
+                "名称": { "type": "string" },
+                "描述": { "type": "string" }
+              }
+            },
+            "声望": { "type": "number", "default": 0 },
+            "体力": {
+              "type": "object",
+              "default": { "当前": 100, "上限": 100 },
+              "properties": {
+                "当前": { "type": "number" },
+                "上限": { "type": "number" }
+              }
+            },
+            "精力": {
+              "type": "object",
+              "default": { "当前": 100, "上限": 100 },
+              "properties": {
+                "当前": { "type": "number" },
+                "上限": { "type": "number" }
+              }
+            }
+          }
+        },
+
+        "效果": {
+          "type": "array",
+          "default": [],
+          "x-assistant-editable": true,
+          "x-assistant-label": "状态效果（buff/debuff）",
+          "$comment": "状态效果（buff/debuff）数组；用 push 添加，由系统定期清理过期条目",
+          "items": {
+            "type": "object",
+            "properties": {
+              "状态名称":   { "type": "string" },
+              "类型":       { "type": "string", "$comment": "buff | debuff" },
+              "生成时间":   { "type": "object" },
+              "持续时间分钟": { "type": "number" },
+              "状态描述":   { "type": "string" }
+            }
+          }
+        },
+
+        "背包": {
+          "type": "object",
+          "x-assistant-editable": true,
+          "x-assistant-label": "背包（金钱/物品）",
+          "properties": {
+            "金钱": {
+              "type": "object",
+              "$comment": "四档货币（通用）：现金/铜/银/金；具体货币名称按世界观理解（铜钱/银两/金币等）",
+              "default": { "现金": 0, "铜": 0, "银": 0, "金": 0 },
+              "properties": {
+                "现金": { "type": "number" },
+                "铜":   { "type": "number" },
+                "银":   { "type": "number" },
+                "金":   { "type": "number" }
+              }
+            },
+            "物品": {
+              "type": "object",
+              "$comment": "Record<物品ID, Item对象> — 用 set 添加完整对象，用 delete 删除。ID格式：类型_时间戳_随机数",
+              "default": {},
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "名称":   { "type": "string" },
+                  "类型":   { "type": "string", "$comment": "装备|消耗品|材料|其他" },
+                  "品质":   { "type": "object" },
+                  "数量":   { "type": "number" },
+                  "描述":   { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+
+        "身体": {
+          "type": "object",
+          "x-assistant-editable": true,
+          "x-assistant-label": "玩家身体（NSFW）",
+          "$comment": "玩家法身（NSFW 专属）。当 系统.nsfwMode=true 时必填。结构与 NPC 私密信息对齐：身体部位数组（per-part 敏感度/开发度/特征描述）+ 子宫。引擎在 src/engine/memory/snapshot-sanitizer.ts 的 NSFW_STRIP_PATHS=['角色.身体'] 按路径剥离后发送给 AI，存档保留完整数据，UI 始终可见。",
+          "default": {},
+          "properties": {
+            "身高":       { "type": "number" },
+            "体重":       { "type": "number" },
+            "三围": {
+              "type": "object",
+              "properties": {
+                "胸围": { "type": "number" },
+                "腰围": { "type": "number" },
+                "臀围": { "type": "number" }
+              }
+            },
+            "胸部描述":     { "type": "string" },
+            "私处描述":     { "type": "string" },
+            "生殖器描述":   { "type": "string" },
+            "身体部位": {
+              "type": "array",
+              "$comment": "与 NPC 私密信息.身体部位 结构对齐。必须至少包含 4 个固定部位：嘴 / 胸部 / 小穴 / 屁穴（'部位名称' 精确匹配）；AI 可基于角色特质自由追加更多条目（如 乳首、臀部、子宫口等）。",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "部位名称":   { "type": "string" },
+                  "敏感度":     { "type": "number", "$comment": "0-100" },
+                  "开发度":     { "type": "number", "$comment": "0-100" },
+                  "特征描述":   { "type": "string" },
+                  "特殊印记":   { "type": "string" }
+                }
+              }
+            },
+            "子宫": {
+              "type": "object",
+              "$comment": "与 NPC 私密信息.子宫 结构对齐。女性玩家角色选填。",
+              "properties": {
+                "状态":     { "type": "string", "$comment": "受孕/妊娠阶段状态文本" },
+                "宫口状态": { "type": "string", "$comment": "生理状态文本" },
+                "内射记录": {
+                  "type": "array",
+                  "default": [],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "日期":       { "type": "string" },
+                      "描述":       { "type": "string" },
+                      "怀孕判定日": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "敏感点":       { "type": "array", "items": { "type": "string" } },
+            "开发度":       { "type": "object", "$comment": "Record<部位名, 0-100>，兼容旧存档；新存档优先使用 身体部位[] 的 per-item 开发度" },
+            "纹身与印记":   { "type": "array", "items": { "type": "string" } }
+          }
+        },
+
+        "图片档案": {
+          "type": "object",
+          "$comment": "Player character image archive. Managed by CharacterDetailsPanel 主角生图 tab. Structure mirrors NPC 图片档案.",
+          "default": { "生图历史": [], "已选头像图片ID": "", "已选立绘图片ID": "", "最近生图结果": "" }
+        }
+      }
+    },
+
+    "世界": {
+      "type": "object",
+      "properties": {
+
+        "描述": { "type": "string", "default": "", "x-assistant-editable": true, "x-assistant-label": "世界描述" },
+
+        "天气": {
+          "type": "string",
+          "default": "晴",
+          "x-assistant-editable": true,
+          "x-assistant-label": "当前天气",
+          "$comment": "2026-04-19 env-tags port. 每回合由 AI 在主回合/心跳回合的 commands 中强制 set；无 expiry 字段，无引擎自动更新。DEFAULT_ENGINE_PATHS.weather = '世界.天气'。"
+        },
+
+        "节日": {
+          "type": "object",
+          "default": { "名称": "平日", "描述": "", "效果": "" },
+          "x-assistant-editable": true,
+          "x-assistant-label": "当前节日",
+          "$comment": "2026-04-19 env-tags port. 单对象（同时只有一个节日）；默认平日表示无节日；每回合 AI 必须 set（强制 re-emission）。DEFAULT_ENGINE_PATHS.festival = '世界.节日'。",
+          "required": ["名称", "描述", "效果"],
+          "properties": {
+            "名称": { "type": "string", "$comment": "节日名（2-4 CJK）；'平日' 表示无节日" },
+            "描述": { "type": "string", "$comment": "节日的氛围/街景描写，1 句；平日时为空" },
+            "效果": { "type": "string", "$comment": "机械化 / 叙事性影响句；平日时为空" }
+          }
+        },
+
+        "环境": {
+          "type": "array",
+          "default": [],
+          "x-assistant-editable": true,
+          "x-assistant-label": "环境标签",
+          "$comment": "2026-04-19 env-tags port. 每回合 AI 用 set 命令整体替换数组；无 push/delete 使用约定。上限 3 条标签；形状与 MRJH 环境变量 byte-for-byte 对齐（名称/描述/效果）。DEFAULT_ENGINE_PATHS.environmentTags = '世界.环境'。",
+          "items": {
+            "type": "object",
+            "required": ["名称", "描述", "效果"],
+            "properties": {
+              "名称": { "type": "string", "$comment": "4 CJK 优选，描述条件性质（如 '妖雾弥漫'）" },
+              "描述": { "type": "string", "$comment": "1 句具象观察，12-25 字" },
+              "效果": { "type": "string", "$comment": "机械化措辞的影响；可为空字符串" }
+            }
+          }
+        },
+
+        "时间": {
+          "type": "object",
+          "$comment": "引擎路径 DEFAULT_ENGINE_PATHS.gameTime = '世界.时间'（对象）；TimeService 负责时间进位（分→时→日→月→年）",
+          "default": { "年": 1, "月": 1, "日": 1, "小时": 8, "分钟": 0 },
+          "properties": {
+            "年":   { "type": "number", "default": 1 },
+            "月":   { "type": "number", "default": 1 },
+            "日":   { "type": "number", "default": 1 },
+            "小时": { "type": "number", "default": 8 },
+            "分钟": { "type": "number", "default": 0 }
+          }
+        },
+
+        "地点信息": {
+          "type": "array",
+          "default": [],
+          "x-assistant-editable": true,
+          "x-assistant-label": "地点信息（世界地图）",
+          "$comment": "扁平数组 + 上级字段建树；用 push 添加；路径 DEFAULT_ENGINE_PATHS.locations = '世界.地点信息'",
+          "items": {
+            "type": "object",
+            "properties": {
+              "名称":     { "type": "string",  "$comment": "唯一标识，建议用全路径如 '东荒大陆·青云城·客栈'" },
+              "描述":     { "type": "string" },
+              "连接":     { "type": "array",   "items": { "type": "string" } },
+              "NPC":      { "type": "array",   "items": { "type": "string" }, "$comment": "本地驻留 NPC 名称列表" },
+              "坐标":     {
+                "type": "object",
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" }
+                }
+              },
+              "类型":     { "type": "string" },
+              "上级":     { "type": "string", "$comment": "父地点名称（上一级全路径）" }
+            }
+          }
+        },
+
+        "状态": {
+          "type": "object",
+          "properties": {
+            "心跳": {
+              "type": "object",
+              "properties": {
+                "配置": {
+                  "type": "object",
+                  "default": { "enabled": false, "period": 5 },
+                  "$comment": "English keys: enabled / period — HeartbeatConfig interface 契约"
+                },
+                "上次心跳回合序号": { "type": "number", "default": 0 },
+                "历史":             { "type": "array",  "default": [] },
+                "上次执行时间":     { "type": "string", "default": "" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "社交": {
+      "type": "object",
+      "properties": {
+        "关系": {
+          "type": "array",
+          "default": [],
+          "x-assistant-editable": true,
+          "x-assistant-label": "社交关系（NPC 列表）",
+          "$comment": "NpcRelation[] — item 字段名契约：名称/类型/好感度/位置/描述；私密信息为 NSFW 专属子对象，当 系统.nsfwMode=true 且 NPC 性别符合 系统.nsfwGenderFilter 时必填。",
+          "items": {
+            "type": "object",
+            "properties": {
+              "名称":   { "type": "string" },
+              "类型":   { "type": "string" },
+              "好感度": { "type": "number" },
+              "位置":   { "type": "string" },
+              "描述":   { "type": "string", "$comment": "一句话身份/气质概述；与 '外貌描述' 区分（外貌详细写在 '外貌描述' 里）。" },
+              "外貌描述": { "type": "string", "$comment": "NPC 完整外貌（脸、发、瞳、体型、服饰基调等自由文本段）；image tokenizer / anchor extractor 主要视觉输入；world heartbeat 允许随剧情演变（衰老/伤疤/染发）。" },
+              "身材描写": { "type": "string", "$comment": "身材/体型描写（身高、体态、胸部/臀部/腰线、肌肉 / 脂肪分布、气场）；image pipeline 用作身体维度的独立锚点，使 generateCharacterImage 不必从 '外貌描述' 字符串里解析。world heartbeat 可在训练/怀孕/发胖等长期事件后更新。" },
+              "衣着风格": { "type": "string", "$comment": "NPC 日常衣着偏好（材质、色调、款式、常驻佩饰）。与临时穿着无关；临时穿着由 '在做事项' 或场景描写承担。world heartbeat 可在换装/季节/阶层变化时更新。" },
+              "性别":   { "type": "string", "$comment": "男|女|其他；供 nsfwGenderFilter 匹配" },
+              "年龄":   { "type": "number" },
+              "背景":   { "type": "string", "$comment": "NPC 的出身/经历背景，供 NPC 私聊 prompt 引用" },
+              "内心想法": { "type": "string", "$comment": "NPC 当前内心想法，供 prompt 引用" },
+              "在做事项": { "type": "string", "$comment": "NPC 当前正在做的事情" },
+              "性格特征": { "type": "array", "items": { "type": "string" }, "$comment": "性格标签数组" },
+              "是否在场": { "type": "boolean", "default": false, "$comment": "Sprint Social-1 新增契约；Social-2 起 NpcPresenceService 读写，拆分在场/离场 prompt 块。AI 可通过 set 社交.关系[名称=X].是否在场=true/false 切换。schema-only 字段，Social-1 不启用消费逻辑。" },
+              "是否主要角色": { "type": "boolean", "default": false, "$comment": "Sprint Social-1: 主要角色标记；UI 可作置顶/筛选依据，prompt 可侧重描写。Social-1 schema-only。" },
+              "关系状态": { "type": "string", "$comment": "Sprint Social-1: 玩家与 NPC 的关系状态文本（如 陌生/朋友/恋人/敌对）。具体标签值由 pack prompt 约定，引擎不枚举。Social-1 schema-only。" },
+              "核心性格特征": { "type": "string", "$comment": "Sprint Social-1: 一句话锚定 NPC 主性格，用于关系演化时保持人格一致。仅 AI 参考字段。" },
+              "好感度突破条件": { "type": "string", "$comment": "Sprint Social-1: 下一阶段好感提升的触发条件。仅 AI 参考字段，不直接驱动逻辑。" },
+              "关系突破条件": { "type": "string", "$comment": "Sprint Social-1: 关系状态升级/转折的触发条件。仅 AI 参考字段。" },
+              "关系网变量": {
+                "type": "array",
+                "default": [],
+                "$comment": "Sprint Social-1: NPC 与其他 NPC 之间的命名关系（who-what-who）。用于多角色叙事一致性。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "对象": { "type": "string", "$comment": "目标 NPC 名称" },
+                    "关系": { "type": "string", "$comment": "关系标签（如 表姐妹 / 师门同门 / 仇家 等；具体标签值由 pack 约定）" },
+                    "备注": { "type": "string" }
+                  }
+                }
+              },
+              "最后互动时间": { "type": "string", "$comment": "Sprint Social-1: NPC 与玩家最后一次互动的游戏时间字符串。Social-2 起由 after-turn hook 自动维护，作离场刷新锚点。" },
+              "记忆": {
+                "type": "array",
+                "default": [],
+                "$comment": "NPC 的记忆条目数组；私聊产生的 memoryEntry 会 push 到此。Sprint Social-1 起支持两种 item 形态：\n  - 旧：string（裸文本，存量存档）\n  - 新：{ 内容: string, 时间?: string }（Social-2 起由 NpcChatPipeline.appendNpcMemory 写入）\noneOf 语法允许两种并存；渲染由 src/engine/social/npc-memory-format.ts 的 formatMemoryEntry 统一处理（引擎 + UI 两端共用）。",
+                "items": {
+                  "oneOf": [
+                    { "type": "string" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "内容": { "type": "string" },
+                        "时间": { "type": "string" }
+                      },
+                      "required": ["内容"]
+                    }
+                  ]
+                }
+              },
+              "总结记忆": {
+                "type": "array",
+                "default": [],
+                "$comment": "Sprint Social-1: per-NPC 总结记忆数组；当 记忆 长度超过 rules/npc-memory.json.threshold 时由 NpcMemorySummaryPipeline (Sprint Social-5) 生成批量摘要 push 入此数组。Social-1 仅建立 schema + rule 载体，尚无子管线消费。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "摘要": { "type": "string", "$comment": "总结文本" },
+                    "涵盖范围": { "type": "string", "$comment": "总结涵盖的时间或轮次范围描述（如 '第 1-20 次互动'）" },
+                    "生成时间": { "type": "string", "$comment": "生成该总结的游戏时间" }
+                  },
+                  "required": ["摘要"]
+                }
+              },
+              "私聊历史": {
+                "type": "array",
+                "$comment": "§7.2 NPC 私聊历史 — NpcChatPipeline 维护；每项 {role, content, timestamp}。独立于 元数据.叙事历史，只影响该 NPC。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role":      { "type": "string", "$comment": "user | assistant" },
+                    "content":   { "type": "string" },
+                    "timestamp": { "type": "number" }
+                  }
+                }
+              },
+              "私密信息": {
+                "type": "object",
+                "$comment": "PrivacyProfile — 中等严格度 8 字段必填（是否为处女/处男、身体部位、性格倾向、性取向、性癖好、性渴望程度、性交总次数、性伴侣名单）+ 非处女时 3 个初夜字段必填（初夜夺取者、初夜时间、初夜描述）。字段结构移植自 demo dataDefinitionsMing.ts PRIVACY_PROFILE_FIELDS_HINT 并扩展。⚠ CR-R17：此字段由 src/engine/memory/snapshot-sanitizer.ts NSFW_STRIP_PATHS=['社交.关系.*.私密信息'] 路径剥离后发 AI，原始数据在存档/UI 中保留。若新增此键到其他路径须同步更新 NSFW_STRIP_PATHS。",
+                "properties": {
+                  "是否为处女/处男": { "type": "boolean" },
+                  "初夜夺取者": { "type": "string", "$comment": "非处女/处男时必填。夺走第一次的人名；若早年被集体/不可考则写 '未知' 或具体情境（'童年被拐'）。由 privacyRepair 生成、剧情事件可通过主回合 commands 更新。" },
+                  "初夜时间": { "type": "string", "$comment": "非处女/处男时必填。发生时的游戏内时间戳或自然描述（'14 岁冬'、'入赘前夜'）。可与世界时间配合做叙事回溯。" },
+                  "初夜描述": { "type": "string", "$comment": "非处女/处男时必填。一段 50-200 字的情境描述：地点、氛围、关系性质、NPC 当时感受。供主回合 context / image secret flow / bodyPolish 引用。" },
+                  "身体部位": {
+                    "type": "array",
+                    "$comment": "身体部位条目数组。必须至少包含 4 个固定部位：嘴 / 胸部 / 小穴 / 屁穴（'部位名称' 精确匹配）；AI 可基于 NPC 特质自由追加更多条目（如 乳首、臀部、阳具、后穴等）。PrivacyProfileValidator 会在 nsfwMode=true 时校验这 4 个名称全部存在。generateSecretPartImage 通过 '部位名称' 查找对应条目的 '特征描述' 作为 partDescription。",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "部位名称":   { "type": "string", "$comment": "必须包含 4 个固定项：嘴、胸部、小穴、屁穴；其他 AI 自由追加。" },
+                        "敏感度":     { "type": "number", "$comment": "0-100" },
+                        "开发度":     { "type": "number", "$comment": "0-100" },
+                        "特征描述":   { "type": "string", "$comment": "部位详细外观/触感描述；generateSecretPartImage 读此字段作为 partDescription。" },
+                        "特殊印记":   { "type": "string" }
+                      }
+                    }
+                  },
+                  "性格倾向":           { "type": "string" },
+                  "性取向":             { "type": "string" },
+                  "性癖好":             { "type": "array", "items": { "type": "string" } },
+                  "性渴望程度":         { "type": "number", "$comment": "0-100" },
+                  "当前性状态":         { "type": "string" },
+                  "体液分泌状态":       { "type": "string" },
+                  "性交总次数":         { "type": "number" },
+                  "性伴侣名单":         { "type": "array", "items": { "type": "string" } },
+                  "最近一次性行为时间": { "type": "string" },
+                  "特殊体质":           { "type": "array", "items": { "type": "string" } },
+                  "子宫": {
+                    "type": "object",
+                    "$comment": "Sprint Social-1 新增（PRINCIPLES §3.15 AGA-native schema field absorption）。女性 NPC 选填生殖系统档案字段；当 系统.nsfwMode=true 且性别匹配时参与 AI 生成。非必填字段 —— `PrivacyProfileValidator` 的 8 必填字段列表不包含此字段，不触发 PrivacyProfileRepairPipeline。字段名使用解剖学/生理学中文术语，保持 pack 通用性（PRINCIPLES §3.3）。该字段已被 `src/engine/memory/snapshot-sanitizer.ts NSFW_STRIP_PATHS='社交.关系.*.私密信息'` 的通配符规则自动覆盖（nsfwMode=false 时从 prompt 剥离），无需扩展 STRIP_PATHS。",
+                    "properties": {
+                      "状态": { "type": "string", "$comment": "受孕/妊娠阶段状态文本（由 pack prompt / AI 填写具体词汇）" },
+                      "宫口状态": { "type": "string", "$comment": "生理状态文本（由 pack prompt / AI 填写具体词汇）" },
+                      "内射记录": {
+                        "type": "array",
+                        "default": [],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "日期": { "type": "string" },
+                            "描述": { "type": "string" },
+                            "怀孕判定日": { "type": "string" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "事件": {
+          "type": "object",
+          "properties": {
+            "事件记录": {
+              "type": "array",
+              "default": [],
+              "$comment": "WorldEvent[] — 用 push 添加；路径 DEFAULT_ENGINE_PATHS.worldEventLog = '社交.事件.事件记录'",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "事件ID":   { "type": "string" },
+                  "事件名称": { "type": "string" },
+                  "事件类型": { "type": "string" },
+                  "事件描述": { "type": "string" },
+                  "影响等级": { "type": "string" },
+                  "发生时间": { "type": "object" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "记忆": {
+      "type": "object",
+      "$comment": "2026-04-11 四层记忆系统：短期（叙事原文，cap 5）→ 隐式中期（AI 每轮结构化总结，与短期 1:1 配对）→ 中期（短期溢出时升级而来，满 25 触发 in-place 精炼，满 50 触发 worldview evolution）→ 长期（world + character evolution，FIFO cap 30）。详见 src/engine/memory/memory-manager.ts 顶部 JSDoc。",
+      "properties": {
+        "短期": {
+          "type": "array",
+          "default": [],
+          "$comment": "ShortTermEntry[] — { round: number, summary: string, timestamp: number }。纯叙事原文（AI 的 text 字段）。cap 5 默认，超出时调 MemoryManager.shiftAndPromoteOldest 同步 shift + 升级对应隐式中期。",
+          "items": {
+            "type": "object",
+            "properties": {
+              "round": { "type": "number" },
+              "summary": { "type": "string" },
+              "timestamp": { "type": "number" }
+            }
+          }
+        },
+        "中期": {
+          "type": "array",
+          "default": [],
+          "$comment": "MidTermEntry[] — { 相关角色: string[], 事件时间: string, 记忆主体: string, 已精炼?: boolean }。由隐式中期升级而来。`已精炼=true` 表示已经 permanent，refine 时跳过。",
+          "items": {
+            "type": "object",
+            "properties": {
+              "相关角色": { "type": "array", "items": { "type": "string" } },
+              "事件时间": { "type": "string" },
+              "记忆主体": { "type": "string" },
+              "已精炼": { "type": "boolean", "$comment": "MidTermRefinePipeline 标记；true 表示该条目已参与过 in-place 精炼，下次 refine 跳过" }
+            }
+          }
+        },
+        "长期": {
+          "type": "array",
+          "default": [],
+          "$comment": "LongTermEntry[] — { id: string, category: string, content: string, createdAt: number }。由 MemorySummaryPipeline 从中期 worldview evolution 汇总而来。FIFO cap 30。",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "category": { "type": "string", "$comment": "建议值: 世界观进化 / 主角经历 / 故事主线 / 人物关系" },
+              "content": { "type": "string" },
+              "createdAt": { "type": "number" }
+            }
+          }
+        },
+        "隐式中期": {
+          "type": "array",
+          "default": [],
+          "$comment": "ImplicitMidTermEntry[] — { 相关角色: string[], 事件时间: string, 记忆主体: string }。AI 每轮 mid_term_memory 字段的结构化总结，与短期 1:1 配对。消费时按 '相关角色 ∩ (player + recent NPCs)' 过滤（MemoryRetriever.filterImplicitByRelevantChars）。",
+          "items": {
+            "type": "object",
+            "properties": {
+              "相关角色": { "type": "array", "items": { "type": "string" } },
+              "事件时间": { "type": "string" },
+              "记忆主体": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "系统": {
+      "type": "object",
+      "properties": {
+        "扩展": {
+          "type": "object",
+          "properties": {
+            "engramMemory": { "type": "object", "default": {} },
+            "语义记忆": {
+              "type": "object",
+              "$comment": "语义三元组知识库。TripleBuilder 从 AI response 的 semantic_memory.triples 追加；UnifiedRetriever 按 keyword+importance+recency 评分检索。独立于 engramMemory 的 events/entities/relations。",
+              "default": { "triples": [], "meta": { "lastUpdated": 0, "tripleCount": 0 } },
+              "properties": {
+                "triples": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "subject": { "type": "string" },
+                      "predicate": { "type": "string" },
+                      "object": { "type": "string" },
+                      "timestamp": { "type": "string" },
+                      "importance": { "type": "number" },
+                      "category": { "type": "string" }
+                    }
+                  }
+                },
+                "meta": { "type": "object" }
+              }
+            },
+            "image": {
+              "type": "object",
+              "$comment": "Image generation subsystem state. Managed by ImagePanel, ImageService, and ImageStateManager. Persists all settings, presets, rules, archives, and task queue across refresh.",
+              "default": {
+                "enabled": false,
+                "config": {},
+                "artistPresets": [],
+                "characterAnchors": [],
+                "transformerPresets": [],
+                "modelRulesets": [],
+                "ruleTemplates": [],
+                "rules": {},
+                "sceneArchive": { "生图历史": [], "当前壁纸图片ID": "" },
+                "tasks": [],
+                "persistentWallpaper": ""
+              }
+            }
+          }
+        },
+        "nsfwMode": {
+          "type": "boolean",
+          "default": false,
+          "$comment": "成人内容总开关。默认 false（安全默认）。开启时 AI 被要求为符合 nsfwGenderFilter 的 NPC 生成 私密信息，并为玩家生成 角色.身体。SettingsPanel UI 同步 localStorage aga_nsfw_settings 与此字段；开启后由 PrivacyProfileValidator 在 CommandExecutionStage 检测并触发 PrivacyProfileRepairPipeline 修复缺失字段。"
+        },
+        "nsfwGenderFilter": {
+          "type": "string",
+          "default": "female",
+          "enum": ["all", "male", "female"],
+          "$comment": "NSFW 性别过滤：哪些性别的 NPC 需要生成 私密信息。值移植自 demo nsfw.ts NsfwGenderFilter。仅影响生成/校验规则；不影响玩家 角色.身体（玩家始终生成，与 nsfwMode 同步）。"
+        },
+        "actionOptions": {
+          "type": "object",
+          "$comment": "行动选项生成模式。mode=action → 简短行为指令（actionOptions.md，8-20字）；mode=story → 剧情叙述分支（actionOptionsStory.md，150-450字）。pace=fast/slow 调节节奏倾向。SettingsPanel 将 localStorage 'aga_action_options_settings' 同步写入此字段；context-assembly 读取后派生 ACTION_OPTIONS_MODE_IS_* 条件变量，main-round / split-gen flows 据此加载对应 prompt。",
+          "default": { "mode": "action", "pace": "fast", "customPrompt": "" },
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["action", "story"],
+              "default": "action",
+              "$comment": "行动选项生成模式：action=行为导向（短）/ story=剧情导向（长）"
+            },
+            "pace": {
+              "type": "string",
+              "enum": ["fast", "slow"],
+              "default": "fast",
+              "$comment": "节奏倾向：fast=推进性 / slow=沉浸性，注入 prompt 变量 ACTION_PACE_HINT"
+            },
+            "customPrompt": {
+              "type": "string",
+              "default": "",
+              "$comment": "用户自定义附加要求。非空时注入 prompt 变量 CUSTOM_ACTION_PROMPT"
+            }
+          }
+        },
+        "设置": {
+          "type": "object",
+          "$comment": "Runtime settings persisted to state tree. Read by pipeline stages.",
+          "properties": {
+            "cot": {
+              "type": "object",
+              "default": { "enabled": false, "judgeEnabled": false, "injectStep2": true, "reasoningRingSize": 3 }
+            },
+            "social": {
+              "type": "object",
+              "default": { "presenceEnabled": false }
+            },
+            "bodyPolish": {
+              "type": "boolean",
+              "default": false
+            },
+            "prompt": {
+              "type": "object",
+              "$comment": "Prompt generation settings — perspective, word count, style, etc. Managed by PromptPanel 游戏设定 tab.",
+              "default": {
+                "perspective": "第二人称",
+                "wordCountRequirement": 650,
+                "storyStyle": "general",
+                "enableNoControl": true,
+                "enableActionOptions": true,
+                "actionOptionsMode": "action",
+                "actionPace": "fast",
+                "customSystemPrompt": ""
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

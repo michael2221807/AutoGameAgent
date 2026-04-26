@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      Sanctuary CJK serif — Noto Serif SC via Google Fonts CDN.
+      Decision: 2026-04-20, Q6 = B (CDN over self-host). After first visit,
+      browser cache keeps the font local. Fallback chain in tokens.css
+      ensures narrative prose never flashes sans even on cold cache.
+      See: docs/status/ui-migration-plan.md §5, Phase 0.2.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&display=swap"
+    />
+
+    <title>AutoGameAgent</title>
+  </head>
+  <body>
+    <div class="app-glow-bloom"></div>
+    <div class="app-glow-wrap">
+      <div id="app"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

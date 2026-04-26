@@ -1,0 +1,24 @@
+{
+  "$schema": "ThresholdTriggerConfig[]",
+  "$description": "数值阈值触发器。当状态树路径 watch 的数值满足 condition 时触发 action。同一条件连续满足只触发一次（内部 firedSet 去重），条件解除后可再次触发。",
+  "triggers": [
+    {
+      "watch": "角色.可变属性.体力.当前",
+      "condition": "<= 0",
+      "action": "emit-event",
+      "payload": {
+        "event": "character:fainted",
+        "message": "体力归零，角色昏迷"
+      }
+    },
+    {
+      "watch": "角色.可变属性.精力.当前",
+      "condition": "<= 0",
+      "action": "emit-event",
+      "payload": {
+        "event": "character:exhausted",
+        "message": "精力归零，角色虚脱"
+      }
+    }
+  ]
+}

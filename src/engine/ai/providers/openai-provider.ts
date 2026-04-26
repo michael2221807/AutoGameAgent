@@ -1,0 +1,130 @@
+/**
+ * OpenAI 兼容 Provider — 处理 OpenAI / DeepSeek / 自定义 API
+ *
+ * 端点格式: {url}/v1/chat/completions
+ * 消息格式: 标准 ChatCompletion（role + content）
+ *
+ * 移植自 demo aiService.ts callOpenAICompatibleAPI / streamingRequestOpenAI。
+ * 关键差异：
+ * - 使用 fetch 代替 axios（减少依赖；非流式也可用 fetch）
+ * - DeepSeek R1 的 reasoning_content 字段兼容已在 BaseProvider 的 SSE 过滤中处理
+ *
+ * 对应 STEP-03B M2.3。
+ */
+import { BaseProvider } from './base-provider';
+import type { GenerateOptions, AIMessage } from '../types';
+
+export class OpenAIProvider extends BaseProvider {
+  async generate(options: GenerateOptions): Promise<string> {
+    const url = this.normalizeUrl(this.config.url);
+    const { apiKey, model, temperature, maxTokens } = this.config;
+    const messages = options.messages;
+    const streaming = options.stream ?? false;
+
+    const safeMaxTokens = this.clampMaxTokens(messages, maxTokens);
+
+    if (streaming) {
+      return this.generateStreaming(url, apiKey, model, messages, temperature, safeMaxTokens, options);
+    }
+    return this.generateNonStreaming(url, apiKey, model, messages, temperature, safeMaxTokens, options.signal);
+  }
+
+  /** 非流式请求 */
+  private async generateNonStreaming(
+    url: string,
+    apiKey: string,
+    model: string,
+    messages: AIMessage[],
+    temperature: number,
+    maxTokens: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const res = await fetch(`${url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: false,
+      }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`API 错误 ${res.status}: ${body}`);
+    }
+
+    const data = await res.json();
+    return data.choices[0]?.message?.content ?? '';
+  }
+
+  /**
+   * 流式请求
+   * 失败时检测是否为"流式不支持"错误，如是则自动降级为非流式
+   */
+  private async generateStreaming(
+    url: string,
+    apiKey: string,
+    model: string,
+    messages: AIMessage[],
+    temperature: number,
+    maxTokens: number,
+    options: GenerateOptions,
+  ): Promise<string> {
+    try {
+      const res = await fetch(`${url}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'text/event-stream',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature,
+          max_tokens: maxTokens,
+          stream: true,
+        }),
+        signal: options.signal,
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`API 错误 ${res.status}: ${body}`);
+      }
+
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.includes('text/event-stream')) {
+        throw new Error(`Stream unsupported (content-type=${contentType || 'unknown'})`);
+      }
+
+      return await this.processSSEStream(
+        res,
+        (data) => {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta;
+          // 兼容 DeepSeek R1 的 reasoning_content 字段
+          if (delta?.reasoning_content) {
+            return `<thinking>${delta.reasoning_content}</thinking>`;
+          }
+          return delta?.content ?? '';
+        },
+        options.onStreamChunk,
+        options.signal,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!this.isStreamUnsupportedError(msg)) throw err;
+
+      console.warn('[OpenAIProvider] 流式不支持，降级为非流式');
+      return this.generateNonStreaming(url, apiKey, model, messages, temperature, maxTokens, options.signal);
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "NpcMemoryConfig",
+  "$description": "Sprint Social-1: per-NPC 记忆 / 总结配置。由未来的 NpcMemorySummaryPipeline (Sprint Social-5) 读取。Social-1 只建立配置载体，尚无子管线消费 —— 修改这些值在 Social-5 落地前没有任何运行时影响。",
+  "threshold": 20,
+  "reserveCount": 5,
+  "summaryMaxLength": 400,
+  "$fieldNotes": {
+    "threshold": "当 NPC 的 `记忆` 数组长度达到此值时，触发总结（将旧条目归并为一条 `总结记忆` 摘要）。",
+    "reserveCount": "总结后保留的最近条目数（最新的 N 条 `记忆` 保留不被归并）。",
+    "summaryMaxLength": "单条 `总结记忆.摘要` 的软上限字数，供 AI 生成时约束。"
+  }
+}

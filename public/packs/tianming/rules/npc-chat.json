@@ -1,0 +1,5 @@
+{
+  "$schema": "NpcChatConfig",
+  "$description": "NPC 私聊子管线配置。由 NpcChatPipeline 在构造时读取。未提供时使用代码默认值。",
+  "maxChatHistory": 20
+}

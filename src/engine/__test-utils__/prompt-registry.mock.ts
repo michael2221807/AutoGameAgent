@@ -1,0 +1,22 @@
+/**
+ * PromptRegistry mock — pre-loaded with test prompt modules.
+ */
+export function createMockPromptRegistry(
+  modules: Array<{ id: string; content: string; enabled?: boolean }> = [],
+) {
+  const store = new Map<string, { content: string; enabled: boolean }>();
+  for (const m of modules) {
+    store.set(m.id, { content: m.content, enabled: m.enabled ?? true });
+  }
+
+  return {
+    getEffectiveContent(id: string): string {
+      const entry = store.get(id);
+      if (!entry || !entry.enabled) return '';
+      return entry.content;
+    },
+    register(id: string, content: string, enabled = true): void {
+      store.set(id, { content, enabled });
+    },
+  };
+}

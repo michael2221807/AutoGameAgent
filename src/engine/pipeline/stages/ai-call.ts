@@ -1,0 +1,221 @@
+/**
+ * AI 调用阶段 — 将组装好的消息列表发送给 AI 并解析响应
+ *
+ * 这是管线中唯一的外部 I/O 阶段（网络请求），也是最耗时的阶段。
+ * 职责被刻意保持简单（调用 + 解析），复杂性交给 AIService 和 ResponseParser：
+ * - AIService 处理 provider 选择、重试、超时、取消
+ * - ResponseParser 处理 JSON 提取、sanitize、字段规范化
+ *
+ * 为什么不把解析放到下一个阶段：
+ * 解析和调用是原子操作 — 如果响应格式错误，应该在同一阶段立即报错，
+ * 而不是让无效数据流入 CommandExecutionStage 导致更难定位的错误。
+ *
+ * 对应 STEP-03B M3.4 AICallStage。
+ */
+import type { PipelineStage, PipelineContext } from '../types';
+import type { AIService } from '../../ai/ai-service';
+import type { ResponseParser } from '../../ai/response-parser';
+import type { AIMessage, AIResponse } from '../../ai/types';
+import { eventBus } from '../../core/event-bus';
+import { emitPromptAssemblyDebug } from '../../core/prompt-debug';
+
+export class AICallStage implements PipelineStage {
+  name = 'AICall';
+
+  constructor(
+    private aiService: AIService,
+    private responseParser: ResponseParser,
+  ) {}
+
+  async execute(ctx: PipelineContext): Promise<PipelineContext> {
+    const splitStep2Messages = ctx.meta.splitStep2Messages as AIMessage[] | undefined;
+
+    if (Array.isArray(splitStep2Messages)) {
+      return this.executeSplitGen(ctx, splitStep2Messages);
+    }
+    return this.executeSingleCall(ctx);
+  }
+
+  /**
+   * 普通单次调用
+   * - stream: 由调用方是否提供 onStreamChunk 决定
+   * - usageType: 主回合固定为 'main'
+   */
+  private async executeSingleCall(ctx: PipelineContext): Promise<PipelineContext> {
+    // Phase 1 (2026-04-19): capture per-turn timing for narrativeHistory `_metrics`.
+    const aiCallStartedAt = performance.now();
+    const rawResponse = await this.aiService.generate({
+      messages: ctx.messages,
+      stream: !!ctx.onStreamChunk,
+      usageType: 'main',
+      generationId: ctx.generationId,
+      onStreamChunk: ctx.onStreamChunk,
+      signal: ctx.abortSignal,
+    });
+    const aiCallDurationMs = performance.now() - aiCallStartedAt;
+    const captureThinking = ctx.meta.cotEnabled === true;
+    const parsedResponse = this.responseParser.parse(rawResponse, { captureThinking });
+    emitDebugPromptResponse('mainRound', ctx.generationId, parsedResponse.thinking, rawResponse);
+    return { ...ctx, rawResponse, parsedResponse, aiCallStartedAt, aiCallDurationMs };
+  }
+
+  /**
+   * 分步生成（两次 API 调用）
+   *
+   * 第1步：使用 splitGenStep1 flow 的消息（ctx.messages），流式输出正文叙事
+   * 第2步：使用 splitGenStep2 flow 的消息 + 第1步响应作为上下文，非流式输出指令/选项/记忆
+   * 合并：text 取第1步，commands/actionOptions/midTermMemory/semanticMemory 取第2步
+   */
+  private async executeSplitGen(
+    ctx: PipelineContext,
+    step2BaseMessages: AIMessage[],
+  ): Promise<PipelineContext> {
+    // Phase 1 (2026-04-19): capture end-to-end timing across both step1 + step2 calls.
+    // `aiCallDurationMs` = step2 end − step1 start (total wall-clock including parsing
+    // between calls). This is what users see as "how long did this round take".
+    const aiCallStartedAt = performance.now();
+    // ── 第1步：正文（流式，让用户看到逐字输出） ──
+    ctx.onProgress?.('[AICall:分步第1步]');
+    const rawStep1 = await this.aiService.generate({
+      messages: ctx.messages,
+      stream: !!ctx.onStreamChunk,
+      usageType: 'main',
+      generationId: ctx.generationId + '_step1',
+      onStreamChunk: ctx.onStreamChunk,
+      signal: ctx.abortSignal,
+    });
+    const captureThinking = ctx.meta.cotEnabled === true;
+    const parsedStep1 = this.responseParser.parse(rawStep1, { captureThinking });
+    emitDebugPromptResponse(
+      'splitGenMainRoundStep1',
+      `${ctx.generationId ?? ''}_step1`,
+      parsedStep1.thinking,
+      rawStep1,
+    );
+
+    // ── 第2步：指令 + 选项 + 记忆（非流式，结果不显示给用户） ──
+    ctx.onProgress?.('[AICall:分步第2步]');
+    //
+    // CR-R12 修复（2026-04-11）：第2步消息必须以 user 结尾（Claude 原生 API 严格要求）。
+    // 旧版本直接把 step1 响应作为最后一条 assistant，Claude 会把它当 prefill 继续生成
+    // 正文（而非产出结构化数据）。新版本：assistant(step1) → user(指令)，构成
+    // 标准的多轮结构，模型从新的 user 指令开始生成第2步的结构化输出。
+    //
+    // 2026-04-11 (round 2): 加入反截断 + 输出格式铁律 —— 之前的 followup 只是
+    // "请按 step2 规范输出..."，没有反截断保护，结果 commands/options 输出半截
+    // 被切。现在显式要求完整输出 + 不允许省略 + 直接 JSON 不带解释。
+    const STEP2_FOLLOWUP_USER =
+      '请基于上面的叙事正文，输出 step2 的结构化数据。要求：\n\n' +
+      '1. **完整输出**：commands / action_options / mid_term_memory / semantic_memory 四个字段必须全部给出，不得用 "(略)" / "(省略)" / "(略 N 条类似)" 之类敷衍，不得中途截断。\n' +
+      '2. **action_options 必须 3-5 个**（按 `actionOptions` 或 `actionOptionsStory` 模块要求的长度），绝不可空数组或只给 1-2 个。\n' +
+      '3. **commands 必须完整**：若本回合正文描述了多个状态变化（位置/时间/NPC/物品/体力/技能等），每条都要对应一条 command；不得合并省略。\n' +
+      '4. **格式铁律**：直接输出一个合法 JSON 对象 —— 无 ``` 代码围栏、无前后缀文字、无 `<thinking>` 标签。不重复或扩写正文（正文已由 step1 生成）。\n\n' +
+      '现在请输出这个 JSON 对象。';
+    // Sprint CoT-3: inject step1's thinking as context for step2 (PRINCIPLES §3.10, §13.7)
+    // Step2 OUTPUT still forbids <thinking> (STEP2_FOLLOWUP_USER rule unchanged).
+    // This is INPUT context only — CoT reasoning informs better action-option generation.
+    const step2ThinkingContext: AIMessage[] = [];
+    if (ctx.meta.cotInjectStep2 === true && parsedStep1.thinking) {
+      step2ThinkingContext.push({
+        role: 'system',
+        content: `## Step 1 Reasoning Context (for reference only — do NOT include thinking tags in your output)\n\n${parsedStep1.thinking}`,
+      });
+    }
+
+    const step2Messages: AIMessage[] = [
+      ...step2BaseMessages,
+      ...step2ThinkingContext,
+      { role: 'assistant', content: rawStep1 },
+      { role: 'user', content: STEP2_FOLLOWUP_USER },
+    ];
+
+    // Emit step2 snapshot HERE (not in context-assembly) — only at this point
+    // do we have the fully-constructed message list. Prior code emitted from
+    // context-assembly with only `step2BaseMessages` (flow-assembled), which
+    // meant the debug panel's step2 snapshot was missing the last 2-3 actual
+    // messages (step1 thinking injection / step1 raw / step2 followup user).
+    const step2DebugSources: string[] = [
+      ...((ctx.meta.splitStep2Sources as string[] | undefined) ?? []),
+      ...(step2ThinkingContext.length > 0 ? ['step1_thinking_context'] : []),
+      'step1_response',
+      'step2_followup',
+    ];
+    emitPromptAssemblyDebug({
+      flow: 'splitGenMainRoundStep2',
+      variables: (ctx.meta.debugVariables as Record<string, string> | undefined) ?? {},
+      messages: step2Messages,
+      messageSources: step2DebugSources,
+      generationId: `${ctx.generationId ?? ''}_step2`,
+      roundNumber: ctx.meta.debugRoundNumber as number | undefined,
+    });
+
+    const rawStep2 = await this.aiService.generate({
+      messages: step2Messages,
+      stream: false,
+      usageType: 'main',
+      generationId: ctx.generationId + '_step2',
+      signal: ctx.abortSignal,
+    });
+    const parsedStep2 = this.responseParser.parse(rawStep2);
+    emitDebugPromptResponse(
+      'splitGenMainRoundStep2',
+      `${ctx.generationId ?? ''}_step2`,
+      parsedStep2.thinking,
+      rawStep2,
+    );
+
+    const aiCallDurationMs = performance.now() - aiCallStartedAt;
+
+    // ── 合并：叙事正文来自第1步，结构化数据来自第2步 ──
+    const parsedResponse: AIResponse = {
+      text: parsedStep1.text,
+      commands: parsedStep2.commands ?? [],
+      actionOptions: parsedStep2.actionOptions ?? [],
+      midTermMemory: parsedStep2.midTermMemory,
+      semanticMemory: parsedStep2.semanticMemory,
+      thinking: parsedStep1.thinking,
+      raw: rawStep1,
+    };
+
+    // Phase 1 (2026-04-19): persist step2 raw on ctx.meta so PostProcess can
+    // attach it to the narrative entry as `_rawResponseStep2` for the raw viewer.
+    return {
+      ...ctx,
+      rawResponse: rawStep1,
+      parsedResponse,
+      aiCallStartedAt,
+      aiCallDurationMs,
+      meta: { ...ctx.meta, rawResponseStep2: rawStep2 },
+    };
+  }
+}
+
+/**
+ * Emit a prompt-response event so PromptAssemblyPanel can attach CoT / raw
+ * text to the matching snapshot. Fails silently if the event bus isn't
+ * listening — this is purely debug instrumentation.
+ *
+ * generationId convention (2026-04-19):
+ *   - single call:  bare `ctx.generationId`
+ *   - split step1:  `${ctx.generationId}_step1`
+ *   - split step2:  `${ctx.generationId}_step2`
+ * ContextAssemblyStage emits snapshots with the same suffix scheme, so each
+ * snapshot gets its own response attached and the two CoT streams don't collide.
+ */
+function emitDebugPromptResponse(
+  flow: string,
+  generationId: string | undefined,
+  thinking: string | undefined,
+  rawResponse: string,
+): void {
+  try {
+    eventBus.emit('ui:debug-prompt-response', {
+      flow,
+      generationId,
+      thinking,
+      rawResponse,
+    });
+  } catch {
+    /* debug-only, never throw */
+  }
+}

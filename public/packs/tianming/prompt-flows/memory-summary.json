@@ -1,0 +1,6 @@
+{
+  "id": "memorySummary",
+  "modules": [
+    { "promptId": "memorySummary", "role": "system", "order": 0, "depth": 0 }
+  ]
+}

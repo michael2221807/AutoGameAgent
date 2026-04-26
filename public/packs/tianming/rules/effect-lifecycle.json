@@ -1,0 +1,13 @@
+{
+  "$schema": "EffectLifecycleConfig",
+  "$description": "角色.效果 数组中 buff/debuff 的到期清理规则。与 state-schema.json 角色.效果.items 字段契约对齐。permanentSentinel 用于标记永久效果（不会过期）。",
+  "effectsPath": "角色.效果",
+  "effectSchema": {
+    "nameField": "状态名称",
+    "typeField": "类型",
+    "typeValues": ["buff", "debuff", "neutral"],
+    "startTimeField": "生成时间",
+    "durationField": "持续时间分钟",
+    "permanentSentinel": 999999
+  }
+}

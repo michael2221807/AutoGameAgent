@@ -1,0 +1,145 @@
+{
+  "steps": [
+    {
+      "id": "world",
+      "label": "世界",
+      "type": "select-one",
+      "required": true,
+      "dataSource": "presets.worlds",
+      "customSchema": {
+        "fields": [
+          { "key": "name", "label": "世界名称", "type": "text", "required": true, "placeholder": "如「九霄界」" },
+          { "key": "description", "label": "世界描述", "type": "textarea", "rows": 4, "placeholder": "简述这个世界的背景、修炼体系、文化特色…" }
+        ]
+      },
+      "aiGeneration": {
+        "enabled": true,
+        "promptFlow": "presetGeneration",
+        "promptModule": "presetGenWorld"
+      }
+    },
+    {
+      "id": "talentTier",
+      "label": "天资",
+      "type": "select-one",
+      "required": true,
+      "dataSource": "presets.talentTiers",
+      "affects": { "pointBudget": "$.total_points" },
+      "statePath": "角色.身份.天赋档次",
+      "valueField": "name"
+    },
+    {
+      "id": "origin",
+      "label": "出身",
+      "type": "select-one",
+      "required": true,
+      "dataSource": "presets.origins",
+      "costField": "talent_cost",
+      "costSource": "pointBudget",
+      "statePath": "角色.身份.出身",
+      "valueField": "name",
+      "customSchema": {
+        "fields": [
+          { "key": "name", "label": "出身名称", "type": "text", "required": true, "placeholder": "如「将门遗孤」" },
+          { "key": "description", "label": "出身描述", "type": "textarea", "rows": 3, "placeholder": "出身背景的简述…" },
+          { "key": "talent_cost", "label": "天资点花费", "type": "number", "default": 0, "min": 0, "max": 50 }
+        ]
+      },
+      "aiGeneration": {
+        "enabled": true,
+        "promptFlow": "presetGeneration",
+        "promptModule": "presetGenOrigin"
+      }
+    },
+    {
+      "id": "trait",
+      "label": "特质",
+      "type": "select-one",
+      "required": true,
+      "dataSource": "presets.traits",
+      "costField": "talent_cost",
+      "costSource": "pointBudget",
+      "statePath": "角色.基础信息.特质",
+      "valueField": "name",
+      "customSchema": {
+        "fields": [
+          { "key": "name", "label": "特质名称", "type": "text", "required": true, "placeholder": "如「过目不忘」" },
+          { "key": "description", "label": "特质描述", "type": "textarea", "rows": 3 },
+          { "key": "talent_cost", "label": "天资点花费", "type": "number", "default": 0, "min": 0, "max": 30 }
+        ]
+      },
+      "aiGeneration": {
+        "enabled": true,
+        "promptFlow": "presetGeneration",
+        "promptModule": "presetGenTrait"
+      }
+    },
+    {
+      "id": "talents",
+      "label": "天赋",
+      "type": "select-many",
+      "required": false,
+      "dataSource": "presets.talents",
+      "costField": "talent_cost",
+      "costSource": "pointBudget",
+      "statePath": "角色.身份.天赋",
+      "valueField": "name",
+      "customSchema": {
+        "fields": [
+          { "key": "name", "label": "天赋名称", "type": "text", "required": true, "placeholder": "如「天眼通」" },
+          { "key": "description", "label": "天赋描述", "type": "textarea", "rows": 3 },
+          { "key": "talent_cost", "label": "天资点花费", "type": "number", "default": 0, "min": 0, "max": 30 }
+        ]
+      },
+      "aiGeneration": {
+        "enabled": true,
+        "promptFlow": "presetGeneration",
+        "promptModule": "presetGenTalent"
+      }
+    },
+    {
+      "id": "attributes",
+      "label": "属性分配",
+      "type": "attribute-allocation",
+      "required": true,
+      "attributes": ["体质", "直觉", "悟性", "气运", "魅力", "心性"],
+      "totalPoints": 30,
+      "perAttributeMax": 10,
+      "statePath": "角色.身份.先天六维"
+    },
+    {
+      "id": "identity",
+      "label": "角色信息",
+      "type": "form",
+      "required": true,
+      "fields": [
+        {
+          "key": "角色.基础信息.姓名",
+          "type": "text",
+          "label": "角色姓名",
+          "required": true
+        },
+        {
+          "key": "角色.基础信息.性别",
+          "type": "text",
+          "label": "性别",
+          "required": false,
+          "default": ""
+        },
+        {
+          "key": "角色.基础信息.年龄",
+          "type": "number",
+          "label": "年龄",
+          "required": false,
+          "default": 18
+        }
+      ]
+    },
+    {
+      "id": "confirm",
+      "label": "确认",
+      "type": "confirmation",
+      "required": false
+    }
+  ]
+}

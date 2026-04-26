@@ -1,0 +1,10 @@
+{
+  "id": "openingScene",
+  "$comment": "Single-call opening scene. core removed (2026-04-21): opening.md already defines all init command rules (§1-§11); core's §二 data-sync rules (designed for main-round text↔commands coupling) conflict with opening's one-shot initialization semantics, causing duplicate or contradictory commands.",
+  "modules": [
+    { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
+    { "promptId": "cot-opening", "role": "system", "order": -0.5, "depth": 0, "condition": "COT_ENABLED" },
+    { "promptId": "opening", "role": "system", "order": 0, "depth": 0 },
+    { "promptId": "cot-no-thinking-guard", "role": "system", "order": 1.1, "depth": 0, "condition": "COT_DISABLED" }
+  ]
+}

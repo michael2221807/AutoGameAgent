@@ -1,0 +1,194 @@
+[
+  {
+    "id": 1,
+    "name": "山野遗孤",
+    "description": "自幼在山野中长大，与自然和野兽为伴，体质与耐受力出众，意志坚韧；对城市与规矩略感疏离。",
+    "talent_cost": 0,
+    "attribute_modifiers": { "体质": 1 },
+    "rarity": 3
+  },
+  {
+    "id": 2,
+    "name": "书香门第",
+    "description": "出身于官宦或学者世家，饱读诗书，悟性超乎常人，对道理与规律有敏锐的理解力；有时略显清高。",
+    "talent_cost": 2,
+    "attribute_modifiers": { "悟性": 2 },
+    "rarity": 3
+  },
+  {
+    "id": 3,
+    "name": "商贾之子",
+    "description": "生于富贵之家，精通人情世故，处事圆滑，魅力出众；在社交与利益场中如鱼得水。",
+    "talent_cost": 2,
+    "attribute_modifiers": { "魅力": 2 },
+    "rarity": 3
+  },
+  {
+    "id": 4,
+    "name": "将门之后",
+    "description": "名将之后，体质与心性兼得：勇武果决，遇事不慌，能扛能打；血脉中自带一股不服输的韧劲。",
+    "talent_cost": 3,
+    "attribute_modifiers": { "心性": 2, "体质": 1 },
+    "rarity": 3
+  },
+  {
+    "id": 5,
+    "name": "游方师承",
+    "description": "师从一位游走四方的能人，继承了其部分本领与眼界；见多识广，悟性与心性皆有所得。",
+    "talent_cost": 4,
+    "attribute_modifiers": { "悟性": 1, "心性": 1 },
+    "rarity": 4
+  },
+  {
+    "id": 6,
+    "name": "双面人生",
+    "description": "曾长期身处对立阵营之间，心性历练远超常人，善于在压力下保持冷静与伪装；代价是难以完全信任他人。",
+    "talent_cost": 1,
+    "attribute_modifiers": { "心性": 3 },
+    "rarity": 4
+  },
+  {
+    "id": 7,
+    "name": "重生者",
+    "description": "你带着前世的记忆而来，对未来的大势与关键节点了如指掌；气运与悟性皆得益于此，但易与当下脱节。",
+    "talent_cost": 5,
+    "attribute_modifiers": { "悟性": 2, "气运": 1 },
+    "rarity": 5
+  },
+  {
+    "id": 8,
+    "name": "名门血脉",
+    "description": "血脉中流淌着某支古老或显赫家族的传承，灵性十足，成长略快于常人；有时会招致嫉妒或期待。",
+    "talent_cost": 6,
+    "attribute_modifiers": { "直觉": 2, "体质": 1 },
+    "rarity": 5
+  },
+  {
+    "id": 9,
+    "name": "宿慧老者",
+    "description": "灵魂历经沧桑，虽居年轻之身，见识与悟性却远超同辈；心性偶显孤僻或与世不容。",
+    "talent_cost": 7,
+    "attribute_modifiers": { "悟性": 3, "心性": -1 },
+    "rarity": 5
+  },
+  {
+    "id": 10,
+    "name": "庙祝之子",
+    "description": "从小在庙宇或祭祀之地长大，对不可言说之事直觉敏锐，灵性受滋养；介于世俗与神秘之间。",
+    "talent_cost": 2,
+    "attribute_modifiers": { "直觉": 2 },
+    "rarity": 3
+  },
+  {
+    "id": 11,
+    "name": "渔家少年",
+    "description": "常年在江河湖海讨生活，体质强健，水性极佳；吃苦耐劳，对风浪与变故习以为常。",
+    "talent_cost": 1,
+    "attribute_modifiers": { "体质": 2 },
+    "rarity": 2
+  },
+  {
+    "id": 12,
+    "name": "王朝皇子",
+    "description": "生于权力之巅，自幼锦衣玉食、受教于最好的师傅；魅力与心性皆有所长，但对民间疾苦未必亲历。",
+    "talent_cost": 3,
+    "attribute_modifiers": { "魅力": 2, "心性": 1 },
+    "rarity": 4
+  },
+  {
+    "id": 13,
+    "name": "药坊学徒",
+    "description": "自幼在药坊或医馆长大，与草木、方剂为伴，对药理与调理有超常的敏感与悟性。",
+    "talent_cost": 2,
+    "attribute_modifiers": { "直觉": 1, "悟性": 1 },
+    "rarity": 3
+  },
+  {
+    "id": 14,
+    "name": "机关学徒",
+    "description": "师从机关或格致大师，自小研习结构与布局，对空间与逻辑极其敏锐；悟性与灵性兼得。",
+    "talent_cost": 3,
+    "attribute_modifiers": { "悟性": 2, "直觉": 1 },
+    "rarity": 4
+  },
+  {
+    "id": 15,
+    "name": "猎户世家",
+    "description": "祖上世代以狩猎或探险为生，体质与胆识出众，对危险与异动极其敏感；心性坚韧。",
+    "talent_cost": 4,
+    "attribute_modifiers": { "体质": 2, "心性": 1 },
+    "rarity": 4
+  },
+  {
+    "id": 16,
+    "name": "流浪乞丐",
+    "description": "自幼流落街头，饱经风霜；心性被磨得极韧，适应力惊人，但气运往往不佳，易遭冷眼。",
+    "talent_cost": -1,
+    "attribute_modifiers": { "心性": 2, "气运": -1 },
+    "rarity": 2
+  },
+  {
+    "id": 17,
+    "name": "矿工余生",
+    "description": "曾在矿洞或苦役中挣扎求生，体魄强健、能扛重活，但长期封闭环境也令灵性与社交略逊。",
+    "talent_cost": 0,
+    "attribute_modifiers": { "体质": 3, "直觉": -1 },
+    "rarity": 2
+  },
+  {
+    "id": 18,
+    "name": "画师传人",
+    "description": "师承名家，精通丹青与造型，对线条、符号与意境有天生理解；悟性与魅力皆可用于表达。",
+    "talent_cost": 3,
+    "attribute_modifiers": { "悟性": 1, "魅力": 2 },
+    "rarity": 3
+  },
+  {
+    "id": 19,
+    "name": "守陵人",
+    "description": "世代守护陵墓或遗迹，长期与寂静与禁忌为伴，心性沉稳、直觉敏锐；对生死与秘密有独特感悟。",
+    "talent_cost": 2,
+    "attribute_modifiers": { "心性": 2, "直觉": 1 },
+    "rarity": 4
+  },
+  {
+    "id": 20,
+    "name": "戏班伶人",
+    "description": "自幼学戏，擅长察言观色、以情动人，魅力非凡；心性易受他人评价左右，不够定锚。",
+    "talent_cost": 1,
+    "attribute_modifiers": { "魅力": 3, "心性": -1 },
+    "rarity": 2
+  },
+  {
+    "id": 21,
+    "name": "星象世家",
+    "description": "家族世代观星测运，你自小研习历法与天象，对规律与气运有独特直觉；悟性与气运皆得益。",
+    "talent_cost": 5,
+    "attribute_modifiers": { "悟性": 2, "气运": 2 },
+    "rarity": 5
+  },
+  {
+    "id": 22,
+    "name": "部落萨满",
+    "description": "出身蛮荒或边地部落，继承萨满传承，对自然与灵性之力有天生亲和；体质与灵性兼得。",
+    "talent_cost": 4,
+    "attribute_modifiers": { "直觉": 2, "体质": 1 },
+    "rarity": 4
+  },
+  {
+    "id": 23,
+    "name": "孤岛遗民",
+    "description": "生于与世隔绝的孤岛，保留着古老的生活方式与技艺；心性坚韧，悟性在独特环境中自成一路。",
+    "talent_cost": 3,
+    "attribute_modifiers": { "心性": 2, "悟性": 1 },
+    "rarity": 4
+  },
+  {
+    "id": 24,
+    "name": "亡国遗孤",
+    "description": "国破家亡，历经苦难，心性坚韧如铁；背负仇恨或使命，气运多舛，却往往在绝境中爆发出惊人意志。",
+    "talent_cost": 2,
+    "attribute_modifiers": { "心性": 3, "气运": -1 },
+    "rarity": 3
+  }
+]

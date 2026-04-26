@@ -1,0 +1,11 @@
+{
+  "$schema": "ContentFilterConfig",
+  "$description": "内容分级过滤规则。评级关闭时，ContentFilterModule 在 onContextAssembly 钩子中从 prompt 模板变量里剥离 [私密]...[/私密] 包裹的段落。使用中文 tag 而非 [NSFW] 是为了避免触发模型的英文关键词内容过滤，提高生成成功率。settingPath 与 state-schema 新增的 系统.nsfwMode 字段一致。",
+  "contentRatings": {
+    "nsfw": {
+      "settingPath": "系统.nsfwMode",
+      "promptStripTags": ["私密"],
+      "conditionalSchemaFields": []
+    }
+  }
+}

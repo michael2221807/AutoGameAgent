@@ -1,0 +1,404 @@
+/**
+ * AGA Design Tokens — Sanctuary Aesthetic (migrated 2026-04-20)
+ *
+ * Single source of truth for all visual tokens. Imported once in main.ts;
+ * consumed by all Vue components via `var(--token-name)`.
+ *
+ * Source of truth for the aesthetic direction: .impeccable.md at repo root.
+ * Migration plan: docs/status/ui-migration-plan.md §4.
+ * Changelog:      docs/status/ui-migration-changelog.md (Phase 0.1).
+ *
+ * Key principles applied:
+ *   — Warm-charcoal neutrals (NOT cool-indigo / pure black)
+ *   — Phosphorescent Sage family: everyday state, focus, interaction
+ *   — Low-Kelvin Amber family:   rare warmth, confirmation, save-done
+ *   — Danger = warm rust, Success = sage-aligned green. No Tailwind defaults.
+ *   — All values in OKLCH so perceived brightness is consistent.
+ *   — Legacy token names (--color-primary, --color-warning, etc.) are
+ *     PRESERVED as aliases of the new families so zero components break.
+ *
+ * Naming convention: --<category>-<semantic>[-<variant>]
+ *   color:    --color-bg, --color-surface, --color-primary, --color-sage-400, ...
+ *   space:    --space-xs ... --space-3xl
+ *   radius:   --radius-xs ... --radius-full
+ *   shadow:   --shadow-sm, --shadow-md, --shadow-lg, --shadow-glow, --shadow-drawer
+ *   duration: --duration-fast, --duration-normal, --duration-slow, --duration-breath
+ *   font:     --font-sans, --font-serif-cjk, --font-mono, --font-size-xs ... --font-size-2xl
+ *   z-index:  --z-panel, --z-modal, --z-toast
+ *
+ * DO NOT add game-specific or MRJH-derived tokens here (CLAUDE.md §5).
+ * AGA defines its own visual identity.
+ */
+:root {
+  /* ─────────────────────────────────────────────────────────────
+     NEUTRAL SURFACES — warm charcoal, matte expedition dashboard
+     ───────────────────────────────────────────────────────────── */
+  --color-bg:               oklch(0.14 0.008 95);
+  --color-surface:          oklch(0.17 0.008 95);
+  --color-surface-elevated: oklch(0.20 0.008 95);
+  --color-surface-input:    oklch(0.16 0.008 95);
+  --color-border:           oklch(0.22 0.006 95);
+  --color-border-subtle:    oklch(0.18 0.006 95);
+
+  /* ─────────────────────────────────────────────────────────────
+     TEXT — warm bone to umber. Never pure white.
+     ───────────────────────────────────────────────────────────── */
+  --color-text:             oklch(0.92 0.01  90);
+  --color-text-secondary:   oklch(0.72 0.012 85);
+  --color-text-umber:       oklch(0.64 0.012 85);
+  --color-text-muted:       oklch(0.52 0.012 85);
+  --color-dialogue:         oklch(0.94 0.01  90);  /* slightly brighter bone for "..." */
+
+  /* Alias for explicit "never use #fff" intent in scoped styles */
+  --color-text-bone:        var(--color-text);
+
+  /* ─────────────────────────────────────────────────────────────
+     SAGE FAMILY — phosphorescent moss / firefly / instrument glow
+     Role: everyday state (nav-active, focus, buttons, send, AI-thinking)
+     ───────────────────────────────────────────────────────────── */
+  --color-sage-100:         oklch(0.92 0.025 150);
+  --color-sage-300:         oklch(0.80 0.065 150);
+  --color-sage-400:         oklch(0.78 0.08  150);  /* ★ primary sage */
+  --color-sage-500:         oklch(0.72 0.085 150);  /* pressed / active */
+  --color-sage-600:         oklch(0.64 0.075 150);  /* border / icon */
+  --color-sage-700:         oklch(0.52 0.06  150);  /* resting icon */
+
+  /* ─────────────────────────────────────────────────────────────
+     AMBER FAMILY — low-kelvin honey / thermostat glow
+     Role: rare warmth (save-done, confirmation, "continue game", accents)
+     ───────────────────────────────────────────────────────────── */
+  --color-amber-100:        oklch(0.93 0.03  75);
+  --color-amber-300:        oklch(0.83 0.07  75);
+  --color-amber-400:        oklch(0.80 0.09  75);   /* ★ primary amber */
+  --color-amber-500:        oklch(0.74 0.09  75);
+  --color-amber-600:        oklch(0.66 0.085 75);
+
+  /* ─────────────────────────────────────────────────────────────
+     SEMANTIC — all desaturated + warm-tinted. No Tailwind defaults.
+     ───────────────────────────────────────────────────────────── */
+  --color-danger:           oklch(0.62 0.12  30);   /* warm rust, not red */
+  --color-danger-hover:     oklch(0.68 0.12  30);
+  --color-danger-muted:     color-mix(in oklch, var(--color-danger) 15%, transparent);
+
+  --color-success:          oklch(0.76 0.09  150);  /* sage-aligned green */
+  --color-success-hover:    oklch(0.80 0.09  150);
+  --color-success-muted:    color-mix(in oklch, var(--color-success) 15%, transparent);
+
+  --color-warning:          var(--color-amber-400); /* warning IS the amber beacon */
+  --color-warning-muted:    color-mix(in oklch, var(--color-warning) 15%, transparent);
+
+  --color-info:             oklch(0.74 0.07  150);  /* sage-dim — no cold blue */
+
+  /* ─────────────────────────────────────────────────────────────
+     BACKWARD-COMPAT ALIASES — every legacy `var(--color-primary)` etc.
+     still resolves; value now resolves to sage instead of indigo.
+     ───────────────────────────────────────────────────────────── */
+  --color-primary:          var(--color-sage-400);
+  --color-primary-hover:    var(--color-sage-300);
+  --color-primary-muted:    color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+
+  /* ─────────────────────────────────────────────────────────────
+     BEACON INTENT ALIASES — for new scoped styles wanting clarity
+     ───────────────────────────────────────────────────────────── */
+  --color-beacon-sage:      var(--color-sage-400);
+  --color-beacon-amber:     var(--color-amber-400);
+  --color-sage-muted:       var(--color-primary-muted);
+  --color-amber-muted:      var(--color-warning-muted);
+
+  /* ─────────────────────────────────────────────────────────────
+     JUDGEMENT-CARD WASHES — replaces the old Tailwind palette
+     referenced directly inside FormattedText.vue (Phase 1.2 target)
+     ───────────────────────────────────────────────────────────── */
+  --color-judgement-success-bg:       color-mix(in oklch, var(--color-sage-400)  8%, transparent);
+  --color-judgement-great-success-bg: color-mix(in oklch, var(--color-amber-400) 10%, transparent);
+  --color-judgement-failure-bg:       color-mix(in oklch, var(--color-danger)    8%, transparent);
+  --color-judgement-great-failure-bg: color-mix(in oklch, var(--color-danger)   14%, transparent);
+
+  /* ─────────────────────────────────────────────────────────────
+     VITAL BAR SEMANTICS — warm-desaturated (never Tailwind red/green)
+     ───────────────────────────────────────────────────────────── */
+  --color-vital-health:     oklch(0.58 0.08 30);    /* warm rust */
+  --color-vital-energy:     oklch(0.72 0.07 75);    /* amber-bronze */
+  --color-vital-spirit:     oklch(0.72 0.06 150);   /* sage */
+
+  /* ─────────────────────────────────────────────────────────────
+     SPACING (4px base) — unchanged from legacy
+     ───────────────────────────────────────────────────────────── */
+  --space-2xs:  2px;
+  --space-xs:   4px;
+  --space-sm:   8px;
+  --space-md:   12px;
+  --space-lg:   16px;
+  --space-xl:   24px;
+  --space-2xl:  32px;
+  --space-3xl:  48px;
+
+  /* ─────────────────────────────────────────────────────────────
+     RADII — unchanged
+     ───────────────────────────────────────────────────────────── */
+  --radius-xs:   2px;
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-full: 9999px;
+
+  /* ─────────────────────────────────────────────────────────────
+     SHADOWS — warm, never neon. Inner refraction for glass panels.
+     ───────────────────────────────────────────────────────────── */
+  --shadow-sm:     0 1px  2px  color-mix(in oklch, var(--color-bg) 60%, black);
+  --shadow-md:     0 4px  12px color-mix(in oklch, var(--color-bg) 50%, black);
+  --shadow-lg:     0 8px  24px color-mix(in oklch, var(--color-bg) 40%, black);
+  --shadow-glow:   0 0    16px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  --shadow-drawer: 0 12px 40px color-mix(in oklch, var(--color-bg) 55%, black);
+
+  /* ─────────────────────────────────────────────────────────────
+     GLASSMORPHISM TOKENS — unified frosted-glass panel recipe.
+     Three tiers: panel (sidebars/modals), overlay (backdrops),
+     and chip (small badges — just blur, no shadow/border).
+
+     Panel-grade glass recipe:
+       background:      var(--glass-bg)
+       backdrop-filter:  var(--glass-blur)
+       border:           none (use .glass-edge ::before for gradient border)
+       box-shadow:       var(--glass-shadow)
+     ───────────────────────────────────────────────────────────── */
+  --glass-bg:      rgba(255, 255, 255, 0.04);
+  --glass-blur:    blur(24px) saturate(1.4);
+  --glass-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 24px rgba(255, 255, 255, 0.02);
+  --glass-edge-gradient: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.05) 40%,
+    transparent 70%
+  );
+  --glass-overlay-bg:   rgba(0, 0, 0, 0.45);
+  --glass-overlay-blur: blur(10px);
+
+  /* ─────────────────────────────────────────────────────────────
+     MOTION — doors close, lamps warm. No spring, no bounce.
+     Durations trend slightly slower than web default; sanctuary pace.
+     ───────────────────────────────────────────────────────────── */
+  --duration-fast:    120ms;
+  --duration-normal:  240ms;
+  --duration-slow:    480ms;
+  --duration-enter:   300ms;
+  --duration-leave:   220ms;
+  --duration-breath:  1600ms;
+  --duration-open:    480ms;
+  --duration-close:   400ms;
+
+  --ease-out:         cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:      cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-droplet:     cubic-bezier(0.25, 1, 0.35, 1);
+  /* --ease-spring retained as alias to --ease-out so no existing consumer breaks.
+     Per brief, bounce/spring is forbidden — existing callers get graceful ease-out. */
+  --ease-spring:      var(--ease-out);
+
+  /* ─────────────────────────────────────────────────────────────
+     TYPOGRAPHY
+     CJK body: Noto Serif SC (loaded via Google Fonts in index.html,
+     see Phase 0.2). Fallback chain covers offline + first-paint.
+     ───────────────────────────────────────────────────────────── */
+  --font-sans:  -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, sans-serif;
+  --font-mono:  'Consolas', 'Monaco', monospace;
+  --font-serif-cjk: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+
+  --narrative-line-height:   1.88;
+  --narrative-letter-spacing: 0.01em;
+
+  --font-size-xs:   0.75rem;    /* 12px */
+  --font-size-sm:   0.8125rem;  /* 13px */
+  --font-size-md:   0.875rem;   /* 14px — base */
+  --font-size-lg:   1rem;       /* 16px */
+  --font-size-xl:   1.25rem;    /* 20px */
+  --font-size-2xl:  1.5rem;     /* 24px */
+  --line-height-tight:  1.3;
+  --line-height-normal: 1.6;
+  --line-height-loose:  1.8;
+
+  /* ─────────────────────────────────────────────────────────────
+     Z-INDEX — unchanged
+     ───────────────────────────────────────────────────────────── */
+  --z-panel:     10;
+  --z-dropdown:  20;
+  --z-modal:     50;
+  --z-toast:     100;
+
+  /* ─────────────────────────────────────────────────────────────
+     LAYOUT — unchanged
+     ───────────────────────────────────────────────────────────── */
+  --sidebar-width:       280px;
+  --panel-max-width:     720px;
+  --panel-padding:       var(--space-lg);
+  --header-height:       48px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FLOATING APP SHELL
+   The app appears to hover above the browser viewport. The body
+   shows a darker "desktop" surface; #app is inset with rounded
+   corners and a subtle shadow to create depth separation.
+   ═══════════════════════════════════════════════════════════════ */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100dvh;
+  overflow: hidden;
+  background: oklch(0.03 0.003 95);
+}
+
+/*
+ * Floating shell with rotating border glow.
+ *
+ * Structure: body > .app-glow-wrap > (.app-glow-bloom + #app)
+ *
+ * Three visual layers:
+ *   1. .app-glow-wrap::before  — sharp beam in the 2px border gap (clipped)
+ *   2. .app-glow-bloom         — large blurred halo, NOT clipped, bleeds
+ *                                outward onto the dark desktop AND inward
+ *                                through #app edges (the "illumination")
+ *   3. #app                    — app content, overflow:hidden
+ *
+ * The bloom div is the key difference from a plain border animation:
+ * it's sized much larger than the wrapper (inset: -20px) with heavy
+ * blur (20px), so wherever the beam passes, surrounding space glows.
+ */
+#app {
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.app-glow-wrap {
+  position: absolute;
+  inset: 10px;
+  border-radius: 14px;
+  padding: 2px;
+  overflow: hidden;
+}
+
+/* Sharp beam — bright core line in the border gap.
+   blur(2px) softens the radial spokes of the conic-gradient so the
+   tail doesn't create a hard angular cutoff where the spoke crosses
+   the border at steep angles (especially visible on short edges). */
+.app-glow-wrap::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200%;
+  height: 200%;
+  margin-top: -100%;
+  margin-left: -100%;
+  background: conic-gradient(
+    from 0deg,
+    oklch(0.80 0.12 150 / 1)       0deg,
+    oklch(0.65 0.09 150 / 0.5)    30deg,
+    oklch(0.40 0.04 150 / 0.1)    60deg,
+    transparent                    90deg,
+    transparent                   180deg,
+    oklch(0.82 0.12  75 / 0.9)   210deg,
+    oklch(0.65 0.09  75 / 0.4)   240deg,
+    oklch(0.40 0.04  75 / 0.08)  270deg,
+    transparent                   295deg,
+    oklch(0.80 0.12 150 / 1)     360deg
+  );
+  animation: glow-rotate 20s linear infinite;
+  filter: blur(6px);
+  will-change: transform;
+  z-index: 0;
+}
+
+/*
+ * Bloom halo — sibling of .app-glow-wrap, NOT its child.
+ * This is critical: the wrapper has overflow:hidden to clip the sharp
+ * beam. If the bloom were inside the wrapper, the blur would be clipped
+ * too and no glow would reach the dark desktop background.
+ *
+ * Positioned to match the wrapper but extended 16px outward on each side.
+ * The blurred conic-gradient creates a soft halo that illuminates the
+ * dark body background wherever the beam is currently passing.
+ */
+.app-glow-bloom {
+  position: absolute;
+  inset: -6px;       /* wrapper is at 10px from body, bloom at 10-16 = -6px — extends beyond wrapper */
+  border-radius: 24px;
+  pointer-events: none;
+  z-index: 0;        /* behind the wrapper (no z-index) and #app (z-index:1) */
+}
+.app-glow-bloom::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200%;
+  height: 200%;
+  margin-top: -100%;
+  margin-left: -100%;
+  background: conic-gradient(
+    from 0deg,
+    oklch(0.68 0.14 150 / 0.85)    0deg,
+    oklch(0.50 0.10 150 / 0.35)   35deg,
+    oklch(0.30 0.05 150 / 0.08)   65deg,
+    transparent                    90deg,
+    transparent                   180deg,
+    oklch(0.70 0.14  75 / 0.70)  210deg,
+    oklch(0.50 0.10  75 / 0.28)  245deg,
+    oklch(0.30 0.05  75 / 0.06)  275deg,
+    transparent                   300deg,
+    oklch(0.68 0.14 150 / 0.85)  360deg
+  );
+  animation: glow-rotate 20s linear infinite;
+  filter: blur(18px);
+  will-change: transform;
+}
+
+@keyframes glow-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL SANCTUARY SCROLLBAR
+   Applied to every scrollable element by default. Per
+   project_native_form_styling memory (2026-04-20): browser defaults
+   are never acceptable. Thin, warm, near-invisible until hovered.
+   ═══════════════════════════════════════════════════════════════ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--color-text-umber) 28%, transparent) transparent;
+}
+*::-webkit-scrollbar      { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-text-umber) 28%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  min-height: 24px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--color-text-umber) 55%, transparent);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL PREFERS-REDUCED-MOTION
+   Honors accessibility preference across every component, matches
+   ui-migration-plan §9.3.
+   ═══════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
