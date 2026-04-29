@@ -1263,6 +1263,7 @@ function typeClass(type: string | undefined): string {
 .relationship-panel {
   height: 100%;
   overflow: hidden;
+  min-width: 0;
 }
 
 .rel-layout {
@@ -1270,6 +1271,7 @@ function typeClass(type: string | undefined): string {
   flex-direction: row;
   height: 100%;
   overflow: hidden;
+  min-width: 0;
   padding-left: var(--sidebar-left-reserve, 40px);
   padding-right: var(--sidebar-right-reserve, 40px);
   transition: padding-left var(--duration-open) var(--ease-droplet),
@@ -1590,7 +1592,9 @@ function typeClass(type: string | undefined): string {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--color-bg);
+  container-type: inline-size;
 }
 
 /* ── Detail empty state ── */
@@ -1611,6 +1615,7 @@ function typeClass(type: string | undefined): string {
   display: flex;
   align-items: flex-start;
   gap: 20px;
+  min-width: 0;
   padding: 24px 28px 20px;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-surface);
@@ -1661,6 +1666,7 @@ function typeClass(type: string | undefined): string {
   align-items: center;
 }
 .rd-chip {
+  max-width: 100%;
   padding: 2px 10px;
   font-size: 0.7rem;
   font-weight: 500;
@@ -1668,6 +1674,9 @@ function typeClass(type: string | undefined): string {
   color: var(--color-text-secondary);
   background: color-mix(in oklch, var(--color-text-secondary) 8%, transparent);
   border: 1px solid color-mix(in oklch, var(--color-text-secondary) 12%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rd-chip--presence {
   display: flex;
@@ -1676,13 +1685,19 @@ function typeClass(type: string | undefined): string {
 }
 .rd-hero-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 2px;
+  max-width: 100%;
+  min-width: 0;
 }
 .rd-action-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
   padding: 5px 12px;
   font-size: 0.72rem;
   font-weight: 600;
@@ -1693,6 +1708,8 @@ function typeClass(type: string | undefined): string {
   cursor: pointer;
   transition: all var(--duration-fast) ease;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rd-action-btn:hover {
   background: color-mix(in oklch, var(--color-sage-400) 18%, transparent);
@@ -1736,11 +1753,13 @@ function typeClass(type: string | undefined): string {
 /* ── 2-Column Detail Body ── */
 .rd-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0;
   min-height: 0;
+  min-width: 0;
 }
 .rd-main {
+  min-width: 0;
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
@@ -1748,6 +1767,7 @@ function typeClass(type: string | undefined): string {
   border-right: 1px solid var(--color-border-subtle);
 }
 .rd-side {
+  min-width: 0;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -1834,6 +1854,29 @@ function typeClass(type: string | undefined): string {
   .rd-body { grid-template-columns: 1fr; }
   .rd-main { border-right: none; }
   .rd-side { border-top: 1px solid var(--color-border-subtle); }
+}
+
+@container (max-width: 640px) {
+  .rd-hero {
+    flex-wrap: wrap;
+    gap: 14px;
+    padding-inline: 20px;
+  }
+
+  .rd-hero-info {
+    flex-basis: calc(100% - 92px);
+  }
+
+  .rd-affinity-block {
+    width: 100%;
+    min-width: 0;
+    align-items: flex-start;
+    padding-top: 0;
+  }
+
+  .rd-hero-actions {
+    gap: 6px;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

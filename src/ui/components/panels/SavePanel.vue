@@ -731,6 +731,22 @@ function ghCopyToken(): void {
 async function ghUpload(): Promise<void> {
   if (!githubSync || ghBusy()) return;
   try {
+    // Auto-save current state before uploading so cloud gets the latest data
+    const pid = activeProfileId.value;
+    const sid = activeSlotId.value;
+    if (saveManager && pid && sid && store) {
+      const snapshot = store.toSnapshot() as GameStateTree;
+      await saveManager.saveGame(pid, sid, snapshot, {
+        slotId: sid,
+        slotName: sid,
+        lastSavedAt: new Date().toISOString(),
+        packId: activePackId.value ?? '',
+        characterName: store.characterName,
+        currentLocation: store.currentLocation,
+        gameTime: store.gameTime,
+        saveType: 'auto',
+      });
+    }
     await githubSync.upload((s) => { ghStatus.value = s; });
     void ghRefreshCloudInfo();
   } catch (err) {
@@ -1638,6 +1654,31 @@ const showSettings = ref(false);
   color: var(--color-text, #e0e0e6);
   line-height: 1.6;
   margin: 0 0 8px;
+}
+.btn-modal {
+  padding: 7px 18px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid var(--color-border, #333);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-modal--secondary {
+  background: transparent;
+  color: var(--color-text-secondary, #8a8580);
+  border-color: var(--color-border, #333);
+}
+.btn-modal--secondary:hover {
+  background: rgba(255,255,255,0.05);
+}
+.btn-modal--danger {
+  background: color-mix(in oklch, var(--color-danger, #ef4444) 15%, transparent);
+  color: var(--color-danger, #ef4444);
+  border-color: color-mix(in oklch, var(--color-danger, #ef4444) 30%, transparent);
+}
+.btn-modal--danger:hover {
+  background: color-mix(in oklch, var(--color-danger, #ef4444) 25%, transparent);
 }
 .confirm-warning {
   font-size: 0.78rem;

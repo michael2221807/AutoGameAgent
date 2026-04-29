@@ -995,13 +995,13 @@ onBeforeUnmount(() => {
 
     <!-- ─── NSFW 内容开关 ─── -->
     <section id="settings-nsfw" v-show="visibleCategoryIds.has('settings-nsfw')" class="settings-section">
-      <h3 class="section-title">��容过滤</h3>
+      <h3 class="section-title">内容过滤</h3>
 
       <div class="setting-row">
         <div class="setting-info">
           <span class="setting-label">成人内容 (NSFW)</span>
           <span class="setting-desc">
-            开启后 AI 会生成成人向扩展内容（NPC 私��信息、角色身体等）。
+            开启后 AI 会生成成人向扩展内容（NPC 私密信息、角色身体等）。
             关闭后相关 prompt 指令不发送给 AI，已有数据保留但不再影响生成。
           </span>
         </div>
