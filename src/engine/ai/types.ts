@@ -175,8 +175,10 @@ export interface AIResponse {
     grade: string;
     details?: unknown;
   };
-  /** 语义记忆（Engram 系统使用） */
+  /** 语义记忆（长期记忆汇总 pipeline 使用 semantic_memory.long_term_memories） */
   semanticMemory?: Record<string, unknown>;
+  /** V2: AI 产出的知识事实（从 knowledge_facts 提取） */
+  knowledgeFacts?: Array<{ fact: string; sourceEntity: string; targetEntity: string }>;
   /**
    * §7.2 NPC 私聊专属 — NPC 以第一人称总结本次交流对自己的影响（50 字内）
    *

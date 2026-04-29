@@ -85,26 +85,36 @@
       </section>
 
       <!-- ─── Status effects ─── -->
-      <section v-if="engineState.statusEffects.length > 0" class="status-card" aria-label="状态效果">
+      <section v-if="normalizedEffects.length > 0" class="status-card" aria-label="状态效果">
         <h3 class="status-card__title">
           状态效果
-          <span class="effects-count">{{ engineState.statusEffects.length }}</span>
+          <span class="effects-count">{{ normalizedEffects.length }}</span>
         </h3>
         <div class="effects-list">
           <div
-            v-for="(effect, i) in engineState.statusEffects"
+            v-for="(effect, i) in normalizedEffects"
             :key="i"
-            :class="['effect-tag', effect.类型 === 'debuff' ? 'effect-tag--debuff' : 'effect-tag--buff']"
-            :aria-label="`${effect.类型 === 'debuff' ? '负面效果' : '正面效果'}：${effect.状态名称}`"
+            :class="['effect-tag', effect.isDebuff ? 'effect-tag--debuff' : 'effect-tag--buff']"
+            :aria-label="`${effect.isDebuff ? '负面效果' : '正面效果'}：${effect.name}`"
+            @mouseenter="showEffectTip($event, effect)"
+            @mouseleave="hideEffectTip"
           >
-            {{ effect.状态名称 }}
-            <div v-if="effect.状态描述 || effect.持续时间分钟" class="effect-detail">
-              <p v-if="effect.状态描述" class="effect-detail__desc">{{ effect.状态描述 }}</p>
-              <span v-if="effect.持续时间分钟" class="effect-detail__dur">{{ effect.持续时间分钟 }} 分钟</span>
-            </div>
+            <span class="effect-tag__label">{{ effect.name }}</span>
           </div>
         </div>
       </section>
+
+      <!-- Effect tooltip — teleported to body to escape overflow clipping -->
+      <Teleport to="body">
+        <div
+          v-if="effectTip.visible"
+          class="effect-detail effect-detail--fixed"
+          :style="{ top: effectTip.y + 'px', left: effectTip.x + 'px' }"
+        >
+          <p v-if="effectTip.effect?.desc" class="effect-detail__desc">{{ effectTip.effect.desc }}</p>
+          <span v-if="effectTip.effect?.duration" class="effect-detail__dur">{{ effectTip.effect.duration }} 分钟</span>
+        </div>
+      </Teleport>
 
       <!-- ─── Attributes (collapsible) ─── -->
       <section class="status-card" aria-label="属性">
@@ -284,6 +294,52 @@ const reputationTier = computed(() => {
   if (r < 500) return '名满天下';
   return '传说';
 });
+
+// ── Status effects (normalize field names) ──────────────────────
+interface NormalizedEffect {
+  name: string;
+  isDebuff: boolean;
+  desc: string;
+  duration: number | null;
+}
+const normalizedEffects = computed<NormalizedEffect[]>(() => {
+  const raw = engineState.statusEffects;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((e: Record<string, unknown>) => ({
+    name: String(e['状态名称'] ?? e['名称'] ?? e['name'] ?? '未知效果'),
+    isDebuff: String(e['类型'] ?? e['type'] ?? '').toLowerCase().includes('debuff'),
+    desc: String(e['状态描述'] ?? e['描述'] ?? e['description'] ?? ''),
+    duration: typeof e['持续时间分钟'] === 'number' ? e['持续时间分钟']
+      : typeof e['duration'] === 'number' ? e['duration'] : null,
+  }));
+});
+
+// ── Effect tooltip (fixed-position, teleported to body) ─────────
+const effectTip = ref<{
+  visible: boolean;
+  x: number;
+  y: number;
+  effect: NormalizedEffect | null;
+}>({ visible: false, x: 0, y: 0, effect: null });
+
+function showEffectTip(ev: MouseEvent, effect: NormalizedEffect): void {
+  if (!effect.desc && !effect.duration) return;
+  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  const tipWidth = 220;
+  let x = rect.left + rect.width / 2 - tipWidth / 2;
+  if (x < 8) x = 8;
+  if (x + tipWidth > window.innerWidth - 8) x = window.innerWidth - 8 - tipWidth;
+  effectTip.value = {
+    visible: true,
+    x,
+    y: rect.bottom + 6,
+    effect,
+  };
+}
+
+function hideEffectTip(): void {
+  effectTip.value = { visible: false, x: 0, y: 0, effect: null };
+}
 
 // ── Attributes ───────────────────────────────────────────────────
 const attributes = computed(() =>
@@ -699,10 +755,7 @@ onUnmounted(() => {
   font-weight: 500;
   border-radius: 999px;
   cursor: default;
-  cursor: default;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -716,16 +769,15 @@ onUnmounted(() => {
   color: oklch(0.78 0.08 30);
   border: 1px solid color-mix(in oklch, var(--color-danger) 22%, transparent);
 }
+.effect-tag__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-.effect-detail {
-  display: none;
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  min-width: 160px;
-  max-width: 220px;
+.effect-detail--fixed {
+  position: fixed;
+  z-index: 9999;
+  width: 220px;
   padding: 8px 10px;
   border-radius: 8px;
   background: color-mix(in oklch, var(--color-surface) 96%, transparent);
@@ -734,8 +786,8 @@ onUnmounted(() => {
   box-shadow: 0 6px 18px rgba(0,0,0,0.3);
   text-align: left;
   white-space: normal;
+  pointer-events: none;
 }
-.effect-tag:hover .effect-detail { display: block; }
 .effect-detail__desc {
   margin: 0;
   font-size: 0.72rem;

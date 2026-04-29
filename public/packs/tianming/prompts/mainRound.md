@@ -61,20 +61,24 @@
 }
 ```
 
-### 语义记忆（可选，推荐）
+### 知识事实（推荐）
 
-`semantic_memory` 字段用于记录对后续剧情有影响的重要事实三元组：
+`knowledge_facts` 记录本回合出现的**两个实体之间的重要事实关系**。系统会自动做语义搜索，在后续回合将相关事实注入 AI 上下文。
 
 ```json
 {
-  "triples": [
-    {"subject": "张三", "predicate": "是", "object": "玩家的师父", "importance": 8},
-    {"subject": "玩家", "predicate": "获得", "object": "玉佩（在青城山）", "importance": 6}
+  "knowledge_facts": [
+    {"fact": "张三是天剑门的嫡传弟子，师从掌门青云子", "source_entity": "张三", "target_entity": "天剑门"},
+    {"fact": "玩家在青城山的古洞中获得了青锋剑", "source_entity": "玩家", "target_entity": "青锋剑"}
   ]
 }
 ```
 
-只提取**对后续剧情有影响**的事实，避免琐碎。若本回合无重要事实，可给 `{"triples": []}` 或省略该字段。
+**fact** 必须是完整的自然语言句子（15-40字），保留所有具体细节（人名、地名、原因）。
+**source_entity / target_entity** 必须是具体的人名、地名或组织名——不能是描述短语。
+
+只提取**涉及两个实体之间、对后续剧情有影响**的事实，每回合 3-8 条。角色内心感受、单独行为不产出 fact。
+详细规范见 core 模块 §十四。
 
 ### 实时关注 NPC
 
@@ -94,6 +98,6 @@
   },
   "commands": [...],
   "action_options": ["选项1", "选项2", "选项3", "选项4"],
-  "semantic_memory": {"triples": [...]}
+  "knowledge_facts": [{"fact": "...", "source_entity": "...", "target_entity": "..."}]
 }
 ```

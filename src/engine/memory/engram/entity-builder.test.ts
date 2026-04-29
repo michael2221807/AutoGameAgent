@@ -59,7 +59,7 @@ describe('EntityBuilder (2026-04-14 双源重构)', () => {
       const player = entities.find((e) => e.name === '戊非春');
       expect(player).toBeDefined();
       expect(player?.type).toBe('player');
-      expect(player?.description).toBe('玩家角色');
+      expect(player?.summary).toBe('玩家角色');
       expect(player?.is_embedded).toBe(false);
     });
 
@@ -80,7 +80,7 @@ describe('EntityBuilder (2026-04-14 双源重构)', () => {
       });
       const entities = builder.build([], sm, PATHS);
       expect(entities.find((e) => e.name === '张三')?.type).toBe('npc');
-      expect(entities.find((e) => e.name === '张三')?.description).toBe('鹤发童颜，道骨仙风');
+      expect(entities.find((e) => e.name === '张三')?.summary).toBe('鹤发童颜，道骨仙风');
       expect(entities.find((e) => e.name === '李四')?.type).toBe('npc');
     });
 
@@ -109,7 +109,7 @@ describe('EntityBuilder (2026-04-14 双源重构)', () => {
         relationships: [{ 名称: '某NPC', 类型: '重点', 当前内心想法: '心事重重' }],
       });
       const entities = builder.build([], sm, PATHS);
-      expect(entities.find((e) => e.name === '某NPC')?.description).toBe('心事重重');
+      expect(entities.find((e) => e.name === '某NPC')?.summary).toBe('心事重重');
     });
 
     it('skips NPCs without 名称', () => {

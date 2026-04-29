@@ -5,7 +5,7 @@
 只输出一个 JSON 对象，禁止任何前后缀文字、禁止 ` ``` ` 代码块：
 
 ```
-{"mid_term_memory":{"相关角色":["张三"],"事件时间":"1-01-15-08-30","记忆主体":"50-100字"},"commands":[{"action":"add","path":"世界.时间.分钟","value":30}],"action_options":["选项1","选项2","选项3","选项4","选项5"],"semantic_memory":{"triples":[]}}
+{"mid_term_memory":{"相关角色":["张三"],"事件时间":"1-01-15-08-30","记忆主体":"50-100字"},"commands":[{"action":"add","path":"世界.时间.分钟","value":30}],"action_options":["选项1","选项2","选项3","选项4","选项5"],"knowledge_facts":[{"fact":"...","source_entity":"...","target_entity":"..."}]}
 ```
 
 ---
@@ -32,7 +32,7 @@
 - `mid_term_memory`：必填，对象格式（如上）
 - `commands`：数据更新指令数组
 - `action_options`：3-5 个行动选项（字符串数组）
-- `semantic_memory`（可选但推荐）：重要事实三元组
+- `knowledge_facts`（推荐）：本回合重要事实
 
 ---
 
@@ -50,7 +50,7 @@
   "位置": "青云镇·茶馆",
   "描述": "外貌简述",
   "性格特征": ["沉稳", "多疑"],
-  "与玩家关系": "陌生人",
+  "关系状态": "陌生人",
   "记忆": [],
   "在做事项": "在茶馆里打探消息"
 }}
@@ -116,21 +116,22 @@
 
 ---
 
-## semantic_memory 结构（可选，推荐）
+## knowledge_facts 结构（推荐）
 
 ```json
 {
-  "triples": [
-    {"subject": "张三", "predicate": "是", "object": "玩家的师父", "importance": 8},
-    {"subject": "玩家", "predicate": "在", "object": "青城山获得玉佩", "importance": 6},
-    {"subject": "李四", "predicate": "仇恨", "object": "玩家", "importance": 7}
+  "knowledge_facts": [
+    {"fact": "张三是天剑门的嫡传弟子，师从掌门青云子", "source_entity": "张三", "target_entity": "天剑门"},
+    {"fact": "玩家在青城山获得了一柄青锋剑", "source_entity": "玩家", "target_entity": "青锋剑"},
+    {"fact": "李四对玩家怀有深深的仇恨，因其父被玩家所杀", "source_entity": "李四", "target_entity": "玩家"}
   ]
 }
 ```
 
-- `subject/predicate/object`：主、谓、宾
-- `importance`（建议）：1-10，越高越重要
-- 只提取**对后续剧情有影响**的事实，避免琐碎
+- `fact`：完整自然语言句子（15-40字），保留所有具体细节
+- `source_entity / target_entity`：必须是人名、地名或组织名
+- 只提取**涉及两个实体之间、对后续剧情有影响**的事实
+- 角色内心感受、单独行为不产出 fact
 
 ---
 
@@ -145,5 +146,5 @@
 
 ## 再次强调
 
-只输出：`{"mid_term_memory":{...},"commands":[...],"action_options":[...],"semantic_memory":{...}}`
+只输出：`{"mid_term_memory":{...},"commands":[...],"action_options":[...],"knowledge_facts":[...]}`
 禁止输出 text 字段！

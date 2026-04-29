@@ -69,7 +69,7 @@ const REPAIR_SYSTEM_PROMPT = [
   '- `commands` —— 状态变更指令数组（每项 `{action, path, value}`）',
   '- `mid_term_memory` —— 中期记忆对象（相关角色 / 事件时间 / 记忆主体），若无则 `null`',
   '- `action_options` —— 3-5 个短字符串，玩家下一步可选行动',
-  '- `semantic_memory` —— 语义三元组对象 `{triples: [...]}`，若无则 `null`',
+  '- `knowledge_facts` —— 知识事实数组 `[{fact, source_entity, target_entity}]`，若无则 `[]`',
   '',
   '**硬规则**：',
   '1. 只输出一个合法 JSON 对象。不加任何解释、前缀、后缀、代码围栏、thinking 标签。',
@@ -101,7 +101,7 @@ export class ResponseRepairStage implements PipelineStage {
     let recoveredCommands = parsed.commands;
     let recoveredMemory = parsed.midTermMemory;
     let recoveredOptions = parsed.actionOptions;
-    let recoveredSemantic = parsed.semanticMemory;
+    let recoveredKnowledgeFacts = parsed.knowledgeFacts;
     let structureRescued = false;
 
     try {
@@ -151,7 +151,7 @@ export class ResponseRepairStage implements PipelineStage {
         if (repaired.actionOptions && repaired.actionOptions.length > 0) {
           recoveredOptions = repaired.actionOptions;
         }
-        if (repaired.semanticMemory) recoveredSemantic = repaired.semanticMemory;
+        if (repaired.knowledgeFacts) recoveredKnowledgeFacts = repaired.knowledgeFacts;
         // If <正文> wasn't found but repair gave clean text, use it.
         if (!recoveredText && repaired.text && repaired.text.trim()) {
           recoveredText = repaired.text;
@@ -175,7 +175,7 @@ export class ResponseRepairStage implements PipelineStage {
         commands: recoveredCommands,
         midTermMemory: recoveredMemory,
         actionOptions: recoveredOptions,
-        semanticMemory: recoveredSemantic,
+        knowledgeFacts: recoveredKnowledgeFacts,
         parseOk: structureRescued,
       },
       meta: {

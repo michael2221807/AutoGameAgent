@@ -99,22 +99,25 @@ export class PostProcessStage implements PipelineStage {
       }
     }
 
-    // ── 3. 处理语义记忆 ──
-    // semantic_memory 字段包含 Engram 系统使用的结构化数据，
-    // 合并到状态树的 semanticMemory 区域
-    if (ctx.parsedResponse.semanticMemory) {
-      this.memoryManager.mergeSemanticMemory(ctx.parsedResponse.semanticMemory);
+    // ── 3. 检查 knowledge_facts 输出 ──
+    if (this.engramManager.isEnabled() && !ctx.parsedResponse.knowledgeFacts) {
+      console.warn(
+        `[PostProcess] AI 未输出 knowledge_facts (round ${ctx.roundNumber})`,
+      );
     }
 
-    // ── 4. 更新 Engram（事件提取 → 实体构建 → 关系构建 → 向量化） ──
-    // processResponse 内部的向量化步骤是 fire-and-forget（不阻塞管线），
-    // 但事件/实体/关系的状态树写入是同步的，需要在存档前完成
+    // ── 4. 更新 Engram（事件提取 → 实体构建 → 事实边构建 → 向量化） ──
     if (this.engramManager.isEnabled()) {
-      await this.engramManager.processResponse(
+      const engramWriteSnapshot = await this.engramManager.processResponse(
         ctx.parsedResponse,
         this.stateManager,
       );
+      if (engramWriteSnapshot) {
+        ctx.meta['engramWrite'] = engramWriteSnapshot;
+      }
     }
+
+    // V2: pendingReviewPairs written directly from FactBuilder inside processResponse
 
     // ── 5. 短期记忆溢出 → 同步 shift + 升级隐式中期为正式中期 ──
     //
@@ -288,6 +291,14 @@ export class PostProcessStage implements PipelineStage {
       if (subject && subject.trim()) {
         assistantEntry._shortTermPreview = subject.slice(0, 80);
       }
+    }
+
+    // ── Engram per-round snapshots ──
+    if (ctx.meta['engramWrite']) {
+      assistantEntry._engramWrite = ctx.meta['engramWrite'];
+    }
+    if (ctx.meta['engramRead']) {
+      assistantEntry._engramRead = ctx.meta['engramRead'];
     }
 
     // ── Phase 4 (2026-04-19): polish metadata ──

@@ -69,7 +69,7 @@ export class ContextAssemblyStage implements PipelineStage {
     // ── 3. 记忆检索（E.2：按 retrievalMode 选择检索路径） ──
     // 参照 ming: 短期记忆单独作为 assistant 消息注入 chat history (depth=2)
     // MEMORY_BLOCK 只包含中期/长期/隐式中期（避免重复注入短期）
-    const memoryBlock = await this.retrieveMemory(ctx.userInput);
+    const memoryBlock = await this.retrieveMemory(ctx.userInput, ctx);
 
     // 读取短期记忆用于单独注入（参照 ming: 短期记忆作为独立 assistant 消息注入 chat history 末端）
     // 路径来自 memoryPathConfig，默认 '记忆.短期'
@@ -527,7 +527,7 @@ export class ContextAssemblyStage implements PipelineStage {
    * - engram.enabled && retrievalMode='hybrid' → UnifiedRetriever（向量+图+三元组+NPC规则）
    * - 其他情况 → legacy MemoryRetriever（传统关键词+时间衰减）
    */
-  private async retrieveMemory(userInput: string): Promise<string> {
+  private async retrieveMemory(userInput: string, ctx?: PipelineContext): Promise<string> {
     const engramConfig = this.engramManager?.getConfig();
 
     const useHybrid =
@@ -540,7 +540,7 @@ export class ContextAssemblyStage implements PipelineStage {
       const locationDesc = this.stateManager.get<string>(this.paths.playerLocation) ?? '';
 
       try {
-        return await this.unifiedRetriever.retrieve(
+        const result = await this.unifiedRetriever.retrieve(
           userInput,
           {
             playerName,
@@ -550,14 +550,15 @@ export class ContextAssemblyStage implements PipelineStage {
           },
           this.stateManager,
         );
+        if (ctx && this.unifiedRetriever.lastReadSnapshot) {
+          ctx.meta['engramRead'] = this.unifiedRetriever.lastReadSnapshot;
+        }
+        return result;
       } catch (err) {
         console.warn('[ContextAssembly] UnifiedRetriever failed, falling back to legacy:', err);
-        // 失败时降级到 legacy，不中断游戏
       }
     }
 
-    // Legacy path（同步）
-    // 2026-04-11: 传 playerName + recentNpcNames 让隐式中期记忆按相关角色过滤
     const playerName = this.stateManager.get<string>(this.paths.playerName) ?? '';
     return this.memoryRetriever.retrieve(this.stateManager, {
       playerName,

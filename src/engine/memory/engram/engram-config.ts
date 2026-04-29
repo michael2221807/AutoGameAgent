@@ -129,6 +129,18 @@ export function normalizeEngramConfig(raw: unknown): EngramConfig {
 
     debug:
       typeof r.debug === 'boolean' ? r.debug : d.debug,
+
+    // V1 'shadow' mode removed in V2 — migrate persisted configs to 'active'
+    knowledgeEdgeMode:
+      r.knowledgeEdgeMode === 'active' || r.knowledgeEdgeMode === 'shadow'
+        ? 'active'
+        : r.knowledgeEdgeMode === 'off' ? 'off' : d.knowledgeEdgeMode,
+    recencyDecayBase:
+      clamp(toNumber(r.recencyDecayBase, d.recencyDecayBase!), 0.9, 0.9999),
+    recencyDecayFloor:
+      clamp(toNumber(r.recencyDecayFloor, d.recencyDecayFloor!), 0, 0.5),
+    edgeCapacity:
+      clamp(toNumber(r.edgeCapacity, d.edgeCapacity!), 100, 5000),
   };
 }
 

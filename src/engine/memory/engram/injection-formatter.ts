@@ -31,7 +31,7 @@ export interface FormatterInput {
 export interface EntitySummary {
   name: string;
   type: string;
-  description: string;
+  summary: string;
 }
 
 /** 关系概要（供格式化使用的简化视图） */
@@ -152,7 +152,7 @@ export class InjectionFormatter {
     if (items.length === 0) return '';
 
     const lines = items.map(
-      (e) => `- **${e.name}**（${e.type}）${e.description ? `— ${e.description}` : ''}`,
+      (e) => `- **${e.name}**（${e.type}）${e.summary ? `— ${e.summary}` : ''}`,
     );
     return `#### 相关角色/实体\n${lines.join('\n')}`;
   }

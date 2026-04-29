@@ -84,6 +84,14 @@ export interface EngramConfig {
   embeddingModel?: string;
   /** 是否开启 debug 模式（开启后 EngramDebugPanel 可见） */
   debug: boolean;
+  /** 事实边系统: 'off' = 不构建边, 'active' = V2 Graphiti 边 */
+  knowledgeEdgeMode: 'off' | 'active';
+  /** Recency decay base per round (default 0.997, half-life ~230 rounds) */
+  recencyDecayBase?: number;
+  /** Minimum recency score floor (default 0.05) */
+  recencyDecayFloor?: number;
+  /** Maximum number of EngramEdge entries (default 800) */
+  edgeCapacity?: number;
 }
 
 /**
@@ -92,6 +100,161 @@ export interface EngramConfig {
  * 生产环境建议从此对象出发，通过 normalizeEngramConfig() 合并用户设置。
  * enabled 默认关闭，需要用户在 Settings → Engram 中显式开启。
  */
+// ═══════════════════════════════════════════════════════════════
+//  Per-round Engram visualization snapshots
+// ═══════════════════════════════════════════════════════════════
+
+/** 单个评分分量——描述一条记忆为什么得了这个分的一个因素 */
+export interface ScoredComponent {
+  /** 人话标签 */
+  label: string;
+  /** 原始值 (0-1) */
+  rawValue: number;
+  /** 该分量在公式中的有效权重 */
+  weight: number;
+  /** rawValue × weight = 对最终得分的贡献 */
+  contribution: number;
+  /** UI 颜色提示 */
+  color: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'gray';
+}
+
+/** 一条候选记忆的完整评分档案 */
+export interface ScoredCandidateTrace {
+  /** 记忆文本（截断到 150 字） */
+  text: string;
+  /** 最终得分 */
+  finalScore: number;
+  /** 召回来源 scope（V2: edge/entity/event 三路，RRF 融合后） */
+  source: 'edge' | 'entity' | 'event';
+  /** 评分分量分解 */
+  components: ScoredComponent[];
+  /** 重排后的混合分数（base×0.7 + rerankScore×0.4），仅重排改变了分数时才有值 */
+  rerankBlendedScore?: number;
+  /** 重排前的分数 */
+  preRerankScore?: number;
+  /**
+   * 最终是注入还是淘汰。
+   * 注意：低于 minScore 的候选在 vectorSearch 内部就被丢弃，不会进入 trace 列表。
+   */
+  outcome: 'injected' | 'filtered-by-topK' | 'filtered-by-rerank';
+  /** 溯源 */
+  eventId?: string;
+  entityName?: string;
+  roundNumber?: number;
+}
+
+/** 写入路径——单个事件提取快照 */
+export interface EngramWriteEventDetail {
+  eventId: string;
+  title: string;
+  roles: string[];
+  location: string[];
+  timeAnchor: string;
+}
+
+/** 写入路径——实体变化记录 */
+export interface EngramWriteEntityDelta {
+  name: string;
+  type: string;
+  isNew: boolean;
+  descriptionUpdated: boolean;
+  mentionCount: number;
+}
+
+/** 关系边 — 知识图谱中连接两个实体的有向边（V1 legacy，V2 不再构建新边） */
+export interface EngramRelation {
+  fromName: string;
+  toName: string;
+  type: string;
+  label: string;
+  weight: number;
+  lastUpdated: number;
+  sourceEventId?: string;
+}
+
+/** @deprecated V2 不再构建关系边 — 保留仅为 EngramWriteSnapshot 结构兼容 */
+export interface EngramWriteRelationDelta {
+  from: string;
+  to: string;
+  type: string;
+  isNew: boolean;
+  weight: number;
+}
+
+/** 写入路径——事实边变化记录（V2 Graphiti） */
+export interface EngramWriteEdgeDelta {
+  sourceEntity: string;
+  targetEntity: string;
+  fact: string;
+  episodeCount: number;
+  isNew: boolean;
+}
+
+/** 写入路径——完整快照 */
+export interface EngramWriteSnapshot {
+  roundNumber: number;
+  capturedAt: number;
+  totalDurationMs: number;
+  event: EngramWriteEventDetail | null;
+  entities: {
+    total: number;
+    deltas: EngramWriteEntityDelta[];
+  };
+  relations: {
+    total: number;
+    deltas: EngramWriteRelationDelta[];
+  };
+  /** V2 快照版本（2 = Graphiti alignment） */
+  snapshotVersion: 2;
+  trimmed: {
+    eventsBefore: number;
+    eventsAfter: number;
+    entitiesBefore: number;
+    entitiesAfter: number;
+  };
+  vectorizeQueued: number;
+  /** Edge review results (from FieldRepairPipeline.runEdgeReview) */
+  reviewResult?: {
+    reviewed: number;
+    invalidated: number;
+    kept: number;
+  };
+  /** 事实边统计（V2 Graphiti） */
+  edges?: {
+    total: number;
+    newCount: number;
+    reinforcedCount: number;
+    prunedCount: number;
+    topNew: EngramWriteEdgeDelta[];
+  };
+}
+
+/** 读取路径——完整快��（以候选列表为核心） */
+export interface EngramReadSnapshot {
+  query: string;
+  capturedAt: number;
+  totalDurationMs: number;
+  /** 所有参与过评分的候选（含被淘汰的） */
+  candidates: ScoredCandidateTrace[];
+  /** 管线统计 */
+  pipeline: {
+    vectorEventCount: number;
+    vectorEntityCount: number;
+    graphCount: number;
+    afterMerge: number;
+    afterRerank: number;
+    injectedCount: number;
+  };
+  /** 当时的检索配置 */
+  config: {
+    minScore: number;
+    topK: number;
+    rerankEnabled: boolean;
+    rerankTopN: number;
+    embeddingEnabled: boolean;
+  };
+}
+
 export const DEFAULT_ENGRAM_CONFIG: EngramConfig = {
   enabled: false,
   retrievalMode: 'hybrid',
@@ -116,4 +279,8 @@ export const DEFAULT_ENGRAM_CONFIG: EngramConfig = {
   embeddingProvider: undefined,
   embeddingModel: undefined,
   debug: false,
+  knowledgeEdgeMode: 'off',
+  recencyDecayBase: 0.997,
+  recencyDecayFloor: 0.05,
+  edgeCapacity: 800,
 };

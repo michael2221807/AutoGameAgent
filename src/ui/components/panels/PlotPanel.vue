@@ -51,6 +51,11 @@ function persist(): void {
 
 const activeArc = computed(() => plotStore.activeArc);
 
+const latestEvalLog = computed(() => {
+  const logs = plotStore.evaluationLog;
+  return logs.length > 0 ? logs[logs.length - 1] : null;
+});
+
 const showCreateArc = ref(false);
 const newArcTitle = ref('');
 const newArcSynopsis = ref('');
@@ -115,9 +120,8 @@ const displayArc = computed<PlotArc | null>(() => {
 function activateCurrentArc(): void {
   const arc = displayArc.value;
   if (!arc) return;
-  const ok = plotStore.activateArc(arc.id);
+  const ok = plotStore.activateArc(arc.id, currentRound.value ?? 0);
   if (ok) persist();
-  persist();
 }
 
 function abandonCurrentArc(): void {
@@ -418,6 +422,7 @@ function rejectAdvancement(): void {
             :nodes="displayArc.nodes"
             :gauges="displayArc.gauges"
             :current-round="currentRound ?? 0"
+            :last-eval-log="latestEvalLog"
             @insert-after="handleInsertAfter"
             @remove="handleRemoveNode"
             @select="handleSelectNode"

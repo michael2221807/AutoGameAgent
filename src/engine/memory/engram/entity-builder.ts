@@ -25,7 +25,7 @@ export interface EngramEntity {
   /** 实体名称（也是主键，用于合并同名实体） */
   name: string;
   /** 实体类型 */
-  type: 'player' | 'npc' | 'location' | 'item' | 'other';
+  type: 'player' | 'npc' | 'location' | 'item';
   /** 实体属性（从事件上下文中累积的信息） */
   attributes: Record<string, unknown>;
   /** 首次出现的回合序号 */
@@ -39,12 +39,18 @@ export interface EngramEntity {
    * 对于 NPC 是"当前外貌状态"/"当前内心想法"的组合；对于玩家填空字符串。
    * 2026-04-14 新增。
    */
-  description: string;
+  summary: string;
   /**
    * 是否已完成向量化。engram-manager 向量化成功后置 true。
    * 2026-04-14 新增。
    */
   is_embedded: boolean;
+  /**
+   * Tier 1 补桩标记：此实体由引擎自动创建（缺失的事实边端点），
+   * summary 尚未由 AI 填充。Tier 2（FieldRepairPipeline.runEntityEnrichment）
+   * 成功写入描述后移除此标记。
+   */
+  _pendingEnrichment?: boolean;
 }
 
 /** EntityBuilder 从 state 读取时使用的路径集合 */
@@ -63,7 +69,8 @@ interface NpcRelationshipEntry {
   名称: string;
   /** NPC 类型：'重点' | '普通' | undefined（未标记视为重点） */
   类型?: string;
-  /** 与玩家关系（供 RelationBuilder 使用） */
+  /** 与玩家关系 */
+  关系状态?: string;
   与玩家关系?: string;
   /** 当前外貌状态（供 description 使用） */
   当前外貌状态?: string;
@@ -113,7 +120,7 @@ export class EntityBuilder {
         if (npc.类型 === '普通') continue;
         const description = this.buildNpcDescription(npc);
         this.upsertEntity(entityMap, name, 'npc', 0, description, {
-          relationToPlayer: npc.与玩家关系,
+          relationToPlayer: npc.关系状态 ?? npc.与玩家关系,
           location: npc.位置,
           source: 'relationship',
         });
@@ -206,12 +213,9 @@ export class EntityBuilder {
       existing.firstSeen = Math.min(existing.firstSeen, round);
       existing.mentionCount += 1;
       // 持续更新描述：新的非空描述覆盖旧的（NPC 外貌/状态会变化）
-      if (description) {
-        existing.description = description;
-        // 描述变化 → 标记需要重新向量化
-        if (existing.is_embedded && existing.description !== description) {
-          existing.is_embedded = false;
-        }
+      if (description && existing.summary !== description) {
+        if (existing.is_embedded) existing.is_embedded = false;
+        existing.summary = description;
       }
       existing.attributes = { ...existing.attributes, ...extraAttrs };
       return;
@@ -223,20 +227,19 @@ export class EntityBuilder {
       firstSeen: round,
       lastSeen: round,
       mentionCount: 1,
-      description,
+      summary: description,
       is_embedded: false,
     });
   }
 
-  /**
-   * 根据名字推断类型
-   * - "玩家"/"player" → player
-   * - 含地点词 → location
-   * - 其余 → npc
-   */
   private inferType(name: string): EngramEntity['type'] {
-    if (name === '玩家' || name === 'player') return 'player';
-    if (/[村镇城池山林洞窟街道广场酒馆教堂寺庙道观宫殿]/.test(name)) return 'location';
-    return 'npc';
+    return inferEntityType(name);
   }
+}
+
+export function inferEntityType(name: string): EngramEntity['type'] {
+  if (name === '玩家' || name === 'player') return 'player';
+  if (/[·]/.test(name) || /[村镇城池山林洞窟街道广场酒馆教堂寺庙道观宫殿区域大陆]/.test(name)) return 'location';
+  if (/[计划文件卷轴药剑书戒指吊坠笔记本信件地图钥匙]/.test(name)) return 'item';
+  return 'npc';
 }

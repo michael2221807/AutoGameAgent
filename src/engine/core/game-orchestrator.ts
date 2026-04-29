@@ -626,6 +626,16 @@ export class GameOrchestrator {
             });
           }
         }
+        if (result.entityEnrichResult && result.entityEnrichResult.enriched > 0) {
+          console.log(
+            `[Orchestrator] EntityEnrich: ${result.entityEnrichResult.enriched} entity(s) enriched (${result.entityEnrichResult.remaining} still pending)`,
+          );
+        }
+        if (result.edgeReviewResult && result.edgeReviewResult.invalidated > 0) {
+          console.log(
+            `[Orchestrator] EdgeReview: ${result.edgeReviewResult.invalidated} edge(s) invalidated out of ${result.edgeReviewResult.reviewed} reviewed`,
+          );
+        }
       } catch (err) {
         console.error('[Orchestrator] FieldRepairPipeline failed:', err);
       }

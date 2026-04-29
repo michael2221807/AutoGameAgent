@@ -232,9 +232,14 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
   push('ai_role', 'AI角色声明', '系统', 'system', slot('narrator_role'));
 
   // ── 2. World Prompt (world info + world book lore) ──
+  // AGA stores the creation-flow world selection at root `world` (no statePath),
+  // while the AI-generated description goes to `世界.描述`. Check both.
+  const worldSelection = stateManager.get<Record<string, unknown>>('world');
   const worldInfo = stateManager.get<Record<string, unknown>>('世界.信息');
-  const worldName = (worldInfo?.['世界名称'] ?? '') as string;
-  const worldDesc = (worldInfo?.['世界背景'] ?? worldInfo?.['描述'] ?? '') as string;
+  const worldName = (worldSelection?.['name'] ?? worldInfo?.['世界名称'] ?? '') as string;
+  const aiWorldDesc = stateManager.get<string>(paths.worldDescription) ?? '';
+  const selectionDesc = (worldSelection?.['description'] ?? worldInfo?.['世界背景'] ?? worldInfo?.['描述'] ?? '') as string;
+  const worldDesc = aiWorldDesc || selectionDesc;
   const worldLore = worldBooks
     .filter((b) => b.enabled !== false)
     .flatMap((b) => b.entries.filter((e) => e.enabled !== false && e.type === 'world_lore' && e.injectionMode === 'always'))
@@ -373,24 +378,33 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
   }
 
   // ── 13. World State ──
-  const worldState = stateManager.get<unknown>('世界.状态');
-  if (worldState && typeof worldState === 'object') {
-    const ws = worldState as Record<string, unknown>;
-    const parts = [];
-    if (ws['天气']) parts.push(`天气: ${JSON.stringify(ws['天气'])}`);
-    if (ws['事件']) parts.push(`世界事件: ${JSON.stringify(ws['事件'])}`);
+  {
+    const worldDesc = stateManager.get<string>('世界.描述') ?? '';
+    const weather = stateManager.get<unknown>(paths.weather);
+    const festival = stateManager.get<unknown>(paths.festival);
+    const worldEvents = stateManager.get<unknown[]>(paths.worldEvents) ?? [];
+    const worldParts: string[] = [];
+    if (worldDesc) worldParts.push(`描述: ${worldDesc}`);
+    if (weather) worldParts.push(`天气: ${typeof weather === 'string' ? weather : JSON.stringify(weather)}`);
+    if (festival && typeof festival === 'object') {
+      const f = festival as Record<string, unknown>;
+      if (f['名称'] && f['名称'] !== '平日') worldParts.push(`节日: ${JSON.stringify(festival)}`);
+    }
+    if (worldEvents.length > 0) worldParts.push(`世界事件: ${JSON.stringify(worldEvents.slice(-5))}`);
     push('state_world', '世界', '系统', 'system',
-      parts.length > 0 ? `【世界】\n${parts.join('\n')}` : '【世界】\n无');
+      worldParts.length > 0 ? `【世界】\n${worldParts.join('\n')}` : '【世界】\n无');
   }
 
   // ── 14. Environment State ──
-  const gameTime = stateManager.get<unknown>('元数据.时间');
-  const environment = stateManager.get<unknown>('世界.状态.环境');
-  const envParts = [];
-  if (gameTime) envParts.push(`时间: ${JSON.stringify(gameTime)}`);
-  envParts.push(`当前位置: ${currentLocation}`);
-  if (environment) envParts.push(`环境: ${JSON.stringify(environment)}`);
-  push('state_environment', '当前环境', '系统', 'system', `【当前环境】\n${envParts.join('\n')}`);
+  {
+    const gameTime = stateManager.get<unknown>(paths.gameTime);
+    const envTags = stateManager.get<unknown>(paths.environmentTags);
+    const envParts: string[] = [];
+    if (gameTime) envParts.push(`时间: ${JSON.stringify(gameTime)}`);
+    envParts.push(`当前位置: ${currentLocation}`);
+    if (envTags) envParts.push(`环境: ${JSON.stringify(envTags)}`);
+    push('state_environment', '当前环境', '系统', 'system', `【当前环境】\n${envParts.join('\n')}`);
+  }
 
   // ── 15. Player State ──
   const playerIdentity = stateManager.get<Record<string, unknown>>('角色.基础信息') ?? {};

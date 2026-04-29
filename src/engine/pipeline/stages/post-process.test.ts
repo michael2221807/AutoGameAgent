@@ -59,7 +59,6 @@ function makeMemoryManager(): IMemoryManager {
   return {
     appendShortTerm: vi.fn(),
     appendImplicitMidTerm: vi.fn(),
-    mergeSemanticMemory: vi.fn(),
     setMidTermEntries: vi.fn(),
     setLongTermEntries: vi.fn(),
     commitSummaryResult: vi.fn(),

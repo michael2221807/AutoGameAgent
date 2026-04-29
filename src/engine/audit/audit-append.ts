@@ -28,6 +28,7 @@ export type AuditSource =
   | 'main'
   | 'privacyRepair'
   | 'fieldRepair'
+  | 'edgeReview'
   | 'worldHeartbeat'
   | 'npcGeneration'
   | 'bodyPolish';

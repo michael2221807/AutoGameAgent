@@ -13,6 +13,8 @@ import type { EnginePathConfig } from '../pipeline/types';
 import type { GamePack } from '../types';
 import type { PlotNode, PlotGauge, OpportunityTier } from './types';
 import { DEFAULT_GAUGE_MAX_DELTA } from './types';
+import { stringifySnapshotForPrompt } from '../memory/snapshot-sanitizer';
+import { buildEnvironmentBlock } from '../prompt/environment-block';
 
 export interface DecomposeResult {
   nodes: Omit<PlotNode, 'id' | 'arcId' | 'status' | 'consecutiveReachedCount' | 'activatedAtRound' | 'completedAtRound'>[];
@@ -32,17 +34,13 @@ export class PlotDecomposer {
     outline: string,
     signal?: AbortSignal,
   ): Promise<DecomposeResult | null> {
-    const playerName = this.stateManager.get<string>(this.paths.playerName) ?? '';
-    const location = this.stateManager.get<string>(this.paths.playerLocation) ?? '';
-    const round = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
-    const stateSummary = `Player: ${playerName}, Location: ${location}, Round: ${round}`;
-
     const promptContent = this.pack.prompts?.['plotDecompose'] ?? '';
     if (!promptContent) {
       console.warn('[PlotDecomposer] plotDecompose prompt not found in pack');
       return null;
     }
 
+    const stateSummary = this.buildStateSummary();
     const rendered = promptContent
       .split('{{PLOT_OUTLINE}}').join(outline)
       .split('{{PLOT_STATE_SUMMARY}}').join(stateSummary);
@@ -54,6 +52,10 @@ export class PlotDecomposer {
     if (jailbreak) {
       messages.push({ role: 'system', content: jailbreak });
     }
+
+    // World context — same data as main round step1 so the AI can design
+    // nodes that reference existing NPCs, locations, and ongoing events.
+    messages.push({ role: 'system', content: this.buildWorldContext() });
 
     messages.push({ role: 'system', content: rendered });
     messages.push({ role: 'user', content: outline });
@@ -102,6 +104,69 @@ export class PlotDecomposer {
       console.error('[PlotDecomposer] Decomposition failed:', err);
       return null;
     }
+  }
+
+  private buildStateSummary(): string {
+    const playerName = this.stateManager.get<string>(this.paths.playerName) ?? '';
+    const location = this.stateManager.get<string>(this.paths.playerLocation) ?? '';
+    const round = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
+    return `玩家：${playerName}，当前位置：${location}，回合：${round}`;
+  }
+
+  private buildWorldContext(): string {
+    const nsfwMode = this.stateManager.get<boolean>('系统.nsfwMode') === true;
+    const gameStateJson = stringifySnapshotForPrompt(
+      this.stateManager.toSnapshot(), nsfwMode, 0,
+    );
+
+    const environmentBlock = buildEnvironmentBlock({
+      weather: this.stateManager.get<unknown>(this.paths.weather),
+      festival: this.stateManager.get<unknown>(this.paths.festival),
+      environment: this.stateManager.get<unknown>(this.paths.environmentTags),
+    });
+
+    const memoryBlock = this.buildMemoryBlock();
+
+    const sections = [
+      '## 当前游戏状态\n',
+      '```json',
+      gameStateJson,
+      '```',
+    ];
+
+    if (environmentBlock) {
+      sections.push('', environmentBlock);
+    }
+
+    if (memoryBlock) {
+      sections.push('', '## 记忆摘要\n', memoryBlock);
+    }
+
+    return sections.join('\n');
+  }
+
+  private buildMemoryBlock(): string {
+    const midTerm = this.stateManager.get<Array<Record<string, unknown>>>('记忆.中期') ?? [];
+    const longTerm = this.stateManager.get<Array<Record<string, unknown>>>('记忆.长期') ?? [];
+    const lines: string[] = [];
+
+    if (longTerm.length > 0) {
+      lines.push('### 长期记忆');
+      for (const entry of longTerm.slice(-10)) {
+        const content = entry['记忆主体'] ?? entry['content'] ?? '';
+        if (content) lines.push(`- ${content}`);
+      }
+    }
+
+    if (midTerm.length > 0) {
+      lines.push('### 中期记忆（最近）');
+      for (const entry of midTerm.slice(-15)) {
+        const content = entry['记忆主体'] ?? entry['content'] ?? '';
+        if (content) lines.push(`- ${content}`);
+      }
+    }
+
+    return lines.length > 0 ? lines.join('\n') : '（暂无记忆）';
   }
 
   private normalizeNodes(raw: unknown[]): DecomposeResult['nodes'] {

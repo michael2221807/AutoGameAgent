@@ -93,7 +93,7 @@ watch(config, () => {
             <div class="setting-info">
               <span class="setting-label">检索策略</span>
               <span class="setting-desc">
-                传统：关键词+时间衰减；混合：向量+图遍历+语义三元组+NPC规则
+                传统：关键词+时间衰减；混合：向量+BM25+RRF+BFS 三路并行检索
               </span>
             </div>
             <div class="radio-group">
@@ -327,6 +327,19 @@ watch(config, () => {
             <button
               :class="['toggle-switch', { 'toggle-switch--on': config.debug }]"
               @click="config.debug = !config.debug"
+            >
+              <span class="toggle-track"><span class="toggle-thumb" /></span>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">事实边</span>
+              <span class="setting-desc">开启后 AI 每回合提取实体间事实，构建可搜索的知识图谱边</span>
+            </div>
+            <button
+              :class="['toggle-switch', { 'toggle-switch--on': config.knowledgeEdgeMode === 'active' }]"
+              @click="config.knowledgeEdgeMode = config.knowledgeEdgeMode === 'active' ? 'off' : 'active'"
             >
               <span class="toggle-track"><span class="toggle-thumb" /></span>
             </button>

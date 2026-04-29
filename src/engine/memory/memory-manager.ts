@@ -52,7 +52,7 @@
 import type { StateManager } from '../core/state-manager';
 import { eventBus } from '../core/event-bus';
 import { logger } from '../core/logger';
-import { TripleBuilder } from './engram/triple-builder';
+
 
 /** 短期记忆条目 — 每轮 AI 回复后追加一条 */
 export interface ShortTermEntry {
@@ -236,7 +236,6 @@ export class MemoryManager {
   private _configCache: ReturnType<MemoryManager['getEffectiveConfig']> | null = null;
   private _configCacheTs = 0;
   private static readonly CONFIG_CACHE_TTL = 5000;
-  private readonly tripleBuilder = new TripleBuilder();
 
   constructor(
     private stateManager: StateManager,
@@ -669,21 +668,6 @@ export class MemoryManager {
       if (e.记忆主体 && playerName && playerName.length >= 2 && e.记忆主体.includes(playerName)) return true;
       return false;
     });
-  }
-
-  // ─── 语义记忆（三元组知识库） ───
-
-  /**
-   * 合并 AI response 中的语义记忆（三元组）到状态树
-   *
-   * 2026-04-16 重构：从 shallow merge 改为 TripleBuilder 追加+去重。
-   * 旧实现用 `{...existing, ...data}` 会覆盖已有 triples；
-   * 新实现用 TripleBuilder.merge() 做 APPEND + 去重 + 时间戳自动填充。
-   *
-   * 存储路径：系统.扩展.语义记忆（独立于 engramMemory 的事件/实体/关系）
-   */
-  mergeSemanticMemory(data: Record<string, unknown>): void {
-    this.tripleBuilder.merge(data, this.stateManager, '世界.时间');
   }
 
   // ─── 查询 ───

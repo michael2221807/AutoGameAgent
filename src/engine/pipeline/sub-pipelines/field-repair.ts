@@ -31,6 +31,10 @@ import {
   extractThinkingFromRaw,
 } from '../../core/prompt-debug';
 import { appendChangesToLastNarrative } from '../../audit/audit-append';
+import type { EngramEdge } from '../../memory/engram/knowledge-edge';
+import type { EngramEntity } from '../../memory/engram/entity-builder';
+import { loadEngramConfig } from '../../memory/engram/engram-config';
+import { eventBus } from '../../core/event-bus';
 import { loadShortTermInjectionSettings } from '../../memory/memory-manager';
 import {
   findIncompleteFields,
@@ -62,10 +66,24 @@ function readMaxRetries(): number {
   }
 }
 
+export interface EdgeReviewResult {
+  reviewed: number;
+  invalidated: number;
+  kept: number;
+}
+
+export interface EntityEnrichResult {
+  enriched: number;
+  remaining: number;
+  entityNames: string[];
+}
+
 export interface FieldRepairResult {
   success: boolean;
   attempts: number;
   remaining: FieldRepairReport;
+  entityEnrichResult?: EntityEnrichResult;
+  edgeReviewResult?: EdgeReviewResult;
 }
 
 export class FieldRepairPipeline {
@@ -85,13 +103,10 @@ export class FieldRepairPipeline {
     const nsfwMode = this.stateManager.get<boolean>('系统.nsfwMode') === true;
 
     let report = findIncompleteFields(this.stateManager, this.paths, config, { nsfwMode });
-    if (report.total === 0) {
-      return { success: true, attempts: 0, remaining: report };
-    }
 
     const maxAttempts = readMaxRetries() + 1;
     let attempts = 0;
-    let success = false;
+    let success = report.total === 0;
 
     while (report.total > 0 && attempts < maxAttempts) {
       attempts += 1;
@@ -105,7 +120,7 @@ export class FieldRepairPipeline {
     }
 
     success = report.total === 0;
-    if (success) {
+    if (success && attempts > 0) {
       console.log(`[FieldRepair] All entities repaired in ${attempts} attempt(s)`);
     } else {
       console.warn(
@@ -113,7 +128,34 @@ export class FieldRepairPipeline {
       );
     }
 
-    return { success, attempts, remaining: report };
+    const engramConfig = loadEngramConfig();
+
+    // ── Entity enrichment — fill summaries for stub entities with _pendingEnrichment ──
+    let entityEnrichResult: EntityEnrichResult | undefined;
+    if (engramConfig.knowledgeEdgeMode === 'active') {
+      try {
+        entityEnrichResult = await this.runEntityEnrichment();
+      } catch (err) {
+        console.warn('[FieldRepair] Entity enrichment failed (non-blocking):', err);
+      }
+    }
+
+    // ── Edge review — runs after field repair, triggered by v2PendingReview ──
+    let edgeReviewResult: EdgeReviewResult | undefined;
+    if (engramConfig.knowledgeEdgeMode === 'active') {
+      try {
+        edgeReviewResult = await this.runEdgeReview();
+      } catch (err) {
+        console.warn('[FieldRepair] Edge review failed (non-blocking):', err);
+        eventBus.emit('ui:toast', {
+          type: 'warning',
+          message: '知识边审查失败（不影响本回合）',
+          duration: 3000,
+        });
+      }
+    }
+
+    return { success, attempts, remaining: report, entityEnrichResult, edgeReviewResult };
   }
 
   /**
@@ -271,5 +313,290 @@ export class FieldRepairPipeline {
       else if (role === 'assistant') wrapped = `<叙事正文>\n${wrapped}\n</叙事正文>`;
       return { role, content: wrapped };
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Edge Review (Sprint D)
+  // ═══════════════════════════════════════════════════════════════
+
+  private async runEdgeReview(): Promise<EdgeReviewResult | undefined> {
+    const engramPath = this.paths.engramMemory;
+    const pending = this.stateManager.get<Array<{ newFact: string; oldEdgeId: string; similarity: number }>>(
+      engramPath + '.meta.v2PendingReview',
+    );
+    if (!Array.isArray(pending) || pending.length === 0) return undefined;
+
+    const v2Edges = this.stateManager.get<EngramEdge[]>(engramPath + '.v2Edges') ?? [];
+    if (v2Edges.length === 0) return undefined;
+
+    const edgeMap = new Map(v2Edges.map((e) => [e.id, e]));
+    const matchedEdges: EngramEdge[] = [];
+    const matchedPairs: Array<{ newFact: string; oldEdgeId: string; similarity: number }> = [];
+    for (const pair of pending) {
+      const edge = edgeMap.get(pair.oldEdgeId);
+      if (edge && edge.invalidatedAtRound == null) {
+        matchedEdges.push(edge);
+        matchedPairs.push(pair);
+      }
+    }
+    if (matchedEdges.length === 0) return undefined;
+
+    // Clear pending only after validation — avoid data loss if v2Edges is empty
+    this.stateManager.set(engramPath + '.meta.v2PendingReview', null, 'system');
+
+    const reviewList = matchedPairs
+      .map((p) => {
+        const old = edgeMap.get(p.oldEdgeId)!;
+        return `- 新事实「${p.newFact}」与旧边「${old.sourceEntity}→${old.targetEntity}: ${old.fact}」（相似度=${p.similarity.toFixed(2)}）`;
+      })
+      .join('\n');
+    const edgeList = matchedEdges
+      .map((e) => `- [${e.id}] ${e.sourceEntity}→${e.targetEntity}: ${e.fact}（第${e.lastSeenRound}轮）`)
+      .join('\n');
+
+    const edgeReviewPrompt = this.gamePack.prompts['edgeReview'];
+    const promptTemplate = edgeReviewPrompt
+      ? edgeReviewPrompt
+        .replace('{{REVIEW_EDGES_LIST}}', reviewList)
+        .replace('{{MATCHED_EDGES}}', edgeList)
+      : this.buildDefaultEdgeReviewPrompt(reviewList, edgeList);
+
+    const gameStateJson = this.buildGameStateJson();
+    const memoryBlock = this.buildMemoryBlock();
+    const chatHistory = this.loadChatHistory();
+
+    const systemContent =
+      `## 当前游戏状态\n\n\`\`\`json\n${gameStateJson}\n\`\`\`\n\n` +
+      `## 记忆摘要\n\n${memoryBlock}`;
+
+    const messages: AIMessage[] = [
+      { role: 'system', content: systemContent },
+      ...chatHistory,
+      { role: 'user', content: promptTemplate },
+    ];
+
+    const generationId = `edgeReview_${Date.now()}`;
+    emitPromptAssemblyDebug({
+      flow: 'edgeReview',
+      variables: { REVIEW_EDGES_LIST: reviewList, MATCHED_EDGES: edgeList },
+      messages,
+      messageSources: ['system_context', ...chatHistory.map(() => 'history'), 'edgeReview'],
+      generationId,
+    });
+
+    const rawResponse = await this.aiService.generate({
+      messages,
+      usageType: 'field_repair',
+    });
+
+    emitPromptResponseDebug({
+      flow: 'edgeReview',
+      generationId,
+      thinking: extractThinkingFromRaw(rawResponse),
+      rawResponse,
+    });
+
+    const updates = this.parseEdgeUpdates(rawResponse);
+    if (!updates || updates.length === 0) {
+      console.log('[EdgeReview] No edge updates returned by AI');
+      return { reviewed: matchedEdges.length, invalidated: 0, kept: matchedEdges.length };
+    }
+
+    const currentRound = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
+    const clonedEdges = v2Edges.map((e) => ({ ...e }));
+    const clonedMap = new Map(clonedEdges.map((e) => [e.id, e]));
+    let invalidatedCount = 0;
+    const auditChanges: Array<{ path: string; action: 'set'; oldValue: unknown; newValue: unknown; timestamp: number }> = [];
+
+    for (const update of updates) {
+      if (update.action !== 'invalidate') continue;
+      const edge = clonedMap.get(update.edge_id);
+      if (!edge || edge.invalidatedAtRound != null) continue;
+
+      edge.invalidatedAtRound = currentRound;
+      invalidatedCount++;
+      auditChanges.push({
+        path: `${engramPath}.v2Edges[id=${update.edge_id}].invalidatedAtRound`,
+        action: 'set',
+        oldValue: undefined,
+        newValue: currentRound,
+        timestamp: Date.now(),
+      });
+    }
+
+    if (invalidatedCount > 0) {
+      this.stateManager.set(engramPath + '.v2Edges', clonedEdges, 'system');
+      appendChangesToLastNarrative(
+        this.stateManager,
+        this.paths,
+        'edgeReview',
+        auditChanges,
+      );
+      console.log(`[EdgeReview] Invalidated ${invalidatedCount} edge(s)`);
+    }
+
+    return {
+      reviewed: matchedEdges.length,
+      invalidated: invalidatedCount,
+      kept: matchedEdges.length - invalidatedCount,
+    };
+  }
+
+  private parseEdgeUpdates(raw: string): Array<{ edge_id: string; action: string; reason: string }> | null {
+    try {
+      // Strip thinking tags
+      const cleaned = raw.replace(/<(?:think|thinking|reasoning|thought)>[\s\S]*?<\/(?:think|thinking|reasoning|thought)>/gi, '').trim();
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace < 0 || lastBrace <= firstBrace) return null;
+      const json = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)) as Record<string, unknown>;
+      const updates = json.edge_updates;
+      if (!Array.isArray(updates)) return null;
+      return updates
+        .filter((u): u is Record<string, unknown> => u != null && typeof u === 'object')
+        .filter((u) => typeof u.edge_id === 'string' && typeof u.action === 'string')
+        .map((u) => ({
+          edge_id: (u.edge_id as string).trim().toLowerCase(),
+          action: (u.action as string).trim(),
+          reason: typeof u.reason === 'string' ? (u.reason as string).trim() : '',
+        }));
+    } catch {
+      return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Entity Enrichment (Tier 2)
+  // ═══════════════════════════════════════════════════════════════
+
+  private async runEntityEnrichment(): Promise<EntityEnrichResult | undefined> {
+    const engramPath = this.paths.engramMemory;
+    const entities = this.stateManager.get<EngramEntity[]>(engramPath + '.entities') ?? [];
+    const pending = entities.filter((e) => e._pendingEnrichment === true);
+    if (pending.length === 0) return undefined;
+
+    const nameList = pending.map((e) => `- ${e.name}（类型: ${e.type}）`).join('\n');
+
+    const enrichPrompt = this.gamePack.prompts['entityEnrich'];
+    const promptTemplate = enrichPrompt
+      ? enrichPrompt.replace('{{MISSING_ENTITIES}}', nameList)
+      : this.buildDefaultEntityEnrichPrompt(nameList);
+
+    const gameStateJson = this.buildGameStateJson();
+    const memoryBlock = this.buildMemoryBlock();
+    const chatHistory = this.loadChatHistory();
+
+    const systemContent =
+      `## 当前游戏状态\n\n\`\`\`json\n${gameStateJson}\n\`\`\`\n\n` +
+      `## 记忆摘要\n\n${memoryBlock}`;
+
+    const messages: AIMessage[] = [
+      { role: 'system', content: systemContent },
+      ...chatHistory,
+      { role: 'user', content: promptTemplate },
+    ];
+
+    const generationId = `entityEnrich_${Date.now()}`;
+    emitPromptAssemblyDebug({
+      flow: 'entityEnrich',
+      variables: { MISSING_ENTITIES: nameList },
+      messages,
+      messageSources: ['system_context', ...chatHistory.map(() => 'history'), 'entityEnrich'],
+      generationId,
+    });
+
+    const rawResponse = await this.aiService.generate({
+      messages,
+      usageType: 'field_repair',
+    });
+
+    emitPromptResponseDebug({
+      flow: 'entityEnrich',
+      generationId,
+      thinking: extractThinkingFromRaw(rawResponse),
+      rawResponse,
+    });
+
+    const descriptions = this.parseEntityDescriptions(rawResponse);
+    if (!descriptions || descriptions.length === 0) {
+      console.log('[EntityEnrich] No descriptions returned by AI');
+      return { enriched: 0, remaining: pending.length, entityNames: pending.map((e) => e.name) };
+    }
+
+    // Read-modify-write to avoid race with vectorizeAsync
+    const currentEntities = this.stateManager.get<EngramEntity[]>(engramPath + '.entities') ?? [];
+    const descMap = new Map(descriptions.map((d) => [d.name, d.summary]));
+    let enriched = 0;
+
+    const updated = currentEntities.map((e) => {
+      if (!e._pendingEnrichment) return e;
+      const summary = descMap.get(e.name);
+      if (summary && summary.length > 0) {
+        enriched++;
+        const { _pendingEnrichment: _, ...rest } = e;
+        return { ...rest, summary, is_embedded: false };
+      }
+      return e;
+    });
+
+    if (enriched > 0) {
+      this.stateManager.set(engramPath + '.entities', updated, 'system');
+      console.log(`[EntityEnrich] Enriched ${enriched} entity(s) with descriptions`);
+    }
+
+    const remaining = pending.length - enriched;
+    return { enriched, remaining, entityNames: descriptions.map((d) => d.name) };
+  }
+
+  private parseEntityDescriptions(raw: string): Array<{ name: string; summary: string }> | null {
+    try {
+      const cleaned = raw.replace(/<(?:think|thinking|reasoning|thought)>[\s\S]*?<\/(?:think|thinking|reasoning|thought)>/gi, '').trim();
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace < 0 || lastBrace <= firstBrace) return null;
+      const json = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)) as Record<string, unknown>;
+      const descs = json.entity_descriptions;
+      if (!Array.isArray(descs)) return null;
+      return descs
+        .filter((d): d is Record<string, unknown> => d != null && typeof d === 'object')
+        .filter((d) => typeof d.name === 'string' && typeof d.summary === 'string')
+        .map((d) => ({ name: (d.name as string).trim(), summary: (d.summary as string).trim() }))
+        .filter((d) => d.name && d.summary);
+    } catch (err) {
+      console.warn('[EntityEnrich] Failed to parse AI response:', err);
+      return null;
+    }
+  }
+
+  private buildDefaultEntityEnrichPrompt(nameList: string): string {
+    return (
+      `<实体描述补全任务>\n` +
+      `以下实体出现在知识图谱的事实边中，但系统中缺少它们的描述。\n` +
+      `请根据游戏状态和最近叙事，为每个实体提供一句简短描述。\n\n` +
+      `${nameList}\n\n` +
+      `输出格式：\n` +
+      `{"entity_descriptions": [\n` +
+      `  {"name": "实体名", "summary": "一句话描述"},\n` +
+      `  ...\n` +
+      `]}\n\n` +
+      `要求：\n` +
+      `- 每个实体都必须有 summary\n` +
+      `- summary 必须贴合当前游戏世界观和叙事\n` +
+      `- 直接输出 JSON，不要解释\n` +
+      `</实体描述补全任务>`
+    );
+  }
+
+  private buildDefaultEdgeReviewPrompt(reviewList: string, edgeList: string): string {
+    return (
+      `<知识边审查任务>\n` +
+      `本回合 AI 标记了以下实体对的记忆可能需要更新：\n${reviewList}\n\n` +
+      `以下是这些实体对之间的全部已有知识边：\n${edgeList}\n\n` +
+      `请判断每条边的状态：\n` +
+      `- "keep"：事实仍然成立\n` +
+      `- "invalidate"：事实已不成立\n\n` +
+      `输出格式：{"edge_updates": [{"edge_id": "...", "action": "keep|invalidate", "reason": "..."}]}\n` +
+      `</知识边审查任务>`
+    );
   }
 }

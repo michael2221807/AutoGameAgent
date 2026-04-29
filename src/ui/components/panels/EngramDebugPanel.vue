@@ -15,12 +15,12 @@ import { loadEngramConfig } from '@/engine/memory/engram/engram-config';
 import { DEFAULT_ENGRAM_CONFIG } from '@/engine/memory/engram/engram-types';
 import type { EngramEventNode } from '@/engine/memory/engram/event-builder';
 import type { EngramEntity } from '@/engine/memory/engram/entity-builder';
-import type { EngramRelation } from '@/engine/memory/engram/relation-builder';
+import type { EngramRelation } from '@/engine/memory/engram/engram-types';
+import type { EngramEdge } from '@/engine/memory/engram/knowledge-edge';
 import Modal from '@/ui/components/common/Modal.vue';
 
 const { isLoaded, get, setValue } = useGameState();
 const debugStore = useEngramDebugStore();
-import type { SemanticTriple } from '@/engine/memory/engram/triple-builder';
 
 // ─── 配置检查 ───
 
@@ -33,6 +33,7 @@ interface EngramStateData {
   events?: EngramEventNode[];
   entities?: EngramEntity[];
   relations?: EngramRelation[];
+  v2Edges?: EngramEdge[];
   meta?: {
     lastUpdated?: number;
     eventCount?: number;
@@ -66,6 +67,7 @@ const entities = computed<EngramEntity[]>(() => {
 });
 
 const relations = computed<EngramRelation[]>(() => engramData.value.relations ?? []);
+const v2Edges = computed(() => engramData.value.v2Edges ?? []);
 
 // ─── 向量化统计（2026-04-14 新增：从 is_embedded 真实字段推算） ───
 
@@ -80,6 +82,12 @@ const eventEmbedPct = computed(() =>
 );
 const entityEmbedPct = computed(() =>
   entities.value.length === 0 ? 0 : Math.round((embeddedEntityCount.value / entities.value.length) * 100),
+);
+const embeddedEdgeCount = computed(
+  () => v2Edges.value.filter((e) => e.is_embedded === true).length,
+);
+const edgeEmbedPct = computed(() =>
+  v2Edges.value.length === 0 ? 0 : Math.round((embeddedEdgeCount.value / v2Edges.value.length) * 100),
 );
 
 const maxEvents   = computed(() => engramConfig.value.trim.countLimit ?? DEFAULT_ENGRAM_CONFIG.trim.countLimit);
@@ -125,12 +133,22 @@ function confirmClear(): void {
     clearStep.value = 2;
     return;
   }
-  // 清除状态树中的 engramMemory
-  setValue(ENGRAM_PATH, { events: [], entities: [], relations: [], meta: { lastUpdated: Date.now(), eventCount: 0 } });
-  // 清除检索调试快照
+  setValue(ENGRAM_PATH, { events: [], entities: [], relations: [], v2Edges: [], meta: { lastUpdated: Date.now(), eventCount: 0 } });
   debugStore.clear();
   showClearModal.value = false;
   clearStep.value = 1;
+}
+
+function rebuildEdges(): void {
+  const data = get<EngramStateData>(ENGRAM_PATH);
+  if (!data) return;
+  // Clear v2Edges and reset schema → next round auto-rebuilds
+  setValue(ENGRAM_PATH, {
+    ...data,
+    v2Edges: [],
+    meta: { ...(data.meta ?? {}), schemaVersion: 4, lastUpdated: Date.now() },
+  });
+  alert('知识边已清空。下一轮 AI 回合将自动重新迁移。');
 }
 
 // ─── 导出 JSON ───
@@ -142,6 +160,7 @@ function exportJson(): void {
     events: events.value,
     entities: entities.value,
     relations: relations.value,
+    v2Edges: v2Edges.value,
     lastRetrieve: debugStore.lastRetrieve,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -187,254 +206,208 @@ const displayRelations = computed(() =>
     })),
 );
 
-// ─── 语义三元组（系统.扩展.语义记忆.triples）───
-
-const SEMANTIC_PATH = '系统.扩展.语义记忆';
-
-interface SemanticMemStore { triples?: SemanticTriple[]; meta?: { tripleCount?: number } }
-
-const semanticStore = computed<SemanticMemStore>(() => {
-  if (!isLoaded.value) return {};
-  return (get<SemanticMemStore>(SEMANTIC_PATH) as SemanticMemStore | null) ?? {};
-});
-
-const triples = computed<SemanticTriple[]>(() => semanticStore.value.triples ?? []);
-
-const IMPORTANCE_COLOR: Record<string, string> = {
-  high: 'var(--color-danger)',
-  mid: 'var(--color-amber-400)',
-  low: 'var(--color-text-secondary)',
-};
-
-function importanceClass(imp: number | undefined): string {
-  const v = imp ?? 5;
-  if (v >= 7) return 'high';
-  if (v >= 4) return 'mid';
-  return 'low';
-}
-
-// ─── Cytoscape 关系图（复用地图面板的 library）───
+// ─── Cytoscape Graphiti 知识图谱可视化 ───
 
 import cytoscape from 'cytoscape';
-import type { Core as CyCore } from 'cytoscape';
+import type { Core as CyCore, ElementDefinition, NodeSingular } from 'cytoscape';
 
 const graphContainer = ref<HTMLDivElement | null>(null);
-const showEdgeLabels = ref(true);
 let cyInstance: CyCore | null = null;
+const graphTooltip = ref<{ visible: boolean; html: string; x: number; y: number }>({ visible: false, html: '', x: 0, y: 0 });
 
-const NODE_BG: Record<string, string> = {
-  player: '#8a9080',
-  npc: '#7aab78',
-  location: '#c9a84c',
-  item: '#6b9e8a',
-  other: '#7a8590',
-};
+// ── Filter state ──
+const gfShowLabels = ref(true);
+const gfNodeTypes = ref<Record<string, boolean>>({ player: true, npc: true, location: true, item: true, event: true });
+const gfEdgeFact = ref(true);
+const gfEdgeMentions = ref(true);
+const gfEdgeInvalidated = ref(false);
+const gfRoundMax = ref(0);
+const gfLayout = ref<'cose' | 'concentric' | 'breadthfirst' | 'circle'>('cose');
 
-function buildCyElements(): { nodes: cytoscape.ElementDefinition[]; edges: cytoscape.ElementDefinition[] } {
-  const entityTypeMap = new Map<string, string>();
-  for (const e of entities.value) entityTypeMap.set(e.name, e.type);
+const maxRound = computed(() => {
+  let m = 0;
+  for (const ev of events.value) if ((ev.roundNumber ?? 0) > m) m = ev.roundNumber ?? 0;
+  for (const e of v2Edges.value) if (e.lastSeenRound > m) m = e.lastSeenRound;
+  return m;
+});
 
-  // 只把 player + npc 作为图节点（排除 location/item/other 避免噪音）
-  const charEntities = entities.value.filter((e) => e.type === 'player' || e.type === 'npc');
-  const charNames = new Set(charEntities.map((e) => e.name));
+watch(maxRound, (v) => { if (gfRoundMax.value === 0 || gfRoundMax.value < v) gfRoundMax.value = v; }, { immediate: true });
 
-  const nodes: cytoscape.ElementDefinition[] = charEntities.map((e) => ({
-    data: { id: e.name, label: e.name, type: e.type, bg: NODE_BG[e.type] ?? NODE_BG.other },
-  }));
+import { buildGraphElements, filterVisibility, type GraphFilterState, type GraphElement } from '@/engine/memory/engram/engram-graph-builder';
+let cachedGraphElements: GraphElement[] = [];
+function esc(s: string): string { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-  // 边：只保留 rel_* 社交关系（和列表一致，排除 co_occurs/appears_at 噪音）
-  const edgeSet = new Map<string, { from: string; to: string; label: string }>();
-  for (const rel of relations.value) {
-    if (!rel.type.startsWith('rel_')) continue;
-    if (!charNames.has(rel.fromName) || !charNames.has(rel.toName)) continue;
-    const key = `${rel.fromName}→${rel.toName}`;
-    if (!edgeSet.has(key)) {
-      edgeSet.set(key, { from: rel.fromName, to: rel.toName, label: rel.type.slice(4) });
-    }
+const CY_STYLES: cytoscape.Stylesheet[] = [
+  { selector: 'node', style: {
+    'background-color': 'data(bg)' as unknown as string, 'label': 'data(label)',
+    'shape': 'data(shape)' as unknown as string,
+    'width': 'data(w)' as unknown as number, 'height': 'data(h)' as unknown as number,
+    'color': '#d4cfc5', 'font-size': '11px', 'font-weight': 500,
+    'text-valign': 'center', 'text-halign': 'center',
+    'border-width': 1, 'border-color': 'rgba(255,255,255,0.12)',
+    'text-outline-width': 2, 'text-outline-color': '#1a1917',
+  }},
+  { selector: 'node[nodeCategory="player"]', style: {
+    'border-width': 2.5, 'border-color': 'rgba(138,158,108,0.5)', 'font-weight': 700, 'font-size': '13px',
+  }},
+  { selector: 'node[nodeCategory="event"]', style: {
+    'font-size': '8px', 'color': 'rgba(255,255,255,0.5)', 'border-width': 0, 'background-opacity': 0.6,
+    'text-valign': 'bottom' as cytoscape.Css.TextValign, 'text-margin-y': 4,
+  }},
+  { selector: 'node[nodeCategory="location"]', style: { 'font-size': '9px' }},
+  { selector: 'node[nodeCategory="item"]', style: { 'font-size': '9px' }},
+  { selector: 'edge[edgeCategory="fact"]', style: {
+    'width': 1.8, 'line-color': 'rgba(255,255,255,0.25)',
+    'target-arrow-color': 'rgba(255,255,255,0.35)', 'target-arrow-shape': 'triangle',
+    'arrow-scale': 0.7, 'curve-style': 'bezier',
+    'label': 'data(label)', 'font-size': '8px', 'color': 'rgba(255,255,255,0.35)',
+    'text-rotation': 'autorotate', 'text-outline-width': 1.5, 'text-outline-color': '#1a1917',
+  }},
+  { selector: 'edge[edgeCategory="invalidated"]', style: {
+    'width': 1, 'line-color': 'rgba(223,107,107,0.25)', 'line-style': 'dashed',
+    'target-arrow-color': 'rgba(223,107,107,0.25)', 'target-arrow-shape': 'triangle',
+    'arrow-scale': 0.5, 'curve-style': 'bezier',
+  }},
+  { selector: 'edge[edgeCategory="mentions"]', style: {
+    'width': 0.8, 'line-color': 'rgba(91,141,239,0.2)', 'line-style': 'dashed',
+    'target-arrow-shape': 'none', 'curve-style': 'bezier',
+  }},
+];
+
+function getLayoutOpts(): cytoscape.LayoutOptions {
+  const base = { animate: true, animationDuration: 500, padding: 40 };
+  if (gfLayout.value === 'cose') {
+    return { ...base, name: 'cose', nodeRepulsion: () => 8000, idealEdgeLength: () => 140, gravity: 0.25, numIter: 300 } as cytoscape.LayoutOptions;
   }
-
-  const edges: cytoscape.ElementDefinition[] = [];
-  for (const [, e] of edgeSet) {
-    edges.push({
-      data: { source: e.from, target: e.to, label: e.label },
-    });
+  if (gfLayout.value === 'concentric') {
+    return { ...base, name: 'concentric',
+      concentric: (n: NodeSingular) => {
+        const cat = n.data('nodeCategory');
+        return cat === 'player' ? 3 : cat === 'npc' ? 2 : cat === 'event' ? 0 : 1;
+      },
+      levelWidth: () => 1,
+    } as cytoscape.LayoutOptions;
   }
-
-  return { nodes, edges };
+  return { ...base, name: gfLayout.value } as cytoscape.LayoutOptions;
 }
 
 function initGraph(): void {
-  if (!graphContainer.value) return;
+  if (!graphContainer.value) { console.debug('[EngramGraph] no container ref'); return; }
+  const rect = graphContainer.value.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) { console.debug('[EngramGraph] container has zero size', rect.width, rect.height); return; }
   destroyGraph();
 
-  const { nodes, edges } = buildCyElements();
-  if (nodes.length === 0) return;
+  cachedGraphElements = buildGraphElements(entities.value, events.value, v2Edges.value);
+  console.debug(`[EngramGraph] built ${cachedGraphElements.length} elements (${entities.value.length} entities, ${events.value.length} events, ${v2Edges.value.length} edges)`);
+  if (cachedGraphElements.length === 0) return;
+  const els = cachedGraphElements;
 
   cyInstance = cytoscape({
     container: graphContainer.value,
-    elements: [...nodes, ...edges],
-    style: [
-      {
-        selector: 'node',
-        style: {
-          'background-color': 'data(bg)',
-          'label': 'data(label)',
-          'color': '#d4cfc5',
-          'font-size': '11px',
-          'text-valign': 'center',
-          'text-halign': 'center',
-          'width': 50,
-          'height': 32,
-          'shape': 'ellipse',
-          'border-width': 1,
-          'border-color': 'rgba(255,255,255,0.15)',
-          'text-outline-width': 2,
-          'text-outline-color': '#1e1d1a',
-        },
-      },
-      {
-        selector: 'node[type="player"]',
-        style: {
-          'width': 60,
-          'height': 38,
-          'font-weight': 700,
-          'border-width': 2,
-          'border-color': 'rgba(148,163,184,0.5)',
-        },
-      },
-      {
-        selector: 'edge',
-        style: {
-          'width': 1.5,
-          'line-color': 'rgba(255,255,255,0.15)',
-          'target-arrow-color': 'rgba(255,255,255,0.25)',
-          'target-arrow-shape': 'triangle',
-          'arrow-scale': 0.7,
-          'curve-style': 'bezier',
-          'label': showEdgeLabels.value ? 'data(label)' : '',
-          'font-size': '9px',
-          'color': 'rgba(255,255,255,0.4)',
-          'text-rotation': 'autorotate',
-          'text-outline-width': 1.5,
-          'text-outline-color': '#1e1d1a',
-        },
-      },
-    ],
-    layout: {
-      name: 'cose',
-      animate: true,
-      animationDuration: 600,
-      nodeRepulsion: () => 6000,
-      idealEdgeLength: () => 120,
-      gravity: 0.3,
-      numIter: 200,
-      padding: 30,
-    } as cytoscape.LayoutOptions,
+    elements: els as unknown as ElementDefinition[],
+    style: CY_STYLES,
+    layout: getLayoutOpts(),
     userZoomingEnabled: true,
     userPanningEnabled: true,
     boxSelectionEnabled: false,
+    wheelSensitivity: 0.3,
+    minZoom: 0.3,
+    maxZoom: 3,
+    textureOnViewport: true,
   });
+
+  // ── Interactions ──
+  cyInstance.on('tap', 'node', (evt) => highlightNeighborhood(evt.target));
+  cyInstance.on('tap', (evt) => { if (evt.target === cyInstance) clearHighlight(); });
+
+  cyInstance.on('mouseover', 'node', (evt) => {
+    const d = evt.target.data();
+    const e = evt.originalEvent as MouseEvent;
+    if (d.nodeCategory === 'event') {
+      graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY,
+        html: `<div class="gtt-type">事件 · 第${d.roundNumber}轮</div><div class="gtt-title">${esc(d.fullLabel)}</div><div class="gtt-body">${esc(d.summary)}</div><div class="gtt-meta">提及: ${(d.mentionedEntities||[]).map(esc).join(', ')}</div>` };
+    } else {
+      const typeMap: Record<string, string> = { player: '玩家', npc: 'NPC', location: '地点', item: '物品' };
+      graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY,
+        html: `<div class="gtt-type">${typeMap[d.nodeCategory]||esc(d.nodeCategory)}</div><div class="gtt-title">${esc(d.fullLabel)}</div><div class="gtt-body">${esc(d.summary||'')}</div><div class="gtt-meta">提及${d.mentionCount}次 · 第${d.firstSeen}轮—第${d.lastSeen}轮 · ${d.embedded?'✓ 已向量化':'○ 未向量化'}</div>` };
+    }
+  });
+  cyInstance.on('mouseover', 'edge', (evt) => {
+    const d = evt.target.data();
+    const e = evt.originalEvent as MouseEvent;
+    if (d.edgeCategory === 'mentions') {
+      graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY, html: `<div class="gtt-type">MENTIONS</div><div class="gtt-meta">事件提及此实体</div>` };
+    } else {
+      const status = d.invalidatedAtRound ? `<span style="color:#df6b6b;">已失效（第${d.invalidatedAtRound}轮）</span>` : '有效';
+      graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY,
+        html: `<div class="gtt-type">事实边 · ${status}</div><div class="gtt-fact">${esc(d.fullFact)}</div><div class="gtt-meta">出现${d.episodes}轮 · 第${d.createdAtRound}轮创建 · ${d.embedded?'✓ 已向量化':'○ 未向量化'}</div>` };
+    }
+  });
+  cyInstance.on('mouseout', () => { graphTooltip.value.visible = false; });
+  cyInstance.on('mousemove', (evt) => {
+    if (!graphTooltip.value.visible) return;
+    const e = evt.originalEvent as MouseEvent;
+    graphTooltip.value.x = e.clientX;
+    graphTooltip.value.y = e.clientY;
+  });
+
+  applyGraphFilters();
 }
 
-function destroyGraph(): void {
-  if (cyInstance) { cyInstance.destroy(); cyInstance = null; }
-}
-
-function resetGraphLayout(): void {
-  if (cyInstance) {
-    cyInstance.layout({
-      name: 'cose',
-      animate: true,
-      animationDuration: 600,
-      nodeRepulsion: () => 6000,
-      idealEdgeLength: () => 120,
-      gravity: 0.3,
-      numIter: 200,
-      padding: 30,
-    } as cytoscape.LayoutOptions).run();
-  }
-}
-
-function toggleEdgeLabels(): void {
+function applyGraphFilters(): void {
   if (!cyInstance) return;
-  cyInstance.edges().style('label', showEdgeLabels.value ? 'data(label)' : '');
-}
+  const filterState: GraphFilterState = {
+    roundMax: gfRoundMax.value,
+    nodeTypes: gfNodeTypes.value,
+    showFactEdges: gfEdgeFact.value,
+    showMentions: gfEdgeMentions.value,
+    showInvalidated: gfEdgeInvalidated.value,
+  };
 
-// 当 graph container DOM 出现时立即初始化 Cytoscape
-watch(graphContainer, (el) => {
-  if (el && !cyInstance) setTimeout(() => initGraph(), 50);
-});
+  const vis = filterVisibility(cachedGraphElements, filterState);
 
-// 数据变化时重建图
-watch([entities, relations], () => {
-  if (isOpenExt('graph') && graphContainer.value) {
-    nextTick(() => initGraph());
-  }
-});
-
-watch(showEdgeLabels, () => toggleEdgeLabels());
-
-// ─── 三元组排序/筛选 ───
-
-const tripleSortField = ref<'timestamp' | 'importance'>('timestamp');
-const tripleSortDir = ref<'desc' | 'asc'>('desc');
-const tripleFilterText = ref('');
-const tripleFilterCategory = ref('全部');
-const tripleMinImportance = ref(0);
-const tripleGroupBySubject = ref(false);
-
-const tripleCategories = computed(() => {
-  const cats = new Set<string>();
-  for (const t of triples.value) { if (t.category) cats.add(t.category); }
-  return ['全部', ...cats];
-});
-
-const filteredTriples = computed(() => {
-  let list = [...triples.value];
-
-  // Filter by text
-  const q = tripleFilterText.value.trim().toLowerCase();
-  if (q) {
-    list = list.filter((t) =>
-      t.subject.toLowerCase().includes(q) ||
-      t.object.toLowerCase().includes(q) ||
-      t.predicate.toLowerCase().includes(q),
-    );
-  }
-
-  // Filter by category
-  if (tripleFilterCategory.value !== '全部') {
-    list = list.filter((t) => t.category === tripleFilterCategory.value);
-  }
-
-  // Filter by min importance
-  if (tripleMinImportance.value > 0) {
-    list = list.filter((t) => (t.importance ?? 5) >= tripleMinImportance.value);
-  }
-
-  // Sort
-  list.sort((a, b) => {
-    const va = tripleSortField.value === 'importance' ? (a.importance ?? 5) : (a.timestamp ?? '');
-    const vb = tripleSortField.value === 'importance' ? (b.importance ?? 5) : (b.timestamp ?? '');
-    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-    return tripleSortDir.value === 'desc' ? -cmp : cmp;
+  cyInstance.batch(() => {
+    cyInstance!.elements().forEach((el) => {
+      const show = vis.get(el.id()) ?? false;
+      el.style('display', show ? 'element' : 'none');
+    });
   });
 
-  return list;
-});
-
-interface TripleGroup { subject: string; items: SemanticTriple[] }
-
-const groupedTriples = computed<TripleGroup[]>(() => {
-  if (!tripleGroupBySubject.value) return [];
-  const map = new Map<string, SemanticTriple[]>();
-  for (const t of filteredTriples.value) {
-    const group = map.get(t.subject) ?? [];
-    group.push(t);
-    map.set(t.subject, group);
+  if (!gfShowLabels.value) {
+    cyInstance.edges('[edgeCategory="fact"]').style('label', '');
+  } else {
+    cyInstance.edges('[edgeCategory="fact"]').style('label', 'data(label)');
   }
-  return [...map.entries()].map(([subject, items]) => ({ subject, items }));
+}
+
+let highlightActive = false;
+function highlightNeighborhood(node: NodeSingular): void {
+  if (!cyInstance) return;
+  highlightActive = true;
+  cyInstance.batch(() => {
+    cyInstance!.elements().style('opacity', 0.12);
+    const hood = node.neighborhood().add(node);
+    hood.style('opacity', 1);
+    if (node.data('nodeCategory') !== 'event') {
+      hood.neighborhood().style('opacity', 0.6);
+    }
+  });
+}
+function clearHighlight(): void {
+  if (!cyInstance || !highlightActive) return;
+  highlightActive = false;
+  cyInstance.batch(() => { cyInstance!.elements().style('opacity', 1); });
+}
+
+function destroyGraph(): void { if (cyInstance) { cyInstance.destroy(); cyInstance = null; } }
+function runGraphLayout(): void { if (cyInstance) cyInstance.layout(getLayoutOpts()).run(); }
+
+// ── Watchers ──
+watch(graphContainer, (el) => { if (el && !cyInstance) setTimeout(() => initGraph(), 50); });
+watch([entities, v2Edges, events], () => {
+  if (isOpenExt('graph') && graphContainer.value) nextTick(() => initGraph());
 });
+watch([gfNodeTypes, gfEdgeFact, gfEdgeMentions, gfEdgeInvalidated, gfRoundMax, gfShowLabels], () => applyGraphFilters(), { deep: true });
 
 function copyText(text: string): void {
   navigator.clipboard.writeText(text).catch(() => {});
@@ -442,7 +415,7 @@ function copyText(text: string): void {
 
 // ─── 新增 section 折叠 ───
 
-type SectionKeyExt = SectionKey | 'triples' | 'graph' | 'architecture';
+type SectionKeyExt = SectionKey | 'graph' | 'architecture';
 
 function toggleSectionExt(key: SectionKeyExt): void {
   if (collapsed.value.has(key as SectionKey)) collapsed.value.delete(key as SectionKey);
@@ -470,6 +443,7 @@ onUnmounted(() => destroyGraph());
       <h2 class="panel-title">Engram 调试</h2>
       <div class="header-actions">
         <button class="btn-sm" :disabled="events.length === 0" @click="exportJson">导出 JSON</button>
+        <button class="btn-sm" :disabled="v2Edges.length === 0" @click="rebuildEdges">重建事实边</button>
         <button class="btn-sm btn-sm--danger" :disabled="events.length === 0" @click="openClearModal">清空数据</button>
       </div>
     </header>
@@ -496,8 +470,8 @@ onUnmounted(() => destroyGraph());
           <span class="stat-label">关系</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value" style="color: var(--color-success, #22c55e);">{{ triples.length }}</span>
-          <span class="stat-label">三元组</span>
+          <span class="stat-value" style="color: var(--color-success, #22c55e);">{{ v2Edges.length }}</span>
+          <span class="stat-label">事实边</span>
         </div>
       </div>
 
@@ -539,7 +513,25 @@ onUnmounted(() => destroyGraph());
             />
           </div>
         </div>
-        <p v-if="eventEmbedPct < 100 || entityEmbedPct < 100" class="embed-hint">
+        <div v-if="v2Edges.length > 0" class="embed-row">
+          <div class="embed-row__header">
+            <span class="embed-row__title">事实边向量化</span>
+            <span class="embed-row__meta">
+              <strong :class="edgeEmbedPct === 100 ? 'text-ok' : edgeEmbedPct > 0 ? 'text-partial' : 'text-zero'">
+                {{ embeddedEdgeCount }} / {{ v2Edges.length }}
+              </strong>
+              <span class="embed-row__pct">{{ edgeEmbedPct }}%</span>
+            </span>
+          </div>
+          <div class="embed-bar">
+            <div
+              class="embed-bar__fill"
+              :class="edgeEmbedPct === 100 ? 'embed-bar__fill--ok' : edgeEmbedPct > 0 ? 'embed-bar__fill--partial' : 'embed-bar__fill--zero'"
+              :style="{ width: edgeEmbedPct + '%' }"
+            />
+          </div>
+        </div>
+        <p v-if="eventEmbedPct < 100 || entityEmbedPct < 100 || edgeEmbedPct < 100" class="embed-hint">
           提示：部分条目尚未向量化 — 可能是 embedding API 调用失败、尚未配置，或正在异步向量化中。重启游戏后会自动补充。
         </p>
       </div>
@@ -560,21 +552,20 @@ onUnmounted(() => destroyGraph());
             <template v-else>
               <div v-for="ev in pagedEvents" :key="ev.id" class="event-row">
                 <div class="event-header-row">
-                  <span class="mono event-id">{{ ev.id.slice(-8) }}</span>
-                  <span v-if="ev.roundNumber != null" class="mono round-badge">R{{ ev.roundNumber }}</span>
-                  <span
-                    :class="['embed-badge', ev.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
-                    :title="ev.is_embedded ? '已向量化' : '尚未向量化'"
-                  >{{ ev.is_embedded ? '✓ 已向量化' : '○ 未向量化' }}</span>
                   <span class="event-sao">
                     <strong>{{ ev.subject }}</strong>
                     <span class="sao-sep">→</span>{{ ev.action }}
                     <template v-if="ev.object"><span class="sao-sep">→</span><strong>{{ ev.object }}</strong></template>
                   </span>
+                  <span
+                    :class="['embed-badge', ev.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
+                    :title="ev.is_embedded ? '已向量化' : '尚未向量化'"
+                  >{{ ev.is_embedded ? '✓' : '○' }}</span>
                 </div>
                 <p class="event-text">{{ ev.text }}</p>
-                <div v-if="ev.tags?.length" class="event-tags">
-                  <span v-for="tag in ev.tags" :key="tag" class="tag">{{ tag }}</span>
+                <div class="item-meta">
+                  <span v-if="ev.roundNumber != null">第{{ ev.roundNumber }}轮</span>
+                  <span v-if="ev.tags?.length">{{ ev.tags.join(' · ') }}</span>
                 </div>
               </div>
 
@@ -606,26 +597,27 @@ onUnmounted(() => destroyGraph());
               <div class="entity-header">
                 <span class="entity-name">{{ ent.name }}</span>
                 <span class="entity-type" :style="{ color: entityColor(ent.type) }">{{ ent.type }}</span>
-                <span class="entity-count">×{{ ent.mentionCount }}</span>
                 <span
                   :class="['embed-badge', ent.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
                   :title="ent.is_embedded ? '已向量化' : '尚未向量化'"
                 >{{ ent.is_embedded ? '✓' : '○' }}</span>
               </div>
-              <div v-if="ent.description" class="entity-desc">{{ ent.description }}</div>
-              <div class="entity-rounds">
-                <span class="meta-text">首见 R{{ ent.firstSeen }} · 末见 R{{ ent.lastSeen }}</span>
+              <div v-if="ent.summary" class="entity-desc">{{ ent.summary }}</div>
+              <div class="item-meta">
+                <span>提及{{ ent.mentionCount }}次</span>
+                <span>第{{ ent.firstSeen }}轮首次出现</span>
+                <span>第{{ ent.lastSeen }}轮最后出现</span>
               </div>
             </div>
           </div>
         </Transition>
       </section>
 
-      <!-- ─── 关系列表 ─── -->
+      <!-- ─── 关系/知识边列表 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSection('relations')">
-          <span class="section-title">关系列表</span>
-          <span class="section-badge">{{ relations.length }}</span>
+          <span class="section-title">事实边</span>
+          <span class="section-badge">{{ v2Edges.length }}</span>
           <svg :class="['chevron', { 'chevron--open': isOpen('relations') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
           </svg>
@@ -633,98 +625,36 @@ onUnmounted(() => destroyGraph());
 
         <Transition name="section-expand">
           <div v-if="isOpen('relations')" class="section-body">
-            <div v-if="relations.length === 0" class="empty-hint">暂无关系数据</div>
-            <div v-for="(rel, idx) in relations" :key="idx" class="relation-row">
-              <span class="rel-from">{{ rel.fromName }}</span>
-              <span class="rel-arrow">–{{ rel.type }}→</span>
-              <span class="rel-to">{{ rel.toName }}</span>
-              <span class="rel-weight">{{ formatScore(rel.weight) }}</span>
-            </div>
-          </div>
-        </Transition>
-      </section>
-
-      <!-- ─── 语义记忆 (系统.扩展.语义记忆) ─── -->
-      <section class="debug-section">
-        <button class="section-header" @click="toggleSectionExt('triples')">
-          <span class="section-title">语义记忆 (系统.扩展.语义记忆)</span>
-          <span class="section-badge">{{ triples.length }}</span>
-          <svg :class="['chevron', { 'chevron--open': isOpenExt('triples') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
-            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-          </svg>
-        </button>
-
-        <Transition name="section-expand">
-          <div v-if="isOpenExt('triples')" class="section-body section-body--triples">
-            <!-- 排序/筛选控件 -->
-            <div class="triple-toolbar">
-              <label class="tb-label">排序
-                <select v-model="tripleSortField" class="tb-select">
-                  <option value="timestamp">timestamp</option>
-                  <option value="importance">importance</option>
-                </select>
-              </label>
-              <select v-model="tripleSortDir" class="tb-select">
-                <option value="desc">降序</option>
-                <option value="asc">升序</option>
-              </select>
-              <label class="tb-label">筛选
-                <input v-model="tripleFilterText" class="tb-input" placeholder="subject/object 包含" />
-              </label>
-              <select v-model="tripleFilterCategory" class="tb-select">
-                <option v-for="c in tripleCategories" :key="c" :value="c">{{ c }}</option>
-              </select>
-              <input v-model.number="tripleMinImportance" class="tb-input tb-input--sm" type="number" min="0" max="10" placeholder="重要度≥" />
-              <label class="tb-check">
-                <input type="checkbox" v-model="tripleGroupBySubject" />
-                按 subject 分组
-              </label>
-            </div>
-
-            <div v-if="triples.length === 0" class="empty-hint">暂无三元组 — AI 尚未产出 semantic_memory.triples</div>
-
-            <!-- 分组视图 -->
-            <template v-else-if="tripleGroupBySubject">
-              <div class="list-section-header">三元组 ({{ filteredTriples.length }})</div>
-              <div v-for="group in groupedTriples" :key="group.subject" class="triple-group">
-                <div class="triple-group__header">{{ group.subject }} ({{ group.items.length }})</div>
-                <div v-for="(t, i) in group.items" :key="i" class="triple-row">
-                  <span v-if="t.timestamp" class="triple-ts">{{ t.timestamp }}</span>
-                  <span class="triple-subject">{{ t.subject }}</span>
-                  <span class="triple-predicate">{{ t.predicate }}</span>
-                  <span class="triple-object">{{ t.object }}</span>
-                  <span class="triple-right">
-                    <span v-if="t.importance" :class="['triple-imp', `triple-imp--${importanceClass(t.importance)}`]">重要度 {{ t.importance }}</span>
-                    <span v-if="t.category" class="triple-category">{{ t.category }}</span>
-                    <button class="btn-copy" @click="copyText(`${t.subject} ${t.predicate} ${t.object}`)">复制</button>
-                  </span>
+            <div v-if="v2Edges.length === 0" class="empty-hint">暂无事实边 — 请运行几轮游戏</div>
+            <template v-else>
+              <div v-for="edge in v2Edges" :key="edge.id" class="relation-row" :class="{ 'relation-row--invalidated': edge.invalidatedAtRound != null }">
+                <div class="edge-header">
+                  <span class="rel-from">{{ edge.sourceEntity }}</span>
+                  <span class="rel-arrow">→</span>
+                  <span class="rel-to">{{ edge.targetEntity }}</span>
+                  <span
+                    :class="['embed-badge', edge.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
+                    :title="edge.is_embedded ? '已向量化' : '尚未向量化'"
+                  >{{ edge.is_embedded ? '✓' : '○' }}</span>
+                  <span v-if="edge.invalidatedAtRound != null" class="rel-invalidated">已失效</span>
+                </div>
+                <div class="rel-fact" :title="edge.fact">{{ edge.fact }}</div>
+                <div class="item-meta">
+                  <span>出现{{ edge.episodes.length }}轮</span>
+                  <span>第{{ edge.createdAtRound }}轮创建</span>
+                  <span>第{{ edge.lastSeenRound }}轮最后出现</span>
+                  <span v-if="edge.invalidatedAtRound != null">第{{ edge.invalidatedAtRound }}轮失效</span>
                 </div>
               </div>
             </template>
-
-            <!-- 平铺视图 -->
-            <template v-else>
-              <div class="list-section-header">三元组 ({{ filteredTriples.length }})</div>
-              <div v-for="(t, idx) in filteredTriples" :key="idx" class="triple-row">
-                <span v-if="t.timestamp" class="triple-ts">{{ t.timestamp }}</span>
-                <span class="triple-subject">{{ t.subject }}</span>
-                <span class="triple-predicate">{{ t.predicate }}</span>
-                <span class="triple-object">{{ t.object }}</span>
-                <span class="triple-right">
-                  <span v-if="t.importance" :class="['triple-imp', `triple-imp--${importanceClass(t.importance)}`]">重要度 {{ t.importance }}</span>
-                  <span v-if="t.category" class="triple-category">{{ t.category }}</span>
-                  <button class="btn-copy" @click="copyText(`${t.subject} ${t.predicate} ${t.object}`)">复制</button>
-                </span>
-              </div>
-            </template>
           </div>
         </Transition>
       </section>
 
-      <!-- ─── 实体与语义 (游戏索引) ─── -->
+      <!-- ─── Graphiti 知识图谱 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSectionExt('graph')">
-          <span class="section-title">实体与语义 (游戏索引)</span>
+          <span class="section-title">知识图谱</span>
           <svg :class="['chevron', { 'chevron--open': isOpenExt('graph') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
           </svg>
@@ -732,46 +662,58 @@ onUnmounted(() => destroyGraph());
 
         <Transition name="section-expand">
           <div v-if="isOpenExt('graph')" class="section-body section-body--graph">
-            <p class="graph-subtitle">实体与关系由 社交.关系+角色 派生；语义记忆由 LLM 在行动生成时产出并写入 系统.扩展.语义记忆。</p>
 
-            <!-- 关系图 -->
-            <div class="graph-card">
-              <div class="graph-card__header">
-                <strong>关系图</strong>
-                <label class="graph-checkbox">
-                  <input type="checkbox" v-model="showEdgeLabels" />
-                  显示标签
-                </label>
-                <button class="btn-sm" @click="resetGraphLayout">恢复默认</button>
+            <!-- Filter bar -->
+            <div class="gf-bar">
+              <div class="gf-group">
+                <span class="gf-label">回合</span>
+                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMax" />
+                <span class="gf-val">≤{{ gfRoundMax }}</span>
               </div>
-              <div v-if="relations.length === 0" class="empty-hint" style="padding: 40px;">暂无关系数据</div>
+              <span class="gf-sep" />
+              <div class="gf-group">
+                <span class="gf-label">节点</span>
+                <button v-for="(on, key) in gfNodeTypes" :key="key"
+                  :class="['gf-toggle', { 'gf-toggle--on': on }]"
+                  @click="gfNodeTypes[key] = !gfNodeTypes[key]"
+                >{{ { player:'玩家',npc:'NPC',location:'地点',item:'物品',event:'事件' }[key] }}</button>
+              </div>
+              <span class="gf-sep" />
+              <div class="gf-group">
+                <span class="gf-label">连线</span>
+                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeFact }]" @click="gfEdgeFact = !gfEdgeFact">事实边</button>
+                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeMentions }]" @click="gfEdgeMentions = !gfEdgeMentions">MENTIONS</button>
+                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeInvalidated }]" @click="gfEdgeInvalidated = !gfEdgeInvalidated">失效边</button>
+              </div>
+              <span class="gf-sep" />
+              <div class="gf-group">
+                <label class="gf-toggle gf-toggle--on" style="cursor:pointer;">
+                  <input type="checkbox" v-model="gfShowLabels" style="display:none;" />
+                  标签{{ gfShowLabels ? '开' : '关' }}
+                </label>
+                <select class="gf-select" v-model="gfLayout" @change="runGraphLayout()">
+                  <option value="cose">力导向</option>
+                  <option value="concentric">同心圆</option>
+                  <option value="breadthfirst">层级</option>
+                  <option value="circle">环形</option>
+                </select>
+                <button class="btn-sm" @click="runGraphLayout()">重排</button>
+              </div>
+            </div>
+
+            <!-- Graph -->
+            <div class="graph-card">
+              <div v-if="entities.length === 0 && events.length === 0" class="empty-hint" style="padding:40px;">暂无数据</div>
               <div v-else ref="graphContainer" class="cy-container" />
             </div>
 
-            <!-- 实体与关系列表 (ming 格式) -->
-            <div class="graph-card">
-              <strong class="graph-card__title">实体与关系 (由 社交.关系+角色 派生)</strong>
-
-              <div class="list-section-header">实体 ({{ entities.length }})</div>
-              <div v-if="entities.length === 0" class="empty-hint">暂无实体</div>
-              <div v-for="ent in entities" :key="ent.name" class="ming-row">
-                <span class="ming-type" :style="{ color: entityColor(ent.type) }">{{ ent.type }}</span>
-                <span class="ming-name" :style="{ color: entityColor(ent.type) }">{{ ent.name }}</span>
-                <span v-if="ent.description" class="ming-desc">{{ ent.description }}</span>
-                <button class="btn-copy" @click="copyText(`${ent.type} ${ent.name} ${ent.description}`)">复制</button>
-              </div>
-
-              <div class="list-section-header">关系 ({{ displayRelations.length }})</div>
-              <div v-if="displayRelations.length === 0" class="empty-hint">暂无社交关系</div>
-              <div v-for="(rel, idx) in displayRelations" :key="idx" class="ming-row">
-                <span class="ming-from">{{ rel.fromName }}</span>
-                <span class="ming-rel" :style="{ color: 'var(--color-sage-300)' }">{{ rel.displayLabel }}</span>
-                <span class="ming-to">{{ rel.toName }}</span>
-                <span class="triple-right">
-                  <button class="btn-copy" @click="copyText(`${rel.fromName} ${rel.displayLabel} ${rel.toName}`)">复制</button>
-                </span>
-              </div>
-            </div>
+            <!-- Tooltip (positioned fixed via portal) -->
+            <div
+              v-if="graphTooltip.visible"
+              class="graph-tooltip"
+              :style="{ left: (graphTooltip.x + 12) + 'px', top: (graphTooltip.y + 12) + 'px' }"
+              v-html="graphTooltip.html"
+            />
           </div>
         </Transition>
       </section>
@@ -796,14 +738,14 @@ onUnmounted(() => destroyGraph());
                 <span class="arch-arrow">→</span>
                 <span class="arch-step">实体构建</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step">关系推断</span>
+                <span class="arch-step">事实边构建</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step arch-step--vec">向量化</span>
+                <span class="arch-step arch-step--vec">向量化（事件+实体+边）</span>
               </div>
               <div class="arch-flow" style="margin-top: 6px;">
                 <span class="arch-step">AI 回复</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step arch-step--triple">三元组提取</span>
+                <span class="arch-step arch-step--triple">事实边提取</span>
                 <span class="arch-arrow">→</span>
                 <span class="arch-step">去重追加</span>
               </div>
@@ -812,18 +754,16 @@ onUnmounted(() => destroyGraph());
               <h4 class="arch-card__title">向量化范围</h4>
               <div class="arch-items">
                 <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>事件 summary（burned 格式）</div>
-                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>实体 name + description</div>
-                <div class="arch-item"><span class="arch-dot arch-dot--kw"></span>三元组（关键词评分，不向量化）</div>
-                <div class="arch-item"><span class="arch-dot arch-dot--kw"></span>关系边（图遍历，不向量化）</div>
+                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>实体 name + summary</div>
+                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>事实边 fact（完整句子）</div>
               </div>
             </div>
             <div class="arch-card">
               <h4 class="arch-card__title">检索通道</h4>
               <div class="arch-items">
-                <div class="arch-item">1. 向量相似度（事件 + 实体，cosine）</div>
-                <div class="arch-item">2. 图遍历（BFS 2跳，关系权重衰减）</div>
-                <div class="arch-item">3. 三元组关键词匹配（importance + recency）</div>
-                <div class="arch-item">4. 当前地点 NPC 规则注入</div>
+                <div class="arch-item">1. Edge scope: Cosine + BM25 + BFS → RRF</div>
+                <div class="arch-item">2. Entity scope: Cosine + BM25 → RRF</div>
+                <div class="arch-item">3. Event scope: Cosine + BM25 → RRF</div>
               </div>
             </div>
           </div>
@@ -847,7 +787,6 @@ onUnmounted(() => destroyGraph());
               <div class="retrieve-stats">
                 <div class="rs-row"><span class="rs-label">向量候选</span><span class="rs-val">{{ debugStore.lastRetrieve.vectorCandidateCount }}</span></div>
                 <div class="rs-row"><span class="rs-label">图遍历候选</span><span class="rs-val">{{ debugStore.lastRetrieve.graphCandidateCount }}</span></div>
-                <div class="rs-row"><span class="rs-label">三元组候选</span><span class="rs-val">{{ debugStore.lastRetrieve.triplesCandidateCount }}</span></div>
                 <div class="rs-row"><span class="rs-label">合并后</span><span class="rs-val">{{ debugStore.lastRetrieve.afterMergeCount }}</span></div>
                 <div class="rs-row"><span class="rs-label">重排后</span><span class="rs-val">{{ debugStore.lastRetrieve.afterRerankCount }}</span></div>
                 <div class="rs-row">
@@ -972,7 +911,7 @@ onUnmounted(() => destroyGraph());
 /* ── Stats grid ── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 .stat-card {
@@ -1048,14 +987,6 @@ onUnmounted(() => destroyGraph());
   display: flex; flex-direction: column; gap: 3px;
 }
 .event-header-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.mono { font-family: 'JetBrains Mono','Fira Code',monospace; }
-.event-id { font-size: 0.65rem; color: var(--color-text-secondary,#8888a0); }
-.round-badge {
-  font-size: 0.62rem; font-weight: 700;
-  color: var(--color-primary,#6366f1);
-  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-  padding: 1px 5px; border-radius: 4px;
-}
 .event-sao { font-size: 0.78rem; color: var(--color-text,#e0e0e6); }
 .sao-sep { margin: 0 3px; color: var(--color-text-secondary,#8888a0); }
 .event-text {
@@ -1065,12 +996,6 @@ onUnmounted(() => destroyGraph());
   line-height: 1.45;
   overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-}
-.event-tags { display: flex; gap: 4px; flex-wrap: wrap; }
-.tag {
-  padding: 1px 5px; font-size: 0.62rem; font-weight: 500;
-  color: var(--color-warning,#f59e0b);
-  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent); border-radius: 4px;
 }
 
 /* ── Pagination ── */
@@ -1089,20 +1014,33 @@ onUnmounted(() => destroyGraph());
 .entity-header { display: flex; align-items: center; gap: 8px; }
 .entity-name { font-size: 0.82rem; font-weight: 600; color: var(--color-text,#e0e0e6); }
 .entity-type { font-size: 0.68rem; font-weight: 600; }
-.entity-count { font-size: 0.68rem; color: var(--color-text-secondary,#8888a0); margin-left: auto; }
-.entity-rounds { }
-.meta-text { font-size: 0.68rem; color: var(--color-text-secondary,#8888a0); }
+.item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.68rem;
+  color: var(--color-text-secondary, #8888a0);
+  margin-top: 2px;
+}
+.edge-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
 
 /* ── Relation rows ── */
 .relation-row {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px;
   background: rgba(255,255,255,0.02); border-radius: 5px;
-  font-size: 0.78rem;
 }
-.rel-from, .rel-to { font-weight: 600; color: var(--color-text,#e0e0e6); }
+.rel-from, .rel-to { font-weight: 600; color: var(--color-text,#e0e0e6); font-size: 0.82rem; }
 .rel-arrow { font-family: monospace; color: var(--color-text-secondary,#8888a0); font-size: 0.72rem; }
-.rel-weight { margin-left: auto; font-size: 0.68rem; color: var(--color-success,#22c55e); }
+.rel-fact { font-size: 0.78rem; color: var(--color-text, #e0e0e6); line-height: 1.4; }
+.relation-row--invalidated { opacity: 0.4; }
+.relation-row--invalidated .rel-fact { text-decoration: line-through; }
+.rel-invalidated { font-size: 0.62rem; font-weight: 600; padding: 1px 5px; border-radius: 3px; color: var(--color-danger); background: color-mix(in oklch, var(--color-danger) 10%, transparent); margin-left: 4px; text-decoration: none; }
 
 /* ── Retrieval stats ── */
 .retrieve-stats {
@@ -1129,6 +1067,7 @@ onUnmounted(() => destroyGraph());
   flex-shrink: 0;
 }
 .score-source--vector { color: var(--color-primary,#6366f1); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
+.score-source--edge   { color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
 .score-source--graph  { color: var(--color-success,#22c55e); background: color-mix(in oklch, var(--color-success) 10%, transparent); }
 .score-pct { font-size: 0.68rem; font-family: monospace; color: var(--color-text,#e0e0e6); flex-shrink: 0; width: 36px; }
 .score-text { font-size: 0.72rem; color: var(--color-text-secondary,#8888a0); flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -1151,23 +1090,6 @@ onUnmounted(() => destroyGraph());
 .engram-panel::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 3px; }
 
 /* ── Embedding status (2026-04-14 新增) ── */
-
-.stat-card--embed {
-  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
-  border-color: color-mix(in oklch, var(--color-sage-400) 30%, transparent);
-}
-
-.embed-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-.embed-dot--ok       { background: var(--color-success); box-shadow: 0 0 6px color-mix(in oklch, var(--color-success) 50%, transparent); }
-.embed-dot--partial  { background: var(--color-amber-400); box-shadow: 0 0 5px color-mix(in oklch, var(--color-amber-400) 50%, transparent); }
-.embed-dot--zero     { background: var(--color-danger); box-shadow: 0 0 5px color-mix(in oklch, var(--color-danger) 50%, transparent); }
 
 .embed-status {
   background: rgba(255, 255, 255, 0.025);
@@ -1264,68 +1186,58 @@ onUnmounted(() => destroyGraph());
   line-height: 1.4;
 }
 
-/* ── Triple toolbar ── */
-/* triple section 无独立限高，由外层 panel scroll */
-.triple-toolbar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 6px 0; border-bottom: 1px solid var(--color-border, #2a2a3a); margin-bottom: 6px;
-}
-.tb-label { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--color-text-secondary); }
-.tb-select {
-  padding: 3px 6px; font-size: 0.72rem;
-  background: rgba(255,255,255,0.06); color: var(--color-text);
-  border: 1px solid var(--color-border); border-radius: 4px;
-}
-.tb-input {
-  padding: 3px 6px; font-size: 0.72rem; width: 120px;
-  background: rgba(255,255,255,0.06); color: var(--color-text);
-  border: 1px solid var(--color-border); border-radius: 4px;
-}
-.tb-input--sm { width: 60px; }
-.tb-check { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--color-text-secondary); cursor: pointer; }
-.tb-check input { accent-color: var(--color-primary); }
-
-.triple-group { margin-bottom: 8px; }
-.triple-group__header { font-size: 0.75rem; font-weight: 700; color: var(--color-primary); padding: 4px 8px; }
-
-/* ── Triple rows ── */
-.triple-row {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 8px;
-  background: rgba(255,255,255,0.02); border-radius: 5px;
-  font-size: 0.78rem;
-}
-.triple-ts { font-size: 0.65rem; color: var(--color-text-secondary); font-family: monospace; flex-shrink: 0; }
 .triple-right { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
-.triple-subject { font-weight: 600; color: var(--color-primary, #6366f1); }
-.triple-predicate { color: var(--color-text, #e0e0e6); font-style: italic; }
-.triple-object { font-weight: 600; color: var(--color-success, #22c55e); }
-.triple-imp {
-  margin-left: auto; font-size: 0.62rem; font-weight: 700;
-  padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
-}
-.triple-imp--high { color: var(--color-danger); background: color-mix(in oklch, var(--color-danger) 10%, transparent); }
-.triple-imp--mid  { color: var(--color-amber-400); background: color-mix(in oklch, var(--color-amber-400) 10%, transparent); }
-.triple-imp--low  { color: var(--color-text-secondary); background: rgba(255,255,255,0.04); }
-.triple-category {
-  font-size: 0.62rem; padding: 1px 5px; border-radius: 3px;
-  color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-300) 10%, transparent); flex-shrink: 0;
-}
 
-/* ── Cytoscape graph ── */
-.section-body--graph { }
-.graph-subtitle { font-size: 0.72rem; color: var(--color-text-secondary); margin: 0; line-height: 1.4; }
+/* ── Graph filter bar ── */
+.gf-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.02); border: 1px solid var(--color-border, #2a2a3a);
+  margin-bottom: 8px;
+}
+.gf-group { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text-secondary,#8888a0); }
+.gf-label { font-weight: 600; margin-right: 2px; }
+.gf-sep { width: 1px; height: 18px; background: var(--color-border, #2a2a3a); flex-shrink: 0; }
+.gf-toggle {
+  padding: 2px 7px; border-radius: 4px; font-size: 11px; cursor: pointer;
+  border: 1px solid var(--color-border, #2a2a3a); background: transparent; color: var(--color-text-secondary,#8888a0);
+  transition: all 0.15s; user-select: none;
+}
+.gf-toggle:hover { border-color: var(--color-sage-400); }
+.gf-toggle--on { border-color: var(--color-sage-400); background: rgba(138,158,108,0.15); color: var(--color-text, #e0e0e6); }
+.gf-range { width: 80px; accent-color: var(--color-sage-400); cursor: pointer; }
+.gf-val { font-family: 'JetBrains Mono',monospace; font-size: 11px; min-width: 24px; color: var(--color-text); }
+.gf-select {
+  background: var(--color-surface, #232220); color: var(--color-text); border: 1px solid var(--color-border);
+  border-radius: 4px; padding: 3px 6px; font-size: 11px; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a8580'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 5px center; padding-right: 18px;
+}
+.gf-select:focus { border-color: var(--color-sage-400, #8a9e6c); outline: none; }
+.gf-select option { background: var(--color-surface, #232220); color: var(--color-text, #d4cfc5); }
+
+/* ── Graph card + container ── */
 .graph-card {
   border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px;
-  padding: 10px; background: rgba(255,255,255,0.015);
+  padding: 0; background: rgba(0,0,0,0.15); overflow: hidden;
 }
-.graph-card__header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 0.82rem; color: var(--color-text); }
-.graph-card__title { font-size: 0.82rem; font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
-.graph-checkbox { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--color-text-secondary); cursor: pointer; }
-.graph-checkbox input { accent-color: var(--color-primary); }
-.cy-container { width: 100%; height: 420px; border: 1px solid var(--color-border, #2a2a3a); border-radius: 6px; background: rgba(0,0,0,0.2); }
+.cy-container { width: 100%; height: 480px; }
 
-/* ── Ming-style entity/relation list ── */
+/* ── Graph tooltip ── */
+.graph-tooltip {
+  position: fixed; max-width: 340px; padding: 10px 14px;
+  background: rgba(30,29,26,0.95); border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 8px; font-size: 12px; line-height: 1.5; color: var(--color-text);
+  z-index: 100; pointer-events: none; backdrop-filter: blur(8px);
+}
+:deep(.gtt-type) { font-size: 10px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+:deep(.gtt-title) { font-weight: 600; margin-top: 2px; }
+:deep(.gtt-body) { font-size: 11px; color: var(--color-text-secondary); margin-top: 4px; }
+:deep(.gtt-meta) { font-size: 11px; color: var(--color-text-secondary); margin-top: 4px; opacity: 0.7; }
+:deep(.gtt-fact) { font-style: italic; color: var(--color-amber-400); margin-top: 4px; }
+
+/* ── Ming-style entity/relation list (kept for architecture section) ── */
 .list-section-header { font-size: 0.78rem; font-weight: 700; color: var(--color-text); margin: 10px 0 4px; padding: 0 4px; }
 .ming-row {
   display: flex; align-items: center; gap: 8px;

@@ -223,11 +223,14 @@ export function extractPlotEvaluation(
   const obj = raw as Record<string, unknown>;
   if (typeof obj['node_reached'] !== 'boolean') return null;
   if (typeof obj['confidence'] !== 'number') return null;
+  // gauge_updates may be nested inside plot_evaluation or at the top level
+  const gaugeUpdates = validateGaugeUpdates(obj['gauge_updates'])
+    ?? validateGaugeUpdates(customFields['gauge_updates']);
   return {
     node_reached: obj['node_reached'] as boolean,
     confidence: obj['confidence'] as number,
     evidence: typeof obj['evidence'] === 'string' ? obj['evidence'] : '',
-    gauge_updates: validateGaugeUpdates(obj['gauge_updates']),
+    gauge_updates: gaugeUpdates,
   };
 }
 

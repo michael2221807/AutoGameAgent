@@ -236,8 +236,6 @@ export interface IMemoryManager {
    * 接受规范对象 / 兼容字符串 / 英文字段旧对象，不接受 null/undefined。
    */
   appendImplicitMidTerm(entry: ImplicitMidTermInput): void;
-  /** 合并语义记忆数据到状态树（semantic_memory 字段，供 Engram 使用） */
-  mergeSemanticMemory(data: Record<string, unknown>): void;
   /** 整体替换中期记忆数组（MidTermRefinePipeline 使用） */
   setMidTermEntries(entries: MidTermEntry[]): void;
   /** 整体替换长期记忆数组（LongTermCompactPipeline 使用） */
@@ -296,19 +294,19 @@ export interface IMemoryManager {
  * Engram 知识图谱管理器 — PostProcessStage 用于更新结构化记忆
  *
  * 实现方：engine/memory/engram/engram-manager.ts
- * 从 AI 响应中提取事件、构建实体和关系、写入状态树、异步向量化。
+ * 从 AI 响应中提取事件、构建实体和事实边、写入状态树、异步向量化。
  * 整个流程中只有向量化是异步非阻塞的，其余操作同步完成。
  */
 export interface IEngramManager {
   /** 检查 Engram 功能是否启用（由 Game Pack 配置控制） */
   isEnabled(): boolean;
   /**
-   * 处理 AI 响应：提取事件 → 构建实体/关系 → 写入状态树 → 异步向量化
-   * 内部的向量化步骤 fire-and-forget，不阻塞返回
+   * 处理 AI 响应：提取事件 → 构建实体 → FactBuilder 边构建 → 写入状态树 → 异步向量化
+   * 返回写入快照供 UI 可视化，Engram 未启用时返回 null
    */
-  processResponse(response: AIResponse, stateManager: StateManager): Promise<void>;
+  processResponse(response: AIResponse, stateManager: StateManager): Promise<import('../memory/engram/engram-types').EngramWriteSnapshot | null>;
   /** 获取当前 Engram 配置（ContextAssemblyStage 用于检索模式决策） */
-  getConfig(): import('../memory/engram/engram-manager').EngramConfig;
+  getConfig(): import('../memory/engram/engram-types').EngramConfig;
   /**
    * 将 IndexedDB 向量数据同步到当前状态树 —— rollback 后调用
    *
@@ -319,12 +317,14 @@ export interface IEngramManager {
 }
 
 /**
- * 统一检索器 — ContextAssemblyStage 在 retrievalMode='hybrid' 时使用
+ * 统一检索器 — ContextAssemblyStage 在 hybrid 模式下使用（V2 三路并行检索）
  *
  * 实现方：engine/memory/engram/unified-retriever.ts
  */
 export interface IUnifiedRetriever {
   retrieve(query: string, context: import('../memory/engram/unified-retriever').RetrievalContext, stateManager: StateManager): Promise<string>;
+  /** Last read snapshot captured during retrieve(), null if not yet called or Engram disabled */
+  readonly lastReadSnapshot?: import('../memory/engram/engram-types').EngramReadSnapshot | null;
 }
 
 // ═══════════════════════════════════════════════════════════════

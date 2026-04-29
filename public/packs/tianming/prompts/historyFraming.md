@@ -11,13 +11,13 @@
 
 ## 关键：你不能模仿 history 里 assistant 的格式
 
-history 里的 assistant 消息**只保留了 `text` 字段**的内容，用于让你回忆之前发生了什么 —— 这是**展示版**，不是完整响应。真正完整的 JSON 输出（包括 `commands` / `action_options` / `mid_term_memory` / `semantic_memory`）**已经被引擎应用到你现在看到的 `GAME_STATE_JSON` 里**。
+history 里的 assistant 消息**只保留了 `text` 字段**的内容，用于让你回忆之前发生了什么 —— 这是**展示版**，不是完整响应。真正完整的 JSON 输出（包括 `commands` / `action_options` / `mid_term_memory` / `knowledge_facts`）**已经被引擎应用到你现在看到的 `GAME_STATE_JSON` 里**。
 
 换句话说：
 - 你看到的 `GAME_STATE_JSON` 状态树 = 历史所有 assistant 输出的 `commands` 累积应用后的结果
-- 你看到的 `MEMORY_BLOCK` = 历史所有 assistant 输出的 `mid_term_memory` / `semantic_memory` 的累积编译
+- 你看到的 `MEMORY_BLOCK` = 历史所有 assistant 输出的 `mid_term_memory` / `knowledge_facts` 的累积编译
 
-**不要**因为 history 里的 assistant 条目"只有 text 没有 JSON"就推断"本回合也只输出 text"。**你本回合必须输出完整的 JSON**，按照 `core` 模块定义的格式（`{"text":"...","commands":[...],"action_options":[...],"mid_term_memory":...,"semantic_memory":{...}}`）。
+**不要**因为 history 里的 assistant 条目"只有 text 没有 JSON"就推断"本回合也只输出 text"。**你本回合必须输出完整的 JSON**，按照 `core` 模块定义的格式（`{"text":"...","commands":[...],"action_options":[...],"mid_term_memory":...,"knowledge_facts":{...}}`）。
 
 ## 关键：user 消息里的引号不是对话标记
 

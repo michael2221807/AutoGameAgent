@@ -23,6 +23,8 @@ export interface VectorStoreData {
   eventVectors: Record<string, number[]>;
   /** 实体向量（entityName → 向量数组） */
   entityVectors: Record<string, number[]>;
+  /** V2: 边向量（edgeId → fact embedding） */
+  edgeVectors: Record<string, number[]>;
   /** 使用的 embedding 模型名（如果模型变更，需要重新向量化） */
   model: string;
   /** 向量维度（用于校验新向量与已有数据的兼容性） */
@@ -87,6 +89,7 @@ export class VectorStore {
     if (data.model && data.model !== model) {
       data.eventVectors = {};
       data.entityVectors = {};
+      data.edgeVectors = {};
     }
 
     data.model = model;
@@ -119,6 +122,7 @@ export class VectorStore {
     if (data.model && data.model !== model) {
       data.eventVectors = {};
       data.entityVectors = {};
+      data.edgeVectors = {};
     }
 
     data.model = model;
@@ -197,9 +201,56 @@ export class VectorStore {
       }
     }
 
+    // Note: edgeVectors are NOT trimmed here — they use separate trimEdgeVectors()
+    // with a dedicated keptEdgeIds set (edge IDs don't overlap with event/entity IDs).
+
     if (changed) {
       await this.save(profileId, slotId, data);
     }
+  }
+
+  async trimEdgeVectors(
+    keptEdgeIds: Set<string>,
+    profileId: string,
+    slotId: string,
+  ): Promise<void> {
+    const data = await this.load(profileId, slotId);
+    let changed = false;
+    for (const id of Object.keys(data.edgeVectors ?? {})) {
+      if (!keptEdgeIds.has(id)) {
+        delete data.edgeVectors[id];
+        changed = true;
+      }
+    }
+    if (changed) await this.save(profileId, slotId, data);
+  }
+
+  async mergeEdgeVectors(
+    edges: Array<{ id: string }>,
+    vectors: number[][],
+    model: string,
+    storage: StorageIdentifier,
+  ): Promise<void> {
+    const data = await this.load(storage.profileId, storage.slotId);
+
+    if (data.model && data.model !== model) {
+      data.eventVectors = {};
+      data.entityVectors = {};
+      data.edgeVectors = {};
+    }
+
+    data.model = model;
+    data.dim = vectors[0]?.length ?? 0;
+
+    for (let i = 0; i < edges.length; i++) {
+      const edge = edges[i];
+      const vector = vectors[i];
+      if (edge && vector) {
+        data.edgeVectors[edge.id] = vector;
+      }
+    }
+
+    await this.save(storage.profileId, storage.slotId, data);
   }
 
   /** 生成 IndexedDB 存储键 */
@@ -209,6 +260,6 @@ export class VectorStore {
 
   /** 创建空的初始数据结构 */
   private createEmpty(): VectorStoreData {
-    return { eventVectors: {}, entityVectors: {}, model: '', dim: 0 };
+    return { eventVectors: {}, entityVectors: {}, edgeVectors: {}, model: '', dim: 0 };
   }
 }

@@ -91,7 +91,7 @@ export const usePlotStore = defineStore('plot-direction', () => {
     return true;
   }
 
-  function activateArc(arcId: string): boolean {
+  function activateArc(arcId: string, currentRound?: number): boolean {
     if (arcs.value.some(a => a.status === 'active')) return false;
     const arc = arcs.value.find(a => a.id === arcId);
     if (!arc || (arc.status !== 'draft' && arc.status !== 'abandoned')) return false;
@@ -113,6 +113,9 @@ export const usePlotStore = defineStore('plot-direction', () => {
     const first = arc.nodes.find(n => n.status === 'pending');
     if (first) {
       first.status = 'active';
+      if (currentRound != null) {
+        first.activatedAtRound = currentRound;
+      }
     }
     return true;
   }

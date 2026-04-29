@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { PlotNode, PlotGauge, GaugeCondition } from '@/engine/plot/types';
+import type { PlotNode, PlotGauge, GaugeCondition, PlotEvalLog } from '@/engine/plot/types';
 
 const props = defineProps<{
   nodes: PlotNode[];
   gauges: PlotGauge[];
   currentRound: number;
+  lastEvalLog?: PlotEvalLog | null;
 }>();
 
 const emit = defineEmits<{
@@ -80,6 +81,18 @@ const activeNodeCurrentTier = computed(() => {
         <div v-if="node.status === 'active' && activeNodeCurrentTier" class="node-item__tier">
           Tier {{ activeNodeCurrentTier }} 引导中
         </div>
+
+        <!-- Evaluation status for active node -->
+        <div v-if="node.status === 'active' && lastEvalLog?.evaluation" class="node-item__eval">
+          <span :class="['eval-dot', lastEvalLog.evaluation.node_reached ? 'eval-dot--reached' : 'eval-dot--miss']" />
+          <span class="eval-conf">{{ (lastEvalLog.evaluation.confidence * 100).toFixed(0) }}%</span>
+          <span v-if="node.consecutiveReachedCount > 0" class="eval-streak">
+            {{ node.consecutiveReachedCount }}/{{ node.importance === 'critical' ? 2 : 1 }}
+          </span>
+        </div>
+        <p v-if="node.status === 'active' && lastEvalLog?.evaluation?.evidence" class="node-item__evidence">
+          {{ lastEvalLog.evaluation.evidence }}
+        </p>
 
         <div v-if="node.activationConditions.length > 0 && node.status === 'pending'" class="node-item__conditions">
           需要：
@@ -233,6 +246,38 @@ const activeNodeCurrentTier = computed(() => {
   border-radius: 4px;
   font-family: var(--font-mono, monospace);
   font-size: 10px;
+}
+
+.node-item__eval {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+}
+.eval-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.eval-dot--reached { background: var(--color-sage-400, #8cb88c); }
+.eval-dot--miss    { background: var(--color-text-secondary, #888); opacity: 0.5; }
+.eval-conf {
+  color: var(--color-amber-400, #f59e0b);
+}
+.eval-streak {
+  color: var(--color-sage-400, #8cb88c);
+  font-weight: 600;
+}
+
+.node-item__evidence {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+  font-style: italic;
+  opacity: 0.8;
 }
 
 .node-item__completed-round {

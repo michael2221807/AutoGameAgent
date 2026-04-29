@@ -50,9 +50,9 @@ function buildRerankEndpoint(config: APIConfig): string {
 export interface RerankCandidate {
   /** 候选文本内容 */
   text: string;
-  /** 初始得分（来自向量相似度或图遍历） */
+  /** 初始得分（来自 RRF 融合） */
   score: number;
-  /** 候选项来源标识（如 "vector", "graph"），用于调试 */
+  /** 候选项来源标识（如 "edge", "entity", "event"），用于调试 */
   source: string;
   /** 附加的元数据（透传给下游，不参与排序） */
   metadata?: Record<string, unknown>;

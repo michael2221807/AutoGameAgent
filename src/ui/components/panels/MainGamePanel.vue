@@ -61,6 +61,7 @@ import RoundDivider from '@/ui/components/panels/RoundDivider.vue';
 import ThinkingViewer from '@/ui/components/panels/ThinkingViewer.vue';
 import CommandsViewer from '@/ui/components/panels/CommandsViewer.vue';
 import RawResponseViewer from '@/ui/components/panels/RawResponseViewer.vue';
+import EngramRoundViewer from '@/ui/components/panels/EngramRoundViewer.vue';
 import WeatherBadge from '@/ui/components/panels/WeatherBadge.vue';
 import EnvironmentChips from '@/ui/components/panels/EnvironmentChips.vue';
 import FestivalChip from '@/ui/components/panels/FestivalChip.vue';
@@ -101,6 +102,9 @@ interface ChatMessage {
   _rawResponseStep2?: string;
   _commands?: unknown[];
   _shortTermPreview?: string;
+  // Engram per-round visualization snapshots
+  _engramWrite?: import('@/engine/memory/engram/engram-types').EngramWriteSnapshot;
+  _engramRead?: import('@/engine/memory/engram/engram-types').EngramReadSnapshot;
   // Phase 4 metadata (2026-04-19) — polish state for 优化/原文 toggle.
   _polish?: {
     applied: boolean;
@@ -263,6 +267,24 @@ function openRawViewer(msg: ChatMessage): void {
     roundNumber: round,
   };
   showRawViewer.value = true;
+}
+
+// ─── Engram round viewer ──────────────────────────────────────
+const activeEngramPayload = ref<{
+  write?: ChatMessage['_engramWrite'];
+  read?: ChatMessage['_engramRead'];
+  roundNumber: number;
+} | null>(null);
+const showEngramViewer = ref(false);
+
+function openEngramViewer(msg: ChatMessage): void {
+  const round = msg._metrics?.roundNumber ?? 0;
+  activeEngramPayload.value = {
+    write: msg._engramWrite,
+    read: msg._engramRead,
+    roundNumber: round,
+  };
+  showEngramViewer.value = true;
 }
 
 /**
@@ -728,11 +750,13 @@ watch(
           :has-thinking="!!msg._thinking && msg._thinking.length > 0"
           :has-commands="(msg._commands?.length ?? 0) > 0 || (msg._delta?.length ?? 0) > 0"
           :has-raw="!!msg._rawResponse && msg._rawResponse.length > 0"
+          :has-engram="!!msg._engramWrite || !!msg._engramRead"
           :polish="msg._polish"
           :showing-original="isShowingOriginalForRound(msg._metrics?.roundNumber ?? 0)"
           @view-thinking="openThinkingViewer(msg)"
           @view-commands="openCommandsViewer(msg, 'commands')"
           @view-raw="openRawViewer(msg)"
+          @view-engram="openEngramViewer(msg)"
           @toggle-original="toggleOriginalForRound(msg)"
         />
       <div
@@ -976,6 +1000,12 @@ watch(
       :step1="activeRaw?.step1 ?? ''"
       :step2="activeRaw?.step2 ?? ''"
       :round-number="activeRaw?.roundNumber ?? 0"
+    />
+    <EngramRoundViewer
+      v-model="showEngramViewer"
+      :write="activeEngramPayload?.write ?? null"
+      :read="activeEngramPayload?.read ?? null"
+      :round-number="activeEngramPayload?.roundNumber ?? 0"
     />
   </div>
 </template>

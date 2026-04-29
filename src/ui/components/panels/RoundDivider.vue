@@ -45,6 +45,8 @@ interface Props {
   hasCommands?: boolean;
   /** Show the ⮂ raw-response button (right cluster). */
   hasRaw?: boolean;
+  /** Show the 🧠 Engram button (right cluster). */
+  hasEngram?: boolean;
   /**
    * Polish state for this round (Phase 4, 2026-04-19).
    * `applied === true` means the round was polished — badge becomes clickable
@@ -65,6 +67,7 @@ const props = withDefaults(defineProps<Props>(), {
   hasThinking: false,
   hasCommands: false,
   hasRaw: false,
+  hasEngram: false,
   showingOriginal: false,
 });
 
@@ -75,6 +78,8 @@ const emit = defineEmits<{
   'view-commands': [];
   /** Right cluster — ⮂: open raw-response viewer */
   'view-raw': [];
+  /** Right cluster — 🧠: open Engram round viewer */
+  'view-engram': [];
   /** Center badge click — request parent to flip the 优化/原文 view for this round. */
   'toggle-original': [];
 }>();
@@ -148,6 +153,19 @@ function onBadgeClick(): void {
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+          </svg>
+        </button>
+        <!-- 🧠 Engram button — shown when this round has Engram write/read data. -->
+        <button
+          v-if="props.hasEngram"
+          type="button"
+          class="round-divider__icon-btn round-divider__icon-btn--engram"
+          title="查看 Engram 记忆流程"
+          aria-label="查看本回合 Engram 写入与召回详情"
+          @click="$emit('view-engram')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
           </svg>
         </button>
       </div>
@@ -249,6 +267,13 @@ function onBadgeClick(): void {
 .round-divider__icon-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+}
+
+/* Engram button: teal-ish hover (knowledge-graph semantic, distinct from sage/amber) */
+.round-divider__icon-btn--engram:hover {
+  color: #5ba8a0;
+  border-color: color-mix(in oklch, #5ba8a0 35%, var(--color-border));
+  background: color-mix(in oklch, #5ba8a0 6%, transparent);
 }
 
 /*

@@ -126,6 +126,7 @@ export class ResponseParser {
         ),
         judgement: json.judgement as AIResponse['judgement'],
         semanticMemory: json.semantic_memory as Record<string, unknown> | undefined,
+        knowledgeFacts: this.normalizeKnowledgeFacts(json.knowledge_facts),
         memoryEntry: this.normalizeMemoryEntry(json.memoryEntry ?? json.memory_entry ?? json['记忆条目']),
         customFields: this.collectCustomFields(json),
         thinking,
@@ -273,6 +274,26 @@ export class ResponseParser {
       .map((o) => o.trim());
   }
 
+
+  private normalizeKnowledgeFacts(
+    raw: unknown,
+  ): Array<{ fact: string; sourceEntity: string; targetEntity: string }> | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
+
+    const result: Array<{ fact: string; sourceEntity: string; targetEntity: string }> = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const obj = item as Record<string, unknown>;
+      const fact = typeof obj.fact === 'string' ? obj.fact.trim() : '';
+      const src = typeof obj.source_entity === 'string' ? obj.source_entity.trim() : '';
+      const tgt = typeof obj.target_entity === 'string' ? obj.target_entity.trim() : '';
+      if (fact.length >= 10 && src && tgt && src !== tgt) {
+        result.push({ fact, sourceEntity: src, targetEntity: tgt });
+      }
+    }
+    return result.length > 0 ? result : undefined;
+  }
+
   private static readonly KNOWN_KEYS = new Set([
     'text', '叙事文本',
     'commands', 'tavern_commands', '指令',
@@ -280,6 +301,7 @@ export class ResponseParser {
     'action_options', '行动选项',
     'judgement',
     'semantic_memory',
+    'knowledge_facts',
     'memoryEntry', 'memory_entry', '记忆条目',
   ]);
 

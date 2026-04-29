@@ -5,7 +5,7 @@
  * - **每回合产出 1 个事件**（旧版本按句子切成 3 个碎片，导致 entity/relation 构建器无从下手）
  * - 事件包含丰富的元数据：时间、地点、相关角色、事件标题、burned summary
  * - `summary` 字段作为 Embedding 输入（命中 query 里的时间/地点/人物关键词）
- * - `structured_kv` 字段供下游 EntityBuilder/RelationBuilder 提取实体与关系
+ * - `structured_kv` 字段供下游 EntityBuilder 提取实体
  * - `is_embedded` 标记供调试面板统计，由 engram-manager 在向量化成功后置 true
  *
  * Role / location / time 的取数路径：
@@ -30,7 +30,7 @@ export interface EngramStateReader {
 
 // ─── 类型定义 ───
 
-/** 事件节点结构化元数据（供 EntityBuilder / RelationBuilder 提取） */
+/** 事件节点结构化元数据（供 EntityBuilder 提取） */
 export interface EngramEventStructuredKV {
   /** 事件标题 —— 第一句（≤48 字） */
   event: string;
@@ -71,7 +71,7 @@ export interface EngramEventNode {
    */
   summary: string;
   /**
-   * 结构化元数据 —— 供 EntityBuilder / RelationBuilder 提取实体关系
+   * 结构化元数据 —— 供 EntityBuilder 提取实体
    */
   structured_kv: EngramEventStructuredKV;
   /**
@@ -81,6 +81,10 @@ export interface EngramEventNode {
   is_embedded: boolean;
   /** 产生此事件的游戏回合序号 */
   roundNumber?: number;
+  /** AI 生成的中期记忆摘要（50-100字），用于 2-hop 图谱充实（避免注入完整原文） */
+  midTermSummary?: string;
+  /** V2: 本事件提及的实体名（从 structured_kv.role 填充，对齐 Graphiti 的 EpisodicEdge MENTIONS） */
+  mentionedEntities?: string[];
 }
 
 /** EventBuilder 从 state 读取时使用的路径集合（由外部注入，避免硬编码） */
@@ -228,6 +232,7 @@ export class EventBuilder {
         time: timeAnchor || undefined,
         location: location[0],
         roundNumber,
+        mentionedEntities: [playerName, ...roles].filter((v, i, a) => a.indexOf(v) === i),
       },
     ];
   }
