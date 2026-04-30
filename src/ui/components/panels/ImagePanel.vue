@@ -206,6 +206,28 @@ const backendOptions: SelectOption[] = [
   { label: 'OpenAI DALL-E', value: 'openai' },
   { label: 'SD-WebUI', value: 'sd_webui' },
   { label: 'ComfyUI', value: 'comfyui' },
+  { label: 'Civitai', value: 'civitai' },
+];
+
+const civitaiSchedulerOptions: SelectOption[] = [
+  { label: 'Euler A', value: 'EulerA' },
+  { label: 'Euler', value: 'Euler' },
+  { label: 'DPM++ 2M', value: 'DPM2M' },
+  { label: 'DPM++ 2S A', value: 'DPM2SA' },
+  { label: 'DPM++ SDE', value: 'DPMSDE' },
+  { label: 'DDIM', value: 'DDIM' },
+  { label: 'UniPC', value: 'UniPC' },
+  { label: 'LCM', value: 'LCM' },
+  { label: 'Heun', value: 'Heun' },
+  { label: 'DPM++ 2M Karras', value: 'DPM2MKarras' },
+  { label: 'DPM++ SDE Karras', value: 'DPMSDEKarras' },
+  { label: 'DEIS', value: 'DEIS' },
+];
+
+const civitaiOutputFormatOptions: SelectOption[] = [
+  { label: 'PNG', value: 'png' },
+  { label: 'JPEG', value: 'jpeg' },
+  { label: 'WebP', value: 'webp' },
 ];
 
 /** Human-readable label for an image backend. Reuses backendOptions as the
@@ -3896,6 +3918,100 @@ function clearNpcImages() {
           </div>
         </div>
 
+        <!-- Civitai settings (tiered: basic + advanced) -->
+        <div v-if="settingsBackend === 'civitai'" class="preset-card">
+          <span class="preset-card-badge">Civitai 设置</span>
+          <div class="settings-row">
+            <div>
+              <span class="form-label">允许 Civitai Mature 内容</span>
+              <p class="form-hint">
+                向 Civitai 发送 allowMatureContent=true。需要账号已开启成人内容并有 Buzz 余额。
+                此选项独立于 AGA 故事系统的 NSFW 模式。如需无限制本地生成，请使用 ComfyUI 或 SD-WebUI。
+              </p>
+            </div>
+            <AgaToggle
+              :model-value="get('系统.扩展.image.config.civitai.allowMatureContent') === true"
+              @update:model-value="setValue('系统.扩展.image.config.civitai.allowMatureContent', $event)"
+            />
+          </div>
+          <div class="settings-grid-3">
+            <div class="form-section">
+              <label class="form-label">采样器</label>
+              <AgaSelect
+                :options="civitaiSchedulerOptions"
+                :model-value="String(get('系统.扩展.image.config.civitai.scheduler') ?? 'EulerA')"
+                @update:model-value="setValue('系统.扩展.image.config.civitai.scheduler', $event)"
+              />
+            </div>
+            <div class="form-section">
+              <label class="form-label">步数</label>
+              <input
+                type="number" min="1" max="100" class="form-input"
+                :value="get('系统.扩展.image.config.civitai.steps') ?? 25"
+                @change="setValue('系统.扩展.image.config.civitai.steps', Math.max(1, Math.min(100, Number(($event.target as HTMLInputElement).value) || 25)))"
+              />
+            </div>
+            <div class="form-section">
+              <label class="form-label">CFG Scale</label>
+              <input
+                type="number" min="1" max="30" step="0.5" class="form-input"
+                :value="get('系统.扩展.image.config.civitai.cfgScale') ?? 7"
+                @change="setValue('系统.扩展.image.config.civitai.cfgScale', Number(($event.target as HTMLInputElement).value) || 7)"
+              />
+            </div>
+          </div>
+          <div class="settings-grid-3">
+            <div class="form-section">
+              <label class="form-label">Seed (-1 = 随机)</label>
+              <input
+                type="number" min="-1" max="4294967295" class="form-input"
+                :value="get('系统.扩展.image.config.civitai.seed') ?? -1"
+                @change="setValue('系统.扩展.image.config.civitai.seed', Number(($event.target as HTMLInputElement).value) ?? -1)"
+              />
+            </div>
+          </div>
+
+          <details class="form-advanced">
+            <summary>高级参数</summary>
+            <div class="settings-grid-3">
+              <div class="form-section">
+                <label class="form-label">Clip Skip</label>
+                <input
+                  type="number" min="1" max="12" class="form-input"
+                  :value="get('系统.扩展.image.config.civitai.clipSkip') ?? 2"
+                  @change="setValue('系统.扩展.image.config.civitai.clipSkip', Math.max(1, Math.min(12, Number(($event.target as HTMLInputElement).value) || 2)))"
+                />
+              </div>
+              <div class="form-section">
+                <label class="form-label">输出格式</label>
+                <AgaSelect
+                  :options="civitaiOutputFormatOptions"
+                  :model-value="String(get('系统.扩展.image.config.civitai.outputFormat') ?? 'png')"
+                  @update:model-value="setValue('系统.扩展.image.config.civitai.outputFormat', $event)"
+                />
+              </div>
+            </div>
+            <div class="form-section">
+              <label class="form-label">附加网络 (LoRA JSON)</label>
+              <textarea
+                class="form-textarea" rows="3"
+                placeholder='{"urn:air:sdxl:lora:civitai:82098@87153": {"type": "Lora", "strength": 0.8}}'
+                :value="String(get('系统.扩展.image.config.civitai.additionalNetworksJson') ?? '')"
+                @input="setValue('系统.扩展.image.config.civitai.additionalNetworksJson', ($event.target as HTMLTextAreaElement).value)"
+              />
+            </div>
+            <div class="form-section">
+              <label class="form-label">ControlNet (JSON)</label>
+              <textarea
+                class="form-textarea" rows="3"
+                placeholder='[{"preprocessor": "Canny", "weight": 1.0, "imageUrl": "..."}]'
+                :value="String(get('系统.扩展.image.config.civitai.controlNetsJson') ?? '')"
+                @input="setValue('系统.扩展.image.config.civitai.controlNetsJson', ($event.target as HTMLTextAreaElement).value)"
+              />
+            </div>
+          </details>
+        </div>
+
         <!-- §7.3 Transformer section -->
         <div class="preset-card">
           <span class="preset-card-badge">转化器</span>
@@ -5285,4 +5401,22 @@ function clearNpcImages() {
 .png-metadata-details summary:hover { color: var(--color-primary); }
 .png-metadata-content { display: flex; flex-direction: column; gap: var(--space-sm); margin-top: var(--space-xs); }
 .png-meta-block { display: flex; flex-direction: column; gap: var(--space-2xs); }
+
+.form-advanced {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--color-border, #2a2a3a);
+  border-radius: 6px;
+}
+.form-advanced > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #8888a0);
+  user-select: none;
+}
+.form-advanced[open] > summary {
+  margin-bottom: 8px;
+  color: var(--color-text, #e0e0e6);
+}
 </style>

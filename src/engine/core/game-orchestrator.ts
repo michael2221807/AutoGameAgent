@@ -75,6 +75,7 @@ import type {
 } from '../pipeline/types';
 import type { GamePack } from '../types';
 import type { GameTime } from '../image/scene-context';
+import type { ImageBackendType } from '../image/types';
 import type { MemorySummaryPipeline } from '../pipeline/sub-pipelines/memory-summary';
 import type { MidTermRefinePipeline } from '../pipeline/sub-pipelines/mid-term-refine';
 import type { LongTermCompactPipeline } from '../pipeline/sub-pipelines/long-term-compact';
@@ -663,7 +664,7 @@ export class GameOrchestrator {
         try {
           const paths = this.subPipelines.paths;
           const location = stateManager.get<string>(paths?.playerLocation ?? '角色.基础信息.当前位置') ?? '';
-          const defaultBackend = (stateManager.get<string>('系统.扩展.image.config.defaultBackend') ?? 'novelai') as 'novelai' | 'openai' | 'sd_webui' | 'comfyui';
+          const defaultBackend = (stateManager.get<string>('系统.扩展.image.config.defaultBackend') ?? 'novelai') as ImageBackendType;
           eventBus.emit('ui:toast', { type: 'info', message: '正在自动生成场景图…', duration: 2000 });
           // P3 env-tags port (2026-04-19): forward env state so auto-gen scene
           // images reflect current weather/festival/environment (same plumbing
@@ -695,7 +696,7 @@ export class GameOrchestrator {
           const relations = stateManager.get<Array<Record<string, unknown>>>(this.subPipelines.paths?.relationships ?? '社交.关系') ?? [];
           const genderFilter = stateManager.get<string>('系统.扩展.image.config.auto.genderFilter') ?? 'all';
           const importanceFilter = stateManager.get<string>('系统.扩展.image.config.auto.importanceFilter') ?? 'major';
-          const defaultBackend = (stateManager.get<string>('系统.扩展.image.config.defaultBackend') ?? 'novelai') as 'novelai' | 'openai' | 'sd_webui' | 'comfyui';
+          const defaultBackend = (stateManager.get<string>('系统.扩展.image.config.defaultBackend') ?? 'novelai') as ImageBackendType;
 
           for (const npc of relations) {
             const name = String(npc['名称'] ?? '');

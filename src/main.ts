@@ -69,6 +69,7 @@ import { NovelAIImageProvider } from './engine/image/providers/novelai';
 import { OpenAIImageProvider } from './engine/image/providers/openai';
 import { SDWebUIImageProvider } from './engine/image/providers/sd-webui';
 import { ComfyUIImageProvider } from './engine/image/providers/comfyui';
+import { CivitaiImageProvider } from './engine/image/providers/civitai';
 import { migrateImageState } from './engine/image/save-migration';
 import { NpcChatPipeline } from './engine/pipeline/sub-pipelines/npc-chat';
 import { DEFAULT_ENGINE_PATHS } from './engine/pipeline/types';
@@ -523,6 +524,7 @@ async function bootstrap(): Promise<void> {
   imageProviderRegistry.register('openai', (c) => new OpenAIImageProvider(c.endpoint, c.apiKey, c.model));
   imageProviderRegistry.register('sd_webui', (c) => new SDWebUIImageProvider(c.endpoint, c.apiKey, c.model));
   imageProviderRegistry.register('comfyui', (c) => new ComfyUIImageProvider(c.endpoint, c.apiKey, c.model));
+  imageProviderRegistry.register('civitai', (c) => new CivitaiImageProvider(c.endpoint, c.apiKey, c.model));
 
   const imageService = new ImageService(
     stateManager,

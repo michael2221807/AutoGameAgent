@@ -37,6 +37,17 @@ const DEFAULT_IMAGE_STATE = {
       seed: 0,
       negativeDefault: '',
     },
+    civitai: {
+      allowMatureContent: false,
+      scheduler: 'EulerA',
+      steps: 25,
+      cfgScale: 7,
+      seed: -1,
+      clipSkip: 2,
+      outputFormat: 'png',
+      additionalNetworksJson: '',
+      controlNetsJson: '',
+    },
     transformer: {
       independentEnabled: false,
       endpoint: '',
@@ -87,9 +98,20 @@ const DEFAULT_IMAGE_STATE = {
 
 export function migrateImageState(stateManager: StateManager): boolean {
   const existing = stateManager.get<unknown>(IMAGE_ROOT_PATH);
-  if (existing !== undefined && existing !== null) return false;
 
-  stateManager.set(IMAGE_ROOT_PATH, DEFAULT_IMAGE_STATE, 'system');
-  console.debug('[ImageMigration] Initialized image subtree for pre-image save');
-  return true;
+  if (existing === undefined || existing === null) {
+    stateManager.set(IMAGE_ROOT_PATH, DEFAULT_IMAGE_STATE, 'system');
+    console.debug('[ImageMigration] Initialized image subtree for pre-image save');
+    return true;
+  }
+
+  let migrated = false;
+  const civitaiPath = `${IMAGE_ROOT_PATH}.config.civitai`;
+  if (stateManager.get<unknown>(civitaiPath) === undefined) {
+    stateManager.set(civitaiPath, DEFAULT_IMAGE_STATE.config.civitai, 'system');
+    console.debug('[ImageMigration] Added civitai config defaults to existing save');
+    migrated = true;
+  }
+
+  return migrated;
 }

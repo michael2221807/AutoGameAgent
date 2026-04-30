@@ -808,11 +808,18 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             v-model="form.url"
             type="text"
             class="form-input"
-            :placeholder="form.apiCategory === 'rerank' || form.apiCategory === 'embedding' ? 'https://api.siliconflow.cn' : 'https://api.example.com'"
+            :placeholder="form.apiCategory === 'rerank' || form.apiCategory === 'embedding'
+              ? 'https://api.siliconflow.cn'
+              : form.apiCategory === 'image'
+                ? 'https://orchestration.civitai.com'
+                : 'https://api.example.com'"
           />
-          <span v-if="form.apiCategory !== 'llm'" class="form-hint">
+          <span v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-hint">
             只填 base URL，不含 <code>/v1/...</code>。系统会自动拼接
             <code>{{ form.apiCategory === 'rerank' ? '/v1/rerank' : '/v1/embeddings' }}</code>
+          </span>
+          <span v-else-if="form.apiCategory === 'image'" class="form-hint">
+            图像 API 的 base URL。Civitai: <code>https://orchestration.civitai.com</code>
           </span>
         </div>
 
@@ -834,7 +841,9 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                 ? 'BAAI/bge-reranker-v2-m3'
                 : form.apiCategory === 'embedding'
                   ? 'BAAI/bge-m3'
-                  : 'gpt-4o'"
+                  : form.apiCategory === 'image'
+                    ? 'urn:air:sdxl:checkpoint:civitai:101055@128078'
+                    : 'gpt-4o'"
             />
             <button
               class="btn-fetch-models"
@@ -865,7 +874,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         </div>
 
         <!-- §11.3: Advanced — custom routing path (only for embedding/rerank) -->
-        <details v-if="form.apiCategory !== 'llm'" class="form-advanced">
+        <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-advanced">
           <summary>高级选项</summary>
           <div class="form-group">
             <label class="form-label">

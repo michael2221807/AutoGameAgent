@@ -41,6 +41,7 @@ const backendOptions: SelectOption[] = [
   { label: 'OpenAI DALL-E', value: 'openai' },
   { label: 'SD-WebUI', value: 'sd_webui' },
   { label: 'ComfyUI', value: 'comfyui' },
+  { label: 'Civitai', value: 'civitai' },
 ];
 
 const dialogRef = ref<HTMLElement | null>(null);

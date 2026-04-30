@@ -766,6 +766,19 @@ export class ImageService {
         resolvedParams = {
           workflowTemplate: hasTemplate ? workflowJson : undefined,
         };
+      } else if (backend === 'civitai') {
+        const base = '系统.扩展.image.config.civitai';
+        resolvedParams = {
+          allowMatureContent: this.stateManager.get<boolean>(`${base}.allowMatureContent`) === true,
+          scheduler: this.stateManager.get<string>(`${base}.scheduler`) ?? undefined,
+          steps: this.stateManager.get<number>(`${base}.steps`) ?? undefined,
+          cfgScale: this.stateManager.get<number>(`${base}.cfgScale`) ?? undefined,
+          seed: this.stateManager.get<number>(`${base}.seed`) ?? undefined,
+          clipSkip: this.stateManager.get<number>(`${base}.clipSkip`) ?? undefined,
+          outputFormat: this.stateManager.get<string>(`${base}.outputFormat`) ?? undefined,
+          additionalNetworksJson: this.stateManager.get<string>(`${base}.additionalNetworksJson`) ?? undefined,
+          controlNetsJson: this.stateManager.get<string>(`${base}.controlNetsJson`) ?? undefined,
+        };
       }
     }
 

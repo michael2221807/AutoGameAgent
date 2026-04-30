@@ -8,7 +8,7 @@
  */
 
 /** Supported image backend types — matches the `imageBackend` field on APIConfig */
-export type ImageBackendType = 'openai' | 'novelai' | 'sd_webui' | 'comfyui';
+export type ImageBackendType = 'openai' | 'novelai' | 'sd_webui' | 'comfyui' | 'civitai';
 
 /** Image task status lifecycle */
 export type ImageTaskStatus = 'pending' | 'tokenizing' | 'generating' | 'complete' | 'failed';
