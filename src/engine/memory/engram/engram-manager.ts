@@ -74,17 +74,10 @@ interface PrunedData {
   relations: EngramRelation[];
 }
 
-/**
- * NPC 关系数组条目
- */
-interface NpcRelationshipEntry {
-  名称: string;
-  类型?: string;
-  [key: string]: unknown;
-}
+type NpcRelationshipEntry = Record<string, unknown>;
 
 /** 当前 engramMemory schema 版本 —— v3 = KnowledgeEdge, v4 = EngramEdge (V2 Graphiti) */
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 
 export class EngramManager {
   private eventBuilder = new EventBuilder();
@@ -104,6 +97,8 @@ export class EngramManager {
   private readonly playerLocationPath: string;
   /** 游戏时间对象路径（2026-04-14 新增） */
   private readonly gameTimePath: string;
+  private readonly npcNameField: string;
+  private readonly npcTypeField: string;
 
   /**
    * 获取当前活跃存档的 profileId + slotId
@@ -121,6 +116,8 @@ export class EngramManager {
       playerName?: string;
       playerLocation?: string;
       gameTime?: string;
+      npcNameField?: string;
+      npcTypeField?: string;
     },
     getActiveSlot?: () => { profileId: string; slotId: string } | null,
   ) {
@@ -130,6 +127,8 @@ export class EngramManager {
     this.playerNamePath = pathOverrides?.playerName ?? '角色.基础信息.姓名';
     this.playerLocationPath = pathOverrides?.playerLocation ?? '角色.基础信息.当前位置';
     this.gameTimePath = pathOverrides?.gameTime ?? '世界.时间';
+    this.npcNameField = pathOverrides?.npcNameField ?? '名称';
+    this.npcTypeField = pathOverrides?.npcTypeField ?? '类型';
     this.vectorStore = new VectorStore();
     this.embedder = new Embedder(aiService);
     this.getActiveSlot = getActiveSlot ?? (() => null);
@@ -195,6 +194,17 @@ export class EngramManager {
       engram.v2Edges = engram.v2Edges ?? [];
       engram.meta.schemaVersion = 4;
       console.info('[Engram] Migrated to v4: initialized v2Edges');
+    }
+
+    if (engram.meta.schemaVersion < 5) {
+      for (const edge of engram.v2Edges) {
+        if (edge.learnedAtRound == null) edge.learnedAtRound = edge.createdAtRound;
+        if (edge.invalidatedAtRound != null && edge.invalidAtRound == null) {
+          edge.invalidAtRound = edge.invalidatedAtRound;
+        }
+      }
+      engram.meta.schemaVersion = 5;
+      console.info('[Engram] Migrated to v5: temporal fields (learnedAtRound, invalidAtRound)');
     }
 
     // Snapshot previous state for delta detection
@@ -316,12 +326,27 @@ export class EngramManager {
 
       if (result.pendingReviewPairs.length > 0) {
         console.log(`[Engram V2] ${result.pendingReviewPairs.length} edge pair(s) flagged for contradiction review`);
-        stateManager.set(this.engramPath + '.meta.v2PendingReview', result.pendingReviewPairs, 'system');
+        const existingPending = engram.meta.v2PendingReview ?? [];
+        const currentEdgeIds = new Set(engram.v2Edges.map((e) => e.id));
+        const merged = [...existingPending, ...result.pendingReviewPairs]
+          .filter((p) => currentEdgeIds.has(p.oldEdgeId));
+        const seen = new Set<string>();
+        const MAX_PENDING_REVIEW = 200;
+        engram.meta.v2PendingReview = merged.filter((p) => {
+          const key = `${p.newFact}::${p.oldEdgeId}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(-MAX_PENDING_REVIEW);
       }
 
-      // Edge vectorization is handled by the existing vectorizeAsync path —
-      // new edges with is_embedded=false will be picked up on the next round's
-      // vectorizeAsync call. No separate fire-and-forget needed here.
+      // Clean up orphaned IDB vectors from renamed edges
+      if (result.renamedEdgeIds.length > 0 && slot?.profileId && slot?.slotId) {
+        const oldIds = result.renamedEdgeIds.map((r) => r.oldId);
+        this.vectorStore
+          .deleteEdgeVectorsByIds(oldIds, slot.profileId, slot.slotId)
+          .catch((err) => console.warn('[Engram] deleteEdgeVectorsByIds failed (non-blocking):', err));
+      }
     }
 
     // ── Step 4: 修剪（重点 NPC 过滤） ──
@@ -331,14 +356,7 @@ export class EngramManager {
 
     // Apply NPC importance filter to V2 edges (episodes >= 3 exempt)
     if (config.pruneToImportantNpcs && engram.v2Edges.length > 0) {
-      const relationships = stateManager.get<NpcRelationshipEntry[]>(this.relationshipsPath) ?? [];
-      const importantNames = new Set<string>();
-      for (const npc of relationships) {
-        const name = npc.名称;
-        if (typeof name === 'string' && name && (npc.类型 === '重点' || !npc.类型)) {
-          importantNames.add(name);
-        }
-      }
+      const importantNames = this.collectImportantNpcNames(stateManager);
       const playerName = stateManager.get<string>(this.playerNamePath) || '玩家';
       const isRelevant = (n: string) => importantNames.has(n) || n === playerName || n === '玩家';
 
@@ -372,6 +390,7 @@ export class EngramManager {
         embeddedEventCount: preserveEmbedFlags.events.filter((e) => e.is_embedded).length,
         embeddedEntityCount: preserveEmbedFlags.entities.filter((e) => e.is_embedded).length,
         schemaVersion: Math.max(engram.meta.schemaVersion, CURRENT_SCHEMA_VERSION),
+        v2PendingReview: engram.meta.v2PendingReview ?? null,
       },
     };
     stateManager.set(this.engramPath, updatedEngram, 'system');
@@ -560,6 +579,7 @@ export class EngramManager {
           embeddedEventCount: raw.meta?.embeddedEventCount ?? 0,
           embeddedEntityCount: raw.meta?.embeddedEntityCount ?? 0,
           schemaVersion: raw.meta?.schemaVersion ?? 1,
+          v2PendingReview: raw.meta?.v2PendingReview ?? null,
         },
       };
     }
@@ -663,51 +683,64 @@ export class EngramManager {
 
     if (ac.signal.aborted) return;
 
+    // Re-read current state and apply is_embedded flags via path-level writes.
+    // Avoid whole-object replacement — a late vectorizeAsync from Round N must
+    // not overwrite meta/entities/edges written by Round N+1.
     const current = this.loadEngram(stateManager);
-    let changed = false;
+
+    let eventsChanged = false;
     const updatedEvents = current.events.map((e) => {
       if (embeddedEventIds.has(e.id) && !e.is_embedded) {
-        changed = true;
+        eventsChanged = true;
         return { ...e, is_embedded: true };
       }
       return e;
     });
+
+    let entitiesChanged = false;
     const updatedEntities = current.entities.map((e) => {
       if (embeddedEntityNames.has(e.name) && !e.is_embedded) {
-        changed = true;
+        entitiesChanged = true;
         return { ...e, is_embedded: true };
       }
       return e;
     });
-    // Mark v2Edges as embedded
+
     const embeddedEdgeIds = new Set<string>();
     for (let i = 0; i < unembeddedEdges.length; i++) {
       if (edgeVectorsSlice[i] && edgeVectorsSlice[i].length > 0) {
         embeddedEdgeIds.add(unembeddedEdges[i].id);
       }
     }
+    let edgesChanged = false;
     const updatedV2Edges = (current.v2Edges ?? []).map((e) => {
       if (embeddedEdgeIds.has(e.id) && !e.is_embedded) {
-        changed = true;
+        edgesChanged = true;
         return { ...e, is_embedded: true };
       }
       return e;
     });
 
-    if (changed) {
-      const updated: EngramStateData = {
-        ...current,
-        events: updatedEvents,
-        entities: updatedEntities,
-        v2Edges: updatedV2Edges,
-        meta: {
-          ...current.meta,
-          embeddedEventCount: updatedEvents.filter((e) => e.is_embedded).length,
-          embeddedEntityCount: updatedEntities.filter((e) => e.is_embedded).length,
-          lastUpdated: Date.now(),
-        },
-      };
-      stateManager.set(this.engramPath, updated, 'system');
+    if (ac.signal.aborted) return;
+
+    if (eventsChanged) {
+      stateManager.set(this.engramPath + '.events', updatedEvents, 'system');
+      stateManager.set(
+        this.engramPath + '.meta.embeddedEventCount',
+        updatedEvents.filter((e) => e.is_embedded).length,
+        'system',
+      );
+    }
+    if (entitiesChanged) {
+      stateManager.set(this.engramPath + '.entities', updatedEntities, 'system');
+      stateManager.set(
+        this.engramPath + '.meta.embeddedEntityCount',
+        updatedEntities.filter((e) => e.is_embedded).length,
+        'system',
+      );
+    }
+    if (edgesChanged) {
+      stateManager.set(this.engramPath + '.v2Edges', updatedV2Edges, 'system');
     }
 
     this._vectorizeAbort = null;
@@ -722,17 +755,7 @@ export class EngramManager {
     relations: EngramRelation[],
     stateManager: StateManager,
   ): PrunedData {
-    const relationships = stateManager.get<NpcRelationshipEntry[]>(this.relationshipsPath) ?? [];
-    const importantNames = new Set<string>();
-
-    for (const npc of relationships) {
-      const name = npc.名称;
-      if (typeof name !== 'string' || !name) continue;
-      if (npc.类型 === '重点' || !npc.类型) {
-        importantNames.add(name);
-      }
-    }
-
+    const importantNames = this.collectImportantNpcNames(stateManager);
     const playerName = stateManager.get<string>(this.playerNamePath) || '玩家';
     const isRelevant = (name: string): boolean =>
       importantNames.has(name) || name === playerName || name === '玩家' || name === 'player';
@@ -753,6 +776,21 @@ export class EngramManager {
       entities: entities.filter((e) => isRelevant(e.name) || e.type === 'location' || e._pendingEnrichment),
       relations: relations.filter((r) => isRelevant(r.fromName) || isRelevant(r.toName)),
     };
+  }
+
+  private collectImportantNpcNames(stateManager: StateManager): Set<string> {
+    const raw = stateManager.get<NpcRelationshipEntry[]>(this.relationshipsPath);
+    const relationships = Array.isArray(raw) ? raw : [];
+    const names = new Set<string>();
+    for (const npc of relationships) {
+      const name = npc[this.npcNameField];
+      if (typeof name !== 'string' || !name) continue;
+      const npcType = npc[this.npcTypeField];
+      if (npcType === '重点' || !npcType) {
+        names.add(name);
+      }
+    }
+    return names;
   }
 
   private createEmpty(): EngramStateData {

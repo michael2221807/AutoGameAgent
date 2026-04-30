@@ -31,7 +31,7 @@ import {
   extractThinkingFromRaw,
 } from '../../core/prompt-debug';
 import { appendChangesToLastNarrative } from '../../audit/audit-append';
-import type { EngramEdge } from '../../memory/engram/knowledge-edge';
+import { isEdgeCurrentlyValid, type EngramEdge } from '../../memory/engram/knowledge-edge';
 import type { EngramEntity } from '../../memory/engram/entity-builder';
 import { loadEngramConfig } from '../../memory/engram/engram-config';
 import { eventBus } from '../../core/event-bus';
@@ -66,10 +66,18 @@ function readMaxRetries(): number {
   }
 }
 
+export interface EdgeReviewDetail {
+  edgeId: string;
+  fact: string;
+  reason: string;
+}
+
 export interface EdgeReviewResult {
   reviewed: number;
   invalidated: number;
   kept: number;
+  invalidatedEdges: EdgeReviewDetail[];
+  keptEdges: EdgeReviewDetail[];
 }
 
 export interface EntityEnrichResult {
@@ -334,15 +342,12 @@ export class FieldRepairPipeline {
     const matchedPairs: Array<{ newFact: string; oldEdgeId: string; similarity: number }> = [];
     for (const pair of pending) {
       const edge = edgeMap.get(pair.oldEdgeId);
-      if (edge && edge.invalidatedAtRound == null) {
+      if (edge && isEdgeCurrentlyValid(edge)) {
         matchedEdges.push(edge);
         matchedPairs.push(pair);
       }
     }
     if (matchedEdges.length === 0) return undefined;
-
-    // Clear pending only after validation — avoid data loss if v2Edges is empty
-    this.stateManager.set(engramPath + '.meta.v2PendingReview', null, 'system');
 
     const reviewList = matchedPairs
       .map((p) => {
@@ -397,48 +402,66 @@ export class FieldRepairPipeline {
     });
 
     const updates = this.parseEdgeUpdates(rawResponse);
-    if (!updates || updates.length === 0) {
+    if (!updates) {
+      console.warn('[EdgeReview] Failed to parse AI response — preserving pending pairs for retry');
+      return undefined;
+    }
+
+    // AI responded successfully — clear pending regardless of whether any edges were invalidated
+    this.stateManager.set(engramPath + '.meta.v2PendingReview', null, 'system');
+
+    if (updates.length === 0) {
       console.log('[EdgeReview] No edge updates returned by AI');
-      return { reviewed: matchedEdges.length, invalidated: 0, kept: matchedEdges.length };
+      const allKept: EdgeReviewDetail[] = matchedEdges.map((e) => ({ edgeId: e.id, fact: e.fact, reason: '' }));
+      return { reviewed: matchedEdges.length, invalidated: 0, kept: matchedEdges.length, invalidatedEdges: [], keptEdges: allKept };
     }
 
     const currentRound = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
     const clonedEdges = v2Edges.map((e) => ({ ...e }));
     const clonedMap = new Map(clonedEdges.map((e) => [e.id, e]));
-    let invalidatedCount = 0;
+    const invalidatedEdges: EdgeReviewDetail[] = [];
     const auditChanges: Array<{ path: string; action: 'set'; oldValue: unknown; newValue: unknown; timestamp: number }> = [];
+    const processedIds = new Set<string>();
 
     for (const update of updates) {
       if (update.action !== 'invalidate') continue;
       const edge = clonedMap.get(update.edge_id);
-      if (!edge || edge.invalidatedAtRound != null) continue;
+      if (!edge || edge.invalidAtRound != null || edge.invalidatedAtRound != null) continue;
 
       edge.invalidatedAtRound = currentRound;
-      invalidatedCount++;
+      edge.invalidAtRound = currentRound;
+      edge.temporalStatus = 'historical';
+      invalidatedEdges.push({ edgeId: edge.id, fact: edge.fact, reason: update.reason });
+      processedIds.add(edge.id);
       auditChanges.push({
-        path: `${engramPath}.v2Edges[id=${update.edge_id}].invalidatedAtRound`,
-        action: 'set',
-        oldValue: undefined,
-        newValue: currentRound,
-        timestamp: Date.now(),
+        path: `${engramPath}.v2Edges[id=${update.edge_id}].invalidAtRound`,
+        action: 'set', oldValue: undefined, newValue: currentRound, timestamp: Date.now(),
       });
     }
 
-    if (invalidatedCount > 0) {
+    if (invalidatedEdges.length > 0) {
       this.stateManager.set(engramPath + '.v2Edges', clonedEdges, 'system');
-      appendChangesToLastNarrative(
-        this.stateManager,
-        this.paths,
-        'edgeReview',
-        auditChanges,
-      );
-      console.log(`[EdgeReview] Invalidated ${invalidatedCount} edge(s)`);
+      if (auditChanges.length > 0) {
+        appendChangesToLastNarrative(this.stateManager, this.paths, 'edgeReview', auditChanges);
+      }
+      if (invalidatedEdges.length > 0) {
+        console.log(`[EdgeReview] Invalidated ${invalidatedEdges.length} edge(s)`);
+      }
     }
+
+    const keptEdges: EdgeReviewDetail[] = matchedEdges
+      .filter((e) => !processedIds.has(e.id))
+      .map((e) => {
+        const u = updates.find((up) => up.edge_id === e.id);
+        return { edgeId: e.id, fact: e.fact, reason: u?.reason ?? '' };
+      });
 
     return {
       reviewed: matchedEdges.length,
-      invalidated: invalidatedCount,
-      kept: matchedEdges.length - invalidatedCount,
+      invalidated: invalidatedEdges.length,
+      kept: keptEdges.length,
+      invalidatedEdges,
+      keptEdges,
     };
   }
 
@@ -456,7 +479,7 @@ export class FieldRepairPipeline {
         .filter((u): u is Record<string, unknown> => u != null && typeof u === 'object')
         .filter((u) => typeof u.edge_id === 'string' && typeof u.action === 'string')
         .map((u) => ({
-          edge_id: (u.edge_id as string).trim().toLowerCase(),
+          edge_id: (u.edge_id as string).trim().toLowerCase().replace(/^\[|\]$/g, ''),
           action: (u.action as string).trim(),
           reason: typeof u.reason === 'string' ? (u.reason as string).trim() : '',
         }));
@@ -475,7 +498,7 @@ export class FieldRepairPipeline {
     const pending = entities.filter((e) => e._pendingEnrichment === true);
     if (pending.length === 0) return undefined;
 
-    const nameList = pending.map((e) => `- ${e.name}（类型: ${e.type}）`).join('\n');
+    const nameList = pending.map((e) => `- ${e.name}`).join('\n');
 
     const enrichPrompt = this.gamePack.prompts['entityEnrich'];
     const promptTemplate = enrichPrompt
@@ -533,8 +556,9 @@ export class FieldRepairPipeline {
       const summary = descMap.get(e.name);
       if (summary && summary.length > 0) {
         enriched++;
+        const currentRound = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
         const { _pendingEnrichment: _, ...rest } = e;
-        return { ...rest, summary, is_embedded: false };
+        return { ...rest, summary, is_embedded: false, enrichedAtRound: currentRound };
       }
       return e;
     });

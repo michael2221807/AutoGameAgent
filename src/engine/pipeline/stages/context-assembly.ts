@@ -546,7 +546,6 @@ export class ContextAssemblyStage implements PipelineStage {
             playerName,
             locationDesc,
             recentNpcNames: this.extractRecentNpcNames(),
-            maxLines: 20,
           },
           this.stateManager,
         );

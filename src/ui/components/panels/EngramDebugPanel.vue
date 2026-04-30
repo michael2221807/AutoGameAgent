@@ -68,6 +68,7 @@ const entities = computed<EngramEntity[]>(() => {
 
 const relations = computed<EngramRelation[]>(() => engramData.value.relations ?? []);
 const v2Edges = computed(() => engramData.value.v2Edges ?? []);
+const pendingEnrichCount = computed(() => entities.value.filter((e) => e._pendingEnrichment).length);
 
 // ─── 向量化统计（2026-04-14 新增：从 is_embedded 真实字段推算） ───
 
@@ -196,16 +197,6 @@ function entityColor(type: string): string {
 
 // ─── 关系过滤（只显示有意义的社交关系，隐藏 co_occurs/appears_at 噪音）───
 
-// 只显示 rel_* 社交关系（从 社交.关系[].与玩家关系 派生），其余全部是内部评分信号
-const displayRelations = computed(() =>
-  relations.value
-    .filter((r) => r.type.startsWith('rel_'))
-    .map((r) => ({
-      ...r,
-      displayLabel: r.type.slice(4), // rel_陌生人 → 陌生人
-    })),
-);
-
 // ─── Cytoscape Graphiti 知识图谱可视化 ───
 
 import cytoscape from 'cytoscape';
@@ -237,6 +228,7 @@ import { buildGraphElements, filterVisibility, type GraphFilterState, type Graph
 let cachedGraphElements: GraphElement[] = [];
 function esc(s: string): string { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// @ts-expect-error cytoscape type package exports StylesheetCSS not Stylesheet
 const CY_STYLES: cytoscape.Stylesheet[] = [
   { selector: 'node', style: {
     'background-color': 'data(bg)' as unknown as string, 'label': 'data(label)',
@@ -252,7 +244,7 @@ const CY_STYLES: cytoscape.Stylesheet[] = [
   }},
   { selector: 'node[nodeCategory="event"]', style: {
     'font-size': '8px', 'color': 'rgba(255,255,255,0.5)', 'border-width': 0, 'background-opacity': 0.6,
-    'text-valign': 'bottom' as cytoscape.Css.TextValign, 'text-margin-y': 4,
+    'text-valign': 'bottom' as never, 'text-margin-y': 4,
   }},
   { selector: 'node[nodeCategory="location"]', style: { 'font-size': '9px' }},
   { selector: 'node[nodeCategory="item"]', style: { 'font-size': '9px' }},
@@ -409,10 +401,6 @@ watch([entities, v2Edges, events], () => {
 });
 watch([gfNodeTypes, gfEdgeFact, gfEdgeMentions, gfEdgeInvalidated, gfRoundMax, gfShowLabels], () => applyGraphFilters(), { deep: true });
 
-function copyText(text: string): void {
-  navigator.clipboard.writeText(text).catch(() => {});
-}
-
 // ─── 新增 section 折叠 ───
 
 type SectionKeyExt = SectionKey | 'graph' | 'architecture';
@@ -463,7 +451,7 @@ onUnmounted(() => destroyGraph());
         </div>
         <div class="stat-card">
           <span class="stat-value">{{ entities.length }}<span class="stat-limit"> / {{ maxEntities }}</span></span>
-          <span class="stat-label">实体</span>
+          <span class="stat-label">实体<span v-if="pendingEnrichCount > 0" class="stat-pending"> ({{ pendingEnrichCount }} 待补全)</span></span>
         </div>
         <div class="stat-card">
           <span class="stat-value">{{ relations.length }}</span>
@@ -597,6 +585,7 @@ onUnmounted(() => destroyGraph());
               <div class="entity-header">
                 <span class="entity-name">{{ ent.name }}</span>
                 <span class="entity-type" :style="{ color: entityColor(ent.type) }">{{ ent.type }}</span>
+                <span v-if="ent._pendingEnrichment" class="enrich-badge" title="Tier 1 桩实体，等待 AI 补全描述">待补全</span>
                 <span
                   :class="['embed-badge', ent.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
                   :title="ent.is_embedded ? '已向量化' : '尚未向量化'"
@@ -627,7 +616,7 @@ onUnmounted(() => destroyGraph());
           <div v-if="isOpen('relations')" class="section-body">
             <div v-if="v2Edges.length === 0" class="empty-hint">暂无事实边 — 请运行几轮游戏</div>
             <template v-else>
-              <div v-for="edge in v2Edges" :key="edge.id" class="relation-row" :class="{ 'relation-row--invalidated': edge.invalidatedAtRound != null }">
+              <div v-for="edge in v2Edges" :key="edge.id" class="relation-row" :class="{ 'relation-row--invalidated': (edge.invalidAtRound ?? edge.invalidatedAtRound) != null }">
                 <div class="edge-header">
                   <span class="rel-from">{{ edge.sourceEntity }}</span>
                   <span class="rel-arrow">→</span>
@@ -636,14 +625,14 @@ onUnmounted(() => destroyGraph());
                     :class="['embed-badge', edge.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
                     :title="edge.is_embedded ? '已向量化' : '尚未向量化'"
                   >{{ edge.is_embedded ? '✓' : '○' }}</span>
-                  <span v-if="edge.invalidatedAtRound != null" class="rel-invalidated">已失效</span>
+                  <span v-if="(edge.invalidAtRound ?? edge.invalidatedAtRound) != null" class="rel-invalidated">已不再成立</span>
                 </div>
                 <div class="rel-fact" :title="edge.fact">{{ edge.fact }}</div>
                 <div class="item-meta">
                   <span>出现{{ edge.episodes.length }}轮</span>
                   <span>第{{ edge.createdAtRound }}轮创建</span>
                   <span>第{{ edge.lastSeenRound }}轮最后出现</span>
-                  <span v-if="edge.invalidatedAtRound != null">第{{ edge.invalidatedAtRound }}轮失效</span>
+                  <span v-if="(edge.invalidAtRound ?? edge.invalidatedAtRound) != null">第{{ edge.invalidAtRound ?? edge.invalidatedAtRound }}轮失效</span>
                 </div>
               </div>
             </template>
@@ -1014,6 +1003,16 @@ onUnmounted(() => destroyGraph());
 .entity-header { display: flex; align-items: center; gap: 8px; }
 .entity-name { font-size: 0.82rem; font-weight: 600; color: var(--color-text,#e0e0e6); }
 .entity-type { font-size: 0.68rem; font-weight: 600; }
+.enrich-badge {
+  font-size: 0.62rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--color-amber-400) 15%, transparent);
+  color: var(--color-amber-400);
+  border: 1px solid color-mix(in oklch, var(--color-amber-400) 30%, transparent);
+  font-weight: 600;
+}
+.stat-pending { color: var(--color-amber-400); font-size: 0.68rem; }
 .item-meta {
   display: flex;
   flex-wrap: wrap;

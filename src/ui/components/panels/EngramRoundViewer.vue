@@ -86,6 +86,7 @@ function outcomeLabel(o: ScoredCandidateTrace['outcome']): string {
     'injected': '已注入',
     'filtered-by-topK': 'topK 截断',
     'filtered-by-rerank': '重排淘汰',
+    'filtered-as-redundant': '去重淘汰',
   };
   return map[o] ?? o;
 }
@@ -160,10 +161,24 @@ function fmtScore(n: number): string {
           <div class="erv__card-label">审查结果</div>
           <div class="erv__review-stats">
             <span>审查 {{ props.write.reviewResult.reviewed }} 条</span>
-            <span class="erv__review-invalidated">失效 {{ props.write.reviewResult.invalidated }} 条</span>
+            <span class="erv__review-invalidated">已不再成立 {{ props.write.reviewResult.invalidated }} 条</span>
             <span>保留 {{ props.write.reviewResult.kept }} 条</span>
           </div>
         </div>
+        <template v-if="props.write.reviewResult.invalidatedEdges?.length">
+          <div v-for="ie in props.write.reviewResult.invalidatedEdges" :key="ie.edgeId" class="erv__review-detail erv__review-detail--invalidated">
+            <span class="erv__review-badge erv__review-badge--invalidated">已不再成立</span>
+            <span class="erv__review-fact">{{ ie.fact }}</span>
+            <span v-if="ie.reason" class="erv__review-reason">{{ ie.reason }}</span>
+          </div>
+        </template>
+        <template v-if="props.write.reviewResult.keptEdges?.length">
+          <div v-for="ke in props.write.reviewResult.keptEdges" :key="ke.edgeId" class="erv__review-detail erv__review-detail--kept">
+            <span class="erv__review-badge erv__review-badge--kept">保留</span>
+            <span class="erv__review-fact">{{ ke.fact }}</span>
+            <span v-if="ke.reason" class="erv__review-reason">{{ ke.reason }}</span>
+          </div>
+        </template>
       </section>
 
       <!-- ═══ READ PATH ═══ -->
@@ -174,23 +189,23 @@ function fmtScore(n: number): string {
           <div class="erv__pipeline-bar">
             <span class="erv__pipeline-query">查询: "{{ props.read.query.length > 60 ? props.read.query.slice(0, 60) + '…' : props.read.query }}"</span>
             <div class="erv__pipeline-stats">
-              <span title="向量·事件">V:{{ props.read.pipeline.vectorEventCount }}</span>
-              <span title="向量·实体">E:{{ props.read.pipeline.vectorEntityCount }}</span>
-              <span title="图遍历">G:{{ props.read.pipeline.graphCount }}</span>
+              <span title="事件语义命中">事件{{ props.read.pipeline.vectorEventCount }}</span>
+              <span title="实体语义命中">实体{{ props.read.pipeline.vectorEntityCount }}</span>
+              <span title="事实候选">事实{{ props.read.pipeline.graphCount }}</span>
               <span class="erv__pipeline-arrow">→</span>
-              <span title="合并后">{{ props.read.pipeline.afterMerge }}</span>
+              <span title="融合后候选">融合{{ props.read.pipeline.afterMerge }}</span>
               <span v-if="props.read.config.rerankEnabled" class="erv__pipeline-arrow">→</span>
-              <span v-if="props.read.config.rerankEnabled" title="重排后">{{ props.read.pipeline.afterRerank }}</span>
+              <span v-if="props.read.config.rerankEnabled" title="精排后">精排{{ props.read.pipeline.afterRerank }}</span>
               <span class="erv__pipeline-arrow">→</span>
-              <span class="erv__pipeline-injected" title="注入">{{ props.read.pipeline.injectedCount }}</span>
+              <span class="erv__pipeline-injected" title="最终注入数">注入{{ props.read.pipeline.injectedCount }}</span>
               <span class="erv__muted">{{ props.read.totalDurationMs.toFixed(0) }}ms</span>
             </div>
           </div>
 
         <!-- Config context -->
         <div class="erv__config-row">
-          阈值 {{ fmtScore(props.read.config.minScore) }} · topK {{ props.read.config.topK }}
-          <span v-if="props.read.config.rerankEnabled"> · rerank topN {{ props.read.config.rerankTopN }}</span>
+          向量{{ props.read.config.embeddingEnabled ? '开' : '关' }} · 阈值 {{ fmtScore(props.read.config.minScore) }} · 候选 {{ props.read.config.maxCandidates }}（边{{ props.read.config.edgeBudget }}/实体{{ props.read.config.entityBudget }}/事件{{ props.read.config.eventBudget }}）
+          <span v-if="props.read.config.rerankEnabled"> · 精排 topN {{ props.read.config.rerankTopN }}</span>
         </div>
 
         <!-- Injected candidates -->
@@ -675,5 +690,45 @@ function fmtScore(n: number): string {
 .erv__heading--review { color: var(--color-danger, #ef4444); }
 .erv__review-stats { display: flex; gap: 12px; font-size: var(--font-size-sm); color: var(--color-text-umber); }
 .erv__review-invalidated { color: var(--color-danger, #ef4444); font-weight: 600; }
+
+.erv__review-detail {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-umber);
+}
+.erv__review-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.erv__review-badge--invalidated {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger, #ef4444);
+}
+.erv__review-badge--kept {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+.erv__review-fact {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.erv__review-reason {
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+  font-style: italic;
+}
 
 </style>

@@ -6,7 +6,7 @@
  */
 import type { EngramEventNode } from './event-builder';
 import type { EngramEntity } from './entity-builder';
-import type { EngramEdge } from './knowledge-edge';
+import { isEdgeCurrentlyValid, type EngramEdge } from './knowledge-edge';
 
 export interface GraphElement {
   group: 'nodes' | 'edges';
@@ -99,7 +99,7 @@ export function buildGraphElements(
 
   for (const edge of v2Edges) {
     if (!entityNames.has(edge.sourceEntity) || !entityNames.has(edge.targetEntity)) continue;
-    const cat = edge.invalidatedAtRound != null ? 'invalidated' : 'fact';
+    const cat = isEdgeCurrentlyValid(edge) ? 'fact' : 'invalidated';
     els.push({
       group: 'edges',
       data: {

@@ -631,10 +631,24 @@ export class GameOrchestrator {
             `[Orchestrator] EntityEnrich: ${result.entityEnrichResult.enriched} entity(s) enriched (${result.entityEnrichResult.remaining} still pending)`,
           );
         }
-        if (result.edgeReviewResult && result.edgeReviewResult.invalidated > 0) {
-          console.log(
-            `[Orchestrator] EdgeReview: ${result.edgeReviewResult.invalidated} edge(s) invalidated out of ${result.edgeReviewResult.reviewed} reviewed`,
-          );
+        if (result.edgeReviewResult) {
+          if (result.edgeReviewResult.invalidated > 0) {
+            console.log(
+              `[Orchestrator] EdgeReview: ${result.edgeReviewResult.invalidated} edge(s) invalidated out of ${result.edgeReviewResult.reviewed} reviewed`,
+            );
+          }
+          const p = this.subPipelines.paths;
+          if (p) {
+            const history = stateManager.get<Array<Record<string, unknown>>>(p.narrativeHistory) ?? [];
+            for (let i = history.length - 1; i >= 0; i--) {
+              const entry = history[i];
+              if (entry._engramWrite) {
+                (entry._engramWrite as Record<string, unknown>).reviewResult = result.edgeReviewResult;
+                stateManager.set(p.narrativeHistory, history, 'system');
+                break;
+              }
+            }
+          }
         }
       } catch (err) {
         console.error('[Orchestrator] FieldRepairPipeline failed:', err);

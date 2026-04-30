@@ -351,7 +351,14 @@ async function bootstrap(): Promise<void> {
     const s = engineStateStore.activeSlotId;
     return p && s ? { profileId: p, slotId: s } : null;
   };
-  const engramManager = new EngramManager(aiService, undefined, getActiveSlot);
+  const engramManager = new EngramManager(
+    aiService,
+    {
+      npcNameField: DEFAULT_ENGINE_PATHS.npcFieldNames.name,
+      npcTypeField: DEFAULT_ENGINE_PATHS.npcFieldNames.type,
+    },
+    getActiveSlot,
+  );
 
   // E.2/E.3: UnifiedRetriever 实例（hybrid 模式时由 ContextAssemblyStage 使用）
   const embedder = new Embedder(aiService);
@@ -363,7 +370,7 @@ async function bootstrap(): Promise<void> {
     reranker,
     () => {
       const cfg = engramManager.getConfig();
-      return { embedding: cfg.embedding, rerank: cfg.rerank };
+      return { embedding: cfg.embedding, rerank: cfg.rerank, shortTermWindow: cfg.shortTermWindow, maxCandidates: cfg.maxCandidates };
     },
     engramDebugStore,
     getActiveSlot,

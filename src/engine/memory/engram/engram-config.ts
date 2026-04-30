@@ -141,6 +141,10 @@ export function normalizeEngramConfig(raw: unknown): EngramConfig {
       clamp(toNumber(r.recencyDecayFloor, d.recencyDecayFloor!), 0, 0.5),
     edgeCapacity:
       clamp(toNumber(r.edgeCapacity, d.edgeCapacity!), 100, 5000),
+    shortTermWindow:
+      clamp(toNumber(r.shortTermWindow, d.shortTermWindow!), 0, 20),
+    maxCandidates:
+      clamp(toNumber(r.maxCandidates, d.maxCandidates!), 5, 100),
   };
 }
 

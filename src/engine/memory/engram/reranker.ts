@@ -64,8 +64,17 @@ export interface RerankResult extends RerankCandidate {
   rerankScore: number;
 }
 
+export interface RerankOutput {
+  results: RerankResult[];
+  actuallyReranked: boolean;
+}
+
 export class Reranker {
   constructor(private aiService: AIService) {}
+
+  isAvailable(): boolean {
+    return this.aiService.getConfigForUsage('rerank') != null;
+  }
 
   /**
    * 对候选列表做重排序
@@ -79,27 +88,23 @@ export class Reranker {
     query: string,
     candidates: RerankCandidate[],
     topK: number,
-  ): Promise<RerankResult[]> {
-    if (candidates.length === 0) return [];
+  ): Promise<RerankOutput> {
+    if (candidates.length === 0) return { results: [], actuallyReranked: false };
 
-    // 检查是否配置了 rerank API
     const config = this.aiService.getConfigForUsage('rerank');
     if (!config) {
-      return this.fallbackSort(candidates, topK);
+      return { results: this.fallbackSort(candidates, topK), actuallyReranked: false };
     }
 
     try {
-      // 按 apiCategory 决定调用路径
       const category = config.apiCategory ?? 'llm';
       if (category === 'rerank') {
-        // 真 rerank 端点（SiliconFlow / Cohere / Jina）
-        return await this.callNativeRerankAPI(config, query, candidates, topK);
+        return { results: await this.callNativeRerankAPI(config, query, candidates, topK), actuallyReranked: true };
       }
-      // 向后兼容：LLM 假装 rerank
-      return await this.callLLMRerankAPI(query, candidates, topK);
+      return { results: await this.callLLMRerankAPI(query, candidates, topK), actuallyReranked: false };
     } catch (err) {
       console.warn('[Reranker] Rerank failed, falling back to score sort:', err);
-      return this.fallbackSort(candidates, topK);
+      return { results: this.fallbackSort(candidates, topK), actuallyReranked: false };
     }
   }
 

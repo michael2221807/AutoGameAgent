@@ -51,6 +51,8 @@ export interface EngramEntity {
    * 成功写入描述后移除此标记。
    */
   _pendingEnrichment?: boolean;
+  /** Round when Tier 2 AI enrichment filled the description */
+  enrichedAtRound?: number;
 }
 
 /** EntityBuilder 从 state 读取时使用的路径集合 */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EntityBuilder, type EntityBuilderPaths } from '@/engine/memory/engram/entity-builder';
+import { EntityBuilder, inferEntityType, type EntityBuilderPaths } from '@/engine/memory/engram/entity-builder';
 import type { EngramEventNode, EngramEventStructuredKV } from '@/engine/memory/engram/event-builder';
 import { createMockStateManager } from '@/engine/__test-utils__/state-manager.mock';
 
@@ -189,5 +189,39 @@ describe('EntityBuilder (2026-04-14 双源重构)', () => {
       const entities = builder.build([], sm, PATHS);
       expect(entities.every((e) => e.is_embedded === false)).toBe(true);
     });
+  });
+});
+
+describe('inferEntityType', () => {
+  it.each([
+    { name: '玩家', expected: 'player' },
+    { name: 'player', expected: 'player' },
+  ])('returns "player" for "$name"', ({ name, expected }) => {
+    expect(inferEntityType(name)).toBe(expected);
+  });
+
+  it.each([
+    { name: '张三', label: 'a normal NPC name' },
+    { name: '李四', label: 'a regular name, no markers' },
+  ])('returns "npc" for $label ("$name")', ({ name }) => {
+    expect(inferEntityType(name)).toBe('npc');
+  });
+
+  it.each([
+    { name: '凌云·天风', marker: '·' },
+    { name: '青云山', marker: '山' },
+    { name: '南阳城', marker: '城' },
+    { name: '天剑酒馆', marker: '酒馆' },
+  ])('returns "location" for "$name" (contains $marker)', ({ name }) => {
+    expect(inferEntityType(name)).toBe('location');
+  });
+
+  it.each([
+    { name: '星尘计划', marker: '计划' },
+    { name: '传承卷轴', marker: '卷轴' },
+    { name: '太虚笔记本', marker: '笔记本' },
+    { name: '破军剑', marker: '剑' },
+  ])('returns "item" for "$name" (contains $marker)', ({ name }) => {
+    expect(inferEntityType(name)).toBe('item');
   });
 });

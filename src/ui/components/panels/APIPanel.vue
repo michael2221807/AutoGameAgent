@@ -47,7 +47,7 @@ const USAGE_TYPE_META: Record<UsageType, UsageTypeMeta> = {
   instruction_generation:  { label: '指令生成',      category: 'plot',         tip: '生成结构化指令和行动选项，通常随主回合一起执行' },
   privacy_repair:          { label: '扩展字段修复',   category: 'repair',       tip: 'NSFW 模式下自动修复不合规的私密字段描述，可配置重试次数' },
   field_repair:            { label: '字段补齐',      category: 'repair',       tip: '自动补齐 AI 遗漏的必填字段（如属性、装备等），减少数据缺失' },
-  imageGeneration:         { label: '图像生成',      category: 'image',        tip: '调用图像生成 API（DALL-E / ComfyUI / SD 等）生成场景或角色图' },
+  imageGeneration:         { label: '图像生成',      category: 'image',        tip: '调用图像生成 API（DALL-E / ComfyUI / SD / Civitai 等）生成场景或角色图' },
   imageCharacterTokenizer: { label: '角色视觉提取',  category: 'image',        tip: '用 LLM 从角色图像中提取叙事描述，供后续 prompt 引用' },
   imageSceneTokenizer:     { label: '场景视觉提取',  category: 'image',        tip: '用 LLM 从场景图像中提取环境描述，增强叙事沉浸感' },
   imageSecretTokenizer:    { label: '私密视觉提取',  category: 'image',        tip: '用 LLM 从 NSFW 图像中提取描述（仅 NSFW 模式下使用）' },
@@ -278,7 +278,7 @@ const CATEGORY_META: Record<APICategory, { label: string; desc: string }> = {
   },
   image: {
     label: '图像生成',
-    desc: '图像生成 — NovelAI / DALL-E / SD-WebUI / ComfyUI 等图像 API',
+    desc: '图像生成 — NovelAI / DALL-E / SD-WebUI / ComfyUI / Civitai 等图像 API',
   },
 };
 

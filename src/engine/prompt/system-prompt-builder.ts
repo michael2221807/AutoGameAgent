@@ -342,7 +342,7 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
 
   // ── 9c. Engram / Unified Retrieval ──
   if (params.engramRetrievalBlock?.trim()) {
-    push('memory_engram', '语义记忆检索', '记忆', 'system', `# 统一记忆检索\n${params.engramRetrievalBlock}`);
+    push('memory_engram', 'Engram · 事实/实体/事件', '记忆', 'system', `# Engram 知识图谱检索\n${params.engramRetrievalBlock}`);
   }
 
   // ── 10. Story Plan ──

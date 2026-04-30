@@ -92,6 +92,10 @@ export interface EngramConfig {
   recencyDecayFloor?: number;
   /** Maximum number of EngramEdge entries (default 800) */
   edgeCapacity?: number;
+  /** Rounds to exclude from event retrieval (overlap with short-term memory, default 5) */
+  shortTermWindow?: number;
+  /** Maximum candidate count per retrieval (split 50/25/25 across edge/entity/event, default 20) */
+  maxCandidates?: number;
 }
 
 /**
@@ -128,15 +132,15 @@ export interface ScoredCandidateTrace {
   source: 'edge' | 'entity' | 'event';
   /** 评分分量分解 */
   components: ScoredComponent[];
-  /** 重排后的混合分数（base×0.7 + rerankScore×0.4），仅重排改变了分数时才有值 */
+  /** 重排后的混合分数（base×0.6 + rerankScore×0.4），仅重排生效时有值 */
   rerankBlendedScore?: number;
-  /** 重排前的分数 */
+  /** 重排前的 RRF 分数 */
   preRerankScore?: number;
   /**
    * 最终是注入还是淘汰。
    * 注意：低于 minScore 的候选在 vectorSearch 内部就被丢弃，不会进入 trace 列表。
    */
-  outcome: 'injected' | 'filtered-by-topK' | 'filtered-by-rerank';
+  outcome: 'injected' | 'filtered-by-topK' | 'filtered-by-rerank' | 'filtered-as-redundant';
   /** 溯源 */
   eventId?: string;
   entityName?: string;
@@ -218,6 +222,8 @@ export interface EngramWriteSnapshot {
     reviewed: number;
     invalidated: number;
     kept: number;
+    invalidatedEdges?: Array<{ edgeId: string; fact: string; reason: string }>;
+    keptEdges?: Array<{ edgeId: string; fact: string; reason: string }>;
   };
   /** 事实边统计（V2 Graphiti） */
   edges?: {
@@ -252,6 +258,11 @@ export interface EngramReadSnapshot {
     rerankEnabled: boolean;
     rerankTopN: number;
     embeddingEnabled: boolean;
+    shortTermWindow: number;
+    maxCandidates: number;
+    edgeBudget: number;
+    entityBudget: number;
+    eventBudget: number;
   };
 }
 
@@ -283,4 +294,6 @@ export const DEFAULT_ENGRAM_CONFIG: EngramConfig = {
   recencyDecayBase: 0.997,
   recencyDecayFloor: 0.05,
   edgeCapacity: 800,
+  shortTermWindow: 5,
+  maxCandidates: 20,
 };

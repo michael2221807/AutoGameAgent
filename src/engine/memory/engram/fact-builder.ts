@@ -7,7 +7,7 @@
  * Design doc: docs/architecture/engram-v2-graphiti-alignment.md §3.2.4
  */
 import type { EngramEdge } from './knowledge-edge';
-import { engramEdgeId } from './knowledge-edge';
+import { engramEdgeId, isEdgeCurrentlyValid } from './knowledge-edge';
 import type { EngramEntity } from './entity-builder';
 import type { VectorStore } from './vector-store';
 
@@ -28,6 +28,7 @@ export interface FactBuildResult {
   newEdges: EngramEdge[];
   reinforcedIds: string[];
   pendingReviewPairs: Array<{ newFact: string; oldEdgeId: string; similarity: number }>;
+  renamedEdgeIds: Array<{ oldId: string; newId: string }>;
 }
 
 export function buildFacts(
@@ -44,6 +45,7 @@ export function buildFacts(
   const newEdges: EngramEdge[] = [];
   const reinforcedIds: string[] = [];
   const pendingReviewPairs: FactBuildResult['pendingReviewPairs'] = [];
+  const renamedEdgeIds: FactBuildResult['renamedEdgeIds'] = [];
   const reviewedEdgeIds = new Set<string>();
 
   for (const kf of knowledgeFacts) {
@@ -66,6 +68,11 @@ export function buildFacts(
         existing.episodes.push(currentEventId);
       }
       existing.lastSeenRound = currentRound;
+      if (!isEdgeCurrentlyValid(existing)) {
+        existing.invalidatedAtRound = undefined;
+        existing.invalidAtRound = undefined;
+        existing.temporalStatus = undefined;
+      }
       reinforcedIds.push(id);
       continue;
     }
@@ -79,7 +86,7 @@ export function buildFacts(
       const tgtLower = kf.targetEntity.toLowerCase();
 
       for (const edge of existingEdges) {
-        if (edge.invalidatedAtRound != null) continue;
+        if (!isEdgeCurrentlyValid(edge)) continue;
         const eSrc = edge.sourceEntity.toLowerCase();
         const eTgt = edge.targetEntity.toLowerCase();
         const sameEntityPair = (eSrc === srcLower && eTgt === tgtLower) || (eSrc === tgtLower && eTgt === srcLower);
@@ -92,8 +99,14 @@ export function buildFacts(
         if (sim > 0.85) {
           // Duplicate — reinforce existing, use longer fact text
           if (kf.fact.length > edge.fact.length) {
+            const oldId = edge.id;
             edge.fact = kf.fact;
+            edge.id = engramEdgeId(edge.sourceEntity, edge.targetEntity, edge.fact);
             edge.is_embedded = false;
+            edgeMap.delete(oldId);
+            edgeMap.set(edge.id, edge);
+            renamedEdgeIds.push({ oldId, newId: edge.id });
+            delete edgeVectors[oldId];
           }
           if (currentEventId && !edge.episodes.includes(currentEventId)) {
             edge.episodes.push(currentEventId);
@@ -117,7 +130,7 @@ export function buildFacts(
     if (newVec && vectorStore) {
       const broadCandidates: Array<{ edgeId: string; sim: number }> = [];
       for (const edge of existingEdges) {
-        if (edge.invalidatedAtRound != null) continue;
+        if (!isEdgeCurrentlyValid(edge)) continue;
         const oldVec = edgeVectors[edge.id];
         if (!oldVec) continue;
         const srcLower = kf.sourceEntity.toLowerCase();
@@ -150,6 +163,7 @@ export function buildFacts(
         if (sim > 0.85) {
           if (kf.fact.length > ne.fact.length) {
             ne.fact = kf.fact;
+            ne.id = engramEdgeId(ne.sourceEntity, ne.targetEntity, ne.fact);
             ne.is_embedded = false;
           }
           if (currentEventId && !ne.episodes.includes(currentEventId)) {
@@ -173,10 +187,11 @@ export function buildFacts(
       is_embedded: false,
       createdAtRound: currentRound,
       lastSeenRound: currentRound,
+      learnedAtRound: currentRound,
     });
   }
 
-  return { newEdges, reinforcedIds, pendingReviewPairs };
+  return { newEdges, reinforcedIds, pendingReviewPairs, renamedEdgeIds };
 }
 
 export function pruneEdgesV2(
@@ -187,7 +202,7 @@ export function pruneEdgesV2(
   // Invalidated edges decay faster
   const scored = edges.map((e) => {
     const age = Math.max(0, currentRound - e.lastSeenRound);
-    const isInvalidated = e.invalidatedAtRound != null;
+    const isInvalidated = !isEdgeCurrentlyValid(e);
     const decayRate = isInvalidated ? 0.9 : 0.97;
     const invalidPenalty = isInvalidated ? 0.3 : 1.0;
     const score = Math.pow(decayRate, age / 10) * (e.episodes.length > 1 ? 1.2 : 1.0) * invalidPenalty;

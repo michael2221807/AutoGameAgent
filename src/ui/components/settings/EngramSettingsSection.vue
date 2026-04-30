@@ -215,6 +215,39 @@ watch(config, () => {
           </div>
         </div>
 
+        <!-- ─ 检索预算 ─ -->
+        <div class="sub-section">
+          <div class="sub-section-title">检索预算</div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">候选上限</span>
+              <span class="setting-desc">每次检索的最大候选总数，按 50/25/25 分配给事实/实体/事件（5–100）</span>
+            </div>
+            <input
+              v-model.number="config.maxCandidates"
+              type="number"
+              min="5"
+              max="100"
+              class="number-input"
+            />
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">短期窗口</span>
+              <span class="setting-desc">排除最近 N 轮的事件（与短期记忆重叠部分），避免重复注入（0–20）</span>
+            </div>
+            <input
+              v-model.number="config.shortTermWindow"
+              type="number"
+              min="0"
+              max="20"
+              class="number-input"
+            />
+          </div>
+        </div>
+
         <!-- ─ 事件修剪 ─ -->
         <div class="sub-section">
           <div class="sub-section-title">事件修剪</div>

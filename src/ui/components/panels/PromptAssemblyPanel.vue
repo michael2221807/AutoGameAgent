@@ -223,7 +223,7 @@ function parseSourceTag(tag: string | undefined): SourceDisplay {
       write_emotion_guard: '情绪约束', write_no_control: 'NoControl',
       perspective_prompt: '叙事人称', length_prompt: '字数要求',
       memory_long: '长期记忆', memory_mid: '中期记忆', memory_implicit: '隐式记忆',
-      memory_engram: '语义检索', story_plan: '剧情安排', npc_present: '在场角色',
+      memory_engram: 'Engram · 事实/实体/事件', story_plan: '剧情安排', npc_present: '在场角色',
       heroine_plan: '剧情规划', state_world: '世界状态', state_environment: '环境',
       state_role: '角色数据', state_tasks: '任务', state_agreements: '约定',
       narrative_constraints: '叙事约束+风格', extra_prompt: '额外要求',

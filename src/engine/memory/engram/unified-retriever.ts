@@ -7,16 +7,17 @@
 import type { StateManager } from '../../core/state-manager';
 import type { VectorStore, VectorStoreData } from './vector-store';
 import type { Embedder } from './embedder';
-import type { Reranker } from './reranker';
+import type { Reranker, RerankCandidate } from './reranker';
 import type { EngramEventNode } from './event-builder';
 import type { EngramEntity } from './entity-builder';
-import type { EngramEdge } from './knowledge-edge';
+import { isEdgeCurrentlyValid, type EngramEdge } from './knowledge-edge';
 import { bm25Score, rrfMerge } from './search-utils';
 import type {
   EngramEmbeddingConfig,
   EngramRerankConfig,
   EngramReadSnapshot,
   ScoredCandidateTrace,
+  ScoredComponent,
 } from './engram-types';
 
 // ─── 类型定义 ───
@@ -26,7 +27,6 @@ export interface RetrievalContext {
   playerName: string;
   locationDesc: string;
   recentNpcNames: string[];
-  maxLines: number;
 }
 
 /** Engram 状态数据结构（从状态树读取） */
@@ -41,6 +41,8 @@ interface EngramStateData {
 export interface UnifiedRetrieverConfig {
   embedding: EngramEmbeddingConfig;
   rerank: EngramRerankConfig;
+  shortTermWindow?: number;
+  maxCandidates?: number;
 }
 
 /**
@@ -70,7 +72,7 @@ export class UnifiedRetriever {
   constructor(
     private vectorStore: VectorStore,
     private embedder: Embedder,
-    _reranker?: Reranker,
+    private reranker?: Reranker,
     private configOrGetter?: UnifiedRetrieverConfig | (() => UnifiedRetrieverConfig | undefined),
     private debugRecorder?: IDebugRecorder,
     private getActiveSlot?: () => { profileId: string; slotId: string } | null,
@@ -123,7 +125,10 @@ export class UnifiedRetriever {
     retrieveStart: number,
     _stateManager: StateManager,
   ): Promise<string> {
-    const LIMIT = 20;
+    const topK = this.config?.embedding?.topK ?? 20;
+    const minScore = this.config?.embedding?.minScore ?? 0.3;
+    const shortTermWindow = this.config?.shortTermWindow ?? 5;
+    const maxCandidates = this.config?.maxCandidates ?? 20;
     const embeddingEnabled = this.config?.embedding?.enabled !== false;
 
     // One embedding call for the query, reused by all scopes
@@ -140,7 +145,11 @@ export class UnifiedRetriever {
       } catch { /* embedding failure → cosine paths produce empty lists */ }
     }
 
-    const validEdges = v2Edges.filter((e) => e.invalidatedAtRound == null);
+    const validEdges = v2Edges.filter(isEdgeCurrentlyValid);
+
+    // Score tracing: RRF rank contributions per retrieval method
+    const bfsHitIds = new Set<string>();
+    const rrfContributions = new Map<string, Array<{ method: string; rank: number; contribution: number }>>();
 
     // ── Scope 1: Edge search (Cosine + BM25 + BFS) ──
     const edgeCosineIds: string[] = [];
@@ -153,9 +162,9 @@ export class UnifiedRetriever {
           if (!vec) return null;
           return { id: e.id, score: this.vectorStore.cosineSimilarity(queryVec!, vec) };
         })
-        .filter((x): x is { id: string; score: number } => x != null && x.score > 0.3)
+        .filter((x): x is { id: string; score: number } => x != null && x.score > minScore)
         .sort((a, b) => b.score - a.score)
-        .slice(0, LIMIT);
+        .slice(0, topK);
       edgeCosineIds.push(...scored.map((s) => s.id));
     }
 
@@ -163,7 +172,7 @@ export class UnifiedRetriever {
       .map((e) => ({ id: e.id, score: bm25Score(query, e.fact) }))
       .filter((s) => s.score > 0.05)
       .sort((a, b) => b.score - a.score)
-      .slice(0, LIMIT);
+      .slice(0, topK);
     edgeBm25Ids.push(...bm25Scored.map((s) => s.id));
 
     // BFS expansion from Cosine + BM25 seed entities
@@ -211,9 +220,19 @@ export class UnifiedRetriever {
       frontier = next;
     }
 
-    const bfsEdgeIds = Array.from(bfsEdgeIdSet).slice(0, LIMIT);
+    const bfsEdgeIds = Array.from(bfsEdgeIdSet).slice(0, topK);
+    for (const id of bfsEdgeIds) bfsHitIds.add(id);
     const edgeRrf = rrfMerge([edgeCosineIds, edgeBm25Ids, bfsEdgeIds]);
-    const topEdges = edgeRrf.slice(0, context.maxLines);
+    const edgeMethodNames = ['余弦', 'BM25', '图展开'];
+    for (const [li, list] of [edgeCosineIds, edgeBm25Ids, bfsEdgeIds].entries()) {
+      for (let r = 0; r < list.length; r++) {
+        const c = rrfContributions.get(list[r]) ?? [];
+        c.push({ method: edgeMethodNames[li], rank: r + 1, contribution: 1 / (r + 2) });
+        rrfContributions.set(list[r], c);
+      }
+    }
+    const edgeBudget = Math.max(1, Math.floor(maxCandidates * 0.5));
+    let topEdges = edgeRrf.slice(0, edgeBudget);
 
     // ── Scope 2: Entity search (Cosine + BM25) ──
     const entityCosineIds: string[] = [];
@@ -226,9 +245,9 @@ export class UnifiedRetriever {
           if (!vec) return null;
           return { id: e.name, score: this.vectorStore.cosineSimilarity(queryVec!, vec) };
         })
-        .filter((x): x is { id: string; score: number } => x != null && x.score > 0.3)
+        .filter((x): x is { id: string; score: number } => x != null && x.score > minScore)
         .sort((a, b) => b.score - a.score)
-        .slice(0, LIMIT);
+        .slice(0, topK);
       entityCosineIds.push(...scored.map((s) => s.id));
     }
 
@@ -236,17 +255,24 @@ export class UnifiedRetriever {
       .map((e) => ({ id: e.name, score: bm25Score(query, `${e.name} ${e.summary}`) }))
       .filter((s) => s.score > 0.05)
       .sort((a, b) => b.score - a.score)
-      .slice(0, LIMIT);
+      .slice(0, topK);
     entityBm25Ids.push(...entityBm25.map((s) => s.id));
 
     const entityRrf = rrfMerge([entityCosineIds, entityBm25Ids]);
-    const topEntities = entityRrf.slice(0, 5);
+    for (const [li, list] of [entityCosineIds, entityBm25Ids].entries()) {
+      const mn = li === 0 ? '余弦' : 'BM25';
+      for (let r = 0; r < list.length; r++) {
+        const c = rrfContributions.get(list[r]) ?? [];
+        c.push({ method: mn, rank: r + 1, contribution: 1 / (r + 2) });
+        rrfContributions.set(list[r], c);
+      }
+    }
+    const entityBudget = Math.max(1, Math.floor(maxCandidates * 0.25));
+    let topEntities = entityRrf.slice(0, entityBudget);
 
     // ── Scope 3: Event search (Cosine + BM25) ──
-    const SHORT_TERM_WINDOW = 5;
-    // Exclude events from the most recent 5 rounds (already in short-term memory context)
     const searchableEvents = events.filter(
-      (e) => e.roundNumber == null || currentRound - e.roundNumber >= SHORT_TERM_WINDOW,
+      (e) => e.roundNumber == null || currentRound - e.roundNumber >= shortTermWindow,
     );
     const eventCosineIds: string[] = [];
     const eventBm25Ids: string[] = [];
@@ -258,9 +284,9 @@ export class UnifiedRetriever {
           if (!vec) return null;
           return { id: e.id, score: this.vectorStore.cosineSimilarity(queryVec!, vec) };
         })
-        .filter((x): x is { id: string; score: number } => x != null && x.score > 0.3)
+        .filter((x): x is { id: string; score: number } => x != null && x.score > minScore)
         .sort((a, b) => b.score - a.score)
-        .slice(0, LIMIT);
+        .slice(0, topK);
       eventCosineIds.push(...scored.map((s) => s.id));
     }
 
@@ -268,36 +294,106 @@ export class UnifiedRetriever {
       .map((e) => ({ id: e.id, score: bm25Score(query, e.summary || e.text) }))
       .filter((s) => s.score > 0.05)
       .sort((a, b) => b.score - a.score)
-      .slice(0, LIMIT);
+      .slice(0, topK);
     eventBm25Ids.push(...eventBm25.map((s) => s.id));
 
     const eventRrf = rrfMerge([eventCosineIds, eventBm25Ids]);
-    const topEvents = eventRrf.slice(0, 5);
+    for (const [li, list] of [eventCosineIds, eventBm25Ids].entries()) {
+      const mn = li === 0 ? '余弦' : 'BM25';
+      for (let r = 0; r < list.length; r++) {
+        const c = rrfContributions.get(list[r]) ?? [];
+        c.push({ method: mn, rank: r + 1, contribution: 1 / (r + 2) });
+        rrfContributions.set(list[r], c);
+      }
+    }
+    const eventBudget = Math.max(1, Math.floor(maxCandidates * 0.25));
+    let topEvents = eventRrf.slice(0, eventBudget);
+
+    // Capture pre-rerank counts for snapshot
+    const afterMergeCount = topEdges.length + topEntities.length + topEvents.length;
+
+    // ── Optional rerank (blends RRF base score with rerank relevance) ──
+    const rerankEnabled = this.config?.rerank?.enabled === true && this.reranker != null;
+    const rerankTopN = this.config?.rerank?.topN ?? maxCandidates;
+    let rerankUsed = false;
+    const rerankScoresMap = new Map<string, number>();
+
+    const entityMap = new Map(entities.map((e) => [e.name, e]));
+    const eventMap = new Map(events.map((e) => [e.id, e]));
+
+    const rerankSurvivorIds = new Set<string>();
+
+    if (rerankEnabled && this.reranker && this.reranker.isAvailable()) {
+      interface ScopedCandidate extends RerankCandidate { scope: 'edge' | 'entity' | 'event'; originalId: string }
+      const allCandidates: ScopedCandidate[] = [];
+      for (const te of topEdges) {
+        const edge = edgeMap.get(te.id);
+        if (edge) allCandidates.push({ text: `[${edge.sourceEntity}→${edge.targetEntity}] ${edge.fact}`, score: te.score, source: 'edge', originalId: te.id, scope: 'edge' });
+      }
+      for (const te of topEntities) {
+        const ent = entityMap.get(te.id);
+        if (ent) allCandidates.push({ text: `${ent.name}: ${ent.summary ?? ''}`, score: te.score, source: 'entity', originalId: te.id, scope: 'entity' });
+      }
+      for (const te of topEvents) {
+        const evt = eventMap.get(te.id);
+        if (evt) allCandidates.push({ text: (evt.midTermSummary || evt.text).slice(0, 300), score: te.score, source: 'event', originalId: te.id, scope: 'event' });
+      }
+
+      try {
+        const { results: reranked, actuallyReranked } = await this.reranker.rerank(query, allCandidates, rerankTopN);
+        rerankUsed = actuallyReranked;
+
+        if (actuallyReranked) {
+          for (const r of reranked) {
+            const c = r as ScopedCandidate & { rerankScore: number };
+            rerankScoresMap.set(c.originalId, c.rerankScore);
+            rerankSurvivorIds.add(c.originalId);
+          }
+          const filterAndBlend = (items: Array<{ id: string; score: number }>) =>
+            items
+              .filter((e) => rerankSurvivorIds.has(e.id))
+              .map((e) => {
+                const rs = rerankScoresMap.get(e.id)!;
+                return { ...e, score: e.score * 0.6 + rs * 0.4 };
+              })
+              .sort((a, b) => b.score - a.score);
+
+          topEdges = filterAndBlend(topEdges);
+          topEntities = filterAndBlend(topEntities);
+          topEvents = filterAndBlend(topEvents);
+        }
+      } catch (err) {
+        console.warn('[UnifiedRetriever] Rerank failed, using RRF order:', err);
+      }
+    }
 
     // ── Format output ──
     const lines: string[] = [];
-    const entityMap = new Map(entities.map((e) => [e.name, e]));
-    const eventMap = new Map(events.map((e) => [e.id, e]));
+
+    const MAX_CHARS = 3000;
+    const mentionedEntities = new Set<string>();
 
     if (topEdges.length > 0) {
       lines.push('相关事实：');
       for (let i = 0; i < topEdges.length; i++) {
         const edge = edgeMap.get(topEdges[i].id);
-        if (edge) {
-          lines.push(`${i + 1}. [${edge.sourceEntity}→${edge.targetEntity}] ${edge.fact}（第${edge.lastSeenRound}轮）`);
-        }
+        if (!edge) continue;
+        lines.push(`${i + 1}. [${edge.sourceEntity}→${edge.targetEntity}] ${edge.fact}（第${edge.lastSeenRound}轮）`);
+        mentionedEntities.add(edge.sourceEntity);
+        mentionedEntities.add(edge.targetEntity);
       }
     }
 
-    if (topEntities.length > 0) {
+    const usefulEntities = topEntities.filter((te) => {
+      const entity = entityMap.get(te.id);
+      return entity && entity.summary && !mentionedEntities.has(entity.name);
+    });
+    if (usefulEntities.length > 0) {
       lines.push('');
       lines.push('相关角色：');
-      for (const te of topEntities) {
-        const entity = entityMap.get(te.id);
-        if (entity) {
-          const desc = entity.summary ? `：${entity.summary}` : '';
-          lines.push(`- ${entity.name}${desc}`);
-        }
+      for (const te of usefulEntities) {
+        const entity = entityMap.get(te.id)!;
+        lines.push(`- ${entity.name}：${entity.summary}`);
       }
     }
 
@@ -313,32 +409,146 @@ export class UnifiedRetriever {
       }
     }
 
-    const result = lines.join('\n').trim();
+    // C3: Historical/superseded facts — BM25 match against invalidated edges
+    const historicalEdges = v2Edges.filter((e) => !isEdgeCurrentlyValid(e));
+    const injectedHistorical: Array<{ edge: EngramEdge; score: number }> = [];
+    if (historicalEdges.length > 0) {
+      const historicalBm25 = historicalEdges
+        .map((e) => ({ edge: e, score: bm25Score(query, e.fact) }))
+        .filter((s) => s.score > 0.3)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 2);
 
-    // Build candidates for debug snapshot
+      if (historicalBm25.length > 0) {
+        lines.push('');
+        lines.push('历史事实（已不再成立）：');
+        for (const h of historicalBm25) {
+          const status = h.edge.temporalStatus === 'superseded' ? '已被取代' : '已失效';
+          lines.push(`- [${status}] [${h.edge.sourceEntity}→${h.edge.targetEntity}] ${h.edge.fact}（第${h.edge.invalidAtRound ?? h.edge.invalidatedAtRound ?? '?'}轮失效）`);
+          injectedHistorical.push(h);
+        }
+      }
+    }
+
+    let result = lines.join('\n').trim();
+    if (result.length > MAX_CHARS) {
+      const lastNewline = result.lastIndexOf('\n', MAX_CHARS);
+      result = lastNewline > 0 ? result.slice(0, lastNewline) : result.slice(0, MAX_CHARS);
+      const resultLines = result.split('\n');
+      while (resultLines.length > 0 && resultLines[resultLines.length - 1].trim().endsWith('：')) {
+        resultLines.pop();
+      }
+      result = resultLines.join('\n');
+      if (!result.includes('已不再成立')) {
+        injectedHistorical.length = 0;
+      }
+    }
+
+    // Build candidates for debug snapshot — components show RRF rank contributions + rerank
+    const buildComponents = (id: string, scope: 'edge' | 'entity' | 'event'): ScoredComponent[] => {
+      const comps: ScoredComponent[] = [];
+      const contribs = rrfContributions.get(id);
+      const rr = rerankScoresMap.get(id);
+      const baseWeight = (rerankUsed && rr != null) ? 0.6 : 1;
+      if (contribs) {
+        const colors: Record<string, ScoredComponent['color']> = { '余弦': 'blue', 'BM25': 'green', '图展开': 'purple' };
+        for (const c of contribs) {
+          comps.push({
+            label: `${scope === 'edge' ? '边' : scope === 'entity' ? '实体' : '事件'}${c.method}`,
+            rawValue: c.contribution,
+            weight: baseWeight,
+            contribution: c.contribution * baseWeight,
+            color: colors[c.method] ?? 'gray',
+          });
+        }
+      }
+      if (rr != null) {
+        comps.push({ label: '精排', rawValue: rr, weight: 0.4, contribution: rr * 0.4, color: 'orange' });
+      }
+      return comps;
+    };
+
     const candidates: ScoredCandidateTrace[] = [];
+    const injectedEntityIds = new Set(usefulEntities.map((te) => te.id));
+    const actualInjectedCount = topEdges.length + usefulEntities.length + topEvents.length + injectedHistorical.length;
+
+    const makeRerankFields = (id: string): Pick<ScoredCandidateTrace, 'preRerankScore' | 'rerankBlendedScore'> => {
+      const rr = rerankScoresMap.get(id);
+      if (!rerankUsed || rr == null) return {};
+      const pre = (edgeRrf.find((e) => e.id === id) ?? entityRrf.find((e) => e.id === id) ?? eventRrf.find((e) => e.id === id))?.score;
+      return pre != null ? { preRerankScore: pre, rerankBlendedScore: pre * 0.6 + rr * 0.4 } : {};
+    };
+
     for (const te of topEdges) {
       const edge = edgeMap.get(te.id);
       if (edge) candidates.push({
         text: `[${edge.sourceEntity}→${edge.targetEntity}] ${edge.fact}`.slice(0, 150),
-        finalScore: te.score, source: 'edge', components: [], outcome: 'injected',
-        roundNumber: edge.lastSeenRound,
+        finalScore: te.score, source: 'edge', components: buildComponents(te.id, 'edge'), outcome: 'injected',
+        roundNumber: edge.lastSeenRound, ...makeRerankFields(te.id),
       });
     }
     for (const te of topEntities) {
       const entity = entityMap.get(te.id);
       if (entity) candidates.push({
         text: `${entity.name}: ${entity.summary ?? ''}`.slice(0, 150),
-        finalScore: te.score, source: 'entity', components: [], outcome: 'injected',
-        entityName: entity.name,
+        finalScore: te.score, source: 'entity', components: buildComponents(te.id, 'entity'),
+        outcome: injectedEntityIds.has(te.id) ? 'injected' : 'filtered-as-redundant',
+        entityName: entity.name, ...makeRerankFields(te.id),
       });
     }
     for (const te of topEvents) {
       const evt = eventMap.get(te.id);
       if (evt) candidates.push({
         text: (evt.midTermSummary || evt.text).slice(0, 150),
-        finalScore: te.score, source: 'event', components: [], outcome: 'injected',
+        finalScore: te.score, source: 'event', components: buildComponents(te.id, 'event'), outcome: 'injected',
+        eventId: evt.id, roundNumber: evt.roundNumber, ...makeRerankFields(te.id),
+      });
+    }
+
+    // Add budget-cut and rerank-filtered candidates to trace
+    const topEdgeIds = new Set(topEdges.map((e) => e.id));
+    const topEntityIds = new Set(topEntities.map((e) => e.id));
+    const topEventIds = new Set(topEvents.map((e) => e.id));
+
+    for (const te of edgeRrf) {
+      if (topEdgeIds.has(te.id)) continue;
+      const edge = edgeMap.get(te.id);
+      if (!edge) continue;
+      const outcome: ScoredCandidateTrace['outcome'] = (rerankUsed && !rerankSurvivorIds.has(te.id)) ? 'filtered-by-rerank' : 'filtered-by-topK';
+      candidates.push({
+        text: `[${edge.sourceEntity}→${edge.targetEntity}] ${edge.fact}`.slice(0, 150),
+        finalScore: te.score, source: 'edge', components: buildComponents(te.id, 'edge'), outcome,
+        roundNumber: edge.lastSeenRound,
+      });
+    }
+    for (const te of entityRrf) {
+      if (topEntityIds.has(te.id)) continue;
+      const entity = entityMap.get(te.id);
+      if (!entity) continue;
+      const outcome: ScoredCandidateTrace['outcome'] = (rerankUsed && !rerankSurvivorIds.has(te.id)) ? 'filtered-by-rerank' : 'filtered-by-topK';
+      candidates.push({
+        text: `${entity.name}: ${entity.summary ?? ''}`.slice(0, 150),
+        finalScore: te.score, source: 'entity', components: buildComponents(te.id, 'entity'), outcome,
+        entityName: entity.name,
+      });
+    }
+    for (const te of eventRrf) {
+      if (topEventIds.has(te.id)) continue;
+      const evt = eventMap.get(te.id);
+      if (!evt) continue;
+      const outcome: ScoredCandidateTrace['outcome'] = (rerankUsed && !rerankSurvivorIds.has(te.id)) ? 'filtered-by-rerank' : 'filtered-by-topK';
+      candidates.push({
+        text: (evt.midTermSummary || evt.text).slice(0, 150),
+        finalScore: te.score, source: 'event', components: buildComponents(te.id, 'event'), outcome,
         eventId: evt.id, roundNumber: evt.roundNumber,
+      });
+    }
+
+    for (const h of injectedHistorical) {
+      candidates.push({
+        text: `[历史] [${h.edge.sourceEntity}→${h.edge.targetEntity}] ${h.edge.fact}`.slice(0, 150),
+        finalScore: h.score, source: 'edge', components: [{ label: '历史BM25', rawValue: h.score, weight: 1, contribution: h.score, color: 'gray' }],
+        outcome: 'injected', roundNumber: h.edge.invalidAtRound ?? h.edge.invalidatedAtRound,
       });
     }
 
@@ -351,16 +561,21 @@ export class UnifiedRetriever {
         vectorEventCount: eventCosineIds.length,
         vectorEntityCount: entityCosineIds.length,
         graphCount: edgeCosineIds.length + edgeBm25Ids.length,
-        afterMerge: topEdges.length + topEntities.length + topEvents.length,
+        afterMerge: afterMergeCount,
         afterRerank: topEdges.length + topEntities.length + topEvents.length,
-        injectedCount: topEdges.length + topEntities.length + topEvents.length,
+        injectedCount: actualInjectedCount,
       },
       config: {
-        minScore: this.config?.embedding?.minScore ?? 0.3,
-        topK: this.config?.embedding?.topK ?? 20,
-        rerankEnabled: false,
-        rerankTopN: 0,
+        minScore,
+        topK,
+        rerankEnabled,
+        rerankTopN: rerankUsed ? rerankTopN : 0,
         embeddingEnabled,
+        shortTermWindow,
+        maxCandidates,
+        edgeBudget,
+        entityBudget,
+        eventBudget,
       },
     };
     this.lastReadSnapshot = readSnapshot;
@@ -369,9 +584,9 @@ export class UnifiedRetriever {
     this.debugRecorder?.recordRetrieve({
       vectorCandidateCount: eventCosineIds.length + entityCosineIds.length,
       graphCandidateCount: edgeCosineIds.length + edgeBm25Ids.length + bfsEdgeIds.length,
-      afterMergeCount: topEdges.length + topEntities.length + topEvents.length,
+      afterMergeCount: afterMergeCount,
       afterRerankCount: topEdges.length + topEntities.length + topEvents.length,
-      rerankUsed: false,
+      rerankUsed,
       embeddingFallback: embeddingEnabled && eventCosineIds.length === 0 && entityCosineIds.length === 0,
       topScores: topEdges.slice(0, 5).map((e) => {
         const edge = edgeMap.get(e.id);
