@@ -242,7 +242,7 @@ async function generatePlayerImage() {
       anchorPositive: anchor?.enabled !== false ? String(anchor?.positivePrompt ?? '') || undefined : undefined,
       anchorNegative: anchor?.enabled !== false ? String(anchor?.negativePrompt ?? '') || undefined : undefined,
       npcDataJson: JSON.stringify(npcData, null, 2),
-      preset: w && h ? { id: 'custom', width: w, height: h } : undefined,
+      preset: w && h ? { id: 'custom', name: '自定义', positivePrefix: '', positiveSuffix: '', negative: '', width: w, height: h, source: 'manual' } : undefined,
     });
 
     if (task.status === 'failed') {

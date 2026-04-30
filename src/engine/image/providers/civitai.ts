@@ -139,8 +139,8 @@ export class CivitaiImageProvider extends BaseImageProvider {
     }
 
     const imageUrl = new URL(image.url);
-    if (imageUrl.protocol !== 'https:' && imageUrl.protocol !== 'http:') {
-      throw new Error(`[Civitai] 图片 URL 协议不合法: ${imageUrl.protocol}`);
+    if (imageUrl.protocol !== 'https:') {
+      throw new Error(`[Civitai] 图片 URL 必须为 HTTPS (实际: ${imageUrl.protocol})`);
     }
     const blobResponse = await fetch(image.url);
     if (!blobResponse.ok) {

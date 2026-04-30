@@ -241,13 +241,13 @@ describe('CivitaiImageProvider', () => {
       expect(body.additionalNetworks).toEqual(networks);
     });
 
-    it('rejects non-http/https image URLs', async () => {
+    it('rejects non-HTTPS image URLs', async () => {
       mockFetchSequence(
-        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'file:///etc/passwd', width: 1024, height: 1024 }] } },
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'http://example.com/img', width: 1024, height: 1024 }] } },
       );
 
       await expect(makeProvider().generate('test', '', 1024, 1024))
-        .rejects.toThrow('协议不合法');
+        .rejects.toThrow('必须为 HTTPS');
     });
 
     it('throws when blob fetch fails', async () => {

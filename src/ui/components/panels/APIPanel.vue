@@ -408,7 +408,7 @@ const CATEGORY_DEFAULTS: Record<APICategory, CategorySlice> = {
   },
   image: {
     provider: 'custom',
-    url: '',
+    url: 'https://orchestration.civitai.com',
     model: '',
     temperature: 0,
     maxTokens: 0,
@@ -846,6 +846,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                     : 'gpt-4o'"
             />
             <button
+              v-if="form.apiCategory !== 'image'"
               class="btn-fetch-models"
               :disabled="isFetchingModels"
               @click="fetchModelsForForm"
@@ -853,6 +854,9 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
               {{ isFetchingModels ? '获取中…' : '获取模型' }}
             </button>
           </div>
+          <span v-if="form.apiCategory === 'image'" class="form-hint">
+            Civitai 模型需使用 AIR 标识符，可在 civitai.com 的模型页面找到
+          </span>
           <datalist :id="MODEL_DATALIST_ID">
             <option v-for="m in availableModels" :key="m" :value="m" />
           </datalist>

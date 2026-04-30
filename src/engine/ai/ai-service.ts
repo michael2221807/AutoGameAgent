@@ -271,15 +271,17 @@ export class AIService {
 
     // 按类别确定端点、请求体、响应校验
     let endpoint: string;
-    let body: Record<string, unknown>;
+    let method: 'GET' | 'POST' = 'POST';
+    let body: Record<string, unknown> | null;
     let validate: (data: unknown) => boolean;
     let invalidMsg: string;
 
     if (category === 'image') {
-      endpoint = `${baseUrl}/`;
-      body = {};
-      validate = () => true;
-      invalidMsg = '(image provider test is a simple reachability check)';
+      endpoint = `${baseUrl}/v2/consumer/workflows?take=1`;
+      method = 'GET';
+      body = null;
+      validate = (d) => d != null && typeof d === 'object';
+      invalidMsg = '响应格式异常';
     } else if (category === 'embedding') {
       const defaultPath = '/v1/embeddings';
       const path = config.customRoutingPath?.trim() || defaultPath;
@@ -330,15 +332,16 @@ export class AIService {
     const timeout = setTimeout(() => controller.abort(), 10_000);
 
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
+      const fetchInit: RequestInit = {
+        method,
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${config.apiKey}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
-        body: JSON.stringify(body),
         signal: controller.signal,
-      });
+      };
+      if (body) fetchInit.body = JSON.stringify(body);
+      const res = await fetch(endpoint, fetchInit);
       clearTimeout(timeout);
       const latencyMs = Date.now() - start;
 

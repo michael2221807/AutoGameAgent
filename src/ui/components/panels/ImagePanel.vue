@@ -998,6 +998,45 @@ const isNovelAIBackend = computed(() => settingsBackend.value === 'novelai');
 const settingsSceneIndependent = computed(() => get('系统.扩展.image.config.sceneIndependentBackend') === true);
 const settingsTransformerIndependent = computed(() => get('系统.扩展.image.config.transformerIndependentModel') === true);
 
+const civitaiNetworksJsonError = ref('');
+const civitaiControlNetsJsonError = ref('');
+function validateCivitaiJson(field: 'additionalNetworksJson' | 'controlNetsJson', errorRef: 'civitaiNetworksJsonError' | 'civitaiControlNetsJsonError') {
+  const raw = String(get(`系统.扩展.image.config.civitai.${field}`) ?? '').trim();
+  if (!raw) { (errorRef === 'civitaiNetworksJsonError' ? civitaiNetworksJsonError : civitaiControlNetsJsonError).value = ''; return; }
+  try { JSON.parse(raw); (errorRef === 'civitaiNetworksJsonError' ? civitaiNetworksJsonError : civitaiControlNetsJsonError).value = ''; }
+  catch (e) { (errorRef === 'civitaiNetworksJsonError' ? civitaiNetworksJsonError : civitaiControlNetsJsonError).value = `JSON 格式错误: ${(e as Error).message}`; }
+}
+
+const civitaiWhatifLoading = ref(false);
+const civitaiWhatifResult = ref('');
+async function runCivitaiWhatif() {
+  civitaiWhatifLoading.value = true;
+  civitaiWhatifResult.value = '';
+  try {
+    const apiConfig = aiService?.getConfigForUsage('imageGeneration');
+    if (!apiConfig) { civitaiWhatifResult.value = '未配置图像生成 API'; return; }
+    const base = apiConfig.url.replace(/\/+$/, '');
+    const body: Record<string, unknown> = { prompt: 'cost estimate', width: 1024, height: 1024, quantity: 1, batchSize: 1 };
+    if (apiConfig.model) body.model = apiConfig.model;
+    const steps = get('系统.扩展.image.config.civitai.steps');
+    if (steps != null) body.steps = steps;
+    const res = await fetch(`${base}/v2/consumer/recipes/textToImage?whatif=true`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) { civitaiWhatifResult.value = `查询失败: HTTP ${res.status}`; return; }
+    const data = await res.json();
+    const cost = data?.cost ?? data?.totalCost ?? data?.jobs?.[0]?.cost;
+    civitaiWhatifResult.value = cost != null ? `预计消耗 ${cost} Buzz` : `查询完成 — ${JSON.stringify(data).slice(0, 120)}`;
+  } catch (e) {
+    civitaiWhatifResult.value = `查询失败: ${(e as Error).message}`;
+  } finally {
+    civitaiWhatifLoading.value = false;
+  }
+}
+
 // History state
 const historyFilter = ref('all');
 const historyFilterOptions: SelectOption[] = [
@@ -3995,21 +4034,38 @@ function clearNpcImages() {
               <label class="form-label">附加网络 (LoRA JSON)</label>
               <textarea
                 class="form-textarea" rows="3"
+                :class="{ 'form-textarea--error': civitaiNetworksJsonError }"
                 placeholder='{"urn:air:sdxl:lora:civitai:82098@87153": {"type": "Lora", "strength": 0.8}}'
                 :value="String(get('系统.扩展.image.config.civitai.additionalNetworksJson') ?? '')"
                 @input="setValue('系统.扩展.image.config.civitai.additionalNetworksJson', ($event.target as HTMLTextAreaElement).value)"
+                @blur="validateCivitaiJson('additionalNetworksJson', 'civitaiNetworksJsonError')"
               />
+              <span v-if="civitaiNetworksJsonError" class="form-hint" style="color: var(--color-error, #f87171);">{{ civitaiNetworksJsonError }}</span>
             </div>
             <div class="form-section">
               <label class="form-label">ControlNet (JSON)</label>
               <textarea
                 class="form-textarea" rows="3"
+                :class="{ 'form-textarea--error': civitaiControlNetsJsonError }"
                 placeholder='[{"preprocessor": "Canny", "weight": 1.0, "imageUrl": "..."}]'
                 :value="String(get('系统.扩展.image.config.civitai.controlNetsJson') ?? '')"
                 @input="setValue('系统.扩展.image.config.civitai.controlNetsJson', ($event.target as HTMLTextAreaElement).value)"
+                @blur="validateCivitaiJson('controlNetsJson', 'civitaiControlNetsJsonError')"
               />
+              <span v-if="civitaiControlNetsJsonError" class="form-hint" style="color: var(--color-error, #f87171);">{{ civitaiControlNetsJsonError }}</span>
             </div>
           </details>
+
+          <div class="settings-row" style="margin-top: 8px;">
+            <div>
+              <span class="form-label">预估 Buzz 消耗</span>
+              <span class="form-hint">以当前参数向 Civitai 查询费用，不实际生成图片</span>
+            </div>
+            <button class="btn-secondary btn-sm" :disabled="civitaiWhatifLoading" @click="runCivitaiWhatif">
+              {{ civitaiWhatifLoading ? '查询中…' : '预估费用' }}
+            </button>
+          </div>
+          <p v-if="civitaiWhatifResult" class="form-hint" style="margin-top: 4px;">{{ civitaiWhatifResult }}</p>
         </div>
 
         <!-- §7.3 Transformer section -->
@@ -5418,5 +5474,12 @@ function clearNpcImages() {
 .form-advanced[open] > summary {
   margin-bottom: 8px;
   color: var(--color-text, #e0e0e6);
+}
+.form-textarea--error {
+  border-color: var(--color-error, #f87171) !important;
+}
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 0.8rem;
 }
 </style>
