@@ -284,6 +284,32 @@ const CATEGORY_META: Record<APICategory, { label: string; desc: string }> = {
 
 const CATEGORY_OPTIONS: APICategory[] = ['llm', 'embedding', 'rerank', 'image'];
 
+type ImageBackendHint = 'civitai' | 'novelai' | 'openai' | 'sd_webui' | 'comfyui' | 'custom';
+const IMAGE_BACKEND_PRESETS: Record<ImageBackendHint, { label: string; url: string; modelPlaceholder: string; modelHint: string }> = {
+  civitai:  { label: 'Civitai',       url: 'https://orchestration.civitai.com', modelPlaceholder: 'urn:air:sdxl:checkpoint:civitai:101055@128078', modelHint: '在 civitai.com 模型页面找到 AIR 标识符' },
+  novelai:  { label: 'NovelAI',       url: 'https://image.novelai.net',          modelPlaceholder: 'nai-diffusion-4-5-full',                       modelHint: 'NovelAI 模型名称' },
+  openai:   { label: 'OpenAI DALL-E', url: 'https://api.openai.com',             modelPlaceholder: 'dall-e-3',                                     modelHint: 'dall-e-2 或 dall-e-3' },
+  sd_webui: { label: 'SD-WebUI',      url: 'http://localhost:7860',              modelPlaceholder: 'v1-5-pruned-emaonly.safetensors',               modelHint: 'Checkpoint 文件名' },
+  comfyui:  { label: 'ComfyUI',       url: 'http://localhost:8188',              modelPlaceholder: 'v1-5-pruned-emaonly.safetensors',               modelHint: 'Checkpoint 文件名（仅基础模式使用）' },
+  custom:   { label: '自定义',         url: '',                                   modelPlaceholder: '',                                             modelHint: '由后端决定' },
+};
+const imageBackend = ref<ImageBackendHint>('civitai');
+
+function onImageBackendChange(): void {
+  const preset = IMAGE_BACKEND_PRESETS[imageBackend.value];
+  form.value.url = preset.url;
+  form.value.model = '';
+}
+
+function inferImageBackend(url: string): ImageBackendHint {
+  if (url.includes('orchestration.civitai.com')) return 'civitai';
+  if (url.includes('image.novelai.net') || url.includes('novelai')) return 'novelai';
+  if (url.includes('api.openai.com')) return 'openai';
+  if (url.includes(':8188')) return 'comfyui';
+  if (url.includes(':7860')) return 'sd_webui';
+  return 'custom';
+}
+
 const form = ref<APIFormData>({
   name: '',
   apiCategory: 'llm',
@@ -339,6 +365,9 @@ function openEditModal(api: APIConfig): void {
     useCustomRouting: api.useCustomRouting ?? false,
     customRoutingPath: api.customRoutingPath ?? '',
   };
+  if ((api.apiCategory ?? 'llm') === 'image') {
+    imageBackend.value = inferImageBackend(api.url);
+  }
   showEditModal.value = true;
 }
 
@@ -408,7 +437,7 @@ const CATEGORY_DEFAULTS: Record<APICategory, CategorySlice> = {
   },
   image: {
     provider: 'custom',
-    url: 'https://orchestration.civitai.com',
+    url: '',
     model: '',
     temperature: 0,
     maxTokens: 0,
@@ -457,6 +486,11 @@ function onCategoryChange(previousCategory: APICategory): void {
   // 2. 从"切入"类别恢复，或用默认值
   const cached = categoryFormCache.value[newCat];
   applySlice(cached ?? CATEGORY_DEFAULTS[newCat]);
+  // 3. 切入 image 时，用 imageBackend 预设填充 URL
+  if (newCat === 'image' && !cached) {
+    imageBackend.value = 'civitai';
+    form.value.url = IMAGE_BACKEND_PRESETS.civitai.url;
+  }
 }
 
 function onProviderChange(): void {
@@ -802,6 +836,19 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
           </select>
         </div>
 
+        <!-- Image backend selector -->
+        <div v-if="form.apiCategory === 'image'" class="form-group">
+          <label class="form-label">图像后端</label>
+          <select v-model="imageBackend" class="form-input" @change="onImageBackendChange">
+            <option value="civitai">Civitai</option>
+            <option value="novelai">NovelAI</option>
+            <option value="openai">OpenAI DALL-E</option>
+            <option value="sd_webui">SD-WebUI (本地)</option>
+            <option value="comfyui">ComfyUI (本地)</option>
+            <option value="custom">自定义</option>
+          </select>
+        </div>
+
         <div class="form-group">
           <label class="form-label">API URL</label>
           <input
@@ -811,7 +858,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             :placeholder="form.apiCategory === 'rerank' || form.apiCategory === 'embedding'
               ? 'https://api.siliconflow.cn'
               : form.apiCategory === 'image'
-                ? 'https://orchestration.civitai.com'
+                ? IMAGE_BACKEND_PRESETS[imageBackend].url || 'https://example.com'
                 : 'https://api.example.com'"
           />
           <span v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-hint">
@@ -819,7 +866,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             <code>{{ form.apiCategory === 'rerank' ? '/v1/rerank' : '/v1/embeddings' }}</code>
           </span>
           <span v-else-if="form.apiCategory === 'image'" class="form-hint">
-            图像 API 的 base URL。Civitai: <code>https://orchestration.civitai.com</code>
+            {{ IMAGE_BACKEND_PRESETS[imageBackend].label }} 的 base URL
           </span>
         </div>
 
@@ -842,7 +889,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                 : form.apiCategory === 'embedding'
                   ? 'BAAI/bge-m3'
                   : form.apiCategory === 'image'
-                    ? 'urn:air:sdxl:checkpoint:civitai:101055@128078'
+                    ? IMAGE_BACKEND_PRESETS[imageBackend].modelPlaceholder
                     : 'gpt-4o'"
             />
             <button
@@ -855,7 +902,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             </button>
           </div>
           <span v-if="form.apiCategory === 'image'" class="form-hint">
-            Civitai 模型需使用 AIR 标识符，可在 civitai.com 的模型页面找到
+            {{ IMAGE_BACKEND_PRESETS[imageBackend].modelHint }}
           </span>
           <datalist :id="MODEL_DATALIST_ID">
             <option v-for="m in availableModels" :key="m" :value="m" />
