@@ -12,6 +12,7 @@ import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import Modal from '@/ui/components/common/Modal.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { API_PROVIDER_PRESETS } from '@/engine/ai/types';
+import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
 import type { APIConfig, APIProviderType, UsageType, APICategory } from '@/engine/ai/types';
 
@@ -67,7 +68,7 @@ const ASSIGN_CATEGORY_META: Record<AssignCategory, { label: string; hint?: strin
   npc_social:   { label: 'NPC 与社交' },
   plot:         { label: '剧情导向' },
   repair:       { label: '修复与补齐' },
-  image:        { label: '图像相关', hint: '图像生成按后端类型自动匹配 API（通过 URL 识别），无需手动分配。词组转化器（角色/场景/私密视觉提取）使用 LLM 类别的 API。' },
+  image:        { label: '图像相关', hint: '为每个图像后端分配对应的 API 配置并开关。图像工作室只显示已开启的后端。词组转化器使用 LLM 类别的 API。' },
   rag:          { label: 'RAG 检索', hint: '下拉框只显示类别匹配的 API。如果没有选项，请先添加 Embedding 或 Rerank 类别的 API 配置。' },
   utility:      { label: '工具' },
 };
@@ -309,13 +310,8 @@ function onImageBackendChange(): void {
 const activeImagePreset = computed(() => IMAGE_BACKEND_PRESETS[imageBackend.value] ?? IMAGE_BACKEND_PRESETS.custom);
 
 function inferImageBackend(url: string): ImageBackendHint {
-  if (url.includes('orchestration.civitai.com')) return 'civitai';
-  if (url.includes('image.novelai.net')) return 'novelai';
-  try { if (new URL(url).hostname.endsWith('.novelai.net')) return 'novelai'; } catch { /* ignore */ }
-  if (url.includes('api.openai.com')) return 'openai';
-  if (url.includes(':8188')) return 'comfyui';
-  if (url.includes(':7860')) return 'sd_webui';
-  return 'custom';
+  const result = inferImageBackendFromUrl(url);
+  return (result && result in IMAGE_BACKEND_PRESETS) ? result as ImageBackendHint : 'custom';
 }
 
 const form = ref<APIFormData>({
@@ -351,6 +347,7 @@ function openAddModal(): void {
     useCustomRouting: false,
     customRoutingPath: '',
   };
+  imageBackend.value = 'civitai';
   showEditModal.value = true;
 }
 

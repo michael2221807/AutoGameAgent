@@ -39,16 +39,13 @@ const apiStore = useAPIManagementStore();
 
 const IMAGE_BACKEND_KEYS: ImageBackendType[] = ['novelai', 'openai', 'sd_webui', 'comfyui', 'civitai'];
 const configuredImageBackends = computed(() => {
+  apiStore.apiConfigs; apiStore.apiAssignments;
   const set = new Set<string>();
   for (const bk of IMAGE_BACKEND_KEYS) {
-    const cfg = apiStore.getAPIForType(`imageGen_${bk}` as import('@/engine/ai/types').UsageType);
-    if (cfg) set.add(bk);
-  }
-  if (set.size === 0) {
-    const legacy = apiStore.getAPIForType('imageGeneration');
-    if (legacy) {
-      const b = inferImageBackendFromUrl(legacy.url);
-      if (b) set.add(b);
+    const assignment = apiStore.apiAssignments.find((a) => a.type === `imageGen_${bk}`);
+    if (assignment && assignment.apiId !== 'default') {
+      const cfg = apiStore.apiConfigs.find((c) => c.id === assignment.apiId && c.enabled && (c.apiCategory ?? 'llm') === 'image');
+      if (cfg) set.add(bk);
     }
   }
   return set;
@@ -63,7 +60,7 @@ const availableBackendOptions = computed(() => {
     { label: 'Civitai', value: 'civitai' },
   ];
   const available = configuredImageBackends.value;
-  if (available.size === 0) return ALL;
+  if (available.size === 0) return [{ label: '请先在 API 管理中添加图像 API', value: '' }];
   return ALL.filter((o) => available.has(o.value));
 });
 

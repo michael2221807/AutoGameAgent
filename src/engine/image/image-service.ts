@@ -79,8 +79,10 @@ export class ImageService {
    * can display which backend + model actually produced the image. Returns an
    * empty string if no config is bound — UI shows '未记录' in that case.
    */
-  private getCurrentModelName(): string {
-    const config = this.aiService.getConfigForUsage('imageGeneration');
+  private getCurrentModelName(backend?: string): string {
+    const config = backend
+      ? this.aiService.getImageConfigForBackend(backend)
+      : this.aiService.getConfigForUsage('imageGeneration');
     return config?.model ?? '';
   }
 
@@ -362,7 +364,7 @@ export class ImageService {
           width: composed.width,
           height: composed.height,
           backend: params.backend,
-          model: this.getCurrentModelName(),
+          model: this.getCurrentModelName(params.backend),
           artStyle: params.artStyle,
           createdAt: Date.now(),
         });
@@ -467,7 +469,7 @@ export class ImageService {
       // 图片档案.香闺秘档 and are invisible to gallery which reads 生图历史.
       if (params.characterName) {
         const createdAt = Date.now();
-        const modelName = this.getCurrentModelName();
+        const modelName = this.getCurrentModelName(params.backend);
         this.state.setSecretPartResult(params.characterName, params.part, {
           id: asset.id,
           taskId: task.id,
@@ -590,7 +592,7 @@ export class ImageService {
       eventBus.emit('image:task-update', { taskId: task.id, status: 'complete', assetId: asset.id });
 
       const createdAt = Date.now();
-      const modelName = this.getCurrentModelName();
+      const modelName = this.getCurrentModelName(params.backend);
       if (params.subjectType === 'scene') {
         this.writeToSceneArchive(asset.id, this.queue.get(task.id)!);
       } else if (params.subjectType === 'secret_part' && params.targetCharacter && params.part) {
@@ -828,7 +830,7 @@ export class ImageService {
       width: task.width,
       height: task.height,
       backend: task.backend,
-      model: this.getCurrentModelName(),
+      model: this.getCurrentModelName(task.backend),
       createdAt: Date.now(),
     };
 

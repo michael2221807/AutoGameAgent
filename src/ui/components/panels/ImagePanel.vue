@@ -213,17 +213,28 @@ const ALL_IMAGE_BACKENDS: SelectOption[] = [
 ];
 
 const IMAGE_BACKEND_KEYS: ImageBackendType[] = ['novelai', 'openai', 'sd_webui', 'comfyui', 'civitai'];
+
+function getImageApiForBackend(bk: string): import('@/engine/ai/types').APIConfig | null {
+  const assignment = apiStore.apiAssignments.find((a) => a.type === `imageGen_${bk}`);
+  if (!assignment || assignment.apiId === 'default') return null;
+  const cfg = apiStore.apiConfigs.find((c) => c.id === assignment.apiId && c.enabled && (c.apiCategory ?? 'llm') === 'image');
+  return cfg ?? null;
+}
+
 const configuredBackends = computed<Set<string>>(() => {
+  apiStore.apiConfigs; apiStore.apiAssignments;
   const set = new Set<string>();
   for (const bk of IMAGE_BACKEND_KEYS) {
-    const cfg = apiStore.getAPIForType(`imageGen_${bk}` as import('@/engine/ai/types').UsageType);
-    if (cfg) set.add(bk);
+    if (getImageApiForBackend(bk)) set.add(bk);
   }
   if (set.size === 0) {
-    const legacy = apiStore.getAPIForType('imageGeneration');
-    if (legacy) {
-      const b = inferImageBackendFromUrl(legacy.url);
-      if (b) set.add(b);
+    const legacyAssign = apiStore.apiAssignments.find((a) => a.type === 'imageGeneration');
+    if (legacyAssign && legacyAssign.apiId !== 'default') {
+      const cfg = apiStore.apiConfigs.find((c) => c.id === legacyAssign.apiId && c.enabled && (c.apiCategory ?? 'llm') === 'image');
+      if (cfg) {
+        const b = inferImageBackendFromUrl(cfg.url);
+        if (b) set.add(b);
+      }
     }
   }
   return set;
@@ -240,7 +251,7 @@ const VALID_BACKENDS = new Set<string>(['openai', 'novelai', 'sd_webui', 'comfyu
 function asBackend(v: string): ImageBackendType {
   return VALID_BACKENDS.has(v) ? v as ImageBackendType : 'novelai';
 }
-{
+function syncBackendToAvailable() {
   const saved = asBackend(String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai'));
   const available = configuredBackends.value;
   if (available.size > 0 && !available.has(saved)) {
@@ -250,10 +261,11 @@ function asBackend(v: string): ImageBackendType {
   }
 }
 watch(backendOptions, (opts) => {
-  if (opts.length > 0 && !opts.some((o) => o.value === backend.value)) {
-    backend.value = asBackend(opts[0].value ?? 'novelai');
+  const realOpts = opts.filter((o) => o.value !== '');
+  if (realOpts.length > 0 && !realOpts.some((o) => o.value === backend.value)) {
+    backend.value = asBackend(realOpts[0].value ?? 'novelai');
   }
-});
+}, { immediate: true });
 
 const civitaiSchedulerOptions: SelectOption[] = [
   { label: 'Euler A', value: 'EulerA' },
