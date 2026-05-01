@@ -77,7 +77,11 @@ const selectedNpc = ref('');
 const composition = ref<'portrait' | 'half-body' | 'full-length' | 'custom'>('portrait');
 const customComposition = ref('');
 const artStyle = ref<'none' | 'generic' | 'anime' | 'realistic' | 'chinese'>('none');
-const backend = ref<ImageBackendType>('novelai');
+const backend = computed<ImageBackendType>(() => {
+  const saved = String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai');
+  const VALID = new Set(['openai', 'novelai', 'sd_webui', 'comfyui', 'civitai']);
+  return VALID.has(saved) ? saved as ImageBackendType : 'novelai';
+});
 const extraPrompt = ref('');
 const selectedArtistPreset = ref('');
 const selectedPngPreset = ref('');
@@ -246,17 +250,6 @@ const backendOptions = computed<SelectOption[]>(() => {
   return ALL_IMAGE_BACKENDS.filter((o) => available.has(o.value));
 });
 
-// Resolve backend from saved default, validated against configured APIs
-const VALID_BACKENDS = new Set<string>(['openai', 'novelai', 'sd_webui', 'comfyui', 'civitai']);
-function asBackend(v: string): ImageBackendType {
-  return VALID_BACKENDS.has(v) ? v as ImageBackendType : 'novelai';
-}
-watch(backendOptions, (opts) => {
-  const realOpts = opts.filter((o) => o.value !== '');
-  if (realOpts.length > 0 && !realOpts.some((o) => o.value === backend.value)) {
-    backend.value = asBackend(realOpts[0].value ?? 'novelai');
-  }
-}, { immediate: true });
 
 const civitaiSchedulerOptions: SelectOption[] = [
   { label: 'Euler A', value: 'EulerA' },
@@ -2330,11 +2323,6 @@ function clearNpcImages() {
                   <div class="grid-btn__label">{{ opt.label }}</div>
                 </button>
               </div>
-            </div>
-
-            <div class="form-section">
-              <label class="form-label">后端</label>
-              <AgaSelect :options="backendOptions" v-model="backend" />
             </div>
 
             <div class="form-section">
