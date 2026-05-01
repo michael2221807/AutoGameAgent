@@ -301,6 +301,8 @@ function onImageBackendChange(): void {
   form.value.model = '';
 }
 
+const activeImagePreset = computed(() => IMAGE_BACKEND_PRESETS[imageBackend.value] ?? IMAGE_BACKEND_PRESETS.custom);
+
 function inferImageBackend(url: string): ImageBackendHint {
   if (url.includes('orchestration.civitai.com')) return 'civitai';
   if (url.includes('image.novelai.net') || url.includes('novelai')) return 'novelai';
@@ -858,7 +860,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             :placeholder="form.apiCategory === 'rerank' || form.apiCategory === 'embedding'
               ? 'https://api.siliconflow.cn'
               : form.apiCategory === 'image'
-                ? IMAGE_BACKEND_PRESETS[imageBackend].url || 'https://example.com'
+                ? activeImagePreset.url || 'https://example.com'
                 : 'https://api.example.com'"
           />
           <span v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-hint">
@@ -866,7 +868,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             <code>{{ form.apiCategory === 'rerank' ? '/v1/rerank' : '/v1/embeddings' }}</code>
           </span>
           <span v-else-if="form.apiCategory === 'image'" class="form-hint">
-            {{ IMAGE_BACKEND_PRESETS[imageBackend].label }} 的 base URL
+            {{ activeImagePreset.label }} 的 base URL
           </span>
         </div>
 
@@ -889,7 +891,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                 : form.apiCategory === 'embedding'
                   ? 'BAAI/bge-m3'
                   : form.apiCategory === 'image'
-                    ? IMAGE_BACKEND_PRESETS[imageBackend].modelPlaceholder
+                    ? activeImagePreset.modelPlaceholder
                     : 'gpt-4o'"
             />
             <button
@@ -902,7 +904,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             </button>
           </div>
           <span v-if="form.apiCategory === 'image'" class="form-hint">
-            {{ IMAGE_BACKEND_PRESETS[imageBackend].modelHint }}
+            {{ activeImagePreset.modelHint }}
           </span>
           <datalist :id="MODEL_DATALIST_ID">
             <option v-for="m in availableModels" :key="m" :value="m" />
