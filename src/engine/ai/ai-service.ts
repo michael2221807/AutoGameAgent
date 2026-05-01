@@ -96,6 +96,28 @@ export class AIService {
     return undefined;
   }
 
+  // ─── Image per-backend routing ───
+
+  /**
+   * Get all enabled image-category API configs.
+   */
+  getImageConfigs(): APIConfig[] {
+    const result: APIConfig[] = [];
+    for (const c of this.configs.values()) {
+      if (c.enabled && (c.apiCategory ?? 'llm') === 'image') result.push(c);
+    }
+    return result;
+  }
+
+  /**
+   * Find the image API config whose URL matches a given backend.
+   * Falls back to the imageGeneration assignment or first available image config.
+   */
+  getImageConfigForBackend(backend: string): APIConfig | undefined {
+    const imageConfigs = this.getImageConfigs();
+    return imageConfigs.find((c) => inferImageBackendFromUrl(c.url) === backend);
+  }
+
   // ─── 主调用方法 ───
 
   /**
@@ -414,4 +436,21 @@ export class AIService {
         return new OpenAIProvider(config);
     }
   }
+}
+
+/**
+ * Infer image backend type from an API config's URL.
+ * Used by both engine (per-backend routing) and UI (preset selection).
+ */
+export function inferImageBackendFromUrl(url: string): string {
+  if (url.includes('orchestration.civitai.com')) return 'civitai';
+  if (url.includes('api.openai.com')) return 'openai';
+  if (url.includes('image.novelai.net')) return 'novelai';
+  try {
+    const hostname = new URL(url).hostname;
+    if (hostname.endsWith('.novelai.net')) return 'novelai';
+  } catch { /* invalid URL — fall through */ }
+  if (url.includes(':8188')) return 'comfyui';
+  if (url.includes(':7860')) return 'sd_webui';
+  return '';
 }

@@ -23,13 +23,16 @@ import { useGameState } from '@/ui/composables/useGameState';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
 import { extractAnchorViaAI } from '@/engine/image/anchor-extractor';
+import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
+import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import { getDefaultPresets, getDefaultModelBundles } from '@/engine/image/transformer-presets';
 import { SCENE_PORTRAIT_SIZE_OPTIONS, SCENE_LANDSCAPE_SIZE_OPTIONS, sizeOptionsToSelectOptions } from '@/engine/image/image-size-options';
 import type { TransformerPromptPreset, ModelTransformerBundle } from '@/engine/image/transformer-presets';
 
 const imageService = inject<ImageService>('imageService');
 const aiService = inject<AIService | undefined>('aiService', undefined);
+const apiStore = useAPIManagementStore();
 const { isLoaded, get, setValue, useValue } = useGameState();
 const relationships = useValue<Array<Record<string, unknown>>>(DEFAULT_ENGINE_PATHS.relationships);
 
@@ -74,7 +77,23 @@ const selectedNpc = ref('');
 const composition = ref<'portrait' | 'half-body' | 'full-length' | 'custom'>('portrait');
 const customComposition = ref('');
 const artStyle = ref<'none' | 'generic' | 'anime' | 'realistic' | 'chinese'>('none');
-const backend = ref<ImageBackendType>('novelai');
+const VALID_BACKENDS = new Set<string>(['openai', 'novelai', 'sd_webui', 'comfyui', 'civitai']);
+function asBackend(v: string): ImageBackendType {
+  return VALID_BACKENDS.has(v) ? v as ImageBackendType : 'novelai';
+}
+function resolveBackend(): ImageBackendType {
+  const saved = asBackend(String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai'));
+  const available = configuredBackends.value;
+  if (available.size === 0 || available.has(saved)) return saved;
+  return asBackend(available.values().next().value ?? 'novelai');
+}
+const backend = ref<ImageBackendType>(resolveBackend());
+
+watch(backendOptions, (opts) => {
+  if (opts.length > 0 && !opts.some((o) => o.value === backend.value)) {
+    backend.value = asBackend(opts[0].value ?? 'novelai');
+  }
+});
 const extraPrompt = ref('');
 const selectedArtistPreset = ref('');
 const selectedPngPreset = ref('');
@@ -201,13 +220,30 @@ const styleOptions = [
   { label: '国风', value: 'chinese' as const },
 ];
 
-const backendOptions: SelectOption[] = [
+const ALL_IMAGE_BACKENDS: SelectOption[] = [
   { label: 'NovelAI', value: 'novelai' },
   { label: 'OpenAI DALL-E', value: 'openai' },
   { label: 'SD-WebUI', value: 'sd_webui' },
   { label: 'ComfyUI', value: 'comfyui' },
   { label: 'Civitai', value: 'civitai' },
 ];
+
+const configuredBackends = computed<Set<string>>(() => {
+  const set = new Set<string>();
+  for (const c of apiStore.apiConfigs) {
+    if (c.enabled && (c.apiCategory ?? 'llm') === 'image') {
+      const b = inferImageBackendFromUrl(c.url);
+      if (b) set.add(b);
+    }
+  }
+  return set;
+});
+
+const backendOptions = computed<SelectOption[]>(() => {
+  const available = configuredBackends.value;
+  if (available.size === 0) return [{ label: '请先在 API 管理中添加图像 API', value: '' }];
+  return ALL_IMAGE_BACKENDS.filter((o) => available.has(o.value));
+});
 
 const civitaiSchedulerOptions: SelectOption[] = [
   { label: 'Euler A', value: 'EulerA' },
@@ -233,7 +269,7 @@ const civitaiOutputFormatOptions: SelectOption[] = [
 /** Human-readable label for an image backend. Reuses backendOptions as the
  *  source so any label change propagates without duplicating strings. */
 function backendLabel(value: string): string {
-  return backendOptions.find((b) => b.value === value)?.label ?? value;
+  return ALL_IMAGE_BACKENDS.find((b) => b.value === value)?.label ?? value;
 }
 
 /**
@@ -995,7 +1031,6 @@ async function generateScene() {
 // Settings tab state
 const settingsBackend = computed(() => String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai'));
 const isNovelAIBackend = computed(() => settingsBackend.value === 'novelai');
-const settingsSceneIndependent = computed(() => get('系统.扩展.image.config.sceneIndependentBackend') === true);
 const settingsTransformerIndependent = computed(() => get('系统.扩展.image.config.transformerIndependentModel') === true);
 
 const civitaiNetworksJsonError = ref('');
@@ -4134,54 +4169,6 @@ function clearNpcImages() {
             />
           </div>
 
-          <!-- Scene independent backend -->
-          <div class="settings-row">
-            <div>
-              <span class="form-label">场景独立生图接口</span>
-              <span class="form-hint">场景图使用独立的后端和 API 配置</span>
-            </div>
-            <AgaToggle
-              :model-value="settingsSceneIndependent"
-              @update:model-value="setValue('系统.扩展.image.config.sceneIndependentBackend', $event)"
-            />
-          </div>
-          <template v-if="settingsSceneIndependent">
-            <div class="form-section">
-              <label class="form-label">场景后端类型</label>
-              <AgaSelect
-                :options="backendOptions"
-                :model-value="String(get('系统.扩展.image.config.scene.backend') ?? 'novelai')"
-                @update:model-value="setValue('系统.扩展.image.config.scene.backend', $event)"
-              />
-            </div>
-            <div class="settings-grid-2">
-              <div class="form-section">
-                <label class="form-label">场景 API 地址</label>
-                <input
-                  type="text" class="form-input"
-                  :value="get('系统.扩展.image.config.scene.endpoint') ?? ''"
-                  @input="setValue('系统.扩展.image.config.scene.endpoint', ($event.target as HTMLInputElement).value)"
-                />
-              </div>
-              <div class="form-section">
-                <label class="form-label">场景 API Key</label>
-                <input
-                  type="password" class="form-input"
-                  :value="get('系统.扩展.image.config.scene.apiKey') ?? ''"
-                  @input="setValue('系统.扩展.image.config.scene.apiKey', ($event.target as HTMLInputElement).value)"
-                />
-              </div>
-            </div>
-            <div class="form-section">
-              <label class="form-label">场景模型名称</label>
-              <input
-                type="text" class="form-input" placeholder="例如：nai-diffusion-4-5-full"
-                :value="get('系统.扩展.image.config.scene.model') ?? ''"
-                @input="setValue('系统.扩展.image.config.scene.model', ($event.target as HTMLInputElement).value)"
-              />
-            </div>
-          </template>
-
           <!-- Scene defaults -->
           <div class="settings-grid-2">
             <div class="form-section">
@@ -4422,6 +4409,7 @@ function clearNpcImages() {
       :width="regenPayload.width"
       :height="regenPayload.height"
       :initial-backend="regenPayload.initialBackend"
+      :available-backends="backendOptions"
       :busy="regenBusy"
       @confirm="confirmRegenerate"
       @cancel="cancelRegenerate"

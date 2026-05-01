@@ -305,7 +305,8 @@ const activeImagePreset = computed(() => IMAGE_BACKEND_PRESETS[imageBackend.valu
 
 function inferImageBackend(url: string): ImageBackendHint {
   if (url.includes('orchestration.civitai.com')) return 'civitai';
-  if (url.includes('image.novelai.net') || url.includes('novelai')) return 'novelai';
+  if (url.includes('image.novelai.net')) return 'novelai';
+  try { if (new URL(url).hostname.endsWith('.novelai.net')) return 'novelai'; } catch { /* ignore */ }
   if (url.includes('api.openai.com')) return 'openai';
   if (url.includes(':8188')) return 'comfyui';
   if (url.includes(':7860')) return 'sd_webui';

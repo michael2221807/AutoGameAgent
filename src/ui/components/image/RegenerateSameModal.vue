@@ -10,7 +10,7 @@
  * Emits `confirm` with the chosen backend; caller owns calling
  * `ImageService.regenerateFromPrompts` with its own subject-specific params.
  */
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import type { ImageBackendType } from '@/engine/image/types';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 
@@ -27,6 +27,8 @@ const props = defineProps<{
   initialBackend: ImageBackendType;
   /** Disable confirm while request is in flight. */
   busy?: boolean;
+  /** Available backend options (filtered by configured APIs). Falls back to all if empty. */
+  availableBackends?: SelectOption[];
 }>();
 
 const emit = defineEmits<{
@@ -36,13 +38,16 @@ const emit = defineEmits<{
 
 const chosenBackend = ref<ImageBackendType>(props.initialBackend);
 
-const backendOptions: SelectOption[] = [
+const ALL_BACKENDS: SelectOption[] = [
   { label: 'NovelAI', value: 'novelai' },
   { label: 'OpenAI DALL-E', value: 'openai' },
   { label: 'SD-WebUI', value: 'sd_webui' },
   { label: 'ComfyUI', value: 'comfyui' },
   { label: 'Civitai', value: 'civitai' },
 ];
+const backendOptions = computed(() =>
+  props.availableBackends?.length ? props.availableBackends : ALL_BACKENDS,
+);
 
 const dialogRef = ref<HTMLElement | null>(null);
 

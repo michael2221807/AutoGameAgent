@@ -24,7 +24,9 @@ import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { readStatFields } from '@/engine/pack/stat-section-reader';
 import { extractAnchorViaAI } from '@/engine/image/anchor-extractor';
+import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
+import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import type { ImageService } from '@/engine/image/image-service';
 import type { ImageBackendType } from '@/engine/image/types';
 
@@ -33,6 +35,41 @@ const P = DEFAULT_ENGINE_PATHS;
 const { isLoaded, useValue, setValue, get } = useGameState();
 const imageService = inject<ImageService>('imageService');
 const aiService = inject<AIService | undefined>('aiService', undefined);
+const apiStore = useAPIManagementStore();
+
+const configuredImageBackends = computed(() => {
+  const set = new Set<string>();
+  for (const c of apiStore.apiConfigs) {
+    if (c.enabled && (c.apiCategory ?? 'llm') === 'image') {
+      const b = inferImageBackendFromUrl(c.url);
+      if (b) set.add(b);
+    }
+  }
+  return set;
+});
+
+const availableBackendOptions = computed(() => {
+  const ALL: SelectOption[] = [
+    { label: 'NovelAI', value: 'novelai' },
+    { label: 'OpenAI DALL-E', value: 'openai' },
+    { label: 'SD-WebUI', value: 'sd_webui' },
+    { label: 'ComfyUI', value: 'comfyui' },
+    { label: 'Civitai', value: 'civitai' },
+  ];
+  const available = configuredImageBackends.value;
+  if (available.size === 0) return ALL;
+  return ALL.filter((o) => available.has(o.value));
+});
+
+const VALID_BACKENDS = new Set<string>(['openai', 'novelai', 'sd_webui', 'comfyui', 'civitai']);
+function resolveDefaultBackend(): ImageBackendType {
+  const raw = String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai');
+  const validated = VALID_BACKENDS.has(raw) ? raw as ImageBackendType : 'novelai' as ImageBackendType;
+  const available = configuredImageBackends.value;
+  if (available.size === 0 || available.has(validated)) return validated;
+  const first = available.values().next().value;
+  return VALID_BACKENDS.has(first ?? '') ? first as ImageBackendType : 'novelai' as ImageBackendType;
+}
 
 // ─── Player image generation ───
 const compositionOptions: SelectOption[] = [
@@ -209,7 +246,7 @@ async function generatePlayerImage() {
   try {
     const playerName = get(P.playerName) as string ?? '主角';
     const playerDesc = get(P.characterDescription) as string ?? '';
-    const defaultBackend = String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai') as import('@/engine/image/types').ImageBackendType;
+    const defaultBackend = resolveDefaultBackend();
     const anchor = playerAnchor.value;
 
     // Build NPC-format data JSON (MRJH: player mapped to NPC format)
@@ -310,7 +347,7 @@ function openPlayerRegenerate(img: Record<string, unknown>) {
   const width = Number(img.width) || 832;
   const height = Number(img.height) || 1216;
   const rawBackend = String(img.backend ?? '');
-  const bk = (rawBackend as ImageBackendType) || (String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai') as ImageBackendType);
+  const bk = (rawBackend as ImageBackendType) || resolveDefaultBackend();
   const playerName = String(name.value ?? '主角');
   const compLabel = comp === 'portrait' ? '头像' : comp === 'half-body' ? '半身' : '立绘';
   playerRegenPayload.value = {
@@ -1236,6 +1273,7 @@ const avatarInitial = computed<string>(() => {
       :width="playerRegenPayload.width"
       :height="playerRegenPayload.height"
       :initial-backend="playerRegenPayload.initialBackend"
+      :available-backends="availableBackendOptions"
       :busy="playerRegenBusy"
       @confirm="confirmPlayerRegenerate"
       @cancel="cancelPlayerRegenerate"

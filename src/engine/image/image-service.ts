@@ -732,8 +732,8 @@ export class ImageService {
     composed: { positive: string; negative: string; width: number; height: number },
     presetParams?: { sampler?: string; noiseSchedule?: string; steps?: number; cfgScale?: number; smea?: boolean; seed?: number },
   ): Promise<Blob> {
-    const config = this.aiService.getConfigForUsage('imageGeneration');
-    if (!config) throw new Error('[ImageService] No API config for image generation');
+    const config = this.aiService.getImageConfigForBackend(backend);
+    if (!config) throw new Error(`[ImageService] 未找到 "${backend}" 后端的图像 API 配置 — 请在 API 管理中添加`);
 
     const provider = this.providerRegistry.resolve({
       backend,
