@@ -77,23 +77,7 @@ const selectedNpc = ref('');
 const composition = ref<'portrait' | 'half-body' | 'full-length' | 'custom'>('portrait');
 const customComposition = ref('');
 const artStyle = ref<'none' | 'generic' | 'anime' | 'realistic' | 'chinese'>('none');
-const VALID_BACKENDS = new Set<string>(['openai', 'novelai', 'sd_webui', 'comfyui', 'civitai']);
-function asBackend(v: string): ImageBackendType {
-  return VALID_BACKENDS.has(v) ? v as ImageBackendType : 'novelai';
-}
-function resolveBackend(): ImageBackendType {
-  const saved = asBackend(String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai'));
-  const available = configuredBackends.value;
-  if (available.size === 0 || available.has(saved)) return saved;
-  return asBackend(available.values().next().value ?? 'novelai');
-}
-const backend = ref<ImageBackendType>(resolveBackend());
-
-watch(backendOptions, (opts) => {
-  if (opts.length > 0 && !opts.some((o) => o.value === backend.value)) {
-    backend.value = asBackend(opts[0].value ?? 'novelai');
-  }
-});
+const backend = ref<ImageBackendType>('novelai');
 const extraPrompt = ref('');
 const selectedArtistPreset = ref('');
 const selectedPngPreset = ref('');
@@ -243,6 +227,26 @@ const backendOptions = computed<SelectOption[]>(() => {
   const available = configuredBackends.value;
   if (available.size === 0) return [{ label: '请先在 API 管理中添加图像 API', value: '' }];
   return ALL_IMAGE_BACKENDS.filter((o) => available.has(o.value));
+});
+
+// Resolve backend from saved default, validated against configured APIs
+const VALID_BACKENDS = new Set<string>(['openai', 'novelai', 'sd_webui', 'comfyui', 'civitai']);
+function asBackend(v: string): ImageBackendType {
+  return VALID_BACKENDS.has(v) ? v as ImageBackendType : 'novelai';
+}
+{
+  const saved = asBackend(String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai'));
+  const available = configuredBackends.value;
+  if (available.size > 0 && !available.has(saved)) {
+    backend.value = asBackend(available.values().next().value ?? 'novelai');
+  } else {
+    backend.value = saved;
+  }
+}
+watch(backendOptions, (opts) => {
+  if (opts.length > 0 && !opts.some((o) => o.value === backend.value)) {
+    backend.value = asBackend(opts[0].value ?? 'novelai');
+  }
 });
 
 const civitaiSchedulerOptions: SelectOption[] = [

@@ -47,7 +47,7 @@ const USAGE_TYPE_META: Record<UsageType, UsageTypeMeta> = {
   instruction_generation:  { label: '指令生成',      category: 'plot',         tip: '生成结构化指令和行动选项，通常随主回合一起执行' },
   privacy_repair:          { label: '扩展字段修复',   category: 'repair',       tip: 'NSFW 模式下自动修复不合规的私密字段描述，可配置重试次数' },
   field_repair:            { label: '字段补齐',      category: 'repair',       tip: '自动补齐 AI 遗漏的必填字段（如属性、装备等），减少数据缺失' },
-  imageGeneration:         { label: '图像生成',      category: 'image',        tip: '调用图像生成 API（DALL-E / ComfyUI / SD / Civitai 等）生成场景或角色图' },
+  imageGeneration:         { label: '图像生成',      category: 'image',        tip: '图像生成会按后端类型自动匹配 API（通过 URL 识别）。如需手动指定可在此分配。' },
   imageCharacterTokenizer: { label: '角色视觉提取',  category: 'image',        tip: '用 LLM 从角色图像中提取叙事描述，供后续 prompt 引用' },
   imageSceneTokenizer:     { label: '场景视觉提取',  category: 'image',        tip: '用 LLM 从场景图像中提取环境描述，增强叙事沉浸感' },
   imageSecretTokenizer:    { label: '私密视觉提取',  category: 'image',        tip: '用 LLM 从 NSFW 图像中提取描述（仅 NSFW 模式下使用）' },
@@ -62,7 +62,7 @@ const ASSIGN_CATEGORY_META: Record<AssignCategory, { label: string; hint?: strin
   npc_social:   { label: 'NPC 与社交' },
   plot:         { label: '剧情导向' },
   repair:       { label: '修复与补齐' },
-  image:        { label: '图像相关' },
+  image:        { label: '图像相关', hint: '图像生成按后端类型自动匹配 API（通过 URL 识别），无需手动分配。词组转化器（角色/场景/私密视觉提取）使用 LLM 类别的 API。' },
   rag:          { label: 'RAG 检索', hint: '下拉框只显示类别匹配的 API。如果没有选项，请先添加 Embedding 或 Rerank 类别的 API 配置。' },
   utility:      { label: '工具' },
 };
