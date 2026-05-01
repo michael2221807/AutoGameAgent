@@ -84,6 +84,13 @@ function resolveDefaultBackend(): ImageBackendType {
   return VALID_BACKENDS.has(first ?? '') ? first as ImageBackendType : 'novelai' as ImageBackendType;
 }
 
+const ALL_BACKEND_LABELS: Record<string, string> = { novelai: 'NovelAI', openai: 'OpenAI DALL-E', sd_webui: 'SD-WebUI', comfyui: 'ComfyUI', civitai: 'Civitai' };
+const activeBackendStatus = computed(() => {
+  const bk = resolveDefaultBackend();
+  const cfg = aiService?.getImageConfigForBackend(bk);
+  return { label: ALL_BACKEND_LABELS[bk] ?? bk, model: cfg?.model ?? '', configured: !!cfg };
+});
+
 // ─── Player image generation ───
 const compositionOptions: SelectOption[] = [
   { label: '头像 (1:1)', value: 'portrait' },
@@ -1127,6 +1134,12 @@ const avatarInitial = computed<string>(() => {
           <div class="player-image-form">
             <h3 class="section-label">生成主角肖像</h3>
             <p class="section-desc">为你的角色生成图片，可在下方设为头像或立绘</p>
+            <div class="pi-backend-status">
+              <span :class="['pi-status-dot', activeBackendStatus.configured ? 'pi-status-dot--ok' : 'pi-status-dot--off']" />
+              <span class="pi-status-label">{{ activeBackendStatus.label }}</span>
+              <span v-if="activeBackendStatus.model" class="pi-status-model">{{ activeBackendStatus.model }}</span>
+              <span v-if="!activeBackendStatus.configured" class="pi-status-warn">未配置</span>
+            </div>
 
             <div class="pi-form-row">
               <label class="pi-label">构图</label>
@@ -1910,6 +1923,13 @@ const avatarInitial = computed<string>(() => {
 .player-image-form { flex: 1; display: flex; flex-direction: column; gap: var(--space-md, 12px); }
 .section-label { font-size: var(--font-size-md, 14px); color: var(--color-text, #e0e0e6); }
 .section-desc { font-size: var(--font-size-xs, 12px); color: var(--color-text-muted, #55556a); }
+.pi-backend-status { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--color-text-secondary, #8888a0); margin-top: 4px; }
+.pi-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.pi-status-dot--ok { background: #4ade80; box-shadow: 0 0 4px #4ade8066; }
+.pi-status-dot--off { background: #666; }
+.pi-status-label { font-weight: 600; color: var(--color-text, #e0e0e6); }
+.pi-status-model { color: var(--color-text-secondary, #8888a0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.pi-status-warn { color: var(--color-amber, #fbbf24); }
 .pi-form-row { display: flex; flex-direction: column; gap: 4px; }
 .pi-label { font-size: var(--font-size-xs, 12px); color: var(--color-text-secondary, #8888a0); }
 .pi-select, .pi-textarea {

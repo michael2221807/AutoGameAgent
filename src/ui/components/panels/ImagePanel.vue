@@ -1039,6 +1039,18 @@ const settingsBackend = computed(() => String(get('系统.扩展.image.config.de
 const isNovelAIBackend = computed(() => settingsBackend.value === 'novelai');
 const settingsTransformerIndependent = computed(() => get('系统.扩展.image.config.transformerIndependentModel') === true);
 
+const activeBackendStatus = computed(() => {
+  const bk = backend.value;
+  const label = ALL_IMAGE_BACKENDS.find((o) => o.value === bk)?.label ?? bk;
+  const cfg = aiService?.getImageConfigForBackend(bk);
+  return {
+    label,
+    model: cfg?.model ?? '',
+    configured: !!cfg,
+    apiName: cfg?.name ?? '',
+  };
+});
+
 const civitaiNetworksJsonError = ref('');
 const civitaiControlNetsJsonError = ref('');
 function validateCivitaiJson(field: 'additionalNetworksJson' | 'controlNetsJson', errorRef: 'civitaiNetworksJsonError' | 'civitaiControlNetsJsonError') {
@@ -2255,6 +2267,12 @@ function clearNpcImages() {
 
       <!-- ═══ Manual Generation Tab ═══ -->
       <div v-if="activeTab === 'manual'" class="tab-content">
+        <div class="backend-status-bar">
+          <span :class="['status-dot', activeBackendStatus.configured ? 'status-dot--ok' : 'status-dot--off']" />
+          <span class="backend-status-label">{{ activeBackendStatus.label }}</span>
+          <span v-if="activeBackendStatus.model" class="backend-status-model">{{ activeBackendStatus.model }}</span>
+          <span v-if="!activeBackendStatus.configured" class="backend-status-warn">未配置 — 请在 API 管理 → 功能分配中分配</span>
+        </div>
         <div class="gen-layout">
           <!-- Left: NPC info + form -->
           <div class="gen-form-col">
@@ -2772,6 +2790,12 @@ function clearNpcImages() {
 
       <!-- ═══ Scene Tab ═══ -->
       <div v-if="activeTab === 'scene'" class="tab-content">
+        <div class="backend-status-bar">
+          <span :class="['status-dot', activeBackendStatus.configured ? 'status-dot--ok' : 'status-dot--off']" />
+          <span class="backend-status-label">{{ activeBackendStatus.label }}</span>
+          <span v-if="activeBackendStatus.model" class="backend-status-model">{{ activeBackendStatus.model }}</span>
+          <span v-if="!activeBackendStatus.configured" class="backend-status-warn">未配置</span>
+        </div>
         <div class="scene-layout-v2">
           <!-- Left column: wallpaper + stats + controls -->
           <div class="scene-left-col">
@@ -5464,6 +5488,29 @@ function clearNpcImages() {
   margin-bottom: 8px;
   color: var(--color-text, #e0e0e6);
 }
+.backend-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #8888a0);
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot--ok { background: #4ade80; box-shadow: 0 0 4px #4ade8066; }
+.status-dot--off { background: #666; }
+.backend-status-label { font-weight: 600; color: var(--color-text, #e0e0e6); }
+.backend-status-model { color: var(--color-text-secondary, #8888a0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; }
+.backend-status-warn { color: var(--color-amber, #fbbf24); font-size: 0.75rem; }
+
 .form-textarea--error {
   border-color: var(--color-error, #f87171) !important;
 }
