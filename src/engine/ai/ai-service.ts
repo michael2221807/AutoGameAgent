@@ -74,9 +74,10 @@ export class AIService {
     }
 
     // 2. 确定此 usage 需要的 API 类别
+    const isImageGen = usageType === 'imageGeneration' || usageType.startsWith('imageGen_');
     const requiredCategory = usageType === 'embedding' ? 'embedding'
       : usageType === 'rerank' ? 'rerank'
-      : usageType === 'imageGeneration' ? 'image'
+      : isImageGen ? 'image'
       : 'llm';
 
     // 3. 非 LLM 类：只在同类 API 中查找，不 fallback 到 LLM
@@ -99,23 +100,14 @@ export class AIService {
   // ─── Image per-backend routing ───
 
   /**
-   * Get all enabled image-category API configs.
-   */
-  getImageConfigs(): APIConfig[] {
-    const result: APIConfig[] = [];
-    for (const c of this.configs.values()) {
-      if (c.enabled && (c.apiCategory ?? 'llm') === 'image') result.push(c);
-    }
-    return result;
-  }
-
-  /**
-   * Find the image API config whose URL matches a given backend.
-   * Falls back to the imageGeneration assignment or first available image config.
+   * Find the image API config for a specific backend.
+   * Uses the per-backend usage type (imageGen_novelai, imageGen_civitai, etc.).
+   * Falls back to legacy imageGeneration assignment for backward compatibility.
    */
   getImageConfigForBackend(backend: string): APIConfig | undefined {
-    const imageConfigs = this.getImageConfigs();
-    return imageConfigs.find((c) => inferImageBackendFromUrl(c.url) === backend);
+    const perBackendUsage = `imageGen_${backend}` as UsageType;
+    return this.getConfigForUsage(perBackendUsage)
+      ?? this.getConfigForUsage('imageGeneration');
   }
 
   // ─── 主调用方法 ───

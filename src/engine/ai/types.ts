@@ -115,7 +115,12 @@ export type UsageType =
   | 'embedding'                // Engram 向量化
   | 'rerank'                   // Engram 重排
   | 'assistant'                // AI 助手（utility chat —— 复用 main fallback，但可单独配 API）
-  | 'imageGeneration'          // 图像生成（Sprint Image-1）— 走 'image' 类别 API
+  | 'imageGeneration'          // 图像生成（Legacy fallback）— 被 per-backend types 取代
+  | 'imageGen_novelai'         // NovelAI 图像生成
+  | 'imageGen_openai'          // OpenAI DALL-E 图像生成
+  | 'imageGen_sd_webui'        // SD-WebUI 图像生成
+  | 'imageGen_comfyui'         // ComfyUI 图像生成
+  | 'imageGen_civitai'         // Civitai 图像生成
   | 'imageCharacterTokenizer'  // 角色视觉 token 提取（LLM 类）— Sprint Image-2
   | 'imageSceneTokenizer'      // 场景视觉 token 提取（LLM 类）— Sprint Image-2
   | 'imageSecretTokenizer'     // 私密部位 token 提取（LLM 类）— Sprint Image-2

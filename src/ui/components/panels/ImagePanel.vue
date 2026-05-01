@@ -212,11 +212,17 @@ const ALL_IMAGE_BACKENDS: SelectOption[] = [
   { label: 'Civitai', value: 'civitai' },
 ];
 
+const IMAGE_BACKEND_KEYS: ImageBackendType[] = ['novelai', 'openai', 'sd_webui', 'comfyui', 'civitai'];
 const configuredBackends = computed<Set<string>>(() => {
   const set = new Set<string>();
-  for (const c of apiStore.apiConfigs) {
-    if (c.enabled && (c.apiCategory ?? 'llm') === 'image') {
-      const b = inferImageBackendFromUrl(c.url);
+  for (const bk of IMAGE_BACKEND_KEYS) {
+    const cfg = apiStore.getAPIForType(`imageGen_${bk}` as import('@/engine/ai/types').UsageType);
+    if (cfg) set.add(bk);
+  }
+  if (set.size === 0) {
+    const legacy = apiStore.getAPIForType('imageGeneration');
+    if (legacy) {
+      const b = inferImageBackendFromUrl(legacy.url);
       if (b) set.add(b);
     }
   }

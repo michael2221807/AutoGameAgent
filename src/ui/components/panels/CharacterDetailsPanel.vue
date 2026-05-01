@@ -37,11 +37,17 @@ const imageService = inject<ImageService>('imageService');
 const aiService = inject<AIService | undefined>('aiService', undefined);
 const apiStore = useAPIManagementStore();
 
+const IMAGE_BACKEND_KEYS: ImageBackendType[] = ['novelai', 'openai', 'sd_webui', 'comfyui', 'civitai'];
 const configuredImageBackends = computed(() => {
   const set = new Set<string>();
-  for (const c of apiStore.apiConfigs) {
-    if (c.enabled && (c.apiCategory ?? 'llm') === 'image') {
-      const b = inferImageBackendFromUrl(c.url);
+  for (const bk of IMAGE_BACKEND_KEYS) {
+    const cfg = apiStore.getAPIForType(`imageGen_${bk}` as import('@/engine/ai/types').UsageType);
+    if (cfg) set.add(bk);
+  }
+  if (set.size === 0) {
+    const legacy = apiStore.getAPIForType('imageGeneration');
+    if (legacy) {
+      const b = inferImageBackendFromUrl(legacy.url);
       if (b) set.add(b);
     }
   }

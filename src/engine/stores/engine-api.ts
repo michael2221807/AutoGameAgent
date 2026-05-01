@@ -25,6 +25,7 @@ const ALL_USAGE_TYPES: UsageType[] = [
   'field_repair',
   'npc_chat', 'embedding', 'rerank',
   'assistant', 'imageGeneration',
+  'imageGen_novelai', 'imageGen_openai', 'imageGen_sd_webui', 'imageGen_comfyui', 'imageGen_civitai',
   'imageCharacterTokenizer', 'imageSceneTokenizer', 'imageSecretTokenizer',
   'bodyPolish', 'plot_decompose',
 ];
