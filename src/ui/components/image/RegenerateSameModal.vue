@@ -10,7 +10,7 @@
  * Emits `confirm` with the chosen backend; caller owns calling
  * `ImageService.regenerateFromPrompts` with its own subject-specific params.
  */
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import type { ImageBackendType } from '@/engine/image/types';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 
@@ -37,6 +37,12 @@ const emit = defineEmits<{
 }>();
 
 const chosenBackend = ref<ImageBackendType>(props.initialBackend);
+
+watch(() => props.availableBackends, (opts) => {
+  if (opts?.length && !opts.some((o) => o.value === chosenBackend.value)) {
+    chosenBackend.value = (opts[0].value || props.initialBackend) as ImageBackendType;
+  }
+}, { immediate: true });
 
 const ALL_BACKENDS: SelectOption[] = [
   { label: 'NovelAI', value: 'novelai' },

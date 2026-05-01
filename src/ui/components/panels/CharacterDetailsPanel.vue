@@ -48,6 +48,16 @@ const configuredImageBackends = computed(() => {
       if (cfg) set.add(bk);
     }
   }
+  if (set.size === 0) {
+    const legacyAssign = apiStore.apiAssignments.find((a) => a.type === 'imageGeneration');
+    if (legacyAssign && legacyAssign.apiId !== 'default') {
+      const cfg = apiStore.apiConfigs.find((c) => c.id === legacyAssign.apiId && c.enabled && (c.apiCategory ?? 'llm') === 'image');
+      if (cfg) {
+        const b = inferImageBackendFromUrl(cfg.url);
+        if (b) set.add(b);
+      }
+    }
+  }
   return set;
 });
 

@@ -251,15 +251,6 @@ const VALID_BACKENDS = new Set<string>(['openai', 'novelai', 'sd_webui', 'comfyu
 function asBackend(v: string): ImageBackendType {
   return VALID_BACKENDS.has(v) ? v as ImageBackendType : 'novelai';
 }
-function syncBackendToAvailable() {
-  const saved = asBackend(String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai'));
-  const available = configuredBackends.value;
-  if (available.size > 0 && !available.has(saved)) {
-    backend.value = asBackend(available.values().next().value ?? 'novelai');
-  } else {
-    backend.value = saved;
-  }
-}
 watch(backendOptions, (opts) => {
   const realOpts = opts.filter((o) => o.value !== '');
   if (realOpts.length > 0 && !realOpts.some((o) => o.value === backend.value)) {
@@ -1070,8 +1061,8 @@ async function runCivitaiWhatif() {
   civitaiWhatifLoading.value = true;
   civitaiWhatifResult.value = '';
   try {
-    const apiConfig = aiService?.getConfigForUsage('imageGeneration');
-    if (!apiConfig) { civitaiWhatifResult.value = '未配置图像生成 API'; return; }
+    const apiConfig = aiService?.getImageConfigForBackend('civitai');
+    if (!apiConfig) { civitaiWhatifResult.value = '未配置 Civitai 图像 API'; return; }
     const base = apiConfig.url.replace(/\/+$/, '');
     const body: Record<string, unknown> = { prompt: 'cost estimate', width: 1024, height: 1024, quantity: 1, batchSize: 1 };
     if (apiConfig.model) body.model = apiConfig.model;
