@@ -33,7 +33,7 @@ export interface SaveSlotMeta {
   /** 存档大小估算（字节，JSON.stringify().length） */
   saveSize?: number;
   /** 存档类型：手动、回合前快照、时间点、退出前 */
-  saveType?: 'manual' | 'pre-round' | 'timepoint' | 'exit';
+  saveType?: 'manual' | 'pre-round' | 'timepoint' | 'exit' | 'auto';
 }
 
 /**

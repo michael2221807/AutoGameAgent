@@ -63,7 +63,7 @@ describe('migrateImageState', () => {
     sm.set('系统.扩展.image', {
       enabled: true,
       config: {
-        civitai: { allowMatureContent: true, scheduler: 'DDIM', steps: 30, cfgScale: 5, seed: 42, clipSkip: 1, outputFormat: 'jpeg', additionalNetworksJson: '{}', controlNetsJson: '' },
+        civitai: { allowMatureContent: true, scheduler: 'DDIM', steps: 30, cfgScale: 5, seed: 42, clipSkip: 1, outputFormat: 'jpeg', additionalNetworksJson: '{}', controlNetsJson: '', loras: [] },
       },
     }, 'system');
     sm.set.mockClear();
@@ -91,11 +91,70 @@ describe('migrateImageState', () => {
   });
 
   it('does not run full init when image root already exists', () => {
-    sm.set('系统.扩展.image', { enabled: false, config: { civitai: { scheduler: 'Euler' } } }, 'system');
+    sm.set('系统.扩展.image', { enabled: false, config: { civitai: { scheduler: 'Euler', loras: [] } } }, 'system');
     sm.set.mockClear();
 
     const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
     expect(result).toBe(false);
     expect(sm.set).not.toHaveBeenCalled();
+  });
+
+  it('adds loras[] to existing civitai config without it', () => {
+    sm.set('系统.扩展.image', {
+      enabled: true,
+      config: {
+        civitai: { allowMatureContent: true, scheduler: 'DDIM', steps: 30, cfgScale: 5, seed: 42, clipSkip: 1, outputFormat: 'jpeg', additionalNetworksJson: '{}', controlNetsJson: '' },
+      },
+    }, 'system');
+    sm.set.mockClear();
+
+    const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+    expect(result).toBe(true);
+
+    const loras = sm.get('系统.扩展.image.config.civitai.loras');
+    expect(loras).toEqual([]);
+
+    // Existing fields must be preserved
+    const civitai = sm.get('系统.扩展.image.config.civitai') as Record<string, unknown> | undefined;
+    expect(civitai?.allowMatureContent).toBe(true);
+    expect(civitai?.scheduler).toBe('DDIM');
+  });
+
+  it('adds loras[] when existing civitai config has loras: null', () => {
+    sm.set('系统.扩展.image', {
+      enabled: true,
+      config: { civitai: { scheduler: 'Euler', loras: null } },
+    }, 'system');
+    sm.set.mockClear();
+
+    const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+    expect(result).toBe(true);
+    expect(sm.get('系统.扩展.image.config.civitai.loras')).toEqual([]);
+  });
+
+  it('does not overwrite existing loras array', () => {
+    const existingLoras = [{ id: 'test', name: 'Test LoRA', air: 'urn:air:sdxl:lora:civitai:1@2', enabled: true, strength: 1 }];
+    sm.set('系统.扩展.image', {
+      enabled: true,
+      config: {
+        civitai: { scheduler: 'Euler', loras: existingLoras },
+      },
+    }, 'system');
+    sm.set.mockClear();
+
+    const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+    expect(result).toBe(false);
+
+    const loras = sm.get('系统.扩展.image.config.civitai.loras') as unknown[];
+    expect(loras).toEqual(existingLoras);
+  });
+
+  it('full init includes loras[] in civitai defaults', () => {
+    migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+
+    const civitai = sm.get('系统.扩展.image.config.civitai') as Record<string, unknown> | undefined;
+    expect(civitai).toBeDefined();
+    expect(civitai?.loras).toEqual([]);
+    expect(civitai?.scheduler).toBe('EulerA');
   });
 });

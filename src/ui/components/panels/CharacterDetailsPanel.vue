@@ -16,6 +16,7 @@ import Modal from '@/ui/components/common/Modal.vue';
 import SchemaForm from '@/ui/components/editing/SchemaForm.vue';
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 import RegenerateSameModal from '@/ui/components/image/RegenerateSameModal.vue';
+import CivitaiLoraShelf from '@/ui/components/image/CivitaiLoraShelf.vue';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
 import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
@@ -28,7 +29,8 @@ import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import type { ImageService } from '@/engine/image/image-service';
-import type { ImageBackendType } from '@/engine/image/types';
+import type { ImageBackendType, CivitaiLoraSnapshot } from '@/engine/image/types';
+import { buildPromptStyleInjection, type PromptStylePresetLike } from '@/engine/image/style-preset-injection';
 
 const P = DEFAULT_ENGINE_PATHS;
 
@@ -84,9 +86,18 @@ function resolveDefaultBackend(): ImageBackendType {
   return VALID_BACKENDS.has(first ?? '') ? first as ImageBackendType : 'novelai' as ImageBackendType;
 }
 
+function extractLoraSnapshot(record: Record<string, unknown>): CivitaiLoraSnapshot | undefined {
+  const meta = record.providerMeta;
+  if (!meta || typeof meta !== 'object') return undefined;
+  const snap = (meta as Record<string, unknown>).civitai;
+  if (!snap || typeof snap !== 'object' || !Array.isArray((snap as CivitaiLoraSnapshot).loras)) return undefined;
+  return snap as CivitaiLoraSnapshot;
+}
+
 const ALL_BACKEND_LABELS: Record<string, string> = { novelai: 'NovelAI', openai: 'OpenAI DALL-E', sd_webui: 'SD-WebUI', comfyui: 'ComfyUI', civitai: 'Civitai' };
+const activeBackend = computed(() => resolveDefaultBackend());
 const activeBackendStatus = computed(() => {
-  const bk = resolveDefaultBackend();
+  const bk = activeBackend.value;
   const cfg = aiService?.getImageConfigForBackend(bk);
   return { label: ALL_BACKEND_LABELS[bk] ?? bk, model: cfg?.model ?? '', configured: !!cfg };
 });
@@ -268,6 +279,11 @@ async function generatePlayerImage() {
     const playerDesc = get(P.characterDescription) as string ?? '';
     const defaultBackend = resolveDefaultBackend();
     const anchor = playerAnchor.value;
+    const rawPresets = get('系统.扩展.image.artistPresets');
+    const styleInjection = buildPromptStyleInjection(
+      Array.isArray(rawPresets) ? rawPresets as PromptStylePresetLike[] : [],
+      [playerArtistPreset.value, playerPngPreset.value],
+    );
 
     // Build NPC-format data JSON (MRJH: player mapped to NPC format)
     const npcData: Record<string, unknown> = { 姓名: playerName };
@@ -298,6 +314,8 @@ async function generatePlayerImage() {
       extraPrompt: playerExtraPrompt.value || undefined,
       anchorPositive: anchor?.enabled !== false ? String(anchor?.positivePrompt ?? '') || undefined : undefined,
       anchorNegative: anchor?.enabled !== false ? String(anchor?.negativePrompt ?? '') || undefined : undefined,
+      artistPrefix: styleInjection.artistPrefix,
+      extraNegative: styleInjection.extraNegative,
       npcDataJson: JSON.stringify(npcData, null, 2),
       preset: w && h ? { id: 'custom', name: '自定义', positivePrefix: '', positiveSuffix: '', negative: '', width: w, height: h, source: 'manual' } : undefined,
     });
@@ -353,6 +371,7 @@ interface PlayerRegenPayload {
   height: number;
   initialBackend: ImageBackendType;
   artStyle?: string;
+  civitaiLoraSnapshot?: CivitaiLoraSnapshot;
 }
 const playerRegenPayload = ref<PlayerRegenPayload | null>(null);
 const playerRegenBusy = ref(false);
@@ -380,6 +399,7 @@ function openPlayerRegenerate(img: Record<string, unknown>) {
     height,
     initialBackend: bk,
     artStyle: String(img.artStyle ?? '') || undefined,
+    civitaiLoraSnapshot: extractLoraSnapshot(img),
   };
 }
 
@@ -467,6 +487,7 @@ interface RelationEntry {
   好感度?: number;
   内心想法?: string;
   在做事项?: string;
+  图片档案?: Record<string, string | undefined>;
   [key: string]: unknown;
 }
 
@@ -1141,6 +1162,13 @@ const avatarInitial = computed<string>(() => {
               <span v-if="!activeBackendStatus.configured" class="pi-status-warn">未配置</span>
             </div>
 
+            <CivitaiLoraShelf
+              v-if="activeBackend === 'civitai'"
+              mode="compact"
+              scope="player"
+              :mature-enabled="get('系统.扩展.image.config.civitai.allowMatureContent') === true"
+            />
+
             <div class="pi-form-row">
               <label class="pi-label">构图</label>
               <AgaSelect v-model="playerComposition" :options="compositionOptions" />
@@ -1301,6 +1329,7 @@ const avatarInitial = computed<string>(() => {
       :initial-backend="playerRegenPayload.initialBackend"
       :available-backends="availableBackendOptions"
       :busy="playerRegenBusy"
+      :civitai-lora-snapshot="playerRegenPayload.civitaiLoraSnapshot"
       @confirm="confirmPlayerRegenerate"
       @cancel="cancelPlayerRegenerate"
     />

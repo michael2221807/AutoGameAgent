@@ -13,6 +13,10 @@ import type { GameTime } from '@/engine/image/scene-context';
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 import ImageViewer from '@/ui/components/image/ImageViewer.vue';
 import RegenerateSameModal from '@/ui/components/image/RegenerateSameModal.vue';
+import CivitaiLoraShelf from '@/ui/components/image/CivitaiLoraShelf.vue';
+import { prepareCivitaiLora } from '@/engine/image/civitai-lora';
+import { buildPromptStyleInjection } from '@/engine/image/style-preset-injection';
+import type { CivitaiLoraShelfItem, CivitaiLoraScope, CivitaiLoraSnapshot } from '@/engine/image/types';
 import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
@@ -402,6 +406,10 @@ async function submitGenerate() {
     const npc = selectedNpcData.value;
     const artStyleMap: Record<string, string> = { none: '无要求', generic: '通用', anime: '二次元', realistic: '写实', chinese: '国风' };
     const anchor = selectedNpcAnchor.value;
+    const styleInjection = buildPromptStyleInjection(artistPresets.value, [
+      selectedArtistPreset.value,
+      selectedPngPreset.value,
+    ]);
 
     // Extract rich NPC data as JSON (matching MRJH's 提取NPC生图基础数据)
     const npcBaseData: Record<string, unknown> = {};
@@ -453,6 +461,8 @@ async function submitGenerate() {
       extraPrompt: extraPrompt.value || undefined,
       anchorPositive: anchor?.positive || undefined,
       anchorNegative: anchor?.negative || undefined,
+      artistPrefix: styleInjection.artistPrefix,
+      extraNegative: styleInjection.extraNegative,
       npcDataJson: JSON.stringify(npcBaseData, null, 2),
       useTransformer: get('系统.扩展.image.config.useTransformer') !== false,
     });
@@ -572,10 +582,17 @@ async function generateSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
   secretBusy.value = partKey;
   secretStatusText.value = `${part.label}特写已提交，正在加入图片队列。`;
   try {
+    const styleInjection = buildPromptStyleInjection(artistPresets.value, [
+      secretArtistPreset.value,
+      secretPngPreset.value,
+    ]);
     const task = await imageService.generateSecretPartImage({
       characterName: selectedNpc.value,
       part: partKey,
       backend: backend.value,
+      artistPrefix: styleInjection.artistPrefix,
+      extraNegative: styleInjection.extraNegative,
+      extraPrompt: secretExtraPrompt.value || undefined,
     });
     // Mirror the regular generate flow — push result into lastTask so the NPC
     // preview panel picks up the latest image instead of staying blank.
@@ -598,11 +615,18 @@ async function generateAllSecretParts() {
   secretStatusText.value = '三处特写已提交，正在加入图片队列。';
   try {
     let lastCompleted: ImageTask | null = null;
+    const styleInjection = buildPromptStyleInjection(artistPresets.value, [
+      secretArtistPreset.value,
+      secretPngPreset.value,
+    ]);
     for (const part of secretParts) {
       const task = await imageService.generateSecretPartImage({
         characterName: selectedNpc.value,
         part: part.key,
         backend: backend.value,
+        artistPrefix: styleInjection.artistPrefix,
+        extraNegative: styleInjection.extraNegative,
+        extraPrompt: secretExtraPrompt.value || undefined,
       });
       if (task.status === 'complete') lastCompleted = task;
     }
@@ -647,6 +671,7 @@ interface RegenPayload {
   height: number;
   initialBackend: ImageBackendType;
   artStyle?: string;
+  civitaiLoraSnapshot?: CivitaiLoraSnapshot;
 }
 const regenPayload = ref<RegenPayload | null>(null);
 const regenBusy = ref(false);
@@ -726,10 +751,6 @@ function openRegenerateFromTask(task: ImageTask) {
     subjectLabel,
     subtitle,
     targetCharacter: task.targetCharacter,
-    // Queue tasks don't record composition/part explicitly on the ImageTask;
-    // for character queue tasks we default to 'portrait' so the regen record
-    // gets a sensible composition badge — user can still re-trigger manually
-    // if they want a different composition. Scene/secret-part don't need it.
     composition: task.subjectType === 'character' ? 'portrait' : undefined,
     part: isSecret ? (task as ImageTask & { part?: 'breast' | 'vagina' | 'anus' }).part : undefined,
     positivePrompt: task.positivePrompt ?? '',
@@ -737,6 +758,7 @@ function openRegenerateFromTask(task: ImageTask) {
     width: task.width,
     height: task.height,
     initialBackend: task.backend,
+    civitaiLoraSnapshot: task.providerMeta?.civitai,
   });
 }
 
@@ -766,10 +788,11 @@ function openRegenerateFromGalleryImage(npcName: string, img: GalleryImage) {
     height,
     initialBackend: bk,
     artStyle: img.artStyle || undefined,
+    civitaiLoraSnapshot: img.providerMeta?.civitai,
   });
 }
 
-function openRegenerateFromHistoryEntry(entry: { type: 'scene' | 'character'; name: string; composition?: string; positivePrompt?: string; negativePrompt?: string; width?: number; height?: number; backend?: ImageBackendType; part?: 'breast' | 'vagina' | 'anus'; artStyle?: string }) {
+function openRegenerateFromHistoryEntry(entry: { type: 'scene' | 'character'; name: string; composition?: string; positivePrompt?: string; negativePrompt?: string; width?: number; height?: number; backend?: ImageBackendType; part?: 'breast' | 'vagina' | 'anus'; artStyle?: string; providerMeta?: { civitai?: CivitaiLoraSnapshot } }) {
   const isScene = entry.type === 'scene';
   const isSecret = entry.composition === 'secret_part';
   const width = entry.width ?? (isScene ? 1024 : 832);
@@ -794,7 +817,16 @@ function openRegenerateFromHistoryEntry(entry: { type: 'scene' | 'character'; na
     height,
     initialBackend: bk,
     artStyle: entry.artStyle,
+    civitaiLoraSnapshot: entry.providerMeta?.civitai,
   });
+}
+
+function extractLoraSnapshot(obj: Record<string, unknown>): CivitaiLoraSnapshot | undefined {
+  const meta = obj.providerMeta;
+  if (!meta || typeof meta !== 'object') return undefined;
+  const snap = (meta as Record<string, unknown>).civitai;
+  if (!snap || typeof snap !== 'object' || !Array.isArray((snap as CivitaiLoraSnapshot).loras)) return undefined;
+  return snap as CivitaiLoraSnapshot;
 }
 
 function openRegenerateFromSceneRecord(record: Record<string, unknown>) {
@@ -815,6 +847,7 @@ function openRegenerateFromSceneRecord(record: Record<string, unknown>) {
     width,
     height,
     initialBackend: bk,
+    civitaiLoraSnapshot: extractLoraSnapshot(record),
   });
 }
 
@@ -1008,6 +1041,10 @@ async function generateScene() {
     // into scene generation so image output reflects current weather,
     // festival decoration, and atmospheric tags.
     const gameTime = get(DEFAULT_ENGINE_PATHS.gameTime) as GameTime | null | undefined;
+    const styleInjection = buildPromptStyleInjection(artistPresets.value, [
+      selectedScenePreset.value,
+      selectedScenePngPreset.value,
+    ]);
     const task = await imageService.generateSceneImage({
       sceneDescription: sceneExtraPrompt.value || '当前场景',
       location: get('角色.基础信息.当前位置') as string ?? '',
@@ -1018,6 +1055,8 @@ async function generateScene() {
       backend: backend.value,
       compositionMode: sceneComposition.value === 'snapshot' ? 'story_snapshot' : 'pure_landscape',
       extraRequirements: sceneExtraPrompt.value || undefined,
+      artistPrefix: styleInjection.artistPrefix,
+      extraNegative: styleInjection.extraNegative,
       preset: { id: 'scene_custom', name: '场景自定义', positivePrefix: '', positiveSuffix: '', negative: '', source: 'manual', width: sceneW, height: sceneH },
     });
     if (task.status === 'failed') {
@@ -1037,6 +1076,7 @@ async function generateScene() {
 // Settings tab state
 const settingsBackend = computed(() => String(get('系统.扩展.image.config.defaultBackend') ?? 'novelai'));
 const isNovelAIBackend = computed(() => settingsBackend.value === 'novelai');
+const settingsLoraPreviewScope = ref<CivitaiLoraScope>('character');
 const settingsTransformerIndependent = computed(() => get('系统.扩展.image.config.transformerIndependentModel') === true);
 
 const activeBackendStatus = computed(() => {
@@ -1073,6 +1113,18 @@ async function runCivitaiWhatif() {
     if (apiConfig.model) body.model = apiConfig.model;
     const steps = get('系统.扩展.image.config.civitai.steps');
     if (steps != null) body.steps = steps;
+
+    // Include LoRA shelf in whatif request
+    const loraShelfRaw = get('系统.扩展.image.config.civitai.loras');
+    const loraShelf: CivitaiLoraShelfItem[] = Array.isArray(loraShelfRaw) ? loraShelfRaw as CivitaiLoraShelfItem[] : [];
+    const rawNetJson = String(get('系统.扩展.image.config.civitai.additionalNetworksJson') ?? '');
+    const scope = settingsLoraPreviewScope.value;
+    const prepared = prepareCivitaiLora({ shelf: loraShelf, scope, positivePrompt: body.prompt as string, rawAdditionalNetworksJson: rawNetJson });
+    body.prompt = prepared.modifiedPositive;
+    if (prepared.mergedAdditionalNetworksJson) {
+      try { body.additionalNetworks = JSON.parse(prepared.mergedAdditionalNetworksJson); } catch { /* ignore parse error */ }
+    }
+
     const res = await fetch(`${base}/v2/consumer/recipes/textToImage?whatif=true`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
@@ -1886,6 +1938,7 @@ interface CombinedHistoryEntry {
   height?: number;
   backend?: ImageBackendType;
   part?: 'breast' | 'vagina' | 'anus';
+  providerMeta?: { civitai?: CivitaiLoraSnapshot };
 }
 
 const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
@@ -1918,6 +1971,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
           height: Number(record.height) || undefined,
           backend: (record.backend as ImageBackendType | undefined) ?? undefined,
           part: record.part as 'breast' | 'vagina' | 'anus' | undefined,
+          providerMeta: extractLoraSnapshot(record) ? { civitai: extractLoraSnapshot(record)! } : undefined,
         });
       }
     }
@@ -1940,6 +1994,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       height: Number(record.height) || undefined,
       backend: record.backend ?? undefined,
       part: record.part ?? undefined,
+      providerMeta: extractLoraSnapshot(record as unknown as Record<string, unknown>) ? { civitai: extractLoraSnapshot(record as unknown as Record<string, unknown>)! } : undefined,
     });
   }
 
@@ -1960,6 +2015,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       width: Number(record.width) || undefined,
       height: Number(record.height) || undefined,
       backend: (record.backend as ImageBackendType | undefined) ?? undefined,
+      providerMeta: extractLoraSnapshot(record) ? { civitai: extractLoraSnapshot(record)! } : undefined,
     });
   }
 
@@ -2060,6 +2116,7 @@ interface GalleryImage {
   height?: number;
   /** Backend that produced the record; initial value when opening the regen modal. */
   backend?: ImageBackendType;
+  providerMeta?: { civitai?: CivitaiLoraSnapshot };
 }
 
 // Player archive for Gallery/History integration (MRJH: __player__ pseudo-NPC)
@@ -2273,6 +2330,12 @@ function clearNpcImages() {
           <span v-if="activeBackendStatus.model" class="backend-status-model">{{ activeBackendStatus.model }}</span>
           <span v-if="!activeBackendStatus.configured" class="backend-status-warn">未配置 — 请在 API 管理 → 功能分配中分配</span>
         </div>
+        <CivitaiLoraShelf
+          v-if="backend === 'civitai'"
+          mode="compact"
+          scope="character"
+          :mature-enabled="get('系统.扩展.image.config.civitai.allowMatureContent') === true"
+        />
         <div class="gen-layout">
           <!-- Left: NPC info + form -->
           <div class="gen-form-col">
@@ -2477,6 +2540,12 @@ function clearNpcImages() {
               v-if="selectedNpcData && !(selectedNpcData['性别'] && String(selectedNpcData['性别']).includes('男')) && get('系统.nsfwMode') === true"
               class="secret-section"
             >
+              <CivitaiLoraShelf
+                v-if="backend === 'civitai'"
+                mode="compact"
+                scope="secret_part"
+                :mature-enabled="get('系统.扩展.image.config.civitai.allowMatureContent') === true"
+              />
               <div class="secret-header-row">
                 <div>
                   <h4 class="secret-title">私密部位特写</h4>
@@ -2796,6 +2865,12 @@ function clearNpcImages() {
           <span v-if="activeBackendStatus.model" class="backend-status-model">{{ activeBackendStatus.model }}</span>
           <span v-if="!activeBackendStatus.configured" class="backend-status-warn">未配置</span>
         </div>
+        <CivitaiLoraShelf
+          v-if="backend === 'civitai'"
+          mode="compact"
+          scope="scene"
+          :mature-enabled="get('系统.扩展.image.config.civitai.allowMatureContent') === true"
+        />
         <div class="scene-layout-v2">
           <!-- Left column: wallpaper + stats + controls -->
           <div class="scene-left-col">
@@ -2970,6 +3045,7 @@ function clearNpcImages() {
                   <div class="scene-history-card-body">
                     <div class="scene-history-card-top">
                       <span class="scene-history-card-time">{{ new Date(Number(record.createdAt) || 0).toLocaleString() }}</span>
+                      <span v-if="(record as Record<string, unknown>).providerMeta && ((record as Record<string, unknown>).providerMeta as Record<string, unknown>)?.civitai" class="lora-badge">LoRA</span>
                     </div>
                     <!-- Expandable prompts -->
                     <details v-if="record.positivePrompt" class="prompt-details">
@@ -3057,6 +3133,7 @@ function clearNpcImages() {
               </div>
               <div class="queue-card-status-area">
                 <span :class="['task-badge', `task-badge--${task.status}`]">{{ taskStatusLabel(task.status) }}</span>
+                <span v-if="task.providerMeta?.civitai?.loras?.length" class="lora-badge">LoRA ×{{ task.providerMeta.civitai.loras.length }}</span>
                 <AgaButton variant="ghost" size="sm" @click="removeTask(task.id)">删除</AgaButton>
               </div>
             </div>
@@ -3160,6 +3237,7 @@ function clearNpcImages() {
                   <div class="history-card-name-v2">{{ entry.type === 'scene' ? '场景' : entry.name }}</div>
                   <div class="history-card-sub-v2">
                     <span v-if="entry.composition" class="history-comp-badge">{{ entry.composition }}</span>
+                    <span v-if="entry.providerMeta?.civitai?.loras?.length" class="lora-badge">LoRA ×{{ entry.providerMeta.civitai.loras.length }}</span>
                     <span>{{ new Date(entry.timestamp).toLocaleString() }}</span>
                   </div>
                 </div>
@@ -4070,6 +4148,14 @@ function clearNpcImages() {
             </div>
           </div>
 
+          <!-- Civitai LoRA Shelf -->
+          <CivitaiLoraShelf
+            mode="full"
+            :scope="settingsLoraPreviewScope"
+            :mature-enabled="get('系统.扩展.image.config.civitai.allowMatureContent') === true"
+            @update:scope="settingsLoraPreviewScope = $event"
+          />
+
           <details class="form-advanced">
             <summary>高级参数</summary>
             <div class="settings-grid-3">
@@ -4091,7 +4177,7 @@ function clearNpcImages() {
               </div>
             </div>
             <div class="form-section">
-              <label class="form-label">附加网络 (LoRA JSON)</label>
+              <label class="form-label">附加网络 JSON（非 LoRA / 高级）</label>
               <textarea
                 class="form-textarea" rows="3"
                 :class="{ 'form-textarea--error': civitaiNetworksJsonError }"
@@ -4436,6 +4522,7 @@ function clearNpcImages() {
       :initial-backend="regenPayload.initialBackend"
       :available-backends="backendOptions"
       :busy="regenBusy"
+      :civitai-lora-snapshot="regenPayload.civitaiLoraSnapshot"
       @confirm="confirmRegenerate"
       @cancel="cancelRegenerate"
     />
@@ -4832,6 +4919,11 @@ function clearNpcImages() {
 .task-badge--generating { background: var(--color-warning-muted); color: var(--color-warning); }
 .task-badge--tokenizing { background: var(--color-info); color: var(--color-text-bone); }
 .task-badge--pending { background: var(--color-primary-muted); color: var(--color-primary); }
+.lora-badge {
+  padding: 1px 6px; border-radius: var(--radius-full, 999px); font-size: 10px; font-weight: 500;
+  color: var(--color-sage-300); border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+}
 
 /* Queue tab v2 */
 .queue-header-v2 {

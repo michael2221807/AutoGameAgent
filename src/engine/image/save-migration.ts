@@ -8,6 +8,7 @@
  * Idempotent: if the subtree already exists, does nothing.
  */
 import type { StateManager } from '../core/state-manager';
+import type { CivitaiLoraShelfItem } from './types';
 
 const IMAGE_ROOT_PATH = '系统.扩展.image';
 
@@ -47,6 +48,7 @@ const DEFAULT_IMAGE_STATE = {
       outputFormat: 'png',
       additionalNetworksJson: '',
       controlNetsJson: '',
+      loras: [] as CivitaiLoraShelfItem[],
     },
     transformer: {
       independentEnabled: false,
@@ -110,6 +112,15 @@ export function migrateImageState(stateManager: StateManager): boolean {
   if (stateManager.get<unknown>(civitaiPath) === undefined) {
     stateManager.set(civitaiPath, DEFAULT_IMAGE_STATE.config.civitai, 'system');
     console.debug('[ImageMigration] Added civitai config defaults to existing save');
+    migrated = true;
+  }
+
+  // Field-level: add loras array if civitai config exists but loras is missing/null
+  const lorasPath = `${civitaiPath}.loras`;
+  if (stateManager.get<unknown>(civitaiPath) !== undefined
+      && stateManager.get<unknown>(lorasPath) == null) {
+    stateManager.set(lorasPath, [], 'system');
+    console.debug('[ImageMigration] Added loras[] to existing civitai config');
     migrated = true;
   }
 

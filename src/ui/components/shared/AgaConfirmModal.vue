@@ -6,7 +6,7 @@
  */
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 
-const props = defineProps<{
+defineProps<{
   title?: string;
   message: string;
   confirmLabel?: string;

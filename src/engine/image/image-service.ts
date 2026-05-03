@@ -18,7 +18,9 @@ import { ImagePromptComposer } from './prompt-composer';
 import { ImageProviderRegistry } from './provider-registry';
 import { ImageAssetCache } from './asset-cache';
 import { ImageTaskQueue } from './task-queue';
-import type { ImageTask, ImageAsset, ImageBackendType, CharacterAnchor, StylePreset } from './types';
+import type { ImageTask, ImageAsset, ImageBackendType, ImageSubjectType, CharacterAnchor, StylePreset, CivitaiLoraShelfItem, CivitaiLoraSnapshot } from './types';
+import { prepareCivitaiLora, resolveLoraScope, validateShelfForGeneration } from './civitai-lora';
+import { joinPromptFragments } from './style-preset-injection';
 import { normalizeSingleCharacterOutput, processTransformerOutput, type SerializationStrategy } from './output-processor';
 import { buildDirectCharacterPrompt } from './direct-prompt-builder';
 import { getTransformerPresetContext } from './transformer-presets';
@@ -153,6 +155,8 @@ export class ImageService {
     extraRequirements?: string;
     roleAnchors?: Array<{ name: string; positive: string }>;
     preset?: StylePreset;
+    artistPrefix?: string;
+    extraNegative?: string;
     backend: ImageBackendType;
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
@@ -202,21 +206,39 @@ export class ImageService {
         isNovelAI,
       });
 
-      const composed = this.composer.compose({
+      const composedRaw = this.composer.compose({
         subjectTokens: processedPositive ? [processedPositive] : tokenResult.tokens,
         subjectNegative: tokenResult.negative,
         composition: 'scene',
+        artistPrefix: joinPromptFragments([
+          params.preset?.positivePrefix,
+          params.artistPrefix,
+          params.preset?.positiveSuffix,
+        ]),
+        extraNegative: joinPromptFragments([params.preset?.negative, params.extraNegative]),
         width: params.preset?.width,
         height: params.preset?.height,
       });
 
+      // Civitai LoRA preparation (no-op for non-civitai)
+      let composed = composedRaw;
+      let civitaiProviderParams: Record<string, unknown> | undefined;
+      let loraSnapshot: CivitaiLoraSnapshot | undefined;
+      if (params.backend === 'civitai') {
+        const prep = this.prepareCivitaiRequest(composedRaw, 'scene');
+        composed = prep.composed;
+        civitaiProviderParams = prep.providerParams;
+        loraSnapshot = prep.snapshot;
+      }
+
       this.queue.updateStatus(task.id, 'generating', {
         positivePrompt: composed.positive,
         negativePrompt: composed.negative,
+        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
       });
       eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
 
-      const blob = await this.callProvider(params.backend, composed);
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -254,6 +276,8 @@ export class ImageService {
     anchorPositive?: string;
     anchorNegative?: string;
     anchorStructuredFeatures?: import('./types').AnchorStructuredFeatures;
+    artistPrefix?: string;
+    extraNegative?: string;
     npcDataJson?: string;
     /** When false, bypass AI transformer and build prompt directly from NPC data.
      *  Default: true. Forced true for NovelAI backend.
@@ -332,22 +356,43 @@ export class ImageService {
         negativeTokens = undefined;
       }
 
-      const composed = this.composer.compose({
+      const composedRaw = this.composer.compose({
         subjectTokens: processedPositive ? [processedPositive] : [],
         subjectNegative: negativeTokens,
         composition: params.composition ?? 'portrait',
+        artistPrefix: joinPromptFragments([
+          params.preset?.positivePrefix,
+          params.artistPrefix,
+          params.preset?.positiveSuffix,
+        ]),
         width: params.preset?.width,
         height: params.preset?.height,
-        extraNegative: params.anchorNegative,
+        extraNegative: joinPromptFragments([
+          params.preset?.negative,
+          params.anchorNegative,
+          params.extraNegative,
+        ]),
       });
+
+      // Civitai LoRA preparation (no-op for non-civitai)
+      let composed = composedRaw;
+      let civitaiProviderParams: Record<string, unknown> | undefined;
+      let loraSnapshot: CivitaiLoraSnapshot | undefined;
+      if (params.backend === 'civitai') {
+        const prep = this.prepareCivitaiRequest(composedRaw, 'character', params.characterName);
+        composed = prep.composed;
+        civitaiProviderParams = prep.providerParams;
+        loraSnapshot = prep.snapshot;
+      }
 
       this.queue.updateStatus(task.id, 'generating', {
         positivePrompt: composed.positive,
         negativePrompt: composed.negative,
+        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
       });
       eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
 
-      const blob = await this.callProvider(params.backend, composed);
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -367,6 +412,7 @@ export class ImageService {
           model: this.getCurrentModelName(params.backend),
           artStyle: params.artStyle,
           createdAt: Date.now(),
+          ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
         });
       }
 
@@ -399,6 +445,9 @@ export class ImageService {
     anchorNegative?: string;
     anchorStructuredFeatures?: import('./types').AnchorStructuredFeatures;
     preset?: StylePreset;
+    artistPrefix?: string;
+    extraNegative?: string;
+    extraPrompt?: string;
     backend: ImageBackendType;
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
@@ -438,26 +487,48 @@ export class ImageService {
           ? { positive: params.anchorPositive, negative: params.anchorNegative, structuredFeatures: params.anchorStructuredFeatures }
           : undefined,
         isNovelAI,
-        extraRequirements: undefined,
+        extraRequirements: params.extraPrompt,
       });
 
       const processedPositive = normalizeSingleCharacterOutput(tokenResult.rawResponse, { isNovelAI });
 
-      const composed = this.composer.compose({
+      const composedRaw = this.composer.compose({
         subjectTokens: processedPositive ? [processedPositive] : tokenResult.tokens,
         subjectNegative: tokenResult.negative,
         composition: 'secret_part',
+        artistPrefix: joinPromptFragments([
+          params.preset?.positivePrefix,
+          params.artistPrefix,
+          params.preset?.positiveSuffix,
+        ]),
+        extraNegative: joinPromptFragments([
+          params.preset?.negative,
+          params.anchorNegative,
+          params.extraNegative,
+        ]),
         width: params.preset?.width,
         height: params.preset?.height,
       });
 
+      // Civitai LoRA preparation (no-op for non-civitai)
+      let composed = composedRaw;
+      let civitaiProviderParams: Record<string, unknown> | undefined;
+      let loraSnapshot: CivitaiLoraSnapshot | undefined;
+      if (params.backend === 'civitai') {
+        const prep = this.prepareCivitaiRequest(composedRaw, 'secret_part', params.characterName);
+        composed = prep.composed;
+        civitaiProviderParams = prep.providerParams;
+        loraSnapshot = prep.snapshot;
+      }
+
       this.queue.updateStatus(task.id, 'generating', {
         positivePrompt: composed.positive,
         negativePrompt: composed.negative,
+        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
       });
       eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
 
-      const blob = await this.callProvider(params.backend, composed);
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -470,6 +541,7 @@ export class ImageService {
       if (params.characterName) {
         const createdAt = Date.now();
         const modelName = this.getCurrentModelName(params.backend);
+        const metaSpread = loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {};
         this.state.setSecretPartResult(params.characterName, params.part, {
           id: asset.id,
           taskId: task.id,
@@ -482,13 +554,12 @@ export class ImageService {
           backend: params.backend,
           model: modelName,
           createdAt,
+          ...metaSpread,
         });
         this.state.writeNpcImageRecord(params.characterName, {
           id: asset.id,
           taskId: task.id,
           composition: 'secret_part',
-          // `part` (breast/vagina/anus) lets the gallery render a body-part
-          // badge + lets history filter by secret-part if the user wants to.
           part: params.part,
           status: 'complete',
           positivePrompt: composed.positive,
@@ -498,6 +569,7 @@ export class ImageService {
           backend: params.backend,
           model: modelName,
           createdAt,
+          ...metaSpread,
         });
       }
 
@@ -573,19 +645,32 @@ export class ImageService {
     });
 
     try {
-      this.queue.updateStatus(task.id, 'generating', {
-        positivePrompt: params.positivePrompt,
-        negativePrompt: params.negativePrompt,
-      });
-      eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
-
-      const composed = {
+      const composedRaw = {
         positive: params.positivePrompt,
         negative: params.negativePrompt,
         width: params.width,
         height: params.height,
       };
-      const blob = await this.callProvider(params.backend, composed);
+
+      // Civitai LoRA preparation (no-op for non-civitai)
+      let composed = composedRaw;
+      let civitaiProviderParams: Record<string, unknown> | undefined;
+      let loraSnapshot: CivitaiLoraSnapshot | undefined;
+      if (params.backend === 'civitai') {
+        const prep = this.prepareCivitaiRequest(composedRaw, params.subjectType, params.targetCharacter);
+        composed = prep.composed;
+        civitaiProviderParams = prep.providerParams;
+        loraSnapshot = prep.snapshot;
+      }
+
+      this.queue.updateStatus(task.id, 'generating', {
+        positivePrompt: composed.positive,
+        negativePrompt: composed.negative,
+        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
+      });
+      eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
+
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -593,6 +678,7 @@ export class ImageService {
 
       const createdAt = Date.now();
       const modelName = this.getCurrentModelName(params.backend);
+      const metaSpread = loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {};
       if (params.subjectType === 'scene') {
         this.writeToSceneArchive(asset.id, this.queue.get(task.id)!);
       } else if (params.subjectType === 'secret_part' && params.targetCharacter && params.part) {
@@ -601,13 +687,14 @@ export class ImageService {
           taskId: task.id,
           part: params.part,
           status: 'complete',
-          positivePrompt: params.positivePrompt,
-          negativePrompt: params.negativePrompt,
+          positivePrompt: composed.positive,
+          negativePrompt: composed.negative,
           width: params.width,
           height: params.height,
           backend: params.backend,
           model: modelName,
           createdAt,
+          ...metaSpread,
         });
         this.state.writeNpcImageRecord(params.targetCharacter, {
           id: asset.id,
@@ -615,13 +702,14 @@ export class ImageService {
           composition: 'secret_part',
           part: params.part,
           status: 'complete',
-          positivePrompt: params.positivePrompt,
-          negativePrompt: params.negativePrompt,
+          positivePrompt: composed.positive,
+          negativePrompt: composed.negative,
           width: params.width,
           height: params.height,
           backend: params.backend,
           model: modelName,
           createdAt,
+          ...metaSpread,
         });
       } else if (params.subjectType === 'character' && params.targetCharacter) {
         this.state.writeNpcImageRecord(params.targetCharacter, {
@@ -629,14 +717,15 @@ export class ImageService {
           taskId: task.id,
           composition: params.composition ?? 'portrait',
           status: 'complete',
-          positivePrompt: params.positivePrompt,
-          negativePrompt: params.negativePrompt,
+          positivePrompt: composed.positive,
+          negativePrompt: composed.negative,
           width: params.width,
           height: params.height,
           backend: params.backend,
           model: modelName,
           artStyle: params.artStyle,
           createdAt,
+          ...metaSpread,
         });
       }
 
@@ -729,10 +818,71 @@ export class ImageService {
     }
   }
 
+  private getCivitaiProviderParams(): Record<string, unknown> {
+    const base = '系统.扩展.image.config.civitai';
+    return {
+      allowMatureContent: this.stateManager.get<boolean>(`${base}.allowMatureContent`) === true,
+      scheduler: this.stateManager.get<string>(`${base}.scheduler`) ?? undefined,
+      steps: this.stateManager.get<number>(`${base}.steps`) ?? undefined,
+      cfgScale: this.stateManager.get<number>(`${base}.cfgScale`) ?? undefined,
+      seed: this.stateManager.get<number>(`${base}.seed`) ?? undefined,
+      clipSkip: this.stateManager.get<number>(`${base}.clipSkip`) ?? undefined,
+      outputFormat: this.stateManager.get<string>(`${base}.outputFormat`) ?? undefined,
+      additionalNetworksJson: this.stateManager.get<string>(`${base}.additionalNetworksJson`) ?? undefined,
+      controlNetsJson: this.stateManager.get<string>(`${base}.controlNetsJson`) ?? undefined,
+    };
+  }
+
+  private prepareCivitaiRequest(
+    composed: { positive: string; negative: string; width: number; height: number },
+    subjectType: ImageSubjectType,
+    targetCharacter?: string,
+  ): {
+    composed: { positive: string; negative: string; width: number; height: number };
+    providerParams: Record<string, unknown>;
+    snapshot: CivitaiLoraSnapshot | undefined;
+  } {
+    const base = '系统.扩展.image.config.civitai';
+    const shelf = this.stateManager.get<CivitaiLoraShelfItem[]>(`${base}.loras`) ?? [];
+    const rawJson = this.stateManager.get<string>(`${base}.additionalNetworksJson`);
+    const scope = resolveLoraScope(subjectType, targetCharacter);
+
+    const validation = validateShelfForGeneration(shelf, scope);
+    if (!validation.valid) {
+      throw new Error(`[Civitai LoRA] ${validation.errors.join('; ')}`);
+    }
+
+    const prepared = prepareCivitaiLora({
+      shelf,
+      scope,
+      positivePrompt: composed.positive,
+      rawAdditionalNetworksJson: rawJson,
+    });
+
+    // Build provider params directly — avoids redundant state reads via getCivitaiProviderParams
+    const providerParams: Record<string, unknown> = {
+      allowMatureContent: this.stateManager.get<boolean>(`${base}.allowMatureContent`) === true,
+      scheduler: this.stateManager.get<string>(`${base}.scheduler`) ?? undefined,
+      steps: this.stateManager.get<number>(`${base}.steps`) ?? undefined,
+      cfgScale: this.stateManager.get<number>(`${base}.cfgScale`) ?? undefined,
+      seed: this.stateManager.get<number>(`${base}.seed`) ?? undefined,
+      clipSkip: this.stateManager.get<number>(`${base}.clipSkip`) ?? undefined,
+      outputFormat: this.stateManager.get<string>(`${base}.outputFormat`) ?? undefined,
+      additionalNetworksJson: prepared.mergedAdditionalNetworksJson,
+      controlNetsJson: this.stateManager.get<string>(`${base}.controlNetsJson`) ?? undefined,
+    };
+
+    return {
+      composed: { ...composed, positive: prepared.modifiedPositive },
+      providerParams,
+      snapshot: prepared.snapshot.loras.length > 0 ? prepared.snapshot : undefined,
+    };
+  }
+
   private async callProvider(
     backend: ImageBackendType,
     composed: { positive: string; negative: string; width: number; height: number },
-    presetParams?: { sampler?: string; noiseSchedule?: string; steps?: number; cfgScale?: number; smea?: boolean; seed?: number },
+    presetParams?: Record<string, unknown>,
   ): Promise<Blob> {
     const config = this.aiService.getImageConfigForBackend(backend);
     if (!config) throw new Error(`[ImageService] 未找到 "${backend}" 后端的图像 API 配置 — 请在 API 管理中添加`);
@@ -744,11 +894,6 @@ export class ImageService {
       model: config.model,
     });
 
-    // Read per-backend custom params from state tree if no preset params provided.
-    // NovelAI: sampler / cfg / seed overrides.
-    // ComfyUI: optional workflow JSON template (with __PROMPT__/%prompt%/etc placeholders)
-    //   — when present, the provider substitutes and POSTs the user's full workflow
-    //   instead of falling back to a hardcoded minimal SD1.5 pipeline.
     let resolvedParams: Record<string, unknown> | undefined = presetParams;
     if (!resolvedParams) {
       if (backend === 'novelai') {
@@ -769,18 +914,7 @@ export class ImageService {
           workflowTemplate: hasTemplate ? workflowJson : undefined,
         };
       } else if (backend === 'civitai') {
-        const base = '系统.扩展.image.config.civitai';
-        resolvedParams = {
-          allowMatureContent: this.stateManager.get<boolean>(`${base}.allowMatureContent`) === true,
-          scheduler: this.stateManager.get<string>(`${base}.scheduler`) ?? undefined,
-          steps: this.stateManager.get<number>(`${base}.steps`) ?? undefined,
-          cfgScale: this.stateManager.get<number>(`${base}.cfgScale`) ?? undefined,
-          seed: this.stateManager.get<number>(`${base}.seed`) ?? undefined,
-          clipSkip: this.stateManager.get<number>(`${base}.clipSkip`) ?? undefined,
-          outputFormat: this.stateManager.get<string>(`${base}.outputFormat`) ?? undefined,
-          additionalNetworksJson: this.stateManager.get<string>(`${base}.additionalNetworksJson`) ?? undefined,
-          controlNetsJson: this.stateManager.get<string>(`${base}.controlNetsJson`) ?? undefined,
-        };
+        resolvedParams = this.getCivitaiProviderParams();
       }
     }
 
@@ -821,7 +955,7 @@ export class ImageService {
     const archive = (this.stateManager.get<Record<string, unknown>>(archivePath) ?? { 生图历史: [] }) as Record<string, unknown>;
     const history = Array.isArray(archive['生图历史']) ? [...(archive['生图历史'] as unknown[])] : [];
 
-    const record = {
+    const record: Record<string, unknown> = {
       id: assetId,
       taskId: task.id,
       status: task.status,
@@ -833,6 +967,7 @@ export class ImageService {
       model: this.getCurrentModelName(task.backend),
       createdAt: Date.now(),
     };
+    if (task.providerMeta) record.providerMeta = task.providerMeta;
 
     history.unshift(record);
 

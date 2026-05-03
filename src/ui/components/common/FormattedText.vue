@@ -106,7 +106,8 @@ function isGreatFailure(result: string): boolean {
 
 /** Parse 〖类型:结果,判定值:X,难度:Y,基础:B,幸运:L,环境:E,状态:S〗 */
 function parseJudgement(raw: string): JudgementData {
-  const parts = raw.split(',').map((p) => p.trim());
+  const normalized = raw.replace(/：/g, ':').replace(/，/g, ',');
+  const parts = normalized.split(',').map((p) => p.trim());
   const [typeStr, resultStr] = (parts[0] ?? '').split(':').map((s) => s.trim());
   const data: JudgementData = {
     type: typeStr ?? '判定',
@@ -125,6 +126,11 @@ function parseJudgement(raw: string): JudgementData {
     else if (key === '幸运') data.lucky = val;
     else if (key === '环境') data.environment = val;
     else if (key === '状态') data.status = val;
+    else if (key === '结果') {
+      // AI sometimes generates 〖社交:判定,结果:成功,...〗 instead of 〖社交:成功,...〗
+      // When the first field has "判定" as a type label, the actual result is here
+      if (!data.result || data.result === '判定') data.result = val;
+    }
     else data.details.push(`${key}:${val}`);
   }
   return data;

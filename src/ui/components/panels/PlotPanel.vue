@@ -6,7 +6,7 @@ import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_GAUGE_MAX_DELTA } from '@/engine/plot/types';
 import type { PlotDirectionState, PlotArc, PlotNode } from '@/engine/plot/types';
-import type { PlotDecomposer, DecomposeResult } from '@/engine/plot/plot-decomposer';
+import type { PlotDecomposer } from '@/engine/plot/plot-decomposer';
 import Modal from '@/ui/components/common/Modal.vue';
 import GaugeBar from './plot/GaugeBar.vue';
 import PlotNodeList from './plot/PlotNodeList.vue';

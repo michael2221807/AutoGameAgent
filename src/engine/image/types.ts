@@ -121,6 +121,10 @@ export interface ImageTask {
   error?: string;
   /** Backend type used */
   backend: ImageBackendType;
+  /** Provider-specific metadata snapshot (e.g. Civitai LoRA config used) */
+  providerMeta?: {
+    civitai?: CivitaiLoraSnapshot;
+  };
   /** Timestamps */
   createdAt: number;
   updatedAt: number;
@@ -191,3 +195,50 @@ export type ImageProviderFactory = (config: {
   apiKey: string;
   model?: string;
 }) => ImageProvider;
+
+// ── Civitai LoRA Shelf types ──
+
+/** Intentionally distinct from ImageSubjectType — 'player' is a LoRA scope concept that maps from subjectType='character' + characterName='__player__' */
+export type CivitaiLoraScope = 'player' | 'character' | 'scene' | 'secret_part';
+
+export interface CivitaiLoraTrigger {
+  id: string;
+  text: string;
+  enabled: boolean;
+  source: 'manual' | 'metadata';
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CivitaiLoraShelfItem {
+  id: string;
+  name: string;
+  air: string;
+  enabled: boolean;
+  strength: number;
+  scopes: CivitaiLoraScope[];
+  triggers: CivitaiLoraTrigger[];
+  autoInjectTriggers: boolean;
+  notes?: string;
+  modelName?: string;
+  versionName?: string;
+  baseModel?: string;
+  modelVersionId?: number;
+  sourceUrl?: string;
+  mature?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CivitaiLoraSnapshot {
+  loras: Array<{
+    id: string;
+    name: string;
+    air: string;
+    strength: number;
+    scopes: CivitaiLoraScope[];
+    injectedTriggers: string[];
+  }>;
+  /** Post-parse merged networks object (NOT the raw JSON string from config) */
+  additionalNetworks: Record<string, unknown>;
+}

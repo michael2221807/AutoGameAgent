@@ -11,7 +11,7 @@
  * `ImageService.regenerateFromPrompts` with its own subject-specific params.
  */
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import type { ImageBackendType } from '@/engine/image/types';
+import type { ImageBackendType, CivitaiLoraSnapshot } from '@/engine/image/types';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 
 const props = defineProps<{
@@ -29,6 +29,8 @@ const props = defineProps<{
   busy?: boolean;
   /** Available backend options (filtered by configured APIs). Falls back to all if empty. */
   availableBackends?: SelectOption[];
+  /** Civitai LoRA snapshot from the original generation (if available) */
+  civitaiLoraSnapshot?: CivitaiLoraSnapshot;
 }>();
 
 const emit = defineEmits<{
@@ -103,6 +105,24 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
           <div class="regen-meta">
             <span class="regen-meta-chip">尺寸 {{ width }} × {{ height }}</span>
             <span class="regen-meta-chip">原后端 {{ initialBackend }}</span>
+          </div>
+
+          <div v-if="civitaiLoraSnapshot?.loras?.length" class="regen-lora-summary">
+            <div class="regen-prompt-label">原图使用的 LoRA</div>
+            <div class="regen-meta">
+              <span v-for="l in civitaiLoraSnapshot.loras" :key="l.id" class="regen-meta-chip">
+                {{ l.name }} ({{ l.strength.toFixed(2) }})
+              </span>
+            </div>
+            <div v-if="civitaiLoraSnapshot.loras.flatMap(l => l.injectedTriggers).length > 0" class="regen-meta" style="margin-top: 4px;">
+              <span class="regen-meta-chip" style="font-style: italic;">
+                触发词: {{ civitaiLoraSnapshot.loras.flatMap(l => l.injectedTriggers).join(', ') }}
+              </span>
+            </div>
+          </div>
+
+          <div v-if="initialBackend === 'civitai'" class="regen-hint" style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
+            本次重新生成将按当前书架设置应用 LoRA，可能与原图不同。
           </div>
 
           <div class="regen-prompt-block">

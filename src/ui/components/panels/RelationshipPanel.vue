@@ -20,6 +20,7 @@ import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { formatMemoryEntry } from '@/engine/social/npc-memory-format';
 import NpcMemoryTimeline from '@/ui/components/shared/NpcMemoryTimeline.vue';
+import type { MemorySummary } from '@/ui/components/shared/NpcMemoryTimeline.vue';
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 import ImageViewer from '@/ui/components/image/ImageViewer.vue';
 import { useRouter, useRoute } from 'vue-router';
@@ -33,6 +34,7 @@ interface BodyPartEntry {
   开发度?: number;
   特征描述?: string;
   特殊印记?: string;
+  已选背景图片ID?: string;
 }
 
 /** NPC 私密信息子对象 */
@@ -84,6 +86,8 @@ interface NpcRelation {
   记忆?: string[];
   私密信息?: PrivacyProfile;
   私聊历史?: ChatHistoryEntry[];
+  图片档案?: Record<string, string | undefined>;
+  总结记忆?: MemorySummary[];
   关注?: boolean;
   心跳锁定?: boolean;
   [key: string]: unknown;
@@ -360,7 +364,6 @@ function clonePrivacy(p?: PrivacyProfile): PrivacyProfile {
 
 /** The 4 mandatory body-part names (matches PrivacyProfileValidator contract). */
 const REQUIRED_BODY_PARTS = ['嘴', '胸部', '小穴', '屁穴'] as const;
-type RequiredBodyPart = typeof REQUIRED_BODY_PARTS[number];
 
 /** Seed the 4 mandatory parts on the current editForm (idempotent).
  *  Called from openEdit / openAddNew so the template can bind via index
