@@ -689,7 +689,7 @@ function cancelRegenerate() {
   regenPayload.value = null;
 }
 
-async function confirmRegenerate(opts: { backend: ImageBackendType }) {
+async function confirmRegenerate(opts: { backend: ImageBackendType; positivePrompt: string; negativePrompt: string }) {
   if (!imageService || !regenPayload.value || regenBusy.value) return;
   const p = regenPayload.value;
   regenBusy.value = true;
@@ -699,8 +699,8 @@ async function confirmRegenerate(opts: { backend: ImageBackendType }) {
       targetCharacter: p.targetCharacter,
       composition: p.composition,
       part: p.part,
-      positivePrompt: p.positivePrompt,
-      negativePrompt: p.negativePrompt,
+      positivePrompt: opts.positivePrompt,
+      negativePrompt: opts.negativePrompt,
       width: p.width,
       height: p.height,
       backend: opts.backend,

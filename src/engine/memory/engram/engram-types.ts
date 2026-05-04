@@ -217,7 +217,7 @@ export interface EngramWriteSnapshot {
     entitiesAfter: number;
   };
   vectorizeQueued: number;
-  /** Edge review results (from FieldRepairPipeline.runEdgeReview) */
+  /** Edge review results (from FieldRepairPipeline combined step) */
   reviewResult?: {
     reviewed: number;
     invalidated: number;

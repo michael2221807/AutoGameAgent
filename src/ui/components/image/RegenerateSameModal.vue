@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
- * RegenerateSameModal — "同提示词重新生成" dialog.
+ * RegenerateSameModal — "生成同款" dialog with editable prompts.
  *
  * Shown when the user clicks "生成同款" on a queue task, gallery card, scene
- * history card, or player archive card. Displays the captured positive +
- * negative prompts (read-only) alongside a backend selector so the user can
- * regenerate with the same prompts on a DIFFERENT backend (cross-model).
+ * history card, or player archive card. Pre-fills positive + negative prompts
+ * from the source record; the user can freely edit both before generating.
+ * Also includes a backend selector for cross-model regeneration.
  *
- * Emits `confirm` with the chosen backend; caller owns calling
- * `ImageService.regenerateFromPrompts` with its own subject-specific params.
+ * Emits `confirm` with the chosen backend + edited prompts; caller owns
+ * calling `ImageService.regenerateFromPrompts` with its own subject params.
  */
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import type { ImageBackendType, CivitaiLoraSnapshot } from '@/engine/image/types';
@@ -34,11 +34,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'confirm', payload: { backend: ImageBackendType }): void;
+  (e: 'confirm', payload: { backend: ImageBackendType; positivePrompt: string; negativePrompt: string }): void;
   (e: 'cancel'): void;
 }>();
 
 const chosenBackend = ref<ImageBackendType>(props.initialBackend);
+const editedPositive = ref(props.positivePrompt);
+const editedNegative = ref(props.negativePrompt);
 
 watch(() => props.availableBackends, (opts) => {
   if (opts?.length && !opts.some((o) => o.value === chosenBackend.value)) {
@@ -61,7 +63,11 @@ const dialogRef = ref<HTMLElement | null>(null);
 
 function confirm() {
   if (props.busy) return;
-  emit('confirm', { backend: chosenBackend.value });
+  emit('confirm', {
+    backend: chosenBackend.value,
+    positivePrompt: editedPositive.value,
+    negativePrompt: editedNegative.value,
+  });
 }
 function cancel() {
   if (props.busy) return;
@@ -127,17 +133,29 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 
           <div class="regen-prompt-block">
             <div class="regen-prompt-label">正向提示词</div>
-            <pre class="regen-prompt-text">{{ positivePrompt || '（空）' }}</pre>
+            <textarea
+              v-model="editedPositive"
+              class="regen-prompt-textarea"
+              rows="5"
+              :disabled="busy"
+              placeholder="正向提示词…"
+            />
           </div>
-          <div v-if="negativePrompt" class="regen-prompt-block">
+          <div class="regen-prompt-block">
             <div class="regen-prompt-label">负面提示词</div>
-            <pre class="regen-prompt-text regen-prompt-text--neg">{{ negativePrompt }}</pre>
+            <textarea
+              v-model="editedNegative"
+              class="regen-prompt-textarea regen-prompt-textarea--neg"
+              rows="3"
+              :disabled="busy"
+              placeholder="负面提示词（可选）"
+            />
           </div>
         </section>
 
         <footer class="regen-footer">
           <button type="button" class="regen-btn regen-btn--ghost" :disabled="busy" @click="cancel">取消</button>
-          <button type="button" class="regen-btn regen-btn--primary" :disabled="busy || !positivePrompt" @click="confirm">
+          <button type="button" class="regen-btn regen-btn--primary" :disabled="busy || !editedPositive.trim()" @click="confirm">
             {{ busy ? '生成中…' : '开始生成' }}
           </button>
         </footer>
@@ -226,7 +244,7 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 
 .regen-prompt-block { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .regen-prompt-label { font-size: var(--font-size-sm); color: var(--color-text-secondary); font-weight: 500; }
-.regen-prompt-text {
+.regen-prompt-textarea {
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -236,12 +254,17 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
   font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--color-text);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 160px;
-  overflow-y: auto;
+  resize: vertical;
+  min-height: 60px;
+  max-height: 200px;
+  transition: border-color var(--duration-fast);
 }
-.regen-prompt-text--neg { color: var(--color-text-secondary); }
+.regen-prompt-textarea:focus {
+  outline: none;
+  border-color: var(--color-sage-400);
+}
+.regen-prompt-textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+.regen-prompt-textarea--neg { color: var(--color-text-secondary); }
 
 .regen-footer {
   display: flex;

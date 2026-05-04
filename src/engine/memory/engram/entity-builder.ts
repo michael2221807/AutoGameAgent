@@ -47,7 +47,7 @@ export interface EngramEntity {
   is_embedded: boolean;
   /**
    * Tier 1 补桩标记：此实体由引擎自动创建（缺失的事实边端点），
-   * summary 尚未由 AI 填充。Tier 2（FieldRepairPipeline.runEntityEnrichment）
+   * summary 尚未由 AI 填充。Tier 2（FieldRepairPipeline combined step）
    * 成功写入描述后移除此标记。
    */
   _pendingEnrichment?: boolean;

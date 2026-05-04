@@ -761,16 +761,16 @@ const avatarInitial = computed<string>(() => {
     <template v-if="isLoaded">
       <!-- ─── Hero Header ─── -->
       <div class="hero-header">
-        <div class="hero-avatar">
+        <button class="hero-avatar" title="查看主角图库" @click="activeTab = 'playerImage'">
           <ImageDisplay
             v-if="playerAvatarId"
             :asset-id="playerAvatarId"
             :fallback-letter="avatarInitial"
-            size="md"
+            size="fill"
             class="hero-avatar-img"
           />
           <span v-else>{{ avatarInitial }}</span>
-        </div>
+        </button>
         <div class="hero-info">
           <div class="hero-name-row">
             <h2 class="hero-name">{{ name ?? '未命名' }}</h2>
@@ -1379,21 +1379,31 @@ const avatarInitial = computed<string>(() => {
 }
 
 .hero-avatar {
-  width: 52px;
-  height: 52px;
+  width: 120px;
+  height: 120px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-surface-elevated);
   color: var(--color-text-secondary);
-  font-size: 1.4rem;
+  font-size: 2.4rem;
   font-weight: 700;
-  border-radius: 50%;
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) ease,
+              box-shadow var(--duration-fast) ease;
 }
-.hero-avatar-img :deep(.img-display) { width: 52px; height: 52px; border-radius: 50%; }
-.hero-avatar-img :deep(.img-display__img) { width: 100%; height: 100%; object-fit: cover; }
+.hero-avatar:hover {
+  border-color: var(--color-sage-400);
+  box-shadow: var(--shadow-glow);
+}
+.hero-avatar-img :deep(.img-display) { border-radius: var(--radius-lg); }
+.hero-avatar-img :deep(.img-display--fill .img-display__img) { width: 100%; height: 100%; object-fit: cover; }
+.hero-avatar-img :deep(.img-display__fallback) { font-size: 2.4rem; }
 
 .hero-info {
   flex: 1;

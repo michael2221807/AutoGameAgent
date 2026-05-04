@@ -203,6 +203,7 @@ onMounted(() => {
   eventBus.on('engine:round-complete', onGenerationEnd);
   eventBus.on('ai:error', onGenerationEnd);
   eventBus.on('ai:retrying', onGenerationStart);
+  eventBus.on('engine:sub-pipelines-done', onGenerationEnd);
   document.addEventListener('fullscreenchange', onFullscreenChange);
 });
 
@@ -211,6 +212,7 @@ onUnmounted(() => {
   eventBus.off('engine:round-complete', onGenerationEnd);
   eventBus.off('ai:error', onGenerationEnd);
   eventBus.off('ai:retrying', onGenerationStart);
+  eventBus.off('engine:sub-pipelines-done', onGenerationEnd);
   document.removeEventListener('fullscreenchange', onFullscreenChange);
 });
 

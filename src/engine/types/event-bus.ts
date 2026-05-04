@@ -8,6 +8,7 @@ export type EngineEventName =
   | 'engine:round-start'
   | 'engine:round-complete'
   | 'engine:round-error'
+  | 'engine:sub-pipelines-done'
   | 'engine:state-changed'
   | 'engine:save-complete'
   | 'engine:save-error'

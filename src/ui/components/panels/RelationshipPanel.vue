@@ -705,7 +705,7 @@ function typeClass(type: string | undefined): string {
                 <ImageDisplay
                   :asset-id="selectedNpc['图片档案']?.['已选头像图片ID']"
                   :fallback-letter="selectedNpc.名称?.charAt(0) ?? '?'"
-                  size="lg"
+                  size="fill"
                   class="rd-hero-avatar-img"
                 />
               </button>
@@ -1625,6 +1625,8 @@ function typeClass(type: string | undefined): string {
 }
 
 .rd-hero-avatar-btn {
+  width: 120px;
+  height: 120px;
   background: none;
   border: 2px solid transparent;
   border-radius: var(--radius-lg);
@@ -1638,12 +1640,16 @@ function typeClass(type: string | undefined): string {
   border-color: var(--color-sage-400);
   box-shadow: var(--shadow-glow);
 }
-
 .rd-hero-avatar-img :deep(.img-display) {
-  width: 72px;
-  height: 72px;
   border-radius: var(--radius-lg);
+}
+.rd-hero-avatar-img :deep(.img-display--fill .img-display__img) {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+}
+.rd-hero-avatar-img :deep(.img-display__fallback) {
+  font-size: 2.4rem;
 }
 
 /* ── Hero info ── */

@@ -661,6 +661,12 @@ onMounted(() => {
   );
 
   unsubscribers.push(
+    eventBus.on('engine:sub-pipelines-done', () => {
+      isGenerating.value = false;
+    }),
+  );
+
+  unsubscribers.push(
     eventBus.on('engine:rollback-complete', () => {
       actionOptions.value = [];
       // Restore the rolled-back round's user input so the player can re-submit or edit

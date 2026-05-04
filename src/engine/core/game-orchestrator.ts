@@ -426,6 +426,9 @@ export class GameOrchestrator {
         await this.runPostRoundSubPipelines(finalCtx, stateManager, locationBefore);
       } finally {
         this._subPipelineActive = false;
+        // Sub-pipeline AI calls may emit ai:retrying which sets isGenerating=true
+        // in the UI. Ensure the UI resets after all sub-pipelines finish.
+        eventBus.emit('engine:sub-pipelines-done');
       }
     }
   }
