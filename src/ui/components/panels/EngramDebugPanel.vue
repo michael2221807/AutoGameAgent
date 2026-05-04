@@ -212,6 +212,7 @@ const gfNodeTypes = ref<Record<string, boolean>>({ player: true, npc: true, loca
 const gfEdgeFact = ref(true);
 const gfEdgeMentions = ref(true);
 const gfEdgeInvalidated = ref(false);
+const gfRoundMin = ref(0);
 const gfRoundMax = ref(0);
 const gfLayout = ref<'cose' | 'concentric' | 'breadthfirst' | 'circle'>('cose');
 
@@ -223,6 +224,10 @@ const maxRound = computed(() => {
 });
 
 watch(maxRound, (v) => { if (gfRoundMax.value === 0 || gfRoundMax.value < v) gfRoundMax.value = v; }, { immediate: true });
+
+// Clamp min/max so they don't cross
+watch(gfRoundMin, (v) => { if (v > gfRoundMax.value) gfRoundMax.value = v; });
+watch(gfRoundMax, (v) => { if (v < gfRoundMin.value) gfRoundMin.value = v; });
 
 import { buildGraphElements, filterVisibility, type GraphFilterState, type GraphElement } from '@/engine/memory/engram/engram-graph-builder';
 let cachedGraphElements: GraphElement[] = [];
@@ -349,6 +354,7 @@ function initGraph(): void {
 function applyGraphFilters(): void {
   if (!cyInstance) return;
   const filterState: GraphFilterState = {
+    roundMin: gfRoundMin.value,
     roundMax: gfRoundMax.value,
     nodeTypes: gfNodeTypes.value,
     showFactEdges: gfEdgeFact.value,
@@ -399,7 +405,7 @@ watch(graphContainer, (el) => { if (el && !cyInstance) setTimeout(() => initGrap
 watch([entities, v2Edges, events], () => {
   if (isOpenExt('graph') && graphContainer.value) nextTick(() => initGraph());
 });
-watch([gfNodeTypes, gfEdgeFact, gfEdgeMentions, gfEdgeInvalidated, gfRoundMax, gfShowLabels], () => applyGraphFilters(), { deep: true });
+watch([gfNodeTypes, gfEdgeFact, gfEdgeMentions, gfEdgeInvalidated, gfRoundMin, gfRoundMax, gfShowLabels], () => applyGraphFilters(), { deep: true });
 
 // ─── 新增 section 折叠 ───
 
@@ -654,10 +660,11 @@ onUnmounted(() => destroyGraph());
 
             <!-- Filter bar -->
             <div class="gf-bar">
-              <div class="gf-group">
+              <div class="gf-group gf-group--round-range">
                 <span class="gf-label">回合</span>
-                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMax" />
-                <span class="gf-val">≤{{ gfRoundMax }}</span>
+                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMin" title="起始回合" />
+                <span class="gf-val">{{ gfRoundMin }} – {{ gfRoundMax }}</span>
+                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMax" title="结束回合" />
               </div>
               <span class="gf-sep" />
               <div class="gf-group">
@@ -1205,7 +1212,9 @@ onUnmounted(() => destroyGraph());
 .gf-toggle:hover { border-color: var(--color-sage-400); }
 .gf-toggle--on { border-color: var(--color-sage-400); background: rgba(138,158,108,0.15); color: var(--color-text, #e0e0e6); }
 .gf-range { width: 80px; accent-color: var(--color-sage-400); cursor: pointer; }
+.gf-group--round-range .gf-range { width: 64px; }
 .gf-val { font-family: 'JetBrains Mono',monospace; font-size: 11px; min-width: 24px; color: var(--color-text); }
+.gf-group--round-range .gf-val { min-width: 48px; text-align: center; }
 .gf-select {
   background: var(--color-surface, #232220); color: var(--color-text); border: 1px solid var(--color-border);
   border-radius: 4px; padding: 3px 6px; font-size: 11px; cursor: pointer;

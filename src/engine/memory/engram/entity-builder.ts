@@ -176,6 +176,51 @@ export class EntityBuilder {
       }
     }
 
+    // ── 4. Fix firstSeen/lastSeen from events ──
+    // Step 2 hardcodes round=0 for relationship-sourced entities because 社交.関係
+    // doesn't record when an NPC was added. This post-processing pass derives the
+    // actual first/last appearance round from event data (authoritative source).
+    const eventRounds = new Map<string, { first: number; last: number }>();
+    for (const event of events) {
+      const round = event.roundNumber ?? 0;
+      const kv = event.structured_kv;
+      const names = new Set<string>();
+      if (kv?.role) {
+        for (const r of kv.role) {
+          if (typeof r !== 'string' || !r.trim()) continue;
+          const n = r.trim();
+          names.add((n === '玩家' || n === 'player') ? playerName : n);
+        }
+      }
+      if (kv?.location) {
+        for (const l of kv.location) {
+          if (typeof l === 'string' && l.trim()) names.add(l.trim());
+        }
+      }
+      if (event.subject) names.add(event.subject === '玩家' || event.subject === 'player' ? playerName : event.subject);
+      if (event.object) names.add(event.object === '玩家' || event.object === 'player' ? playerName : event.object);
+      if (event.location) names.add(event.location);
+
+      for (const n of names) {
+        const existing = eventRounds.get(n);
+        if (existing) {
+          if (round < existing.first) existing.first = round;
+          if (round > existing.last) existing.last = round;
+        } else {
+          eventRounds.set(n, { first: round, last: round });
+        }
+      }
+    }
+
+    for (const entity of entityMap.values()) {
+      if (entity.type === 'player') continue;
+      const er = eventRounds.get(entity.name);
+      if (er) {
+        entity.firstSeen = er.first;
+        entity.lastSeen = er.last;
+      }
+    }
+
     return Array.from(entityMap.values());
   }
 

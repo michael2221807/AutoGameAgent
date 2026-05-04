@@ -14,6 +14,7 @@ export interface GraphElement {
 }
 
 export interface GraphFilterState {
+  roundMin: number;
   roundMax: number;
   nodeTypes: Record<string, boolean>;
   showFactEdges: boolean;
@@ -144,15 +145,19 @@ export function filterVisibility(
   const visibility = new Map<string, boolean>();
   const visibleNodes = new Set<string>();
 
+  const { roundMin, roundMax } = filter;
+
   for (const el of elements) {
     if (el.group !== 'nodes') continue;
     const id = el.data.id as string;
     const cat = el.data.nodeCategory as string;
     let vis = filter.nodeTypes[cat] ?? false;
     if (cat === 'event') {
-      vis = vis && (el.data.roundNumber as number) <= filter.roundMax;
+      const r = el.data.roundNumber as number;
+      vis = vis && r >= roundMin && r <= roundMax;
     } else {
-      vis = vis && (el.data.firstSeen as number) <= filter.roundMax;
+      const r = el.data.firstSeen as number;
+      vis = vis && r >= roundMin && r <= roundMax;
     }
     visibility.set(id, vis);
     if (vis) visibleNodes.add(id);
@@ -172,9 +177,11 @@ export function filterVisibility(
 
     let inRange = true;
     if (cat === 'fact' || cat === 'invalidated') {
-      inRange = (el.data.createdAtRound as number) <= filter.roundMax;
+      const r = el.data.createdAtRound as number;
+      inRange = r >= roundMin && r <= roundMax;
     } else if (cat === 'mentions') {
-      inRange = (el.data.roundNumber as number) <= filter.roundMax;
+      const r = el.data.roundNumber as number;
+      inRange = r >= roundMin && r <= roundMax;
     }
 
     visibility.set(id, srcVis && tgtVis && typeVis && inRange);

@@ -141,6 +141,7 @@ describe('filterVisibility', () => {
   const allElements = buildGraphElements(entities, events, edges);
 
   const fullFilter: GraphFilterState = {
+    roundMin: 0,
     roundMax: 15,
     nodeTypes: { player: true, npc: true, location: true, item: true, event: true },
     showFactEdges: true,
