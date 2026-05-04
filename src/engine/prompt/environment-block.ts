@@ -1,3 +1,4 @@
+// Design: docs/research/mrjh-migration/07-environment-tags-plan.md
 /**
  * Environment-block prompt helper (env-tags P2, 2026-04-19).
  *

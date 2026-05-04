@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-character.md
 /**
  * CharacterDetailsPanel — 角色详情面板。
  *

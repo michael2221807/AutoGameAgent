@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-map.md
 /**
  * MapPanel — Cytoscape.js compound-node hierarchical map.
  *

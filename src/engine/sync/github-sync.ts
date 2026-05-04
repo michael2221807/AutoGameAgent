@@ -1,3 +1,4 @@
+// Archived research: docs/design/archive/cloud-sync-options.md
 /**
  * GitHub Sync Service — 通过 GitHub Contents API 实现存档云同步
  *

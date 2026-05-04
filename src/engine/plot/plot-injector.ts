@@ -1,3 +1,4 @@
+// Design: docs/design/plot-direction-system.md
 /**
  * Plot Direction System — Prompt Variable Builder
  *

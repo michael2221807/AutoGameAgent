@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-heartbeat.md
 /**
  * HeartbeatPanel — heartbeat configuration and execution history.
  *

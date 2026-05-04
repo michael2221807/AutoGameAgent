@@ -28,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-overview.md
 import TopBar from '@/ui/components/layout/TopBar.vue';
 import LeftSidebar from '@/ui/components/layout/LeftSidebar.vue';
 import RightSidebar from '@/ui/components/layout/RightSidebar.vue';

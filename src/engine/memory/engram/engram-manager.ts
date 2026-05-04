@@ -1,3 +1,4 @@
+// Architecture: docs/architecture/engram-v2-graphiti-alignment.md
 /**
  * Engram 管理器 — V2 Graphiti 对齐架构（2026-04-27 重构）
  *

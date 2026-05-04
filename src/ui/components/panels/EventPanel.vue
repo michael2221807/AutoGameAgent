@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-events.md
 /**
  * EventPanel — displays world events + heartbeat history.
  * Also provides a collapsible event-config section for tuning event intervals,

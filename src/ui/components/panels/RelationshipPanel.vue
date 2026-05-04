@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-relationships.md
 /**
  * RelationshipPanel — NPC 关系列表，路径见 `DEFAULT_ENGINE_PATHS.relationships`。
  *

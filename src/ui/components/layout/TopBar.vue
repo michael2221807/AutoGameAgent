@@ -151,6 +151,7 @@
 </template>
 
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-overview.md §4.0.1
 import { ref, computed, onMounted, onUnmounted, inject } from 'vue';
 import { useRouter } from 'vue-router';
 import { useEngineStateStore } from '@/engine/stores/engine-state';

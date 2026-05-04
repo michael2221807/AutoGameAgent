@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/home.md
 /**
  * HomeView — Application entry screen.
  *

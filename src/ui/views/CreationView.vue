@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/creation.md
 /**
  * CreationView — Multi-step character creation wizard.
  *

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-save.md
 /**
  * SavePanel — 完整存档管理面板
  *

@@ -224,6 +224,7 @@
 </template>
 
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-overview.md §4.0.3
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
@@ -305,13 +306,19 @@ interface NormalizedEffect {
 const normalizedEffects = computed<NormalizedEffect[]>(() => {
   const raw = engineState.statusEffects;
   if (!Array.isArray(raw)) return [];
-  return raw.map((e: Record<string, unknown>) => ({
-    name: String(e['状态名称'] ?? e['名称'] ?? e['name'] ?? '未知效果'),
-    isDebuff: String(e['类型'] ?? e['type'] ?? '').toLowerCase().includes('debuff'),
-    desc: String(e['状态描述'] ?? e['描述'] ?? e['description'] ?? ''),
-    duration: typeof e['持续时间分钟'] === 'number' ? e['持续时间分钟']
-      : typeof e['duration'] === 'number' ? e['duration'] : null,
-  }));
+  // Deduplicate by name (last occurrence wins — newest from AI)
+  const seen = new Map<string, NormalizedEffect>();
+  for (const e of raw as Record<string, unknown>[]) {
+    const name = String(e['状态名称'] ?? e['名称'] ?? e['name'] ?? '未知效果');
+    seen.set(name, {
+      name,
+      isDebuff: String(e['类型'] ?? e['type'] ?? '').toLowerCase().includes('debuff'),
+      desc: String(e['状态描述'] ?? e['描述'] ?? e['description'] ?? ''),
+      duration: typeof e['持续时间分钟'] === 'number' ? e['持续时间分钟']
+        : typeof e['duration'] === 'number' ? e['duration'] : null,
+    });
+  }
+  return [...seen.values()];
 });
 
 // ── Effect tooltip (fixed-position, teleported to body) ─────────

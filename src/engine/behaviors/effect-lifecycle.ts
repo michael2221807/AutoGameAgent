@@ -44,6 +44,7 @@ export class EffectLifecycleModule implements BehaviorModule {
    * 确保当前时间已经是正确的进位后值。
    */
   onRoundEnd(stateManager: StateManager): void {
+    this.deduplicateEffects(stateManager);
     this.removeExpiredEffects(stateManager);
   }
 
@@ -52,7 +53,38 @@ export class EffectLifecycleModule implements BehaviorModule {
    * 玩家可能存档后过了很久再读档，期间效果应该已经过期
    */
   onGameLoad(stateManager: StateManager): void {
+    this.deduplicateEffects(stateManager);
     this.removeExpiredEffects(stateManager);
+  }
+
+  /**
+   * 同名效果去重 — 保留最后出现的（即 AI 最新推入的版本）
+   *
+   * AI 模型有时会 push 与现有效果同名的新条目。
+   * 从数组尾部向前扫描，首次出现的名称保留，重复的丢弃。
+   */
+  private deduplicateEffects(stateManager: StateManager): void {
+    const effects = stateManager.get<Record<string, unknown>[]>(this.effectConfig.effectsPath);
+    if (!Array.isArray(effects) || effects.length <= 1) return;
+
+    const nameField = this.effectConfig.effectSchema.nameField;
+    const seen = new Set<string>();
+    const deduped: Record<string, unknown>[] = [];
+
+    for (let i = effects.length - 1; i >= 0; i--) {
+      const name = String(effects[i][nameField] ?? '').trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      deduped.push(effects[i]);
+    }
+
+    deduped.reverse();
+
+    if (deduped.length < effects.length) {
+      const removed = effects.length - deduped.length;
+      console.log(`[EffectLifecycle] Deduplicated ${removed} same-name effect(s)`);
+      stateManager.set(this.effectConfig.effectsPath, deduped, 'system');
+    }
   }
 
   /**

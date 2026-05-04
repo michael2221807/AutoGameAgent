@@ -1,3 +1,4 @@
+// Architecture: docs/architecture/engram-v2-graphiti-alignment.md
 /**
  * FactBuilder — V2 knowledge fact extraction, validation, and dedup.
  *

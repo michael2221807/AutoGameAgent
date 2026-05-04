@@ -1,3 +1,4 @@
+// Architecture: docs/architecture/image-generation-system.md
 /**
  * Image Service — Sprint Image-5
  *

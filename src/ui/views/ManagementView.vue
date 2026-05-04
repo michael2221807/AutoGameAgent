@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/management.md
 /**
  * ManagementView — Profile and save management screen.
  *

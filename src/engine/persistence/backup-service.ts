@@ -1,3 +1,4 @@
+// Archived plan: docs/status/archive/full-backup-plan-2026-04-13.md
 /**
  * 全量备份与恢复服务 — 跨模块数据导出/导入
  *

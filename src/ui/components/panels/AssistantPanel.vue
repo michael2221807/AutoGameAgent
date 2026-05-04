@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-assistant.md
 /**
  * AssistantPanel — AI 助手主面板（路由 /game/assistant）
  *

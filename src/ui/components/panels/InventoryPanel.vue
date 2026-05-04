@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-inventory.md
 /**
  * InventoryPanel — 背包物品与货币展示。
  *

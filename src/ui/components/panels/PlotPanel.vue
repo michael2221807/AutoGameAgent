@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-plot.md
 import { ref, computed, watch, inject } from 'vue';
 import { useGameState } from '@/ui/composables/useGameState';
 import { usePlotStore } from '@/engine/plot/plot-store';

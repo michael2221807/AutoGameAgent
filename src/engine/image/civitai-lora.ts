@@ -1,3 +1,4 @@
+// Design: docs/design/civitai-lora-shelf-design.md
 import type {
   CivitaiLoraScope,
   CivitaiLoraShelfItem,

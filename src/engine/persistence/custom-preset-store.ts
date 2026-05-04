@@ -1,3 +1,4 @@
+// Archived research: docs/status/archive/research-custom-creation-presets-2026-04-14.md
 /**
  * CustomPresetStore — 用户自定义创角预设的 IDB 持久化层
  *

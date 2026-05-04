@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-main.md
 /**
  * MainGamePanel — The primary game conversation interface.
  *

@@ -1,3 +1,4 @@
+// Architecture: docs/architecture/engram-v2-graphiti-alignment.md
 /**
  * 统一检索器 — V2 Graphiti 对齐架构
  *

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-memory.md
 /**
  * MemoryPanel — displays short-term, mid-term, long-term, and sent memory lists.
  *

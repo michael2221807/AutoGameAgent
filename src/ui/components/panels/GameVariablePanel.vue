@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-variables.md
 /**
  * GameVariablePanel — STEP-03B M4.3 Layer 2 统一数据编辑中心。
  *

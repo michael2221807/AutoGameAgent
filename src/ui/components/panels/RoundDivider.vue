@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// Archived plan: docs/research/mrjh-migration/archive/06-round-divider-plan.md
 /**
  * RoundDivider — a visual break between rounds in the MainGamePanel message
  * stream. Shows a horizontal rule with a centered "第 N 回合" badge, and an

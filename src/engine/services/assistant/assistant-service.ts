@@ -1,3 +1,4 @@
+// Archived plan: docs/status/archive/plan-assistant-utility-2026-04-14.md
 /**
  * AssistantService — Assistant utility 顶层编排
  *

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-overview.md §4.0.2
 /**
  * LeftSidebar — navigation + realtime clock + exit dialog.
  *

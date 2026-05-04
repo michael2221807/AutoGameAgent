@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-engram-debug.md
 /**
  * EngramDebugPanel — E.6 实时 Engram 调试面板
  *

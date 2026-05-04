@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-prompt-assembly.md
 /**
  * PromptAssemblyPanel — debug panel showing prompt assembly snapshots.
  *
