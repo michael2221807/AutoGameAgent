@@ -7,7 +7,7 @@
  *
  * Full implementation — calls the real SD-WebUI API.
  */
-import { BaseImageProvider } from './base';
+import { BaseImageProvider, IMAGE_GENERATE_TIMEOUT_MS } from './base';
 import type { ImageBackendType } from '../types';
 import { fetchWithDiagnostic } from './network-diagnostic';
 
@@ -46,6 +46,7 @@ export class SDWebUIImageProvider extends BaseImageProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(IMAGE_GENERATE_TIMEOUT_MS),
     });
 
     if (!response.ok) {

@@ -1,4 +1,5 @@
 // Architecture: docs/architecture/image-generation-system.md
+// App doc: docs/user-guide/pages/game-image.md §后台生成保护机制
 /**
  * Image Service — Sprint Image-5
  *
@@ -63,6 +64,19 @@ export class ImageService {
         this.restoreTasksFromState();
       }
     });
+
+    // Global toast for task terminal states — fires regardless of whether
+    // ImagePanel is mounted, so the user always gets feedback.
+    eventBus.on<{ taskId?: string; status?: string; error?: string }>('image:task-update', (payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      const { status, error } = payload as { status?: string; error?: string };
+      if (status === 'failed') {
+        const msg = error ? `图像生成失败: ${error.slice(0, 120)}` : '图像生成失败';
+        eventBus.emit('ui:toast', { type: 'error', message: msg, duration: 5000 });
+      } else if (status === 'complete') {
+        eventBus.emit('ui:toast', { type: 'success', message: '图像生成完成', duration: 2000 });
+      }
+    });
   }
 
   /** Restore task queue from state tree (called after game load) */
@@ -70,6 +84,28 @@ export class ImageService {
     const savedTasks = this.stateManager.get<ImageTask[]>('系统.扩展.image.tasks');
     if (Array.isArray(savedTasks) && savedTasks.length > 0) {
       this.queue.restore(savedTasks);
+      this.recoverStuckTasks();
+    }
+  }
+
+  private recoverStuckTasks(): void {
+    const stuckStatuses: Set<string> = new Set(['generating', 'tokenizing', 'pending']);
+    let recovered = 0;
+    for (const task of this.queue.getAll()) {
+      if (stuckStatuses.has(task.status)) {
+        this.queue.updateStatus(task.id, 'failed', {
+          error: '任务因页面刷新中断，请重试',
+        });
+        recovered++;
+      }
+    }
+    if (recovered > 0) {
+      console.warn(`[ImageService] Recovered ${recovered} stuck task(s) after reload`);
+      eventBus.emit('ui:toast', {
+        type: 'warning',
+        message: `${recovered} 个图像生成任务因页面刷新中断`,
+        duration: 4000,
+      });
     }
   }
 

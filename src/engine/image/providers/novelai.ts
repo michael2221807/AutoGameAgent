@@ -13,7 +13,7 @@
  * - V4/V4.5 models use structured `v4_prompt` + `characterPrompts`
  * - NAI weight syntax: `1.2::tag::` for emphasis, `{tag}` boost, `[tag]` dampen
  */
-import { BaseImageProvider } from './base';
+import { BaseImageProvider, IMAGE_GENERATE_TIMEOUT_MS } from './base';
 import type { ImageBackendType } from '../types';
 import { unzipSync } from 'fflate';
 
@@ -141,6 +141,7 @@ export class NovelAIImageProvider extends BaseImageProvider {
         'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(IMAGE_GENERATE_TIMEOUT_MS),
     });
 
     if (!response.ok) {

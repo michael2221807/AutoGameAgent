@@ -7,6 +7,9 @@
  */
 import type { ImageProvider, ImageBackendType } from '../types';
 
+export const IMAGE_GENERATE_TIMEOUT_MS = 180_000;
+export const IMAGE_DOWNLOAD_TIMEOUT_MS = 60_000;
+
 export class NotImplementedError extends Error {
   constructor(backend: string, method: string) {
     super(`[Image] ${backend}.${method}() is not implemented yet (Sprint Image-5)`);

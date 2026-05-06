@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-image.md §后台生成保护机制
 /**
  * Image State Manager — MRJH npcImageStateWorkflow.ts + sceneImageArchiveWorkflow.ts
  *
@@ -32,8 +33,9 @@ export const PLAYER_PSEUDO_NPC_ID = '__player__';
 const PLAYER_ARCHIVE_PATH = '角色.图片档案';
 
 export class ImageStateManager {
-  /** Concurrent generation lock — tracks NPC keys currently being generated */
-  private generatingSet = new Set<string>();
+  private static readonly LOCK_TIMEOUT_MS = 300_000;
+
+  private generatingMap = new Map<string, number>();
 
   private isPlayer(name: string): boolean { return name === PLAYER_PSEUDO_NPC_ID; }
 
@@ -46,9 +48,18 @@ export class ImageStateManager {
   // §1 — Concurrent generation lock (MRJH NPC生图进行中集合)
   // ═══════════════════════════════════════════════════════════
 
-  isGenerating(key: string): boolean { return this.generatingSet.has(key); }
-  lockGeneration(key: string): void { this.generatingSet.add(key); }
-  unlockGeneration(key: string): void { this.generatingSet.delete(key); }
+  isGenerating(key: string): boolean {
+    const lockedAt = this.generatingMap.get(key);
+    if (lockedAt === undefined) return false;
+    if (Date.now() - lockedAt > ImageStateManager.LOCK_TIMEOUT_MS) {
+      this.generatingMap.delete(key);
+      console.warn(`[ImageStateManager] Lock expired for "${key}" after ${ImageStateManager.LOCK_TIMEOUT_MS / 1000}s`);
+      return false;
+    }
+    return true;
+  }
+  lockGeneration(key: string): void { this.generatingMap.set(key, Date.now()); }
+  unlockGeneration(key: string): void { this.generatingMap.delete(key); }
 
   // ═══════════════════════════════════════════════════════════
   // §2 — NPC archive reads

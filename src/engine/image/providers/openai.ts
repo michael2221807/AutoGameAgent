@@ -6,7 +6,7 @@
  *
  * Per PRINCIPLES §3.12: user configures endpoint directly in API settings.
  */
-import { BaseImageProvider } from './base';
+import { BaseImageProvider, IMAGE_GENERATE_TIMEOUT_MS, IMAGE_DOWNLOAD_TIMEOUT_MS } from './base';
 import type { ImageBackendType } from '../types';
 
 export class OpenAIImageProvider extends BaseImageProvider {
@@ -45,6 +45,7 @@ export class OpenAIImageProvider extends BaseImageProvider {
         'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(IMAGE_GENERATE_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -60,7 +61,7 @@ export class OpenAIImageProvider extends BaseImageProvider {
     if (!b64) {
       const url = data.data?.[0]?.url;
       if (url) {
-        const imgResponse = await fetch(url);
+        const imgResponse = await fetch(url, { signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS) });
         return imgResponse.blob();
       }
       throw new Error('[OpenAI] No image data in response');

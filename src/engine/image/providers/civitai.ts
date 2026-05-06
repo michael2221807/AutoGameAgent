@@ -1,4 +1,4 @@
-import { BaseImageProvider } from './base';
+import { BaseImageProvider, IMAGE_DOWNLOAD_TIMEOUT_MS } from './base';
 import type { ImageBackendType } from '../types';
 
 interface CivitaiImage {
@@ -127,26 +127,71 @@ export class CivitaiImageProvider extends BaseImageProvider {
       throw new Error(`[Civitai] 预览模式 — 预计消耗 ${cost} Buzz，未实际生成`);
     }
 
-    const image = data.images?.[0];
+    let image = data.images?.[0];
     if (!image) {
       throw new Error(`[Civitai] 响应中无图片数据 — ${JSON.stringify(data).slice(0, 200)}`);
     }
     if (image.blockedReason) {
       throw new CivitaiBlockedError(image.blockedReason, image.nsfwLevel);
     }
+
     if (!image.available || !image.url) {
-      throw new Error('[Civitai] 图片尚未就绪 (available=false)');
+      image = await this.pollUntilAvailable(endpoint, data, image);
     }
 
-    const imageUrl = new URL(image.url);
+    const imageUrl = new URL(image.url!);
     if (imageUrl.protocol !== 'https:') {
       throw new Error(`[Civitai] 图片 URL 必须为 HTTPS (实际: ${imageUrl.protocol})`);
     }
-    const blobResponse = await fetch(image.url);
+    const blobResponse = await fetch(image.url!, { signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS) });
     if (!blobResponse.ok) {
       throw new Error(`[Civitai] 下载图片失败: ${blobResponse.status}`);
     }
     return blobResponse.blob();
+  }
+
+  private async pollUntilAvailable(
+    endpoint: string,
+    initialData: CivitaiRecipeResponse,
+    initialImage: CivitaiImage,
+  ): Promise<CivitaiImage> {
+    const jobToken = initialData.id ?? initialImage.jobId;
+    if (!jobToken) {
+      throw new Error('[Civitai] 图片尚未就绪且无法获取任务 ID 用于轮询');
+    }
+
+    const maxAttempts = 60;
+    const pollInterval = 3000;
+    const pollUrl = `${endpoint}/v2/consumer/jobs/${jobToken}`;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+
+      let pollRes: Response;
+      try {
+        pollRes = await fetch(pollUrl, {
+          headers: { 'Authorization': `Bearer ${this.apiKey}` },
+          signal: AbortSignal.timeout(15_000),
+        });
+      } catch {
+        continue;
+      }
+      if (!pollRes.ok) continue;
+
+      let pollData: CivitaiRecipeResponse;
+      try {
+        pollData = await pollRes.json() as CivitaiRecipeResponse;
+      } catch { continue; }
+
+      const img = pollData.images?.[0];
+      if (!img) continue;
+      if (img.blockedReason) {
+        throw new CivitaiBlockedError(img.blockedReason, img.nsfwLevel);
+      }
+      if (img.available && img.url) return img;
+    }
+
+    throw new Error(`[Civitai] 等待图片就绪超时 (${maxAttempts * pollInterval / 1000}s)`);
   }
 
   async testConnection(): Promise<boolean> {
