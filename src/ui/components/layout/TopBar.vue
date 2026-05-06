@@ -498,9 +498,17 @@ function handleQuickSave(): void {
   transition: color var(--duration-normal) var(--ease-out),
               background var(--duration-normal) var(--ease-out);
 }
-.topbar__btn:hover:not(:disabled) {
-  color: var(--color-sage-400);
-  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+@media (hover: hover) {
+  .topbar__btn:hover:not(:disabled) {
+    color: var(--color-sage-400);
+    background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .topbar__btn:active:not(:disabled) {
+    color: var(--color-sage-400);
+    background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+  }
 }
 .topbar__btn:focus-visible {
   outline: none;
@@ -548,18 +556,33 @@ function handleQuickSave(): void {
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn--primary  { background: var(--color-sage-400); color: var(--color-bg); font-weight: 600; }
-.btn--primary:not(:disabled):hover { background: var(--color-sage-300); }
+@media (hover: hover) {
+  .btn--primary:not(:disabled):hover { background: var(--color-sage-300); }
+}
 .btn--secondary {
   background: transparent;
   color: var(--color-text-secondary);
   border-color: var(--color-border);
 }
-.btn--secondary:not(:disabled):hover {
-  color: var(--color-text);
-  background: var(--color-surface-elevated);
+@media (hover: hover) {
+  .btn--secondary:not(:disabled):hover {
+    color: var(--color-text);
+    background: var(--color-surface-elevated);
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .btn--secondary:not(:disabled):active {
+    color: var(--color-text);
+    background: var(--color-surface-elevated);
+  }
 }
 .btn--danger   { background: var(--color-danger); color: var(--color-text); }
-.btn--danger:not(:disabled):hover { filter: brightness(1.12); }
+@media (hover: hover) {
+  .btn--danger:not(:disabled):hover { filter: brightness(1.12); }
+}
+@media (hover: none) and (pointer: coarse) {
+  .btn--danger:not(:disabled):active { filter: brightness(1.12); }
+}
 
 .btn-spinner {
   width: 12px;
@@ -598,6 +621,19 @@ function handleQuickSave(): void {
   }
   .topbar__character-name {
     display: none;
+  }
+}
+
+/* ─── Mobile: enlarge touch targets (641-767px range) ─── */
+@media (min-width: 641px) and (max-width: 767px) {
+  .topbar {
+    padding: 0 var(--space-sm);
+  }
+}
+@media (max-width: 767px) {
+  .topbar__btn {
+    width: 44px;
+    height: 44px;
   }
 }
 </style>

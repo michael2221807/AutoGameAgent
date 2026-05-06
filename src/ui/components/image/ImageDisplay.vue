@@ -9,7 +9,7 @@
  * Used by: CharacterDetailsPanel (avatar), RelationshipPanel (NPC avatar),
  * future gallery/wallpaper components.
  */
-import { ref, watch, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { ImageAssetCache } from '@/engine/image/asset-cache';
 
 const sharedCache = new ImageAssetCache();
@@ -31,30 +31,52 @@ const props = defineProps<{
 const objectUrl = ref<string | null>(null);
 const loading = ref(false);
 const failed = ref(false);
+const rootEl = ref<HTMLElement | null>(null);
+const isVisible = ref(false);
+let observer: IntersectionObserver | null = null;
+
+async function loadAsset(assetId: string) {
+  revokeUrl();
+  failed.value = false;
+  loading.value = true;
+  try {
+    const result = await sharedCache.retrieve(assetId);
+    if (result) {
+      objectUrl.value = URL.createObjectURL(result.blob);
+    } else {
+      failed.value = true;
+    }
+  } catch {
+    failed.value = true;
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(() => {
+  if (!rootEl.value) return;
+  observer = new IntersectionObserver(
+    ([entry]) => {
+      if (entry.isIntersecting) {
+        isVisible.value = true;
+        observer?.disconnect();
+        observer = null;
+        if (props.assetId) loadAsset(props.assetId);
+      }
+    },
+    { rootMargin: '200px' },
+  );
+  observer.observe(rootEl.value);
+});
 
 watch(
   () => props.assetId,
-  async (newId) => {
+  (newId) => {
     revokeUrl();
     failed.value = false;
-
     if (!newId) return;
-
-    loading.value = true;
-    try {
-      const result = await sharedCache.retrieve(newId);
-      if (result) {
-        objectUrl.value = URL.createObjectURL(result.blob);
-      } else {
-        failed.value = true;
-      }
-    } catch {
-      failed.value = true;
-    } finally {
-      loading.value = false;
-    }
+    if (isVisible.value) loadAsset(newId);
   },
-  { immediate: true },
 );
 
 function revokeUrl() {
@@ -64,13 +86,16 @@ function revokeUrl() {
   }
 }
 
-onUnmounted(revokeUrl);
+onUnmounted(() => {
+  observer?.disconnect();
+  revokeUrl();
+});
 
 const sizeClass = `img-display--${props.size ?? 'md'}`;
 </script>
 
 <template>
-  <div class="img-display" :class="sizeClass">
+  <div ref="rootEl" class="img-display" :class="sizeClass">
     <img
       v-if="objectUrl"
       :src="objectUrl"

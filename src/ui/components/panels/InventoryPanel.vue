@@ -597,4 +597,8 @@ function itemTypeIcon(type: string | undefined): string {
   background: color-mix(in oklch, var(--color-text-umber) 35%, transparent);
   border-radius: 3px;
 }
+
+@media (max-width: 767px) {
+  .inventory-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

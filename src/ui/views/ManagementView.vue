@@ -1192,27 +1192,30 @@ function triggerImportRawStateTree(): void {
 
 /* ── Responsive ── */
 
-@media (max-width: 480px) {
+@media (max-width: 767px) {
   .mgmt-header {
     flex-wrap: wrap;
     gap: 0.5rem;
   }
-
   .header-actions {
     width: 100%;
     justify-content: flex-end;
   }
+  .header-actions .btn {
+    min-height: 44px;
+  }
+}
 
+/* Small phone refinements — mgmt-header/header-actions already handled by 767px block above */
+@media (max-width: 480px) {
   .profile-list {
     padding: 0.75rem;
   }
-
   .slot-row {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
   }
-
   .slot-actions {
     width: 100%;
     justify-content: flex-end;

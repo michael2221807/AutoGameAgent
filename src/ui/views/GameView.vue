@@ -30,17 +30,20 @@
  * belong to GameLayout and the individual panel components respectively.
  * This separation keeps GameView thin and focused on its guard/provision role.
  */
-import { watch, provide, onMounted, inject } from 'vue';
+import { watch, provide, onMounted, inject, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useTheme } from '@/ui/composables/useTheme';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
+import { useMobile } from '@/ui/composables/useMobile';
 import type { EventBus } from '@/engine/core/event-bus';
 import type { GamePack } from '@/engine/types/game-pack';
 import GameLayout from '@/ui/layouts/GameLayout.vue';
 
 const router = useRouter();
 const { isLoaded } = useGameState();
+const { isMobile } = useMobile();
+const keepAliveMax = computed(() => isMobile.value ? 4 : undefined);
 const engineState = useEngineStateStore();
 
 // ─── Injected dependencies ────────────────────────────────────
@@ -86,7 +89,7 @@ watch(isLoaded, (loaded) => {
   -->
   <GameLayout v-if="isLoaded">
     <router-view v-slot="{ Component }">
-      <KeepAlive>
+      <KeepAlive :max="keepAliveMax">
         <component :is="Component" />
       </KeepAlive>
     </router-view>

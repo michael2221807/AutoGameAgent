@@ -1293,4 +1293,8 @@ onUnmounted(() => destroyGraph());
 .arch-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .arch-dot--vec { background: var(--color-primary, #6366f1); }
 .arch-dot--kw { background: var(--color-warning, #f59e0b); }
+
+@media (max-width: 767px) {
+  .engram-debug-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

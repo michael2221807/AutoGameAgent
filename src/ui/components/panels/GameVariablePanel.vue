@@ -590,7 +590,7 @@ async function copyFieldValue(path: string): Promise<void> {
         </div>
 
         <!-- Two-column layout -->
-        <div class="gv-columns">
+        <div :class="['gv-columns', { 'gv-columns--detail-open': !!selectedPath }]">
           <!-- Left: tree navigation -->
           <aside class="tree-nav">
             <div
@@ -689,7 +689,7 @@ async function copyFieldValue(path: string): Promise<void> {
                     title="重置为默认值（需确认）"
                     @click.stop="confirmResetField(field)"
                   >
-                    ↩
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
                   </button>
                 </div>
               </div>
@@ -1368,4 +1368,59 @@ async function copyFieldValue(path: string): Promise<void> {
   border-radius: 4px;
 }
 
+@media (max-width: 767px) {
+  .gv-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+
+  /* Master-detail push: only one pane visible at a time */
+  .gv-columns {
+    flex-direction: column;
+  }
+  .tree-nav {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .field-list {
+    display: none;
+  }
+
+  /* Detail open: tree hides, field-list takes over */
+  .gv-columns--detail-open .tree-nav {
+    display: none;
+  }
+  .gv-columns--detail-open .field-list {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .field-list-hint { display: none; }
+  .field-row {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: var(--space-xs);
+  }
+  .field-key-area {
+    width: 100%;
+    flex-shrink: 1;
+  }
+  .field-value-area {
+    width: 100%;
+    justify-content: flex-start;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+  .field-value-area .inline-edit {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .field-value-text {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+}
 </style>

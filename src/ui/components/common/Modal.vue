@@ -255,9 +255,17 @@ onUnmounted(() => {
   transition: color var(--duration-normal) var(--ease-out),
               background var(--duration-normal) var(--ease-out);
 }
-.modal-close:hover {
-  color: var(--color-amber-400);
-  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+@media (hover: hover) {
+  .modal-close:hover {
+    color: var(--color-amber-400);
+    background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .modal-close:active {
+    color: var(--color-amber-400);
+    background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+  }
 }
 .modal-close:focus-visible {
   outline: none;
@@ -334,6 +342,10 @@ onUnmounted(() => {
   }
   .modal-content {
     border-radius: 10px;
+    /* !important overrides inline :style maxWidth prop binding */
+    max-width: calc(100vw - 24px) !important;
+    /* 100dvh for Safari dynamic address bar; fallback for older */
+    max-height: calc(100dvh - 40px);
   }
   .modal-header {
     padding: 12px 16px;
@@ -341,8 +353,18 @@ onUnmounted(() => {
   .modal-body {
     padding: 16px;
   }
+  .modal-close {
+    width: 44px;
+    height: 44px;
+  }
   .modal-footer {
     padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+  .modal-footer .btn {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 </style>

@@ -1,0 +1,112 @@
+/**
+ * AGA Mobile Overrides — additive layer over tokens.css
+ *
+ * Rules:
+ * 1. EVERY rule must be inside a @media query — nothing unconditional
+ * 2. Specificity must match or exceed the original rule
+ * 3. Only override what's necessary — don't repeat unchanged values
+ * 4. All new surfaces follow .impeccable.md sanctuary aesthetic
+ *
+ * Imported in main.ts AFTER tokens.css.
+ * Phase 1.1 of docs/design/mobile-adaptation-plan.md.
+ */
+
+/* ═══════════════════════════════════════════════════════════════
+   1. APP SHELL — remove floating inset on mobile
+   Desktop: .app-glow-wrap { inset: 10px; border-radius: 14px; }
+   Mobile: fill full viewport, no wasted space.
+   The glow-rotate animation + bloom are purely decorative and
+   consume GPU continuously — disabled on mobile.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .app-glow-wrap {
+    inset: 0;
+    border-radius: 0;
+    padding: 0;
+  }
+  .app-glow-wrap::before,
+  .app-glow-bloom,
+  .app-glow-bloom::before {
+    display: none;
+  }
+  #app {
+    border-radius: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   2. GLASSMORPHISM PERFORMANCE — reduce blur on touch devices
+   Only applies to devices with no hover (phones/tablets with
+   touch-only input). Desktop with mouse is completely unaffected.
+   Blur reduced from 24px to 8px to prevent GPU jank on mid-range
+   mobile GPUs. Maintains the frosted-glass feel at lower cost.
+   ═══════════════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  :root {
+    --glass-blur: blur(8px) saturate(1.15);
+    --glass-overlay-blur: blur(4px);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3. TOUCH TARGETS — scoped whitelist, NOT global
+   Only elevate specific shell/nav elements to 44px minimum.
+   Per-panel buttons handled in Phase 4 per component.
+   Both min-width and min-height set for icon-only buttons.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .topbar__btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .sidebar__item {
+    min-height: 44px;
+  }
+  .right-sidebar__collapse-btn,
+  .sidebar__collapse-btn {
+    min-height: 44px;
+  }
+  /* Modal.vue scoped block carries a hard 44px at ≤520px;
+     this min-* covers the 521-767px gap on touch devices. */
+  .modal-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   4. SCROLLBAR — targeted hide on narrative/chrome containers
+   DO NOT hide on data tables / horizontal-scroll lists — those
+   need affordance for discoverability.
+   ═══════════════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  .game-layout__main,
+  .sidebar__groups,
+  .right-sidebar__content,
+  .modal-body,
+  .messages-area {
+    scrollbar-width: none;
+  }
+  .game-layout__main::-webkit-scrollbar,
+  .sidebar__groups::-webkit-scrollbar,
+  .right-sidebar__content::-webkit-scrollbar,
+  .modal-body::-webkit-scrollbar,
+  .messages-area::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   5. SAFE-AREA INSETS — iPhone notch + home indicator
+   Applied to bottom-fixed elements. TopBar doesn't need
+   bottom safe-area; bottom nav and input areas do.
+   NOTE: .input-area safe-area must live in MainGamePanel's own
+   scoped @media block (Phase 4) — a global rule here is defeated
+   by the scoped padding shorthand. Only .mobile-nav is safe here
+   because it's a new component (Phase 2) with no scoped conflict.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .mobile-nav {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

@@ -250,6 +250,8 @@ html, body {
   height: 100dvh;
   overflow: hidden;
   background: oklch(0.03 0.003 95);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /*
@@ -400,5 +402,19 @@ html, body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BACKDROP-FILTER FALLBACK
+   Browsers without backdrop-filter support get a solid
+   semi-transparent surface instead of invisible 4% white.
+   ═══════════════════════════════════════════════════════════════ */
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --glass-bg: rgba(25, 24, 22, 0.88);
+    --glass-blur: none;
+    --glass-overlay-bg: rgba(0, 0, 0, 0.65);
+    --glass-overlay-blur: none;
   }
 }

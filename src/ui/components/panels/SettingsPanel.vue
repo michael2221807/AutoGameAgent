@@ -2644,4 +2644,15 @@ onBeforeUnmount(() => {
   color: var(--color-text, #e0e0e6);
   line-height: 1.8;
 }
+
+/* ─── Mobile: side nav → horizontal scroll strip ─── */
+@media (max-width: 767px) {
+  .settings-nav {
+    display: none;
+  }
+  .settings-content {
+    padding: var(--space-md);
+    padding-bottom: 30vh;
+  }
+}
 </style>

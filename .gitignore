@@ -31,6 +31,10 @@ dist-ssr
 skills-lock.json
 .impeccable.md
 
+# E2E tests — screenshots and artifacts are local-only
+e2e/screenshots/
+e2e/test-results/
+
 # Local reference only
 docs/
 CLAUDE.md

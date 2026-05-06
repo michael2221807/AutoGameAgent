@@ -5611,4 +5611,34 @@ function clearNpcImages() {
   padding: 4px 12px;
   font-size: 0.8rem;
 }
+
+/* ─── Mobile: stack sidebars, fullwidth forms ─── */
+@media (max-width: 767px) {
+  .image-panel {
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+    transition: none;
+    overflow-x: hidden;
+  }
+  .image-panel * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .presets-sidebar,
+  .png-preset-list-col,
+  .transformer-sidebar,
+  .model-ruleset-left,
+  .rules-left-col,
+  .anchor-list-col {
+    width: 100%;
+    flex-shrink: 1;
+  }
+  .gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+  /* Prevent any horizontal scrolling within tab content */
+  .tab-content {
+    overflow-x: hidden;
+  }
+}
 </style>

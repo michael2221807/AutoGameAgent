@@ -1138,4 +1138,8 @@ function memorySegmentsFor(index: number): MemorySegment[] {
 .message-text::-webkit-scrollbar { width: 4px; }
 .message-text::-webkit-scrollbar-track { background: transparent; }
 .message-text::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+
+@media (max-width: 767px) {
+  .assembly-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

@@ -853,6 +853,12 @@ function goHome(): void {
 
 /* ── Responsive ── */
 
+@media (max-width: 767px) {
+  .creation-nav .btn {
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 480px) {
   .creation-header {
     padding: 0.5rem 0.75rem;

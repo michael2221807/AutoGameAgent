@@ -11,9 +11,11 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { loadEngramConfig } from '@/engine/memory/engram/engram-config';
 import { eventBus } from '@/engine/core/event-bus';
+import { useSidebarDrawer } from '@/ui/composables/useSidebarDrawer';
 
 const route = useRoute();
 const isCollapsed = ref(false);
+const { isMobile, leftOpen, closeAll } = useSidebarDrawer();
 
 // ─── Engram 调试面板可见性（受 config.debug 控制）────────────────
 const engramDebugVisible = ref(loadEngramConfig().debug);
@@ -22,6 +24,10 @@ let offEngramConfigChanged: (() => void) | null = null;
 // ─── Collapse ─────────────────────────────────────────────────
 
 function toggleCollapse(): void {
+  if (isMobile.value) {
+    closeAll();
+    return;
+  }
   isCollapsed.value = !isCollapsed.value;
 }
 
@@ -65,7 +71,11 @@ onUnmounted(() => {
  *
  * Observational only — does NOT mutate `isCollapsed` or any existing logic.
  */
-watch(isCollapsed, (collapsed) => {
+watch([isCollapsed, isMobile], ([collapsed, mobile]) => {
+  if (mobile) {
+    document.documentElement.style.setProperty('--sidebar-left-reserve', '0px');
+    return;
+  }
   document.documentElement.style.setProperty(
     '--sidebar-left-reserve',
     collapsed ? '40px' : '264px',
@@ -156,7 +166,7 @@ const panelGroups = computed<PanelGroup[]>(() => [
     Header shows realtime HH:MM:SS clock; footer has exit button.
   -->
   <nav
-    :class="['sidebar', { 'sidebar--collapsed': isCollapsed }]"
+    :class="['sidebar', { 'sidebar--collapsed': isCollapsed, 'drawer-open': leftOpen }]"
     role="navigation"
     aria-label="游戏导航"
   >
@@ -310,9 +320,11 @@ const panelGroups = computed<PanelGroup[]>(() => [
   transition-duration: var(--duration-close);
   cursor: pointer;
 }
-.sidebar--collapsed:hover {
-  background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
-  box-shadow: inset -1px 0 0 color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+@media (hover: hover) {
+  .sidebar--collapsed:hover {
+    background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+    box-shadow: inset -1px 0 0 color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  }
 }
 
 /*
@@ -373,9 +385,17 @@ const panelGroups = computed<PanelGroup[]>(() => [
               color var(--duration-normal) var(--ease-out);
 }
 
-.sidebar__back-main:hover {
-  background: var(--color-sage-500);
-  color: var(--color-bg);
+@media (hover: hover) {
+  .sidebar__back-main:hover {
+    background: var(--color-sage-500);
+    color: var(--color-bg);
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .sidebar__back-main:active {
+    background: var(--color-sage-500);
+    color: var(--color-bg);
+  }
 }
 
 .sidebar__back-main:focus-visible {
@@ -444,9 +464,17 @@ const panelGroups = computed<PanelGroup[]>(() => [
   position: relative;
 }
 
-.sidebar__item:hover {
-  color: var(--color-text);
-  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+@media (hover: hover) {
+  .sidebar__item:hover {
+    color: var(--color-text);
+    background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .sidebar__item:active {
+    color: var(--color-text);
+    background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+  }
 }
 
 .sidebar__item:focus-visible {
@@ -509,9 +537,11 @@ const panelGroups = computed<PanelGroup[]>(() => [
               background var(--duration-normal) var(--ease-out);
 }
 
-.sidebar__collapse-btn:hover {
-  color: var(--color-text);
-  background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
+@media (hover: hover) {
+  .sidebar__collapse-btn:hover {
+    color: var(--color-text);
+    background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
+  }
 }
 .sidebar__collapse-btn:focus-visible {
   outline: none;
@@ -522,6 +552,44 @@ const panelGroups = computed<PanelGroup[]>(() => [
 @media (max-width: 860px) {
   .sidebar:not(.sidebar--collapsed) {
     width: 200px;
+  }
+}
+
+/* ─── Mobile: off-screen drawer, slides in via .drawer-open ─── */
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 280px;
+    border-radius: 0 16px 16px 0;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform var(--duration-open) var(--ease-droplet);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+  }
+  .sidebar.drawer-open {
+    transform: translateX(0);
+  }
+  .sidebar--collapsed {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 280px;
+    border-radius: 0 16px 16px 0;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+    opacity: 1;
+  }
+  .sidebar--collapsed > * {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 </style>

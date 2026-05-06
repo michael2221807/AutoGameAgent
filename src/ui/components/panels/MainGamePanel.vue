@@ -1735,21 +1735,48 @@ watch(
   border-color: color-mix(in oklch, var(--color-danger) 60%, transparent);
 }
 
-/* ── Responsive ─────────────────────────────────────────────── */
+/* ── Responsive — wider breakpoint first, narrower overrides after ── */
 
+/* Mobile baseline: replace 0px sidebar-reserve with minimum padding */
+@media (max-width: 767px) {
+  .status-bar {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+  }
+  .messages-container {
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+  }
+  .action-options__toggle {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+  }
+  .action-options__list {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+  }
+  .input-area {
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+  .action-btn {
+    min-height: 44px;
+  }
+}
+
+/* Small phone refinements — overrides 767px block above */
 @media (max-width: 640px) {
   .messages-container {
     padding: 0.75rem;
   }
-
   .message--user {
     max-width: 82%;
   }
-
   .input-area {
     padding: 0.5rem 0.75rem;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
   }
-
   .action-options__toggle,
   .action-options__list {
     padding-left: 0.75rem;

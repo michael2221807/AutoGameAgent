@@ -806,4 +806,8 @@ function payloadButtonLabel(draft: PayloadDraft): string {
 .btn--secondary { background: rgba(255, 255, 255, 0.07); color: var(--color-text, #e0e0e6); }
 .btn--danger { background: color-mix(in oklch, var(--color-danger) 12%, transparent); color: var(--color-danger-hover); border: 1px solid color-mix(in oklch, var(--color-danger) 30%, transparent); }
 .confirm-hint { margin-top: 8px; font-size: 0.8rem; color: var(--color-text-secondary, #8888a0); }
+
+@media (max-width: 767px) {
+  .assistant-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

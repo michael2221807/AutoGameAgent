@@ -1865,4 +1865,12 @@ const showSettings = ref(false);
   width: 14px;
   height: 14px;
 }
+
+/* ─── Mobile: sidebar reserve is 0px — provide minimum padding ─── */
+@media (max-width: 767px) {
+  .save-panel {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+  }
+}
 </style>

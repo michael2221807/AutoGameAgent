@@ -1084,4 +1084,8 @@ function rejectAdvancement(): void {
 .cfg-expand-leave-active { transition: all 0.15s ease; }
 .cfg-expand-enter-from,
 .cfg-expand-leave-to { opacity: 0; max-height: 0; overflow: hidden; }
+
+@media (max-width: 767px) {
+  .plot-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

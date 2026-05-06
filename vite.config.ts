@@ -70,4 +70,13 @@ export default defineConfig({
   server: {
     host: true,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          cytoscape: ['cytoscape'],
+        },
+      },
+    },
+  },
 });

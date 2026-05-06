@@ -2290,4 +2290,27 @@ const avatarInitial = computed<string>(() => {
   color: var(--color-text-secondary, #8888a0);
   font-style: italic;
 }
+
+/* ─── Mobile: stack hero, fullwidth sections ─── */
+@media (max-width: 767px) {
+  .character-panel {
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+    transition: none;
+  }
+  .hero-header {
+    flex-wrap: wrap;
+  }
+  .hero-avatar {
+    width: 80px;
+    height: 80px;
+    font-size: 1.8rem;
+  }
+  .player-archive {
+    width: 100%;
+  }
+  .bp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
 </style>

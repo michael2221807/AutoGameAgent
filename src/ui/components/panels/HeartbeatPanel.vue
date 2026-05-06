@@ -499,4 +499,8 @@ function toggleEntry(id: string): void {
 .heartbeat-panel::-webkit-scrollbar { width: 5px; }
 .heartbeat-panel::-webkit-scrollbar-track { background: transparent; }
 .heartbeat-panel::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 3px; }
+
+@media (max-width: 767px) {
+  .heartbeat-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

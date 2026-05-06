@@ -1,8 +1,9 @@
 <template>
   <!--
     Main game layout wrapper used by GameView.
-    Structure: TopBar + (LeftSidebar | main content slot | RightSidebar)
-    Uses CSS Grid for the three-column body area with flexible sidebars.
+    Structure: TopBar + (LeftSidebar | main content slot | RightSidebar) + MobileNavBar
+    Uses CSS Grid for the body area with floating sidebars.
+    Mobile: sidebars become off-screen drawers; MobileNavBar provides bottom navigation.
 
     Polanyi principle: the layout itself should be invisible to the user.
     It structures space so that focal awareness (game narrative/panels)
@@ -11,10 +12,8 @@
     the content room to breathe.
   -->
   <div class="game-layout">
-    <!-- Top bar spans full width -->
     <TopBar />
 
-    <!-- Three-column body -->
     <div class="game-layout__body">
       <LeftSidebar />
 
@@ -24,6 +23,14 @@
 
       <RightSidebar />
     </div>
+
+    <MobileNavBar />
+
+    <div
+      v-if="isMobile && (leftOpen || rightOpen)"
+      class="mobile-drawer-backdrop"
+      @click="closeAll"
+    />
   </div>
 </template>
 
@@ -32,6 +39,10 @@
 import TopBar from '@/ui/components/layout/TopBar.vue';
 import LeftSidebar from '@/ui/components/layout/LeftSidebar.vue';
 import RightSidebar from '@/ui/components/layout/RightSidebar.vue';
+import MobileNavBar from '@/ui/components/layout/MobileNavBar.vue';
+import { useSidebarDrawer } from '@/ui/composables/useSidebarDrawer';
+
+const { isMobile, leftOpen, rightOpen, closeAll } = useSidebarDrawer();
 </script>
 
 <style scoped>
@@ -95,5 +106,27 @@ import RightSidebar from '@/ui/components/layout/RightSidebar.vue';
   inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* ─── Mobile layout ─── */
+@media (max-width: 767px) {
+  .game-layout {
+    grid-template-rows: auto 1fr auto;
+  }
+}
+
+.mobile-drawer-backdrop {
+  display: none;
+}
+@media (max-width: 767px) {
+  .mobile-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    background: var(--glass-overlay-bg);
+    backdrop-filter: var(--glass-overlay-blur);
+    -webkit-backdrop-filter: var(--glass-overlay-blur);
+  }
 }
 </style>

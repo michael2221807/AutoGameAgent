@@ -1,3 +1,11 @@
+// structuredClone polyfill — must run before any import that touches idb-adapter.
+// Safe for AGA: persisted data is exclusively JSON-compatible (no Date/Map/Set/cycle).
+// If a future module stores non-JSON-safe values, replace with a proper polyfill.
+if (typeof globalThis.structuredClone !== 'function') {
+  (globalThis as Record<string, unknown>).structuredClone = <T>(val: T): T =>
+    JSON.parse(JSON.stringify(val)) as T;
+}
+
 /**
  * 应用入口 — 引擎初始化序列
  *
@@ -18,6 +26,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import { router } from './ui/router';
 import './ui/styles/tokens.css';
+import './ui/styles/mobile.css';
 
 // Apply persisted font-size × ui-scale before any component renders so the
 // user's preference survives page refresh regardless of which route they

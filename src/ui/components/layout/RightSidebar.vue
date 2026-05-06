@@ -8,7 +8,7 @@
     away from the narrative in the main panel.
   -->
   <aside
-    :class="['right-sidebar', { 'right-sidebar--collapsed': isCollapsed }]"
+    :class="['right-sidebar', { 'right-sidebar--collapsed': isCollapsed, 'drawer-open': rightOpen }]"
     role="complementary"
     aria-label="角色状态栏"
   >
@@ -98,6 +98,7 @@
             :aria-label="`${effect.isDebuff ? '负面效果' : '正面效果'}：${effect.name}`"
             @mouseenter="showEffectTip($event, effect)"
             @mouseleave="hideEffectTip"
+            @click.stop="toggleEffectTip($event, effect)"
           >
             <span class="effect-tag__label">{{ effect.name }}</span>
           </div>
@@ -225,18 +226,24 @@
 
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-overview.md §4.0.3
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { eventBus } from '@/engine/core/event-bus';
+import { useSidebarDrawer } from '@/ui/composables/useSidebarDrawer';
 
 const engineState = useEngineStateStore();
 const router = useRouter();
 
 const isCollapsed = ref(false);
+const { isMobile, rightOpen, closeAll } = useSidebarDrawer();
 const attrsExpanded = ref(true);
 
 function toggleCollapse(): void {
+  if (isMobile.value) {
+    closeAll();
+    return;
+  }
   isCollapsed.value = !isCollapsed.value;
 }
 
@@ -348,6 +355,14 @@ function hideEffectTip(): void {
   effectTip.value = { visible: false, x: 0, y: 0, effect: null };
 }
 
+function toggleEffectTip(ev: MouseEvent, effect: NormalizedEffect): void {
+  if (effectTip.value.visible && effectTip.value.effect?.name === effect.name) {
+    hideEffectTip();
+  } else {
+    showEffectTip(ev, effect);
+  }
+}
+
 // ── Attributes ───────────────────────────────────────────────────
 const attributes = computed(() =>
   engineState.get<Record<string, number>>('角色.属性') ?? {},
@@ -400,14 +415,27 @@ function handleExport(): void {
  * droplet sidebar. Observational only — does NOT mutate `isCollapsed` or
  * any existing logic.
  */
-watch(isCollapsed, (collapsed) => {
+watch([isCollapsed, isMobile], ([collapsed, mobile]) => {
+  if (mobile) {
+    document.documentElement.style.setProperty('--sidebar-right-reserve', '0px');
+    return;
+  }
   document.documentElement.style.setProperty(
     '--sidebar-right-reserve',
     collapsed ? '40px' : '264px',
   );
 }, { immediate: true });
 
+function onDocumentClick(): void {
+  if (effectTip.value.visible) hideEffectTip();
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick);
+});
+
 onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick);
   document.documentElement.style.removeProperty('--sidebar-right-reserve');
 });
 </script>
@@ -498,9 +526,11 @@ onUnmounted(() => {
   transition-duration: var(--duration-close);
   cursor: pointer;
 }
-.right-sidebar--collapsed:hover {
-  background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
-  box-shadow: inset 1px 0 0 color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+@media (hover: hover) {
+  .right-sidebar--collapsed:hover {
+    background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+    box-shadow: inset 1px 0 0 color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  }
 }
 .right-sidebar--collapsed > *:not(.right-sidebar__footer) {
   opacity: 0;
@@ -544,9 +574,11 @@ onUnmounted(() => {
               background var(--duration-normal) var(--ease-out);
 }
 
-.right-sidebar__collapse-btn:hover {
-  color: var(--color-text);
-  background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
+@media (hover: hover) {
+  .right-sidebar__collapse-btn:hover {
+    color: var(--color-text);
+    background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
+  }
 }
 .right-sidebar__collapse-btn:focus-visible {
   outline: none;
@@ -761,7 +793,7 @@ onUnmounted(() => {
   font-size: 0.7rem;
   font-weight: 500;
   border-radius: 999px;
-  cursor: default;
+  cursor: pointer;
   max-width: 100%;
   white-space: nowrap;
 }
@@ -913,10 +945,19 @@ onUnmounted(() => {
               border-color var(--duration-normal) var(--ease-out),
               background var(--duration-normal) var(--ease-out);
 }
-.quick-action-btn:hover {
-  color: var(--color-text);
-  border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
-  background: color-mix(in oklch, var(--color-sage-400) 4%, transparent);
+@media (hover: hover) {
+  .quick-action-btn:hover {
+    color: var(--color-text);
+    border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
+    background: color-mix(in oklch, var(--color-sage-400) 4%, transparent);
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .quick-action-btn:active {
+    color: var(--color-text);
+    border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
+    background: color-mix(in oklch, var(--color-sage-400) 4%, transparent);
+  }
 }
 .quick-action-btn:focus-visible {
   outline: none;
@@ -932,7 +973,45 @@ onUnmounted(() => {
 }
 
 /* ─── Responsive ─── */
-@media (max-width: 1024px) {
+@media (min-width: 768px) and (max-width: 1024px) {
   .right-sidebar { display: none; }
+}
+
+/* ─── Mobile: off-screen drawer, slides in via .drawer-open ─── */
+@media (max-width: 767px) {
+  .right-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 280px;
+    border-radius: 16px 0 0 16px;
+    z-index: 200;
+    transform: translateX(100%);
+    transition: transform var(--duration-open) var(--ease-droplet);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+  }
+  .right-sidebar.drawer-open {
+    transform: translateX(0);
+  }
+  .right-sidebar--collapsed {
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 280px;
+    border-radius: 16px 0 0 16px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+    opacity: 1;
+  }
+  .right-sidebar--collapsed > * {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 </style>

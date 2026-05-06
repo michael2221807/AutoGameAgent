@@ -36,6 +36,9 @@ function getDB(): Promise<IDBPDatabase> {
  * - "storage_root" — 角色档案根
  * - "save_{profileId}_{slotId}" — 存档数据
  */
+let _lastQuotaCheck = 0;
+const QUOTA_CHECK_INTERVAL = 60_000;
+
 export const idbAdapter = {
   /** 按 key 读取 */
   async get<T>(key: string): Promise<T | undefined> {
@@ -46,7 +49,24 @@ export const idbAdapter = {
   /** 写入（structuredClone 避免 reactive proxy 问题） */
   async set(key: string, value: unknown): Promise<void> {
     const db = await getDB();
-    await db.put(STORE_NAME, structuredClone(value), key);
+    try {
+      await db.put(STORE_NAME, structuredClone(value), key);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+        console.error('[IDB] QuotaExceededError — storage full');
+      }
+      throw err;
+    }
+
+    const now = Date.now();
+    if (navigator.storage?.estimate && now - _lastQuotaCheck > QUOTA_CHECK_INTERVAL) {
+      _lastQuotaCheck = now;
+      navigator.storage.estimate().then(({ usage, quota }) => {
+        if (usage && quota && usage > quota * 0.85) {
+          console.warn(`[IDB] Storage ${Math.round(usage / 1024 / 1024)}MB / ${Math.round(quota / 1024 / 1024)}MB (>85%)`);
+        }
+      }).catch(() => { /* estimate() unavailable */ });
+    }
   },
 
   /** 删除 */

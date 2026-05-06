@@ -1460,4 +1460,8 @@ function previewContent(content: string, maxLen = 100): string {
 .prompt-panel::-webkit-scrollbar { width: 5px; }
 .prompt-panel::-webkit-scrollbar-track { background: transparent; }
 .prompt-panel::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 3px; }
+
+@media (max-width: 767px) {
+  .prompt-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

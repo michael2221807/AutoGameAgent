@@ -837,4 +837,8 @@ function persist(): void {
 .event-panel::-webkit-scrollbar { width: 5px; }
 .event-panel::-webkit-scrollbar-track { background: transparent; }
 .event-panel::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 3px; }
+
+@media (max-width: 767px) {
+  .event-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

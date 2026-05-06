@@ -1692,4 +1692,8 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 .api-panel::-webkit-scrollbar { width: 5px; }
 .api-panel::-webkit-scrollbar-track { background: transparent; }
 .api-panel::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 3px; }
+
+@media (max-width: 767px) {
+  .api-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

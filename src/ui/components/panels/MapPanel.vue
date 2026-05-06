@@ -18,10 +18,12 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, nextTick
 import cytoscape from 'cytoscape';
 import type { Core as CyCore, NodeSingular, EventObject } from 'cytoscape';
 import { useGameState } from '@/ui/composables/useGameState';
+import { useMobile } from '@/ui/composables/useMobile';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import Modal from '@/ui/components/common/Modal.vue';
 
 const { isLoaded, useValue } = useGameState();
+const { isMobile } = useMobile();
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -479,6 +481,7 @@ function initCytoscape(): void {
       padding: 15,
       componentSpacing: 18,
       nestingFactor: 1.2,
+      numIter: isMobile.value ? 300 : 1000,
     } as cytoscape.LayoutOptions,
     userZoomingEnabled: true,
     userPanningEnabled: true,
@@ -1042,4 +1045,9 @@ onActivated(() => {
 .detail-slide-enter-from, .detail-slide-leave-to { opacity: 0; transform: translateY(6px); }
 
 .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-secondary); font-size: 0.88rem; }
+
+@media (max-width: 767px) {
+  .map-panel { padding-left: var(--space-sm); padding-right: var(--space-sm); transition: none; }
+  .cy-viewport { touch-action: manipulation; }
+}
 </style>

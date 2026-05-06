@@ -15,6 +15,7 @@
  */
 import { ref, computed, onActivated, watch } from 'vue';
 import { useGameState } from '@/ui/composables/useGameState';
+import { useMobile } from '@/ui/composables/useMobile';
 import Modal from '@/ui/components/common/Modal.vue';
 import NpcChatModal from '@/ui/components/shared/NpcChatModal.vue';
 import { eventBus } from '@/engine/core/event-bus';
@@ -226,6 +227,7 @@ function toggleHeartbeatLock(npc: NpcRelation, event: Event): void {
 
 const router = useRouter();
 const route = useRoute();
+const { isMobile } = useMobile();
 const npcFields = DEFAULT_ENGINE_PATHS.npcFieldNames;
 
 function openImageWorkbench(npcName: string, event: Event): void {
@@ -307,6 +309,10 @@ function closePortraitViewer() {
 }
 
 function toggleDetail(npc: NpcRelation, index: number): void {
+  if (isMobile.value && selectedNpc.value?.名称 === npc.名称) {
+    selectedNpc.value = null;
+    return;
+  }
   detailNpcIdx.value = index;
   selectedNpc.value = npc;
   detailTab.value = 'basic';
@@ -2678,5 +2684,45 @@ function typeClass(type: string | undefined): string {
 .btn-sm:hover {
   background: var(--color-sage-400);
   color: var(--color-text-bone);
+}
+
+/* ─── Mobile: master-detail stack ─── */
+@media (max-width: 767px) {
+  .rel-layout {
+    flex-direction: column;
+    padding-left: 0;
+    padding-right: 0;
+    transition: none;
+  }
+  .rel-roster {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .rel-detail {
+    flex: 0;
+    overflow: hidden;
+  }
+  /* When an NPC is selected, detail-empty is replaced by actual content.
+     Use :has() to auto-expand — supported iOS 15.4+ / Chrome 105+.
+     Fallback: detail stays collapsed, user taps NPC name to navigate. */
+  .rel-detail:has(.rd-hero) {
+    flex: 1;
+    overflow-y: auto;
+    border-top: 1px solid var(--color-border);
+  }
+  .detail-empty {
+    display: none;
+  }
+  .rd-action-btn {
+    min-height: 44px;
+    font-size: 0.78rem;
+  }
+  .edit-form {
+    max-height: calc(100dvh - 200px);
+  }
 }
 </style>

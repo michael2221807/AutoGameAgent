@@ -704,4 +704,8 @@ function exportNarrative(): void {
 .memory-panel::-webkit-scrollbar { width: 5px; }
 .memory-panel::-webkit-scrollbar-track { background: transparent; }
 .memory-panel::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 3px; }
+
+@media (max-width: 767px) {
+  .memory-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+}
 </style>

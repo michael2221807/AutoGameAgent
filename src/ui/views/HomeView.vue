@@ -991,20 +991,42 @@ onMounted(async () => {
 
 /* ── Responsive ── */
 
+@media (max-width: 767px) {
+  .home-view {
+    justify-content: flex-start;
+    padding-top: 2rem;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .profiles-section {
+    max-width: 100%;
+    flex-shrink: 0;
+  }
+  .profile-card {
+    word-break: break-word;
+  }
+  .actions:not(.actions--secondary) {
+    flex-direction: column;
+    width: 100%;
+    max-width: 340px;
+  }
+  .actions:not(.actions--secondary) .btn {
+    width: 100%;
+    text-align: center;
+  }
+  .modal-panel-wrap {
+    height: calc(100dvh - 120px);
+  }
+}
+
 @media (max-width: 480px) {
   .brand-title {
     font-size: 1.9rem;
   }
-
   .actions {
-    flex-direction: column;
-    width: 100%;
     max-width: 320px;
-  }
-
-  .btn {
-    width: 100%;
-    text-align: center;
   }
 }
 
