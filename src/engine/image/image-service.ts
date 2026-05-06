@@ -89,6 +89,13 @@ export class ImageService {
     return config?.model ?? '';
   }
 
+  private getCurrentApiConfigName(backend?: string): string {
+    const config = backend
+      ? this.aiService.getImageConfigForBackend(backend)
+      : this.aiService.getConfigForUsage('imageGeneration');
+    return config?.name ?? '';
+  }
+
   /**
    * Resolve user-customized transformer presets from state tree.
    * Falls back to engine defaults if state tree has no custom presets.
@@ -411,6 +418,7 @@ export class ImageService {
           height: composed.height,
           backend: params.backend,
           model: this.getCurrentModelName(params.backend),
+          apiConfigName: this.getCurrentApiConfigName(params.backend),
           artStyle: params.artStyle,
           createdAt: Date.now(),
           ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
@@ -542,6 +550,7 @@ export class ImageService {
       if (params.characterName) {
         const createdAt = Date.now();
         const modelName = this.getCurrentModelName(params.backend);
+        const apiName = this.getCurrentApiConfigName(params.backend);
         const metaSpread = loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {};
         this.state.setSecretPartResult(params.characterName, params.part, {
           id: asset.id,
@@ -554,6 +563,7 @@ export class ImageService {
           height: composed.height,
           backend: params.backend,
           model: modelName,
+          apiConfigName: apiName,
           createdAt,
           ...metaSpread,
         });
@@ -569,6 +579,7 @@ export class ImageService {
           height: composed.height,
           backend: params.backend,
           model: modelName,
+          apiConfigName: apiName,
           createdAt,
           ...metaSpread,
         });
@@ -679,6 +690,7 @@ export class ImageService {
 
       const createdAt = Date.now();
       const modelName = this.getCurrentModelName(params.backend);
+      const apiName = this.getCurrentApiConfigName(params.backend);
       const metaSpread = loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {};
       if (params.subjectType === 'scene') {
         this.writeToSceneArchive(asset.id, this.queue.get(task.id)!);
@@ -694,6 +706,7 @@ export class ImageService {
           height: params.height,
           backend: params.backend,
           model: modelName,
+          apiConfigName: apiName,
           createdAt,
           ...metaSpread,
         });
@@ -709,6 +722,7 @@ export class ImageService {
           height: params.height,
           backend: params.backend,
           model: modelName,
+          apiConfigName: apiName,
           createdAt,
           ...metaSpread,
         });
@@ -724,6 +738,7 @@ export class ImageService {
           height: params.height,
           backend: params.backend,
           model: modelName,
+          apiConfigName: apiName,
           artStyle: params.artStyle,
           createdAt,
           ...metaSpread,
@@ -966,6 +981,7 @@ export class ImageService {
       height: task.height,
       backend: task.backend,
       model: this.getCurrentModelName(task.backend),
+      apiConfigName: this.getCurrentApiConfigName(task.backend),
       createdAt: Date.now(),
     };
     if (task.providerMeta) record.providerMeta = task.providerMeta;

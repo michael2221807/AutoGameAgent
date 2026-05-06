@@ -246,6 +246,11 @@ async function exportSingleSave(_slot: SaveSlotMeta): Promise<void> {
   const pid = activeProfileId.value;
   if (!backupService || !pid) return;
   try {
+    // Flush current state to IDB before exporting
+    const sid = activeSlotId.value;
+    if (saveManager && sid) {
+      await saveManager.saveGame(pid, sid, store.toSnapshot() as GameStateTree);
+    }
     const blob = await backupService.exportProfile(pid);
     const charName = store.characterName || pid;
     const safeName = String(charName).replace(/[\\/:*?"<>|]/g, '_');
@@ -371,6 +376,13 @@ async function exportFullBackup(): Promise<void> {
   if (!backupService || isExportingBackup.value) return;
   isExportingBackup.value = true;
   try {
+    // Flush current in-memory state tree to IDB before exporting,
+    // so toggled settings that haven't been auto-saved yet are included.
+    const pid = activeProfileId.value;
+    const sid = activeSlotId.value;
+    if (saveManager && pid && sid) {
+      await saveManager.saveGame(pid, sid, store.toSnapshot() as GameStateTree);
+    }
     const blob = await backupService.exportAll();
     const today = new Date().toISOString().slice(0, 10);
     const a = document.createElement('a');

@@ -425,6 +425,12 @@ async function exportFullBackup(): Promise<void> {
   isLoading.value = true;
   errorMessage.value = null;
   try {
+    // Flush current in-memory state to IDB before exporting
+    const pid = engineState.activeProfileId;
+    const sid = engineState.activeSlotId;
+    if (saveManager && pid && sid) {
+      await saveManager.saveGame(pid, sid, engineState.toSnapshot() as import('@/engine/types').GameStateTree);
+    }
     const blob = await backupService.exportAll();
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');

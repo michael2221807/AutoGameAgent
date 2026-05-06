@@ -301,6 +301,10 @@ function modelCellText(img: { model?: string; backend?: string }): string {
   return '未记录';
 }
 
+function apiConfigLabel(img: { apiConfigName?: string }): string {
+  return img.apiConfigName ?? '';
+}
+
 // Selected NPC data
 const selectedNpcData = computed(() => {
   if (!selectedNpc.value || !Array.isArray(relationships.value)) return null;
@@ -1930,6 +1934,7 @@ interface CombinedHistoryEntry {
   negativePrompt?: string;
   composition?: string;
   model?: string;
+  apiConfigName?: string;
   artStyle?: string;
   error?: string;
   assetId?: string;
@@ -1966,6 +1971,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
           negativePrompt: String(record.negativePrompt ?? record['最终负向提示词'] ?? ''),
           composition: String(record.composition ?? ''),
           model: String(record.model ?? record['使用模型'] ?? ''),
+          apiConfigName: typeof record.apiConfigName === 'string' ? record.apiConfigName : undefined,
           artStyle: String(record.artStyle ?? record['画风'] ?? ''),
           assetId: String(record.id ?? ''),
           width: Number(record.width) || undefined,
@@ -1990,6 +1996,8 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       positivePrompt: String(record.positivePrompt ?? ''),
       negativePrompt: String(record.negativePrompt ?? ''),
       composition: String(record.composition ?? ''),
+      model: record.model ?? undefined,
+      apiConfigName: record.apiConfigName ?? undefined,
       assetId: String(record.id ?? ''),
       width: Number(record.width) || undefined,
       height: Number(record.height) || undefined,
@@ -2011,6 +2019,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       positivePrompt: String(record.positivePrompt ?? record['最终正向提示词'] ?? ''),
       negativePrompt: String(record.negativePrompt ?? record['最终负向提示词'] ?? ''),
       model: String(record.model ?? record['使用模型'] ?? ''),
+      apiConfigName: typeof record.apiConfigName === 'string' ? record.apiConfigName : undefined,
       assetId: String(record.id ?? ''),
       taskId: String(record.taskId ?? ''),
       width: Number(record.width) || undefined,
@@ -2107,6 +2116,7 @@ interface GalleryImage {
   composition?: string;
   artStyle?: string;
   model?: string;
+  apiConfigName?: string;
   status?: 'complete' | 'failed' | 'generating' | 'pending' | 'tokenizing';
   positivePrompt?: string;
   negativePrompt?: string;
@@ -2763,13 +2773,13 @@ function clearNpcImages() {
                     <span class="gallery-meta-time">{{ new Date(img.createdAt).toLocaleString() }}</span>
                   </div>
                   <div class="gallery-meta-grid">
-                    <div class="gallery-meta-cell" :title="modelCellText(img)">
+                    <div class="gallery-meta-cell gallery-meta-cell--wide" :title="modelCellText(img)">
                       <div class="gallery-meta-label">使用模型</div>
                       <div class="gallery-meta-value">{{ modelCellText(img) }}</div>
                     </div>
-                    <div class="gallery-meta-cell" :title="img.artStyle || '未记录'">
-                      <div class="gallery-meta-label">画风</div>
-                      <div class="gallery-meta-value">{{ img.artStyle || '未记录' }}</div>
+                    <div v-if="apiConfigLabel(img)" class="gallery-meta-cell gallery-meta-cell--wide" :title="apiConfigLabel(img)">
+                      <div class="gallery-meta-label">API 配置</div>
+                      <div class="gallery-meta-value">{{ apiConfigLabel(img) }}</div>
                     </div>
                   </div>
                   <div v-if="img.positivePrompt || img.negativePrompt" class="gallery-card-prompts">
@@ -3248,9 +3258,13 @@ function clearNpcImages() {
 
               <!-- Metadata grid -->
               <div class="history-meta-grid-v2">
-                <div class="history-meta-cell-v2">
+                <div class="history-meta-cell-v2 history-meta-cell-v2--wide">
                   <div class="history-meta-label-v2">使用模型</div>
                   <div class="history-meta-value-v2">{{ modelCellText(entry) }}</div>
+                </div>
+                <div v-if="apiConfigLabel(entry)" class="history-meta-cell-v2 history-meta-cell-v2--wide">
+                  <div class="history-meta-label-v2">API 配置</div>
+                  <div class="history-meta-value-v2">{{ apiConfigLabel(entry) }}</div>
                 </div>
                 <div class="history-meta-cell-v2">
                   <div class="history-meta-label-v2">画风偏好</div>
@@ -5087,6 +5101,7 @@ function clearNpcImages() {
   text-align: center; cursor: help;
   transition: color var(--duration-fast);
 }
+.gallery-meta-cell--wide { grid-column: 1 / -1; text-align: left; }
 .gallery-meta-cell:hover { color: var(--color-text); }
 .gallery-meta-label { font-size: 10px; color: var(--color-primary); opacity: 0.5; margin-bottom: 2px; }
 .gallery-meta-value { font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -5239,6 +5254,7 @@ function clearNpcImages() {
   padding: var(--space-xs); border: 1px solid var(--color-border);
   border-radius: var(--radius-xs); background: var(--color-surface-elevated);
 }
+.history-meta-cell-v2--wide { grid-column: 1 / -1; text-align: left; }
 .history-meta-cell-v2--error {
   border-color: color-mix(in oklch, var(--color-danger) 30%, transparent); background: color-mix(in oklch, var(--color-danger) 5%, transparent);
   color: var(--color-danger); font-size: var(--font-size-xs);

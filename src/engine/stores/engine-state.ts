@@ -197,6 +197,45 @@ export const useEngineStateStore = defineStore('engineState', () => {
       }
     } catch { /* no-op */ }
 
+    // CoT settings
+    try {
+      const raw = localStorage.getItem('aga_cot_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw) as { enabled?: boolean; judgeEnabled?: boolean; injectStep2?: boolean; ringSize?: number };
+        if (typeof parsed.enabled === 'boolean') setValue('系统.设置.cot.enabled', parsed.enabled);
+        if (typeof parsed.judgeEnabled === 'boolean') setValue('系统.设置.cot.judgeEnabled', parsed.judgeEnabled);
+        if (typeof parsed.injectStep2 === 'boolean') setValue('系统.设置.cot.injectStep2', parsed.injectStep2);
+        if (typeof parsed.ringSize === 'number' && parsed.ringSize >= 1) setValue('系统.设置.cot.reasoningRingSize', parsed.ringSize);
+      }
+    } catch { /* no-op */ }
+
+    // Body polish
+    try {
+      const raw = localStorage.getItem('aga_body_polish_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw) as { enabled?: boolean };
+        if (typeof parsed.enabled === 'boolean') setValue('系统.设置.bodyPolish', parsed.enabled);
+      }
+    } catch { /* no-op */ }
+
+    // Presence partition
+    try {
+      const raw = localStorage.getItem('aga_presence_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw) as { presenceEnabled?: boolean };
+        if (typeof parsed.presenceEnabled === 'boolean') setValue('系统.设置.social.presenceEnabled', parsed.presenceEnabled);
+      }
+    } catch { /* no-op */ }
+
+    // Image generation
+    try {
+      const raw = localStorage.getItem('aga_image_gen_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw) as { enabled?: boolean };
+        if (typeof parsed.enabled === 'boolean') setValue('系统.扩展.image.enabled', parsed.enabled);
+      }
+    } catch { /* no-op */ }
+
     // Prompt settings — ensure defaults exist in state tree
     // (PromptPanel reads/writes to 系统.设置.prompt; SystemPromptBuilder reads it)
     if (!get('系统.设置.prompt')) {

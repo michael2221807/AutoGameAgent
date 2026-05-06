@@ -730,6 +730,11 @@ onMounted(() => {
   featureToggles.value.bodyPolish = bodyPolishEnabled.value;
   featureToggles.value.imageGeneration = imageGenEnabled.value;
   saveFeatureToggles();
+  // Sync state-tree values → localStorage so they survive page reloads / import-export
+  saveCotToLocalStorage();
+  savePresenceToLocalStorage();
+  saveBodyPolishToLocalStorage();
+  saveImageGenToLocalStorage();
   // fontSize × uiScale are coupled — apply together so rem units scale correctly
   applyRootMetrics(settings.value.fontSize, uiScale.value);
 });
@@ -794,6 +799,11 @@ function toggleFeature(key: keyof FeatureToggles): void {
 
 watch(featureToggles, () => saveFeatureToggles(), { deep: true });
 
+const COT_LS_KEY = 'aga_cot_settings';
+const BODY_POLISH_LS_KEY = 'aga_body_polish_settings';
+const PRESENCE_LS_KEY = 'aga_presence_settings';
+const IMAGE_GEN_LS_KEY = 'aga_image_gen_settings';
+
 const cotSettings = ref({
   enabled: false,
   judgeEnabled: false,
@@ -812,6 +822,12 @@ function loadCotSettings(): void {
   };
 }
 
+function saveCotToLocalStorage(): void {
+  try {
+    localStorage.setItem(COT_LS_KEY, JSON.stringify(cotSettings.value));
+  } catch { /* ignore */ }
+}
+
 function toggleCotSetting(key: 'enabled' | 'judgeEnabled' | 'injectStep2'): void {
   cotSettings.value[key] = !cotSettings.value[key];
   setValue(`系统.设置.cot.${key}`, cotSettings.value[key]);
@@ -819,43 +835,67 @@ function toggleCotSetting(key: 'enabled' | 'judgeEnabled' | 'injectStep2'): void
     featureToggles.value.cot = cotSettings.value.enabled;
     saveFeatureToggles();
   }
+  saveCotToLocalStorage();
+  eventBus.emit('engine:request-save');
 }
 
 function updateCotRingSize(val: string): void {
   const n = Math.min(10, Math.max(1, parseInt(val) || 3));
   cotSettings.value.ringSize = n;
   setValue('系统.设置.cot.reasoningRingSize', n);
+  saveCotToLocalStorage();
+  eventBus.emit('engine:request-save');
 }
 
 const presenceEnabled = ref(false);
 function loadPresenceEnabled(): void {
   presenceEnabled.value = get('系统.设置.social.presenceEnabled') === true;
 }
+function savePresenceToLocalStorage(): void {
+  try {
+    localStorage.setItem(PRESENCE_LS_KEY, JSON.stringify({ presenceEnabled: presenceEnabled.value }));
+  } catch { /* ignore */ }
+}
 function togglePresenceEnabled(): void {
   presenceEnabled.value = !presenceEnabled.value;
   setValue('系统.设置.social.presenceEnabled', presenceEnabled.value);
+  savePresenceToLocalStorage();
+  eventBus.emit('engine:request-save');
 }
 
 const bodyPolishEnabled = ref(false);
 function loadBodyPolish(): void {
   bodyPolishEnabled.value = get('系统.设置.bodyPolish') === true;
 }
+function saveBodyPolishToLocalStorage(): void {
+  try {
+    localStorage.setItem(BODY_POLISH_LS_KEY, JSON.stringify({ enabled: bodyPolishEnabled.value }));
+  } catch { /* ignore */ }
+}
 function toggleBodyPolish(): void {
   bodyPolishEnabled.value = !bodyPolishEnabled.value;
   setValue('系统.设置.bodyPolish', bodyPolishEnabled.value);
   featureToggles.value.bodyPolish = bodyPolishEnabled.value;
   saveFeatureToggles();
+  saveBodyPolishToLocalStorage();
+  eventBus.emit('engine:request-save');
 }
 
 const imageGenEnabled = ref(false);
 function loadImageGen(): void {
   imageGenEnabled.value = get('系统.扩展.image.enabled') === true;
 }
+function saveImageGenToLocalStorage(): void {
+  try {
+    localStorage.setItem(IMAGE_GEN_LS_KEY, JSON.stringify({ enabled: imageGenEnabled.value }));
+  } catch { /* ignore */ }
+}
 function toggleImageGen(): void {
   imageGenEnabled.value = !imageGenEnabled.value;
   setValue('系统.扩展.image.enabled', imageGenEnabled.value);
   featureToggles.value.imageGeneration = imageGenEnabled.value;
   saveFeatureToggles();
+  saveImageGenToLocalStorage();
   eventBus.emit('engine:request-save');
 }
 
