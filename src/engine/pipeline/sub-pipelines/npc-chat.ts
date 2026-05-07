@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-relationships.md §NPC 私聊 Modal
 /**
  * NPC 私聊子管线 — §7.2 GAP_AUDIT（Talk 功能）
  *
@@ -44,8 +45,9 @@ import type { AIMessage } from '../../ai/types';
 import type { ResponseParser } from '../../ai/response-parser';
 import type { PromptAssembler } from '../../prompt/prompt-assembler';
 import type { GamePack, Command } from '../../types';
-import type { EnginePathConfig } from '../types';
+import type { EnginePathConfig, IEngramManager } from '../types';
 import type { MemoryManager } from '../../memory/memory-manager';
+import { unset as _unset } from 'lodash-es';
 import {
   emitPromptAssemblyDebug,
   emitPromptResponseDebug,
@@ -86,6 +88,11 @@ export class NpcChatPipeline {
   private readonly nameKey: string;
   private readonly chatHistoryKey: string;
 
+  private _lastChatSnapshot: Record<string, unknown> | null = null;
+  private _lastChatNpcName: string | null = null;
+  private _lastChatRound: number = -1;
+  private _isChatInFlight = false;
+
   constructor(
     private stateManager: StateManager,
     private commandExecutor: CommandExecutor,
@@ -94,8 +101,8 @@ export class NpcChatPipeline {
     private promptAssembler: PromptAssembler,
     private gamePack: GamePack,
     private paths: EnginePathConfig,
-    /** 用于读取短期记忆 → 作为剧情上下文注入 prompt */
     private memoryManager: MemoryManager,
+    private engramManager?: IEngramManager,
   ) {
     this.nameKey = paths.npcFieldNames?.name ?? '名称';
     this.chatHistoryKey = paths.npcFieldNames?.privateChatHistory ?? '私聊历史';
@@ -163,6 +170,12 @@ export class NpcChatPipeline {
     // 3. 整体 trim
     // 4. 限长 2000 字符（防止一次粘贴整本小说）—— 超长时截断并 warn
     const MAX_USER_INPUT_LENGTH = 2000;
+    if (this._isChatInFlight) {
+      return { success: false, reply: '', error: '上一条消息仍在处理中' };
+    }
+    this._isChatInFlight = true;
+    try {
+
     const normalized = userMessage
       .replace(/\r\n?/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
@@ -183,6 +196,13 @@ export class NpcChatPipeline {
       return { success: false, reply: '', error: `未找到 NPC「${npcName}」` };
     }
     const { npc, index } = npcInfo;
+
+    // ── 1b. Capture snapshot BEFORE any state writes (for rollback support) ──
+    const snapshot = this.stateManager.toSnapshot();
+    _unset(snapshot, this.paths.preRoundSnapshot);
+    this._lastChatSnapshot = snapshot;
+    this._lastChatNpcName = npcName;
+    this._lastChatRound = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
 
     // ── 2. 立即把玩家消息 append 到私聊历史 ──
     // 这样即使后续 AI 调用失败，用户消息也已经保存
@@ -299,7 +319,48 @@ export class NpcChatPipeline {
       this.appendNpcMemory(appendIndex, parsed.memoryEntry);
     }
 
+    // ── 9. Engram knowledge graph update ──
+    if (this.engramManager?.isEnabled() && replyText) {
+      try {
+        await this.engramManager.processResponse(parsed, this.stateManager);
+      } catch (engramErr) {
+        console.warn('[NpcChat] Engram processResponse failed (non-blocking):', engramErr);
+      }
+    }
+
     return { success: true, reply: replyText };
+
+    } finally {
+      this._isChatInFlight = false;
+    }
+  }
+
+  // ─── Rollback ─────────────────────────────────────────────
+
+  get canRollbackChat(): boolean { return this._lastChatSnapshot !== null; }
+  get lastChatNpcName(): string | null { return this._lastChatNpcName; }
+
+  rollbackLastChat(): { success: boolean; error?: string } {
+    if (this._isChatInFlight) {
+      return { success: false, error: '消息处理中，无法回退' };
+    }
+    if (!this._lastChatSnapshot) {
+      return { success: false, error: '没有可回退的私聊快照' };
+    }
+    const currentRound = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
+    if (currentRound !== this._lastChatRound) {
+      return { success: false, error: '快照期间已推进回合，回退可能导致数据丢失，已阻止' };
+    }
+    this.stateManager.rollbackTo(this._lastChatSnapshot);
+    if (this.engramManager?.isEnabled()) {
+      this.engramManager.syncVectorsToState(this.stateManager).catch((e: unknown) =>
+        console.warn('[NpcChat] Engram vector sync after rollback failed (non-blocking):', e),
+      );
+    }
+    this._lastChatSnapshot = null;
+    this._lastChatNpcName = null;
+    this._lastChatRound = -1;
+    return { success: true };
   }
 
   // ─── 内部方法 ──────────────────────────────────────────────
@@ -362,11 +423,12 @@ export class NpcChatPipeline {
     if (!Array.isArray(list) || index < 0 || index >= list.length) return;
 
     const npc = { ...list[index] };
-    const memoryList = Array.isArray(npc['记忆'])
-      ? [...(npc['记忆'] as unknown[])]
+    const memoryKey = this.paths.npcFieldNames?.memory ?? '记忆';
+    const memoryList = Array.isArray(npc[memoryKey])
+      ? [...(npc[memoryKey] as unknown[])]
       : [];
     memoryList.push(entry);
-    npc['记忆'] = memoryList;
+    npc[memoryKey] = memoryList;
 
     const newList = [...list];
     newList[index] = npc;

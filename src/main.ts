@@ -525,6 +525,7 @@ async function bootstrap(): Promise<void> {
       pack,
       DEFAULT_ENGINE_PATHS,
       memoryManager,
+      engramManager,
     );
   }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-relationships.md §NPC 私聊 Modal
 /**
  * NpcChatModal — NPC 私聊对话窗口（§7.2）
  *
@@ -99,6 +100,7 @@ const chatHistory = computed<NpcChatMessage[]>(() => {
 const userInput = ref('');
 const isSending = ref(false);
 const errorMsg = ref<string | null>(null);
+const canRollback = ref(false);
 const messagesContainer = ref<HTMLDivElement | null>(null);
 
 /**
@@ -164,9 +166,25 @@ async function sendMessage(): Promise<void> {
   } finally {
     isSending.value = false;
     streamingText.value = '';
+    canRollback.value = npcChatPipeline?.canRollbackChat ?? false;
     // 等待 DOM 更新后滚到底部
     await nextTick();
     scrollToBottom();
+  }
+}
+
+// ─── 回退上一条对话 ──────────────────────────────────────────
+
+function rollbackChat(): void {
+  if (!npcChatPipeline || isSending.value) return;
+  const result = npcChatPipeline.rollbackLastChat();
+  canRollback.value = false;
+  if (result.success) {
+    streamingText.value = '';
+    errorMsg.value = null;
+    eventBus.emit('ui:toast', { type: 'success', message: '已撤回上一条对话', duration: 2000 });
+  } else {
+    eventBus.emit('ui:toast', { type: 'warning', message: result.error ?? '撤回失败', duration: 3000 });
   }
 }
 
@@ -331,13 +349,23 @@ function affinityColor(value: number | undefined): string {
               :disabled="isSending"
               @keydown="onKeydown"
             />
-            <button
-              class="btn-send"
-              :disabled="!userInput.trim() || isSending"
-              @click="sendMessage"
-            >
-              {{ isSending ? '发送中…' : '发送' }}
-            </button>
+            <div class="chat-actions">
+              <button
+                v-if="canRollback"
+                class="btn-rollback"
+                :disabled="isSending"
+                @click="rollbackChat"
+              >
+                撤回
+              </button>
+              <button
+                class="btn-send"
+                :disabled="!userInput.trim() || isSending"
+                @click="sendMessage"
+              >
+                {{ isSending ? '发送中…' : '发送' }}
+              </button>
+            </div>
           </footer>
         </div>
       </div>
@@ -614,6 +642,12 @@ function affinityColor(value: number | undefined): string {
   cursor: not-allowed;
 }
 
+.chat-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
 .btn-send {
   padding: 10px 18px;
   background: color-mix(in oklch, var(--color-sage-400) 18%, transparent);
@@ -624,13 +658,29 @@ function affinityColor(value: number | undefined): string {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
-  flex-shrink: 0;
 }
 .btn-send:hover:not(:disabled) {
   background: color-mix(in oklch, var(--color-sage-400) 28%, transparent);
   box-shadow: 0 0 12px color-mix(in oklch, var(--color-sage-400) 20%, transparent);
 }
 .btn-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-rollback {
+  padding: 6px 12px;
+  background: color-mix(in oklch, var(--color-amber-400) 12%, transparent);
+  color: var(--color-amber-300);
+  border: 1px solid color-mix(in oklch, var(--color-amber-400) 25%, transparent);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-rollback:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-amber-400) 22%, transparent);
+}
+.btn-rollback:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
