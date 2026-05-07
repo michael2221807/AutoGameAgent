@@ -66,8 +66,7 @@ const NSFW_STRIP_PATHS: readonly string[] = [
  * 2. **`记忆.短期 / 中期 / 长期 / 隐式中期`**
  *    已经通过 `MemoryRetriever.retrieve()` 编译为结构化的 `MEMORY_BLOCK`
  *    （按层级分组 + 编号列表），这是 AI 专用的人类可读形态。再把相同数据
- *    以 JSON 形式塞进 `GAME_STATE_JSON` 完全是浪费。**注意**：`记忆.语义`
- *    不在剥离列表里 —— triples 对后续剧情一致性有用，应保留在状态树。
+ *    以 JSON 形式塞进 `GAME_STATE_JSON` 完全是浪费。
  *
  * 3. **`系统.扩展.engramMemory`**
  *    这是 Engram 子系统内部的**事件/实体/关系/向量元数据**存储，单条
@@ -81,25 +80,61 @@ const NSFW_STRIP_PATHS: readonly string[] = [
  *    **最致命的重复**：如果不剥，每次 prompt 里实际包含两份完整状态树
  *    （本回合 + 上回合）。纯内部机制，AI 绝对不应看到。
  *
- * 5. **`系统.探索记录`**
+ * 5. **`系统.扩展.image` / `角色.图片档案` / `社交.关系.*.图片档案`**
+ *    图像生成子系统的全部配置 / presets / anchors / rules / task queue /
+ *    sceneArchive / persistentWallpaper，以及玩家和每个 NPC 的生图历史
+ *    和资产 ID。纯 UI/引擎内部状态，AI 不需要。
+ *    注意：`image.config.transformer` 子树含 apiKey / endpoint（独立转化器模型配置，
+ *    由 ImagePanel 写入状态树），另外 additionalNetworksJson 等可能含用户本地路径。
+ *    整棵 `系统.扩展.image` 被 strip 覆盖，敏感字段不会泄漏。
+ *
+ * 6. **子系统运行时设置 / UI 状态 / 日志**
+ *    `系统.设置` / `系统.actionOptions` 由 ContextAssembly 读取后以专门变量
+ *    或开关影响 prompt；`元数据.当前行动选项` 只用于刷新后恢复 UI；
+ *    `世界.状态.心跳` 是心跳配置和执行日志。这些都不是叙事世界事实。
+ *
+ * 7. **`社交.关系.*.私聊历史`**
+ *    私聊原文由 NPC 私聊 UI 独立保存。主线 AI 需要知道的摘要会写入 NPC
+ *    的 `记忆` 字段，因此原始私聊明细不应随 NPC 对象整段进入 GAME_STATE_JSON。
+ *
+ * 8. **`系统.扩展.语义记忆`** — **暂不 strip**
+ *    语义三元组（TripleBuilder 写入）。当前无检索链路消费此路径（UnifiedRetriever
+ *    读的是 engramMemory，不是语义记忆）。strip 会导致旧存档 triples 静默消失。
+ *    待补 retrieval 注入后再启用 strip。数组无 maxItems 限制，长期可能增长较大。
+ *
+ * 9. **`系统.探索记录`**
  *    每回合后 post-process 自动写入当前位置的数组，某些 pack 可能会
  *    写大量条目。考虑到它已经隐含在 `地点信息` 的 `已探索` 标志里，
  *    重复放进 JSON 对 AI 没价值。先不强制剥离以保持向后兼容 —
  *    若未来变成瓶颈再加。
+ *
+ * **注意**：`元数据.女主规划` 不在此列表。legacy flow 依赖它在 GAME_STATE_JSON
+ * 中出现；new builder 虽然会通过 heroine_plan 单独注入（导致重复），但 strip
+ * 会破坏 legacy 回退路径。等 legacy 完全移除后再考虑剥离。
  *
  * 加入此数组的路径**无条件**从发给 AI 的快照中剥离（与 NSFW 开关无关）。
  */
 const PROMPT_ALWAYS_STRIP_PATHS: readonly string[] = [
   '元数据.叙事历史',
   '元数据.上次对话前快照',
+  '元数据.当前行动选项',
+  '元数据.推理历史',
+  '元数据.剧情规划',
+  '元数据.剧情导向',
   '记忆.短期',
   '记忆.中期',
   '记忆.长期',
   '记忆.隐式中期',
   '系统.扩展.engramMemory',
-  '元数据.推理历史',
-  '元数据.剧情规划',
-  '元数据.剧情导向',
+  '系统.扩展.image',
+  // '系统.扩展.语义记忆' — 暂不 strip：当前无检索链路消费该路径，
+  // strip 会导致旧存档 triples 静默消失。待补 retrieval 注入后再启用。
+  '系统.设置',
+  '系统.actionOptions',
+  '世界.状态.心跳',
+  '角色.图片档案',
+  '社交.关系.*.图片档案',
+  '社交.关系.*.私聊历史',
 ];
 
 /**
@@ -149,8 +184,8 @@ function shouldStripAtPath(path: string, nsfwMode: boolean): boolean {
  * - null/undefined：直接返回
  *
  * 命中 strip 规则的节点返回 `undefined`；在对象上下文里，对应 key 直接不写入；
- * 在数组上下文里，对应元素保留位置但值为 null（避免索引错位，因为 NSFW 字段不应
- * 出现在数组元素自己上）。实际 NSFW_STRIP_PATHS 只定义对象键路径，所以数组情况无害。
+ * 在数组上下文里，命中 strip 的元素被 skip（不保留位置），后续索引前移。
+ * 当前所有 strip 规则都作用于对象键而非数组元素本身，所以索引变化无实际影响。
  */
 function sanitizeDeep(value: unknown, path: string, nsfwMode: boolean): unknown {
   if (value === null || value === undefined) return value;

@@ -119,6 +119,89 @@ describe('stringifySnapshotForPrompt — NSFW strip paths', () => {
   });
 });
 
+describe('stringifySnapshotForPrompt — image/settings/chat strip paths (2026-05-06)', () => {
+  it('strips 系统.扩展.image (entire image subsystem)', () => {
+    const snap = buildSnapshot({
+      系统: {
+        扩展: {
+          engramMemory: { tons: 'of-stuff' },
+          image: { enabled: true, config: { transformer: { apiKey: 'SECRET' } }, tasks: [{ id: 't1' }], sceneArchive: { 生图历史: ['img1'] } },
+        },
+      },
+    });
+    const out = stringifySnapshotForPrompt(snap, false);
+    expect(out).not.toContain('SECRET');
+    expect(out).not.toContain('sceneArchive');
+    expect(out).not.toContain('img1');
+  });
+
+  it('strips 角色.图片档案', () => {
+    const snap = buildSnapshot({
+      角色: { 基础信息: { 姓名: '主角' }, 图片档案: { 生图历史: ['PLAYER-IMG'], 已选头像图片ID: 'avatar123' } },
+    });
+    const out = stringifySnapshotForPrompt(snap, false);
+    expect(out).not.toContain('PLAYER-IMG');
+    expect(out).not.toContain('avatar123');
+    expect(out).toContain('主角');
+  });
+
+  it('strips 社交.关系.*.图片档案 and 社交.关系.*.私聊历史', () => {
+    const snap = buildSnapshot({
+      社交: {
+        关系: [{
+          名称: '林曦',
+          好感度: 75,
+          图片档案: { 生图历史: ['NPC-IMG-DATA'] },
+          私聊历史: [{ role: 'user', content: 'CHAT-SECRET', timestamp: 1 }],
+        }],
+      },
+    });
+    const out = stringifySnapshotForPrompt(snap, false);
+    expect(out).not.toContain('NPC-IMG-DATA');
+    expect(out).not.toContain('CHAT-SECRET');
+    expect(out).toContain('林曦');
+    expect(out).toContain('75');
+  });
+
+  it('strips 系统.设置 and 系统.actionOptions', () => {
+    const snap = buildSnapshot({
+      系统: {
+        扩展: { engramMemory: {} },
+        设置: { cot: { enabled: true }, bodyPolish: true },
+        actionOptions: { mode: 'story', pace: 'slow' },
+      },
+    });
+    const out = stringifySnapshotForPrompt(snap, false);
+    expect(out).not.toContain('bodyPolish');
+    expect(out).not.toContain('"pace"');
+  });
+
+  it('strips 世界.状态.心跳 and 元数据.当前行动选项', () => {
+    const snap = buildSnapshot({
+      世界: { 描述: '开阔大地', 天气: '晴', 状态: { 心跳: { 配置: { enabled: true }, 历史: ['HB-LOG'] } } },
+      元数据: { 回合序号: 5, 当前行动选项: ['OPT-A', 'OPT-B'] },
+    });
+    const out = stringifySnapshotForPrompt(snap, false);
+    expect(out).not.toContain('HB-LOG');
+    expect(out).not.toContain('OPT-A');
+    expect(out).toContain('开阔大地');
+  });
+
+  it('preserves 系统.扩展.语义记忆 (NOT stripped — no retrieval chain yet)', () => {
+    const snap = buildSnapshot({
+      系统: {
+        扩展: {
+          engramMemory: { tons: 'of-stuff' },
+          语义记忆: { triples: [{ subject: 'Alice', predicate: 'knows', object: 'Bob' }] },
+        },
+      },
+    });
+    const out = stringifySnapshotForPrompt(snap, false);
+    expect(out).toContain('Alice');
+    expect(out).toContain('knows');
+  });
+});
+
 describe('stringifySnapshotForPrompt — env tags pass-through (P0 env-tags port 2026-04-19)', () => {
   // These three must ALWAYS reach the AI. Any regression where one of these
   // paths gets added to a strip list means the env-tags feature silently
