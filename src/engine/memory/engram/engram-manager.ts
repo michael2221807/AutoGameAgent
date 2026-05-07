@@ -107,6 +107,8 @@ export class EngramManager {
   private getActiveSlot: () => { profileId: string; slotId: string } | null;
   /** R-02: 当前飞行中的 vectorizeAsync */
   private _vectorizeAbort: AbortController | null = null;
+  /** Serialize processResponse calls to prevent concurrent read-modify-write races */
+  private _processMutex: Promise<void> = Promise.resolve();
 
   constructor(
     aiService: AIService,
@@ -181,6 +183,17 @@ export class EngramManager {
   ): Promise<EngramWriteSnapshot | null> {
     const config = loadEngramConfig();
     if (!config.enabled) return null;
+
+    const ticket = this._processMutex.then(() => this._processResponseInner(response, stateManager, config));
+    this._processMutex = ticket.then(() => {}, () => {});
+    return ticket;
+  }
+
+  private async _processResponseInner(
+    response: AIResponse,
+    stateManager: StateManager,
+    config: EngramConfig,
+  ): Promise<EngramWriteSnapshot | null> {
 
     const startTime = performance.now();
     const currentRound = stateManager.get<number>(this.roundNumberPath) ?? 0;

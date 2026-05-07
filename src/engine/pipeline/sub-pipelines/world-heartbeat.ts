@@ -29,7 +29,9 @@ import type { AIService } from '../../ai/ai-service';
 import type { ResponseParser } from '../../ai/response-parser';
 import type { PromptAssembler } from '../../prompt/prompt-assembler';
 import type { GamePack } from '../../types';
-import type { EnginePathConfig } from '../types';
+import type { EnginePathConfig, IEngramManager } from '../types';
+import type { AIResponse } from '../../ai/types';
+import type { StateChange } from '../../types';
 import {
   emitPromptAssemblyDebug,
   emitPromptResponseDebug,
@@ -50,6 +52,7 @@ export class WorldHeartbeatPipeline {
     private promptAssembler: PromptAssembler,
     private gamePack: GamePack,
     private paths: EnginePathConfig,
+    private engramManager?: IEngramManager,
   ) {}
 
   /**
@@ -100,10 +103,12 @@ export class WorldHeartbeatPipeline {
 
       let commandCount = 0;
       let success = true;
+      let changes: StateChange[] = [];
       if (parsed.commands && parsed.commands.length > 0) {
         commandCount = parsed.commands.length;
         const result = this.commandExecutor.executeBatch(parsed.commands);
         success = !result.hasErrors;
+        changes = result.changeLog.changes;
         console.log(
           `[WorldHeartbeat] Executed ${commandCount} commands, ` +
           `${success ? 'all succeeded' : 'with errors'}`,
@@ -112,15 +117,14 @@ export class WorldHeartbeatPipeline {
           this.stateManager,
           this.paths,
           'worldHeartbeat',
-          result.changeLog.changes,
+          changes,
         );
       } else {
         console.log('[WorldHeartbeat] AI returned no commands');
       }
 
-      // 写入执行历史 — 字段名与 HeartbeatPanel normalizer 对齐
       const roundNum = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
-      const npcNames = candidates.map((n) => String(n['名称'] ?? '')).filter(Boolean);
+      const npcNames = candidates.map((n) => String(n[this.paths.npcFieldNames.name] ?? '')).filter(Boolean);
       this.stateManager.push(this.paths.heartbeatHistory, {
         timestamp: new Date().toLocaleString(),
         回合: roundNum,
@@ -129,6 +133,20 @@ export class WorldHeartbeatPipeline {
           : `无状态变更（${npcNames.join('、')}）`,
         成功: success,
       }, 'system');
+
+      if (this.engramManager?.isEnabled() && changes.length > 0) {
+        try {
+          // knowledgeFacts intentionally omitted — heartbeat prompt does not produce them.
+          // V2 edges are skipped; events + entity refresh are the MVP scope.
+          const syntheticResponse: AIResponse = {
+            text: this.synthesizeHeartbeatText(npcNames, changes),
+            commands: parsed.commands,
+          };
+          await this.engramManager.processResponse(syntheticResponse, this.stateManager);
+        } catch (engramErr) {
+          console.warn('[WorldHeartbeat] Engram processResponse failed (non-blocking):', engramErr);
+        }
+      }
 
       return true;
     } catch (err) {
@@ -227,6 +245,36 @@ export class WorldHeartbeatPipeline {
       CONTEXT_BLOCK: contextLines.join('\n'),
       ENVIRONMENT_BLOCK: environmentBlock,
     };
+  }
+
+  private synthesizeHeartbeatText(npcNames: string[], changes: StateChange[]): string {
+    const lines: string[] = [`[世界心跳] ${npcNames.join('、')} 的状态发生变化：`];
+    for (const c of changes) {
+      const field = c.path.split('.').pop() ?? c.path;
+      const fmtVal = (v: unknown): string => {
+        if (v === undefined || v === null) return '';
+        const s = typeof v === 'string' ? v : JSON.stringify(v);
+        return s.length > 80 ? s.slice(0, 80) + '…' : s;
+      };
+      switch (c.action) {
+        case 'set':
+          if (c.newValue !== undefined) lines.push(`- ${field}: ${fmtVal(c.newValue)}`);
+          break;
+        case 'add':
+          if (c.newValue !== undefined) lines.push(`- ${field} +${fmtVal(c.newValue)}`);
+          break;
+        case 'push':
+          lines.push(`- ${field} 新增: ${fmtVal(c.newValue)}`);
+          break;
+        case 'pull':
+          lines.push(`- ${field} 移除: ${fmtVal(c.oldValue)}`);
+          break;
+        case 'delete':
+          lines.push(`- ${field} 已删除`);
+          break;
+      }
+    }
+    return lines.join('\n');
   }
 
   /** 从状态树中查找 NPC 列表（路径由 EnginePathConfig 配置） */

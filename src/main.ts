@@ -450,6 +450,7 @@ async function bootstrap(): Promise<void> {
       promptAssembler,
       pack,
       DEFAULT_ENGINE_PATHS,
+      engramManager,
     );
     npcGenerationPipeline = new NpcGenerationPipeline(
       stateManager,
