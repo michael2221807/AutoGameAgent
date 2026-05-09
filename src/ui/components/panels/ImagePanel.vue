@@ -5869,12 +5869,10 @@ function clearNpcImages() {
 }
 
 /* Scene tab v2 */
-.scene-layout-v2 { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: var(--space-lg); height: 100%; }
-.scene-left-col { display: flex; flex-direction: column; gap: var(--space-md); overflow-y: auto; }
+.scene-layout-v2 { display: flex; flex-direction: column; gap: var(--space-lg); }
+.scene-left-col { display: flex; flex-direction: column; gap: var(--space-md); }
 .scene-right-col {
   display: flex; flex-direction: column; gap: var(--space-lg);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); padding: var(--space-md); overflow: hidden;
 }
 .scene-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .scene-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-xs); }
@@ -5888,7 +5886,7 @@ function clearNpcImages() {
 .scene-form-actions { display: flex; gap: var(--space-sm); align-items: center; }
 
 /* Scene queue section */
-.scene-queue-section { flex-shrink: 0; max-height: 30%; display: flex; flex-direction: column; }
+.scene-queue-section { display: flex; flex-direction: column; }
 .scene-queue-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-xs); }
 .scene-queue-actions { display: flex; gap: var(--space-2xs); }
 .scene-queue-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-2xs); }
@@ -5901,7 +5899,7 @@ function clearNpcImages() {
 .scene-queue-card-meta { font-size: 10px; color: var(--color-text-muted); margin-top: 2px; }
 
 /* Scene history section */
-.scene-history-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.scene-history-section { display: flex; flex-direction: column; }
 .scene-history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-sm); }
 .scene-history-count { font-size: 10px; color: var(--color-text-muted); }
 .scene-history-grid {
