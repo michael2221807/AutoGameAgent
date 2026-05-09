@@ -2161,7 +2161,7 @@ const avatarInitial = computed<string>(() => {
 .pi-error { padding: 6px 10px; background: color-mix(in oklch, var(--color-danger) 12%, transparent); border: 1px solid var(--color-danger); border-radius: 6px; color: var(--color-danger); font-size: 12px; }
 .pi-empty { color: var(--color-text-muted, #55556a); font-size: 13px; text-align: center; padding: 24px; }
 .player-archive { }
-.player-grid { display: flex; flex-direction: column; gap: var(--space-sm, 8px); }
+.player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-md, 12px); }
 .player-img-card { background: var(--color-surface, #1a1a24); border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px; overflow: hidden; }
 .player-img-preview { position: relative; }
 .player-img-preview :deep(.img-display) { width: 100%; height: auto; aspect-ratio: 3/4; border-radius: 0; }
