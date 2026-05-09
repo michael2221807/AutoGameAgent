@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-image.md §Tab 3 — 角色数据注入
 /**
  * Scene Context Builder — constructs scene generation context from game state.
  *
@@ -113,6 +114,14 @@ export function formatGameTimeForScene(time: GameTime | null | undefined): strin
 
 export type SceneCompositionMode = 'pure_landscape' | 'story_snapshot' | 'auto';
 
+export interface SceneNpcDetail {
+  name: string;
+  appearance?: string;
+  bodyDescription?: string;
+  outfitStyle?: string;
+  description?: string;
+}
+
 export interface SceneContext {
   /** Parsed location hierarchy */
   location: LocationHierarchy;
@@ -141,6 +150,8 @@ export interface SceneContext {
   environmentSummary: string;
   /** Names of NPCs present at the current location */
   presentNpcs: string[];
+  /** Detailed NPC data for selected characters (appearance, outfit, etc.) */
+  npcDetails: SceneNpcDetail[];
   /** The narrative text to generate a scene from */
   narrativeText: string;
   /** User's composition preference */
@@ -181,6 +192,8 @@ export function buildSceneContext(params: {
   environment?: unknown;
   /** List of NPC names present at the player's location */
   presentNpcs?: string[];
+  /** Detailed NPC data for selected characters */
+  npcDetails?: SceneNpcDetail[];
   /** User's composition choice */
   compositionMode?: SceneCompositionMode;
   /** Extra generation requirements */
@@ -193,6 +206,7 @@ export function buildSceneContext(params: {
     festivalName: deriveFestivalName(params.festival),
     environmentSummary: deriveEnvironmentSummary(params.environment),
     presentNpcs: params.presentNpcs ?? [],
+    npcDetails: params.npcDetails ?? [],
     narrativeText: (params.narrativeText || '').trim(),
     compositionMode: params.compositionMode ?? 'auto',
     extraRequirements: (params.extraRequirements || '').trim(),

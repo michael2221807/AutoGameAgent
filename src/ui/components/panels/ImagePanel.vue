@@ -11,7 +11,7 @@ import { useRoute } from 'vue-router';
 import type { ImageService } from '@/engine/image/image-service';
 import type { ImageBackendType, ImageTask, ArtistPreset, ImageAsset } from '@/engine/image/types';
 import { generateReferenceId } from '@/engine/image/utils';
-import type { GameTime } from '@/engine/image/scene-context';
+import type { GameTime, SceneNpcDetail } from '@/engine/image/scene-context';
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 import ImageViewer from '@/ui/components/image/ImageViewer.vue';
 import RegenerateSameModal from '@/ui/components/image/RegenerateSameModal.vue';
@@ -1186,6 +1186,100 @@ async function onSceneReferenceFileChange(e: Event) {
   reader.readAsDataURL(file);
 }
 
+// ── Round selection for scene generation ──
+const narrativeHistoryRaw = useValue<Array<Record<string, unknown>>>(DEFAULT_ENGINE_PATHS.narrativeHistory);
+interface RoundEntry {
+  originalIndex: number;
+  roundNumber: number;
+  content: string;
+  preview: string;
+}
+const recentRounds = computed<RoundEntry[]>(() => {
+  const history = narrativeHistoryRaw.value;
+  if (!Array.isArray(history)) return [];
+  const assistantEntries: RoundEntry[] = [];
+  let roundCounter = 0;
+  for (let i = 0; i < history.length; i++) {
+    const entry = history[i];
+    if (entry.role !== 'assistant' || typeof entry.content !== 'string') continue;
+    roundCounter++;
+    const metrics = entry._metrics as { roundNumber?: number } | undefined;
+    const content = String(entry.content);
+    assistantEntries.push({
+      originalIndex: i,
+      roundNumber: metrics?.roundNumber ?? roundCounter,
+      content,
+      preview: content.replace(/\n/g, ' ').slice(0, 80),
+    });
+  }
+  return assistantEntries.slice(-15).reverse();
+});
+const selectedRoundKeys = ref<Set<number>>(new Set());
+let roundAutoInitDone = false;
+watch(recentRounds, (rounds) => {
+  if (!roundAutoInitDone && rounds.length > 0) {
+    selectedRoundKeys.value = new Set([rounds[0].originalIndex]);
+    roundAutoInitDone = true;
+  }
+}, { immediate: true });
+function toggleRound(originalIndex: number) {
+  const next = new Set(selectedRoundKeys.value);
+  if (next.has(originalIndex)) next.delete(originalIndex);
+  else next.add(originalIndex);
+  selectedRoundKeys.value = next;
+}
+
+// ── NPC selection for scene generation ──
+interface SceneNpcEntry {
+  name: string;
+  isPresent: boolean;
+  appearance: string;
+  bodyDescription: string;
+  outfitStyle: string;
+  description: string;
+}
+const sceneNpcList = computed<SceneNpcEntry[]>(() => {
+  const list = relationships.value;
+  if (!Array.isArray(list)) return [];
+  const nameKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.name ?? '名称';
+  const presenceKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.isPresent ?? '是否在场';
+  const appearanceKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.appearance ?? '外貌描述';
+  const bodyKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.bodyDescription ?? '身材描写';
+  const outfitKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.outfitStyle ?? '衣着风格';
+  const descKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.description ?? '描述';
+  return list
+    .map((npc) => ({
+      name: String(npc[nameKey] ?? ''),
+      isPresent: npc[presenceKey] === true,
+      appearance: String(npc[appearanceKey] ?? ''),
+      bodyDescription: String(npc[bodyKey] ?? ''),
+      outfitStyle: String(npc[outfitKey] ?? ''),
+      description: String(npc[descKey] ?? ''),
+    }))
+    .filter((n) => n.name)
+    .sort((a, b) => (a.isPresent === b.isPresent ? 0 : a.isPresent ? -1 : 1));
+});
+const selectedNpcNames = ref<Set<string>>(new Set());
+let npcAutoInitDone = false;
+watch(sceneNpcList, (npcs) => {
+  if (!npcAutoInitDone && npcs.length > 0) {
+    selectedNpcNames.value = new Set(npcs.filter((n) => n.isPresent).map((n) => n.name));
+    npcAutoInitDone = true;
+  }
+}, { immediate: true });
+function toggleNpc(name: string) {
+  const next = new Set(selectedNpcNames.value);
+  if (next.has(name)) next.delete(name);
+  else next.add(name);
+  selectedNpcNames.value = next;
+}
+function selectAllNpcs() {
+  selectedNpcNames.value = new Set(sceneNpcList.value.map((n) => n.name));
+}
+function deselectAllNpcs() {
+  selectedNpcNames.value = new Set();
+}
+
 // Scene archive from state tree (MRJH sceneImageArchiveWorkflow)
 const sceneArchiveRaw = useValue<Record<string, unknown>>('系统.扩展.image.sceneArchive');
 const sceneArchive = computed(() => {
@@ -1339,9 +1433,31 @@ async function generateScene() {
     const scenePngPresetObj = selectedScenePngPreset.value ? artistPresets.value.find((p) => p.id === selectedScenePngPreset.value) : undefined;
     const sceneStyleApplicability = scenePngPresetObj ? resolveStyleParams(scenePngPresetObj, backend.value) : null;
 
+    // Assemble narrative text from selected rounds
+    const selectedNarrative = recentRounds.value
+      .filter((r) => selectedRoundKeys.value.has(r.originalIndex))
+      .reverse() // chronological order (oldest first)
+      .map((r) => r.content)
+      .join('\n\n---\n\n');
+
+    // Collect selected NPC details
+    const selectedNpcDetails: SceneNpcDetail[] = sceneNpcList.value
+      .filter((n) => selectedNpcNames.value.has(n.name))
+      .map((n) => ({
+        name: n.name,
+        ...(n.appearance ? { appearance: n.appearance } : {}),
+        ...(n.bodyDescription ? { bodyDescription: n.bodyDescription } : {}),
+        ...(n.outfitStyle ? { outfitStyle: n.outfitStyle } : {}),
+        ...(n.description ? { description: n.description } : {}),
+      }));
+
+    // Filter scene anchors to only selected NPCs
     const sceneAnchors = imageService.collectSceneRoleAnchors();
+    const filteredPresentNpcs = sceneAnchors.presentNpcs.filter((n) => selectedNpcNames.value.has(n));
+    const filteredRoleAnchors = sceneAnchors.roleAnchors.filter((a) => selectedNpcNames.value.has(a.name));
+
     const task = await imageService.generateSceneImage({
-      sceneDescription: sceneExtraPrompt.value || '当前场景',
+      sceneDescription: selectedNarrative || sceneExtraPrompt.value || '当前场景',
       location: get('角色.基础信息.当前位置') as string ?? '',
       gameTime,
       weather: get(DEFAULT_ENGINE_PATHS.weather) as string | undefined,
@@ -1355,8 +1471,9 @@ async function generateScene() {
       preset: { id: 'scene_custom', name: '场景自定义', positivePrefix: '', positiveSuffix: '', negative: '', source: 'manual', width: sceneW, height: sceneH },
       reference: sceneRef,
       styleParamOverrides: sceneStyleApplicability?.applied,
-      presentNpcs: sceneAnchors.presentNpcs,
-      roleAnchors: sceneAnchors.roleAnchors.length > 0 ? sceneAnchors.roleAnchors : undefined,
+      presentNpcs: filteredPresentNpcs,
+      npcDetails: selectedNpcDetails.length > 0 ? selectedNpcDetails : undefined,
+      roleAnchors: filteredRoleAnchors.length > 0 ? filteredRoleAnchors : undefined,
     });
     if (task.status === 'failed') {
       sceneError.value = task.error ?? '场景生成失败';
@@ -3422,6 +3539,50 @@ function clearNpcImages() {
                 </button>
               </div>
               <p class="form-hint">选择场景画面是纯景观还是带人物互动的故事快照。</p>
+            </div>
+
+            <!-- Round/narrative selection -->
+            <div class="scene-section">
+              <label class="form-label">正文来源</label>
+              <p class="form-hint">选择要传入场景转换器的回合正文，可多选。</p>
+              <div v-if="recentRounds.length === 0" class="form-hint" style="opacity:0.5">暂无回合记录</div>
+              <div v-else class="round-selector">
+                <div
+                  v-for="round in recentRounds"
+                  :key="round.originalIndex"
+                  :class="['round-selector__item', { 'round-selector__item--selected': selectedRoundKeys.has(round.originalIndex) }]"
+                  @click="toggleRound(round.originalIndex)"
+                >
+                  <span class="round-selector__check">{{ selectedRoundKeys.has(round.originalIndex) ? '☑' : '☐' }}</span>
+                  <span class="round-selector__label">第 {{ round.roundNumber }} 回合</span>
+                  <span class="round-selector__preview">{{ round.preview }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- NPC selection -->
+            <div class="scene-section">
+              <div class="npc-selector__header">
+                <label class="form-label">参与角色</label>
+                <span class="npc-selector__actions">
+                  <button type="button" class="npc-selector__link" @click="selectAllNpcs">全选</button>
+                  <button type="button" class="npc-selector__link" @click="deselectAllNpcs">全不选</button>
+                </span>
+              </div>
+              <p class="form-hint">选择要包含在场景中的角色（外貌/衣着等信息会传入转换器）。</p>
+              <div v-if="sceneNpcList.length === 0" class="form-hint" style="opacity:0.5">暂无角色</div>
+              <div v-else class="npc-selector">
+                <div
+                  v-for="npc in sceneNpcList"
+                  :key="npc.name"
+                  :class="['npc-selector__item', { 'npc-selector__item--selected': selectedNpcNames.has(npc.name) }]"
+                  @click="toggleNpc(npc.name)"
+                >
+                  <span class="npc-selector__check">{{ selectedNpcNames.has(npc.name) ? '☑' : '☐' }}</span>
+                  <span class="npc-selector__name">{{ npc.name }}</span>
+                  <span v-if="npc.isPresent" class="npc-selector__badge">在场</span>
+                </div>
+              </div>
             </div>
 
             <!-- Orientation -->
@@ -5884,6 +6045,63 @@ function clearNpcImages() {
   color: var(--color-primary); font-size: var(--font-size-sm);
 }
 .scene-form-actions { display: flex; gap: var(--space-sm); align-items: center; }
+
+/* Round selector */
+.round-selector {
+  max-height: 200px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: var(--space-2xs);
+}
+.round-selector__item {
+  display: flex; align-items: center; gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer; user-select: none;
+  font-size: var(--font-size-sm); color: var(--color-text-muted);
+  transition: background var(--duration-fast);
+}
+.round-selector__item:hover { background: rgba(255,255,255,0.04); }
+.round-selector__item--selected { color: var(--color-text); background: rgba(var(--color-primary-rgb, 212,175,55), 0.08); }
+.round-selector__check { flex-shrink: 0; width: 16px; text-align: center; font-size: 13px; }
+.round-selector__label { flex-shrink: 0; font-weight: 500; white-space: nowrap; }
+.round-selector__preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.7; font-size: 11px; }
+
+/* NPC selector */
+.npc-selector__header { display: flex; align-items: center; justify-content: space-between; }
+.npc-selector__actions { display: flex; gap: var(--space-xs); }
+.npc-selector__link {
+  background: none; border: none; color: var(--color-primary);
+  font-size: 11px; cursor: pointer; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.npc-selector__link:hover { opacity: 0.8; }
+.npc-selector {
+  display: flex; flex-wrap: wrap; gap: var(--space-2xs);
+}
+.npc-selector__item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px var(--space-xs);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  cursor: pointer; user-select: none;
+  font-size: var(--font-size-sm); color: var(--color-text-muted);
+  transition: all var(--duration-fast);
+}
+.npc-selector__item:hover { border-color: var(--color-primary); }
+.npc-selector__item--selected {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb, 212,175,55), 0.1);
+}
+.npc-selector__check { font-size: 12px; flex-shrink: 0; }
+.npc-selector__name { white-space: nowrap; }
+.npc-selector__badge {
+  font-size: 9px; padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  background: rgba(var(--color-success-rgb, 76,175,80), 0.15);
+  color: var(--color-success, #4CAF50);
+}
 
 /* Scene queue section */
 .scene-queue-section { display: flex; flex-direction: column; }

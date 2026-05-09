@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-image.md §Tab 3 — 场景生成表单
 /**
  * Image Tokenizer — Sprint Image-2
  *
@@ -207,6 +208,7 @@ export class ImageTokenizer {
         : '纯场景时，让地点、季节、天气、材质、景深和主光源先成立。',
       '输出的场景保持单一可执行镜头，让时间、天气和视角自然统一。',
       hasAnchors ? '若已提供角色锚点，请直接沿用这些角色的稳定外观，把场景输出重点放在站位、动作、互动、表情、镜头与环境关系。' : '',
+      sc.npcDetails.length > 0 ? '若提供了【参与角色资料】，请参考角色的外貌、身材和衣着描述来生成准确的人物外观标签，确保角色在场景中的视觉表现与设定一致。' : '',
       mode === 'pure_landscape'
         ? '构图要求：纯场景，完整展开环境空间、材质、天气和光影。'
         : '构图要求：故事快照，优先抓取一个可执行的单帧互动，允许 tighter framing、portrait-friendly composition 或 vertical composition 语义。',
@@ -234,6 +236,7 @@ export class ImageTokenizer {
       '故事快照中控制人物密度与动作复杂度，让画面保持清晰稳定。',
       '若最终判定为风景场景，必须只输出环境/风景/建筑/天气/材质/光影 tags，禁止输出任何角色标签或 <角色> 段。',
       hasAnchors ? '若已提供角色锚点，只有在判定为故事快照时才沿用这些角色的稳定外观，把输出重点放在构图、角色站位、动作关系、镜头和环境补充。' : '',
+      sc.npcDetails.length > 0 ? '若提供了【参与角色资料】，请参考角色的外貌、身材和衣着来生成准确的人物外观标签。' : '',
       // `...` placeholders removed — weaker LLMs echo them literally.
       '标签格式要求：',
       '1) <thinking> 和 </thinking> 之间写入简短思考过程',
@@ -268,6 +271,18 @@ export class ImageTokenizer {
       sc.festivalName ? `当前节日：${sanitizeEnvTokenForPrompt(sc.festivalName)}（作为 decoration / lantern / festive crowd token，不喧宾夺主）` : '',
       sc.environmentSummary ? `环境标签：${sanitizeEnvTokenForPrompt(sc.environmentSummary)}（作为 mood / ground / air / visibility token；权重不超过全 prompt 的 20%）` : '',
       sc.presentNpcs.length > 0 ? `在场角色：${sc.presentNpcs.join('、')}` : '',
+      ...(sc.npcDetails.length > 0 ? [
+        '',
+        '【参与角色资料】',
+        ...sc.npcDetails.map((npc, i) => {
+          const parts = [`[${i + 1}] ${sanitizeEnvTokenForPrompt(npc.name)}`];
+          if (npc.appearance) parts.push(`  外貌：${sanitizeEnvTokenForPrompt(npc.appearance)}`);
+          if (npc.bodyDescription) parts.push(`  身材：${sanitizeEnvTokenForPrompt(npc.bodyDescription)}`);
+          if (npc.outfitStyle) parts.push(`  衣着：${sanitizeEnvTokenForPrompt(npc.outfitStyle)}`);
+          if (npc.description) parts.push(`  背景：${sanitizeEnvTokenForPrompt(npc.description)}`);
+          return parts.join('\n');
+        }),
+      ] : []),
       '',
       '【最新正文】',
       sc.narrativeText,

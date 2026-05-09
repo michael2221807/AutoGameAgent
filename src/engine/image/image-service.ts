@@ -230,6 +230,7 @@ export class ImageService {
      */
     environment?: unknown;
     presentNpcs?: string[];
+    npcDetails?: Array<{ name: string; appearance?: string; bodyDescription?: string; outfitStyle?: string; description?: string }>;
     compositionMode?: SceneCompositionMode;
     extraRequirements?: string;
     roleAnchors?: Array<{ name: string; positive: string }>;
@@ -270,6 +271,7 @@ export class ImageService {
         festival: params.festival,
         environment: params.environment,
         presentNpcs: params.presentNpcs,
+        npcDetails: params.npcDetails,
         compositionMode: params.compositionMode,
         extraRequirements: params.extraRequirements,
       });
