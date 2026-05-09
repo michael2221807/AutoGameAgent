@@ -10,7 +10,7 @@
  *
  * 2026-04-08 升级：英雄头像区、Tab 结构（基础/属性/关系/成就）
  */
-import { ref, computed, inject, watch } from 'vue';
+import { ref, computed, inject, watch, onUnmounted } from 'vue';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -468,16 +468,8 @@ function setPlayerPortrait(assetId: string) {
 }
 
 function deletePlayerImage(assetId: string) {
-  const archive = { ...(get('角色.图片档案') ?? {}) } as Record<string, unknown>;
-  const history = Array.isArray(archive['生图历史'])
-    ? (archive['生图历史'] as Array<Record<string, unknown>>).filter((r) => String(r.id) !== assetId)
-    : [];
-  archive['生图历史'] = history;
-  if (archive['已选头像图片ID'] === assetId) archive['已选头像图片ID'] = '';
-  if (archive['已选立绘图片ID'] === assetId) archive['已选立绘图片ID'] = '';
-  if (archive['最近生图结果'] === assetId) archive['最近生图结果'] = history[0]?.id ?? '';
-  setValue('角色.图片档案', archive);
-  eventBus.emit('engine:request-save');
+  if (!imageService) return;
+  imageService.deleteNpcImage('__player__', assetId);
 }
 
 // ── Regenerate-Same for player images ──
@@ -695,6 +687,200 @@ const devEntries = computed<Array<{ part: string; val: number }>>(() => {
     .filter(([, v]) => typeof v === 'number')
     .map(([part, val]) => ({ part, val: val as number }));
 });
+
+// ─── Player secret part close-up (mirrors NPC flow in ImagePanel.vue) ───
+
+const playerSecretParts = [
+  { key: 'breast' as const, label: '胸部' },
+  { key: 'vagina' as const, label: '小穴' },
+  { key: 'anus' as const, label: '屁穴' },
+];
+
+const playerSecretSizeOptions = [
+  { label: '无要求', value: 'none' },
+  { label: '1:1', value: '1:1' },
+  { label: '3:4', value: '3:4' },
+  { label: '9:16', value: '9:16' },
+  { label: '16:9', value: '16:9' },
+];
+
+const PLAYER_SECRET_SIZE_MAP: Record<string, { w: number; h: number }> = {
+  '1:1': { w: 1024, h: 1024 },
+  '3:4': { w: 768, h: 1024 },
+  '9:16': { w: 576, h: 1024 },
+  '16:9': { w: 1024, h: 576 },
+};
+
+const playerSecretSizePreset = ref('1:1');
+const playerSecretArtistPreset = ref('');
+const playerSecretPngPreset = ref('');
+const playerSecretExtraPrompt = ref('');
+const playerSecretBusy = ref('');
+const playerSecretStatusText = ref('');
+
+const playerSecretViewerOpen = ref(false);
+const playerSecretViewerSrc = ref('');
+
+async function openPlayerSecretViewer(assetId: string) {
+  if (!imageService) return;
+  try {
+    const result = await imageService.getAssetCache().retrieve(assetId);
+    if (result) {
+      if (playerSecretViewerSrc.value) URL.revokeObjectURL(playerSecretViewerSrc.value);
+      playerSecretViewerSrc.value = URL.createObjectURL(result.blob);
+      playerSecretViewerOpen.value = true;
+    }
+  } catch { /* silent */ }
+}
+
+onUnmounted(() => {
+  if (playerSecretViewerSrc.value) URL.revokeObjectURL(playerSecretViewerSrc.value);
+});
+
+function getPlayerSecretPartAssetId(partKey: 'breast' | 'vagina' | 'anus'): string | null {
+  const archive = get('角色.图片档案') as Record<string, unknown> | undefined;
+  const secretArchive = archive?.['香闺秘档'] as Record<string, unknown> | undefined;
+  if (!secretArchive) return null;
+  const cnKey = partKey === 'breast' ? '胸部' : partKey === 'vagina' ? '小穴' : '屁穴';
+  const entry = secretArchive[cnKey] as Record<string, unknown> | undefined;
+  return typeof entry?.id === 'string' && entry.id ? entry.id : null;
+}
+
+function resolvePlayerSecretPreset(): import('@/engine/image/types').StylePreset | undefined {
+  const p = playerSecretSizePreset.value;
+  const dims = PLAYER_SECRET_SIZE_MAP[p];
+  if (!dims) return undefined;
+  return { id: `secret_${p}`, name: p, positivePrefix: '', positiveSuffix: '', negative: '', width: dims.w, height: dims.h, source: 'manual' as const };
+}
+
+async function generatePlayerSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
+  if (!imageService || playerSecretBusy.value) return;
+  const part = playerSecretParts.find((p) => p.key === partKey);
+  if (!part) return;
+  playerSecretBusy.value = partKey;
+  playerSecretStatusText.value = `${part.label}特写已提交，正在加入图片队列。`;
+  try {
+    const rawPresets = get('系统.扩展.image.artistPresets');
+    const presetArr = Array.isArray(rawPresets) ? rawPresets as PromptStylePresetLike[] : [];
+    const styleInjection = buildPromptStyleInjection(presetArr, [
+      playerSecretArtistPreset.value,
+      playerSecretPngPreset.value,
+    ]);
+    const allPresets = Array.isArray(rawPresets) ? rawPresets as ArtistPreset[] : [];
+    const pngObj = playerSecretPngPreset.value ? allPresets.find((p) => p.id === playerSecretPngPreset.value) : undefined;
+    const styleApplicability = pngObj ? resolveStyleParams(pngObj, playerDefaultBackend.value) : null;
+    const anchor = playerAnchor.value;
+    const task = await imageService.generateSecretPartImage({
+      characterName: '__player__',
+      part: partKey,
+      backend: playerDefaultBackend.value,
+      artistPrefix: styleInjection.artistPrefix,
+      extraNegative: styleInjection.extraNegative,
+      extraPrompt: playerSecretExtraPrompt.value || undefined,
+      preset: resolvePlayerSecretPreset(),
+      anchorPositive: anchor?.enabled !== false ? String(anchor?.positivePrompt ?? '') || undefined : undefined,
+      anchorNegative: anchor?.enabled !== false ? String(anchor?.negativePrompt ?? '') || undefined : undefined,
+      styleParamOverrides: styleApplicability?.applied,
+    });
+    if (task.status === 'failed') {
+      playerSecretStatusText.value = `${part.label}特写生成失败：${task.error ?? '未知错误'}`;
+    } else {
+      playerSecretStatusText.value = `${part.label}特写已完成，可在图库/历史查看。`;
+    }
+  } catch (err) {
+    playerSecretStatusText.value = `${part.label}特写提交后出现失败：${(err as Error).message}`;
+  } finally {
+    playerSecretBusy.value = '';
+  }
+}
+
+async function generateAllPlayerSecretParts() {
+  if (!imageService || playerSecretBusy.value) return;
+  playerSecretBusy.value = 'all';
+  playerSecretStatusText.value = '三处特写已提交，正在加入图片队列。';
+  try {
+    const rawPresets = get('系统.扩展.image.artistPresets');
+    const presetArr = Array.isArray(rawPresets) ? rawPresets as PromptStylePresetLike[] : [];
+    const styleInjection = buildPromptStyleInjection(presetArr, [
+      playerSecretArtistPreset.value,
+      playerSecretPngPreset.value,
+    ]);
+    const allPresets = Array.isArray(rawPresets) ? rawPresets as ArtistPreset[] : [];
+    const pngObj = playerSecretPngPreset.value ? allPresets.find((p) => p.id === playerSecretPngPreset.value) : undefined;
+    const styleApplicability = pngObj ? resolveStyleParams(pngObj, playerDefaultBackend.value) : null;
+    const anchor = playerAnchor.value;
+    const failed: string[] = [];
+    for (const part of playerSecretParts) {
+      const task = await imageService.generateSecretPartImage({
+        characterName: '__player__',
+        part: part.key,
+        backend: playerDefaultBackend.value,
+        artistPrefix: styleInjection.artistPrefix,
+        extraNegative: styleInjection.extraNegative,
+        extraPrompt: playerSecretExtraPrompt.value || undefined,
+        preset: resolvePlayerSecretPreset(),
+        anchorPositive: anchor?.enabled !== false ? String(anchor?.positivePrompt ?? '') || undefined : undefined,
+        anchorNegative: anchor?.enabled !== false ? String(anchor?.negativePrompt ?? '') || undefined : undefined,
+        styleParamOverrides: styleApplicability?.applied,
+      });
+      if (task.status === 'failed') failed.push(part.label);
+    }
+    playerSecretStatusText.value = failed.length
+      ? `${failed.join('、')}特写生成失败，其余已完成。`
+      : '三处特写已完成，可在图库/历史查看。';
+  } catch {
+    playerSecretStatusText.value = '部分特写提交失败，请查看队列。';
+  } finally {
+    playerSecretBusy.value = '';
+  }
+}
+
+async function generatePlayerSecretPartWithReference(partKey: 'breast' | 'vagina' | 'anus') {
+  if (!imageService || playerSecretBusy.value) return;
+  const prevAssetId = getPlayerSecretPartAssetId(partKey);
+  if (!prevAssetId) {
+    eventBus.emit('ui:toast', { type: 'error', message: '没有上一张结果可作为参考', duration: 2000 });
+    return;
+  }
+  const part = playerSecretParts.find((p) => p.key === partKey);
+  if (!part) return;
+  playerSecretBusy.value = partKey;
+  playerSecretStatusText.value = `${part.label}参考重绘已提交…`;
+  try {
+    const entry = await imageService.getAssetCache().retrieve(prevAssetId);
+    if (!entry) {
+      eventBus.emit('ui:toast', { type: 'error', message: '上一张结果缓存缺失', duration: 2000 });
+      return;
+    }
+    const rawPresets = get('系统.扩展.image.artistPresets');
+    const presetArr = Array.isArray(rawPresets) ? rawPresets as PromptStylePresetLike[] : [];
+    const styleInjection = buildPromptStyleInjection(presetArr, [playerSecretArtistPreset.value, playerSecretPngPreset.value]);
+    const denoiseDefault = (get('系统.扩展.image.config.reference.defaultDenoiseStrength') as number | undefined) ?? 0.65;
+    const secretRef: import('@/engine/image/types').ImageReferenceInput = {
+      id: generateReferenceId(), role: 'source', source: 'asset', assetId: prevAssetId,
+      denoiseStrength: denoiseDefault,
+    };
+    const anchor = playerAnchor.value;
+    const task = await imageService.generateSecretPartImage({
+      characterName: '__player__',
+      part: partKey,
+      backend: playerDefaultBackend.value,
+      artistPrefix: styleInjection.artistPrefix,
+      extraNegative: styleInjection.extraNegative,
+      extraPrompt: playerSecretExtraPrompt.value || undefined,
+      reference: secretRef,
+      anchorPositive: anchor?.enabled !== false ? String(anchor?.positivePrompt ?? '') || undefined : undefined,
+      anchorNegative: anchor?.enabled !== false ? String(anchor?.negativePrompt ?? '') || undefined : undefined,
+    });
+    playerSecretStatusText.value = task.status === 'failed'
+      ? `${part.label}参考重绘失败：${task.error ?? '未知错误'}`
+      : `${part.label}参考重绘完成。`;
+  } catch (err) {
+    playerSecretStatusText.value = `${part.label}参考重绘失败：${(err as Error).message}`;
+  } finally {
+    playerSecretBusy.value = '';
+  }
+}
 
 // ─── Tab state ───
 
@@ -1426,6 +1612,99 @@ const avatarInitial = computed<string>(() => {
               </div>
             </div>
           </div>
+
+          <!-- Player secret part close-up (NSFW gated, non-male) -->
+          <div
+            v-if="nsfwEnabled && gender && !String(gender).includes('男')"
+            class="player-secret-section"
+          >
+            <CivitaiLoraShelf
+              v-if="playerDefaultBackend === 'civitai'"
+              mode="compact"
+              scope="player"
+              :mature-enabled="get('系统.扩展.image.config.civitai.allowMatureContent') === true"
+            />
+            <div class="secret-header-row">
+              <div>
+                <h3 class="section-label">私密部位特写</h3>
+                <p class="section-desc">为主角生成私密部位特写图片。</p>
+              </div>
+              <AgaButton
+                size="sm"
+                :disabled="!!playerSecretBusy"
+                @click="generateAllPlayerSecretParts"
+              >{{ playerSecretBusy === 'all' ? '生成中...' : '全部生成' }}</AgaButton>
+            </div>
+
+            <div class="secret-config-grid">
+              <div class="pi-form-row" style="flex-direction:column;align-items:stretch">
+                <label class="pi-label">分辨率 / 比例</label>
+                <div class="secret-btn-row">
+                  <button v-for="opt in playerSecretSizeOptions" :key="opt.value" type="button"
+                    :class="['secret-opt-btn', { 'secret-opt-btn--active': playerSecretSizePreset === opt.value }]"
+                    @click="playerSecretSizePreset = opt.value"
+                  >{{ opt.label }}</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="secret-config-grid">
+              <div class="pi-form-row">
+                <label class="pi-label">画师串预设</label>
+                <AgaSelect :options="[{ label: '不使用', value: '' }, ...playerArtistPresetOptions.slice(1)]" v-model="playerSecretArtistPreset" />
+              </div>
+              <div class="pi-form-row">
+                <label class="pi-label">PNG 画风预设</label>
+                <AgaSelect :options="playerPngPresetOptions" v-model="playerSecretPngPreset" />
+              </div>
+              <div class="pi-form-row" style="flex-direction:column;align-items:stretch">
+                <label class="pi-label">额外要求</label>
+                <textarea v-model="playerSecretExtraPrompt" class="pi-textarea" rows="2" placeholder="如：近景柔光、细节清晰、细腻写实..." />
+              </div>
+            </div>
+
+            <div v-if="playerSecretStatusText" class="secret-status">{{ playerSecretStatusText }}</div>
+
+            <div class="secret-cards">
+              <div v-for="part in playerSecretParts" :key="part.key" class="secret-card">
+                <div class="secret-card-header">
+                  <span class="secret-card-label">{{ part.label }}</span>
+                  <AgaButton size="sm" :disabled="!!playerSecretBusy" @click="generatePlayerSecretPart(part.key)">
+                    {{ playerSecretBusy === part.key ? '生成中...' : '生成' }}
+                  </AgaButton>
+                  <AgaButton
+                    v-if="getPlayerSecretPartAssetId(part.key) && PROVIDER_CAPABILITIES[playerDefaultBackend]?.imageToImage"
+                    size="sm" variant="ghost"
+                    :disabled="!!playerSecretBusy"
+                    @click="generatePlayerSecretPartWithReference(part.key)"
+                  >参考重绘</AgaButton>
+                </div>
+                <div
+                  class="secret-card-image"
+                  :class="{ 'secret-card-image--has-img': getPlayerSecretPartAssetId(part.key) }"
+                  @click="getPlayerSecretPartAssetId(part.key) && openPlayerSecretViewer(getPlayerSecretPartAssetId(part.key)!)"
+                >
+                  <template v-if="getPlayerSecretPartAssetId(part.key)">
+                    <ImageDisplay
+                      :asset-id="getPlayerSecretPartAssetId(part.key)!"
+                      :fallback-letter="part.label.charAt(0)"
+                      size="lg"
+                      class="secret-card-img"
+                    />
+                  </template>
+                  <div v-else class="secret-card-placeholder">暂无图片</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Image viewer for secret part close-ups -->
+          <teleport to="body">
+            <div v-if="playerSecretViewerOpen" class="secret-viewer-overlay" @click="playerSecretViewerOpen = false">
+              <img :src="playerSecretViewerSrc" class="secret-viewer-img" @click.stop />
+              <button class="secret-viewer-close" @click="playerSecretViewerOpen = false">&times;</button>
+            </div>
+          </teleport>
 
           <!-- Player image archive -->
           <div class="player-archive">
@@ -2482,6 +2761,150 @@ const avatarInitial = computed<string>(() => {
   }
   .bp-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
+/* ─── Player secret part close-up styles ─── */
+.player-secret-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md, 12px);
+  padding: var(--space-lg, 20px) 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.secret-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md, 12px);
+}
+
+.secret-config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm, 8px);
+}
+
+.secret-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.secret-opt-btn {
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--color-text-secondary, #aaa);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.secret-opt-btn:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+}
+.secret-opt-btn--active {
+  background: rgba(163,190,140,0.18);
+  border-color: var(--color-sage-300, #a3be8c);
+  color: var(--color-sage-300, #a3be8c);
+}
+
+.secret-status {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #aaa);
+  padding: 4px 0;
+}
+
+.secret-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md, 12px);
+}
+
+.secret-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: var(--space-sm, 8px);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.secret-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.secret-card-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #e5e5e5);
+  margin-right: auto;
+}
+
+.secret-card-image {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.secret-card-image--has-img {
+  cursor: pointer;
+}
+.secret-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.secret-card-placeholder {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #666);
+}
+
+/* Viewer overlay */
+.secret-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+}
+.secret-viewer-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.secret-viewer-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  font-size: 2rem;
+  color: #fff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.secret-viewer-close:hover { opacity: 1; }
+
+@media (max-width: 600px) {
+  .secret-cards {
+    grid-template-columns: 1fr 1fr;
   }
 }
 </style>

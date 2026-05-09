@@ -1,4 +1,5 @@
 // Archived research: docs/design/archive/cloud-sync-options.md
+// App doc: docs/user-guide/cloud-sync.md, docs/user-guide/pages/game-save.md §2.3, docs/user-guide/pages/home.md §1.3.3
 /**
  * GitHub Sync Service — 通过 GitHub Contents API 实现存档云同步
  *
@@ -17,11 +18,14 @@
  */
 
 import type { BackupService } from '../persistence/backup-service';
+import { pack, unpack, type ChunkManifest } from './chunked-bundle-packer';
 
 // ─── 常量 ───
 
 const API = 'https://api.github.com';
 const SAVE_PATH = 'backup.json';
+const MANIFEST_PATH = 'v2/manifest.json';
+const V2_DIR = 'v2';
 const LS_TOKEN = 'aga_github_sync_token';
 const LS_OWNER = 'aga_github_sync_owner';
 const LS_REPO = 'aga_github_sync_repo';
@@ -85,58 +89,161 @@ export class GitHubSyncService {
     }
   }
 
-  // ── 上传存档 ──
+  // ── 上传存档（v2 分块管道）──
 
   async upload(onStatus?: (s: SyncStatus) => void): Promise<void> {
     const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
     const { owner, repo } = this.resolveTarget();
 
     emit('uploading', '正在导出存档…');
-    const blob = await this.backup.exportAll();
-    if (blob.size > 75_000_000) {
-      throw new Error(`存档 ${Math.round(blob.size / 1048576)}MB 超过 GitHub 上限（~75MB）`);
+    const exportBlob = await this.backup.exportAll();
+    const json = await exportBlob.text();
+
+    emit('uploading', '正在压缩…');
+    const { manifest, chunks } = await pack(json);
+    const total = chunks.size;
+
+    // Batch-fetch existing file SHAs to avoid per-file 404s
+    const existingFiles = await this.listV2Files(owner, repo);
+    const shaMap = new Map(existingFiles.map(f => [f.path, f.sha]));
+
+    let i = 0;
+    for (const [path, blob] of chunks) {
+      i++;
+      emit('uploading', `正在上传分块 ${i}/${total}…`);
+      await this.uploadFile(owner, repo, path, await blobToBase64(blob), shaMap.get(path));
     }
-    const json = await blob.text();
-    const b64 = utf8ToBase64(json);
 
+    emit('uploading', '正在更新索引…');
+    const manifestJson = JSON.stringify(manifest, null, 2);
+    await this.uploadFile(owner, repo, MANIFEST_PATH, utf8ToBase64(manifestJson), shaMap.get(MANIFEST_PATH));
+
+    // Cleanup stale chunks using the already-fetched listing
+    this.cleanupStaleFromList(owner, repo, manifest, existingFiles);
+
+    emit('done', '上传完成');
+  }
+
+  // ── v1 上传方法（保留供紧急回退，当前不调用）──
+
+  // @ts-expect-error kept for emergency rollback
+  private async uploadViaContentsApi(
+    owner: string, repo: string, b64: string,
+    emit: (stage: SyncStatus['stage'], message: string) => void,
+  ): Promise<void> {
     emit('uploading', '正在上传…');
-
-    // 获取当前文件 SHA（如果文件已存在则需要）
     const sha = await this.getFileSha(owner, repo, SAVE_PATH);
-
     const body: Record<string, string> = {
       message: `sync ${new Date().toISOString().slice(0, 19)}`,
       content: b64,
     };
     if (sha) body.sha = sha;
-
     await this.put(`/repos/${owner}/${repo}/contents/${SAVE_PATH}`, body);
-    emit('done', '上传完成');
   }
 
-  // ── 下载存档 ──
+  // @ts-expect-error kept for emergency rollback
+  private async uploadViaGitDataApi(
+    owner: string, repo: string, b64: string,
+    emit: (stage: SyncStatus['stage'], message: string) => void,
+  ): Promise<void> {
+    const commitMsg = `sync ${new Date().toISOString().slice(0, 19)}`;
+
+    const repoInfo = await this.get<{ default_branch: string }>(`/repos/${owner}/${repo}`);
+    const branch = repoInfo.default_branch;
+
+    emit('uploading', '正在上传存档数据…');
+    const blobRes = await this.post<{ sha: string }>(
+      `/repos/${owner}/${repo}/git/blobs`,
+      { content: b64, encoding: 'base64' },
+    );
+
+    emit('uploading', '正在同步仓库状态…');
+    const refRes = await this.get<{ object: { sha: string } }>(
+      `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+    );
+    const parentSha = refRes.object.sha;
+
+    const commitInfo = await this.get<{ tree: { sha: string } }>(
+      `/repos/${owner}/${repo}/git/commits/${parentSha}`,
+    );
+
+    emit('uploading', '正在构建提交…');
+    const treeRes = await this.post<{ sha: string }>(
+      `/repos/${owner}/${repo}/git/trees`,
+      {
+        base_tree: commitInfo.tree.sha,
+        tree: [{
+          path: SAVE_PATH,
+          mode: '100644',
+          type: 'blob',
+          sha: blobRes.sha,
+        }],
+      },
+    );
+
+    const newCommit = await this.post<{ sha: string }>(
+      `/repos/${owner}/${repo}/git/commits`,
+      {
+        message: commitMsg,
+        tree: treeRes.sha,
+        parents: [parentSha],
+      },
+    );
+
+    emit('uploading', '正在更新分支…');
+    await this.patch(
+      `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+      { sha: newCommit.sha, force: false },
+    );
+  }
+
+  // ── 下载存档（v2 分块管道）──
 
   async download(onStatus?: (s: SyncStatus) => void): Promise<void> {
     const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
     const { owner, repo } = this.resolveTarget();
 
-    emit('downloading', '正在获取文件信息…');
+    emit('downloading', '正在获取云端索引…');
+    let manifest: ChunkManifest;
+    try {
+      manifest = await this.fetchManifest(owner, repo);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        throw new Error('云端无存档，请先上传');
+      }
+      throw err;
+    }
 
-    // Step 1: Get file SHA from Contents API (works for any size, only returns metadata)
+    const total = manifest.chunks.length;
+    const chunks = new Map<string, Blob>();
+
+    for (let i = 0; i < manifest.chunks.length; i++) {
+      const entry = manifest.chunks[i];
+      emit('downloading', `正在下载分块 ${i + 1}/${total}…`);
+      chunks.set(entry.path, await this.downloadBlob(owner, repo, entry.path));
+    }
+
+    emit('downloading', '正在校验并恢复…');
+    const json = await unpack(manifest, chunks);
+    await this.backup.importAll(new Blob([json], { type: 'application/json' }));
+    emit('done', '下载并恢复完成');
+  }
+
+  // ── v1 下载（保留供紧急回退，当前不调用）──
+
+  // @ts-expect-error kept for emergency rollback
+  private async downloadV1(onStatus?: (s: SyncStatus) => void): Promise<void> {
+    const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
+    const { owner, repo } = this.resolveTarget();
+
+    emit('downloading', '正在获取文件信息…');
     const meta = await this.get<{ sha: string }>(`/repos/${owner}/${repo}/contents/${SAVE_PATH}`);
 
     emit('downloading', '正在下载存档…');
-
-    // Step 2: Fetch full content via Git Blobs API
-    // Unlike Contents API (encoding:"none" for >1MB) and raw.githubusercontent.com (CORS blocked for private repos),
-    // Blobs API always returns base64 content up to 100MB, and runs on api.github.com (CORS safe).
     const blob = await this.get<{ content: string; encoding: string }>(
       `/repos/${owner}/${repo}/git/blobs/${meta.sha}`,
     );
-
-    if (blob.encoding !== 'base64') {
-      throw new Error(`Blob API 返回了非预期编码: ${blob.encoding}`);
-    }
+    if (blob.encoding !== 'base64') throw new Error(`Blob API 返回了非预期编码: ${blob.encoding}`);
 
     emit('downloading', '正在恢复本地数据…');
     const json = base64ToUtf8(blob.content);
@@ -144,27 +251,90 @@ export class GitHubSyncService {
     emit('done', '下载并恢复完成');
   }
 
-  // ── 查询云端信息 ──
+  // ── 查询云端信息（v2）──
 
   async getCloudInfo(): Promise<{ exists: boolean; updatedAt?: string; sizeKB?: number }> {
     const { owner, repo } = this.resolveTarget();
     try {
-      const file = await this.get<{ size: number }>(
-        `/repos/${owner}/${repo}/contents/${SAVE_PATH}`,
-      );
-      // 获取最新 commit 时间
-      let updatedAt: string | undefined;
-      try {
-        const commits = await this.get<Array<{ commit: { committer: { date: string } } }>>(
-          `/repos/${owner}/${repo}/commits?path=${SAVE_PATH}&per_page=1`,
-        );
-        if (Array.isArray(commits) && commits.length > 0) {
-          updatedAt = commits[0].commit.committer.date;
-        }
-      } catch { /* non-critical */ }
-      return { exists: true, updatedAt, sizeKB: Math.round(file.size / 1024) };
+      const manifest = await this.fetchManifest(owner, repo);
+      return {
+        exists: true,
+        updatedAt: manifest.createdAt,
+        sizeKB: Math.round(manifest.totalSizeBytes / 1024),
+      };
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) return { exists: false };
+      throw err;
+    }
+  }
+
+  // ── v2 下载辅助 ──
+
+  private async fetchManifest(owner: string, repo: string): Promise<ChunkManifest> {
+    const meta = await this.get<{ sha: string }>(`/repos/${owner}/${repo}/contents/${MANIFEST_PATH}`);
+    const blob = await this.get<{ content: string; encoding: string }>(
+      `/repos/${owner}/${repo}/git/blobs/${meta.sha}`,
+    );
+    if (blob.encoding !== 'base64') throw new Error(`Unexpected blob encoding: ${blob.encoding}`);
+    const json = base64ToUtf8(blob.content);
+    return JSON.parse(json) as ChunkManifest;
+  }
+
+  private async downloadBlob(owner: string, repo: string, path: string): Promise<Blob> {
+    const meta = await this.get<{ sha: string }>(`/repos/${owner}/${repo}/contents/${path}`);
+    const blobRes = await this.get<{ content: string; encoding: string }>(
+      `/repos/${owner}/${repo}/git/blobs/${meta.sha}`,
+    );
+    if (blobRes.encoding !== 'base64') throw new Error(`Unexpected blob encoding: ${blobRes.encoding}`);
+    const cleaned = blobRes.content.replace(/\s/g, '');
+    const bin = atob(cleaned);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes]);
+  }
+
+  // ── v2 上传辅助 ──
+
+  private async uploadFile(
+    owner: string, repo: string, path: string, b64Content: string,
+    knownSha?: string,
+  ): Promise<void> {
+    const sha = knownSha ?? null;
+    const body: Record<string, string> = {
+      message: `sync ${new Date().toISOString().slice(0, 19)}`,
+      content: b64Content,
+    };
+    if (sha) body.sha = sha;
+    await this.put(`/repos/${owner}/${repo}/contents/${path}`, body);
+  }
+
+  private cleanupStaleFromList(
+    owner: string, repo: string, manifest: ChunkManifest,
+    existingFiles: Array<{ path: string; sha: string }>,
+  ): void {
+    const validPaths = new Set([
+      MANIFEST_PATH,
+      ...manifest.chunks.map(c => c.path),
+    ]);
+
+    for (const file of existingFiles) {
+      if (!validPaths.has(file.path)) {
+        this.del(`/repos/${owner}/${repo}/contents/${file.path}`, {
+          message: `cleanup ${file.path}`,
+          sha: file.sha,
+        }).catch(() => { /* stale chunk deletion is best-effort */ });
+      }
+    }
+  }
+
+  private async listV2Files(owner: string, repo: string): Promise<Array<{ path: string; sha: string }>> {
+    try {
+      const items = await this.get<Array<{ path: string; sha: string }>>(
+        `/repos/${owner}/${repo}/contents/${V2_DIR}`,
+      );
+      return Array.isArray(items) ? items : [];
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return [];
       throw err;
     }
   }
@@ -205,6 +375,35 @@ export class GitHubSyncService {
     return res.json() as Promise<T>;
   }
 
+  private async post<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${API}${path}`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new ApiError(res.status, await safeBody(res));
+    return res.json() as Promise<T>;
+  }
+
+  private async patch<T = unknown>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${API}${path}`, {
+      method: 'PATCH',
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new ApiError(res.status, await safeBody(res));
+    return res.json() as Promise<T>;
+  }
+
+  private async del(path: string, body: unknown): Promise<void> {
+    const res = await fetch(`${API}${path}`, {
+      method: 'DELETE',
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new ApiError(res.status, await safeBody(res));
+  }
+
   private headers(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.getToken()}`,
@@ -216,7 +415,7 @@ export class GitHubSyncService {
 
 // ─── 工具 ───
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(public status: number, body: string) {
     super(`GitHub API ${status}: ${body.slice(0, 300)}`);
   }
@@ -247,4 +446,14 @@ function base64ToUtf8(b64: string): string {
 
 async function safeBody(res: Response): Promise<string> {
   try { return await res.text(); } catch { return ''; }
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const CHUNK = 8192;
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
 }

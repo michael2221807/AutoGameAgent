@@ -90,7 +90,8 @@ export class ImageStateManager {
    * Write an image record to NPC history with dedup + auto-selection.
    * MRJH 写入NPC图片历史记录 (npcImageStateWorkflow.ts:198-253)
    */
-  writeNpcImageRecord(npcName: string, record: Record<string, unknown>): void {
+  writeNpcImageRecord(npcName: string, record: Record<string, unknown>): string[] {
+    const trimmedIds: string[] = [];
     this.mutateNpc(npcName, (npc) => {
       const archive = this.ensureArchive(npc);
       const history = this.getHistoryArray(archive);
@@ -115,7 +116,13 @@ export class ImageStateManager {
 
       // Enforce per-NPC history limit (MRJH: 按NPC上限裁剪档案)
       const limit = this.stateManager.get<number>('系统.扩展.image.config.auto.historyLimit') ?? 100;
-      if (nextHistory.length > limit) nextHistory.length = limit;
+      if (nextHistory.length > limit) {
+        for (let i = limit; i < nextHistory.length; i++) {
+          const id = String((nextHistory[i] as Record<string, unknown>).id ?? '');
+          if (id) trimmedIds.push(id);
+        }
+        nextHistory.length = limit;
+      }
 
       npc['图片档案'] = {
         ...archive,
@@ -125,6 +132,7 @@ export class ImageStateManager {
       };
       return npc;
     });
+    return trimmedIds;
   }
 
   // ── Selection management ──

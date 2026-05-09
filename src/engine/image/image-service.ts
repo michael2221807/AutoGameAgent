@@ -29,7 +29,7 @@ import { normalizeSingleCharacterOutput, processTransformerOutput, type Serializ
 import { buildDirectCharacterPrompt } from './direct-prompt-builder';
 import { getTransformerPresetContext } from './transformer-presets';
 import type { TransformerPromptPreset, ModelTransformerBundle } from './transformer-presets';
-import { ImageStateManager } from './image-state-manager';
+import { ImageStateManager, PLAYER_PSEUDO_NPC_ID } from './image-state-manager';
 import type { SceneCompositionMode, GameTime } from './scene-context';
 import { buildSceneContext } from './scene-context';
 import { eventBus } from '../core/event-bus';
@@ -488,7 +488,7 @@ export class ImageService {
       eventBus.emit('image:task-update', { taskId: task.id, status: 'complete', assetId: asset.id });
 
       if (params.characterName) {
-        this.state.writeNpcImageRecord(params.characterName, {
+        const trimmed = this.state.writeNpcImageRecord(params.characterName, {
           id: asset.id,
           taskId: task.id,
           composition: params.composition ?? 'portrait',
@@ -504,6 +504,7 @@ export class ImageService {
           createdAt: Date.now(),
           providerMeta: { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta },
         });
+        this.deleteTrimmedAssets(trimmed);
       }
 
       return this.queue.get(task.id)!;
@@ -640,6 +641,14 @@ export class ImageService {
         const apiName = this.getCurrentApiConfigName(params.backend);
         const archiveMeta = { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta };
         const metaSpread = Object.keys(archiveMeta).length > 0 ? { providerMeta: archiveMeta } : {};
+
+        // Delete previous secret-part blob before overwriting the archive entry
+        const prevSecret = this.state.getSecretPartResult(params.characterName, params.part);
+        const prevSecretId = typeof prevSecret?.id === 'string' ? prevSecret.id : '';
+        if (prevSecretId && prevSecretId !== asset.id) {
+          void this.cache.delete(prevSecretId).catch(() => {/* best effort */});
+        }
+
         this.state.setSecretPartResult(params.characterName, params.part, {
           id: asset.id,
           taskId: task.id,
@@ -655,7 +664,7 @@ export class ImageService {
           createdAt,
           ...metaSpread,
         });
-        this.state.writeNpcImageRecord(params.characterName, {
+        const trimmed = this.state.writeNpcImageRecord(params.characterName, {
           id: asset.id,
           taskId: task.id,
           composition: 'secret_part',
@@ -671,6 +680,7 @@ export class ImageService {
           createdAt,
           ...metaSpread,
         });
+        this.deleteTrimmedAssets(trimmed);
       }
 
       return this.queue.get(task.id)!;
@@ -809,6 +819,11 @@ export class ImageService {
       if (params.subjectType === 'scene') {
         this.writeToSceneArchive(asset.id, this.queue.get(task.id)!);
       } else if (params.subjectType === 'secret_part' && params.targetCharacter && params.part) {
+        const prevSecret = this.state.getSecretPartResult(params.targetCharacter, params.part);
+        const prevSecretId = typeof prevSecret?.id === 'string' ? prevSecret.id : '';
+        if (prevSecretId && prevSecretId !== asset.id) {
+          void this.cache.delete(prevSecretId).catch(() => {/* best effort */});
+        }
         this.state.setSecretPartResult(params.targetCharacter, params.part, {
           id: asset.id,
           taskId: task.id,
@@ -824,7 +839,7 @@ export class ImageService {
           createdAt,
           ...metaSpread,
         });
-        this.state.writeNpcImageRecord(params.targetCharacter, {
+        const trimmed2 = this.state.writeNpcImageRecord(params.targetCharacter, {
           id: asset.id,
           taskId: task.id,
           composition: 'secret_part',
@@ -840,8 +855,9 @@ export class ImageService {
           createdAt,
           ...metaSpread,
         });
+        this.deleteTrimmedAssets(trimmed2);
       } else if (params.subjectType === 'character' && params.targetCharacter) {
-        this.state.writeNpcImageRecord(params.targetCharacter, {
+        const trimmed3 = this.state.writeNpcImageRecord(params.targetCharacter, {
           id: asset.id,
           taskId: task.id,
           composition: params.composition ?? 'portrait',
@@ -857,6 +873,7 @@ export class ImageService {
           createdAt,
           ...metaSpread,
         });
+        this.deleteTrimmedAssets(trimmed3);
       }
 
       return this.queue.get(task.id)!;
@@ -891,6 +908,20 @@ export class ImageService {
     };
     const targetName = PART_TO_CN[part];
     if (!targetName) return undefined;
+
+    // Player branch: read from 角色.身体.身体部位 instead of NPC relationships
+    if (characterName === PLAYER_PSEUDO_NPC_ID) {
+      const bodyData = this.stateManager.get<Record<string, unknown>>('角色.身体');
+      if (!bodyData || typeof bodyData !== 'object') return undefined;
+      const parts = (bodyData as Record<string, unknown>)['身体部位'];
+      if (!Array.isArray(parts)) return undefined;
+      const entry = parts.find(
+        (p) => p && typeof p === 'object' && (p as Record<string, unknown>)['部位名称'] === targetName,
+      ) as Record<string, unknown> | undefined;
+      if (!entry) return undefined;
+      const desc = entry['特征描述'];
+      return typeof desc === 'string' && desc.trim() ? desc : undefined;
+    }
 
     const relationships = this.stateManager.get<Array<Record<string, unknown>>>(
       this.paths.relationships,
@@ -946,6 +977,101 @@ export class ImageService {
     for (const id of idsToDelete) {
       void this.cache.delete(id).catch(() => {/* best effort */});
     }
+  }
+
+  private deleteTrimmedAssets(ids: string[]): void {
+    for (const id of ids) {
+      void this.cache.delete(id).catch(() => {/* best effort */});
+    }
+  }
+
+  /**
+   * Remove IndexedDB blobs not referenced by any state-tree entry.
+   * Safe to call on demand (e.g. from settings UI) — reads all cached
+   * asset metadata, diffs against referenced IDs from the state tree,
+   * and deletes the difference.
+   */
+  async pruneOrphanedAssets(): Promise<{ deleted: number; freedIds: string[] }> {
+    const allAssets = await this.cache.listAll();
+    const allCachedIds = new Set(allAssets.map((a) => a.id));
+    if (allCachedIds.size === 0) return { deleted: 0, freedIds: [] };
+
+    const referencedIds = this.collectAllReferencedAssetIds();
+    const orphanIds: string[] = [];
+    for (const id of allCachedIds) {
+      if (!referencedIds.has(id)) orphanIds.push(id);
+    }
+    for (const id of orphanIds) {
+      void this.cache.delete(id).catch(() => {/* best effort */});
+    }
+    if (orphanIds.length > 0) {
+      console.info(`[ImageService] Pruned ${orphanIds.length} orphaned asset(s) from cache`);
+    }
+    return { deleted: orphanIds.length, freedIds: orphanIds };
+  }
+
+  private collectAllReferencedAssetIds(): Set<string> {
+    const ids = new Set<string>();
+    const addIfValid = (val: unknown) => {
+      if (typeof val === 'string' && val.trim()) ids.add(val.trim());
+    };
+    const SELECTION_FIELDS = ['已选头像图片ID', '已选立绘图片ID', '已选背景图片ID'];
+    const extractFromArchive = (archive: unknown) => {
+      if (!archive || typeof archive !== 'object' || Array.isArray(archive)) return;
+      const a = archive as Record<string, unknown>;
+      for (const f of SELECTION_FIELDS) addIfValid(a[f]);
+      addIfValid(a['最近生图结果']);
+      const history = a['生图历史'];
+      if (Array.isArray(history)) {
+        for (const entry of history) {
+          if (entry && typeof entry === 'object') addIfValid((entry as Record<string, unknown>).id);
+        }
+      }
+      const secret = a['香闺秘档'];
+      if (secret && typeof secret === 'object') {
+        for (const part of Object.values(secret as Record<string, unknown>)) {
+          if (part && typeof part === 'object') {
+            addIfValid((part as Record<string, unknown>).id);
+            addIfValid((part as Record<string, unknown>).assetId);
+          }
+        }
+      }
+    };
+
+    // Player archive
+    const playerArchive = this.stateManager.get<Record<string, unknown>>('角色.图片档案');
+    extractFromArchive(playerArchive);
+
+    // NPC archives
+    const relationships = this.stateManager.get<Array<Record<string, unknown>>>(this.paths.relationships);
+    if (Array.isArray(relationships)) {
+      for (const npc of relationships) {
+        if (npc && typeof npc === 'object') extractFromArchive(npc['图片档案']);
+      }
+    }
+
+    // Scene archive
+    const sceneArchive = this.stateManager.get<Record<string, unknown>>('系统.扩展.image.sceneArchive');
+    if (sceneArchive && typeof sceneArchive === 'object') {
+      addIfValid(sceneArchive['当前壁纸图片ID']);
+      addIfValid(sceneArchive['最近生图结果']);
+      const sceneHistory = sceneArchive['生图历史'];
+      if (Array.isArray(sceneHistory)) {
+        for (const entry of sceneHistory) {
+          if (entry && typeof entry === 'object') addIfValid((entry as Record<string, unknown>).id);
+        }
+      }
+    }
+
+    // Reference library
+    const refLib = this.stateManager.get<Array<Record<string, unknown>>>('系统.扩展.image.referenceLibrary');
+    if (Array.isArray(refLib)) {
+      for (const entry of refLib) {
+        if (entry && typeof entry === 'object') addIfValid(entry.assetId);
+      }
+    }
+
+    return ids;
   }
 
   private getCivitaiProviderParams(): Record<string, unknown> {
