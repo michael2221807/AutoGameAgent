@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-image.md §生成同款 §参考重绘
 /**
  * RegenerateSameModal — "生成同款" dialog with editable prompts.
  *
@@ -10,8 +11,9 @@
  * Emits `confirm` with the chosen backend + edited prompts; caller owns
  * calling `ImageService.regenerateFromPrompts` with its own subject params.
  */
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import type { ImageBackendType, CivitaiLoraSnapshot } from '@/engine/image/types';
+import { ref, computed, watch, inject, onMounted, onUnmounted, nextTick } from 'vue';
+import type { ImageBackendType, CivitaiLoraSnapshot, ImageReferenceInput } from '@/engine/image/types';
+import { PROVIDER_CAPABILITIES } from '@/engine/image/provider-capabilities';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 
 const props = defineProps<{
@@ -31,16 +33,36 @@ const props = defineProps<{
   availableBackends?: SelectOption[];
   /** Civitai LoRA snapshot from the original generation (if available) */
   civitaiLoraSnapshot?: CivitaiLoraSnapshot;
+  /** Original image asset ID — enables reference redraw checkbox */
+  sourceAssetId?: string;
+  /** Default denoise strength from Settings config */
+  defaultDenoiseStrength?: number;
+  /** Pre-activate reference redraw checkbox when opening */
+  preActivateReference?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'confirm', payload: { backend: ImageBackendType; positivePrompt: string; negativePrompt: string }): void;
+  (e: 'confirm', payload: {
+    backend: ImageBackendType;
+    positivePrompt: string;
+    negativePrompt: string;
+    reference?: ImageReferenceInput;
+  }): void;
   (e: 'cancel'): void;
 }>();
 
 const chosenBackend = ref<ImageBackendType>(props.initialBackend);
 const editedPositive = ref(props.positivePrompt);
 const editedNegative = ref(props.negativePrompt);
+
+const useReference = ref(props.preActivateReference === true);
+const referenceDenoise = ref(props.defaultDenoiseStrength ?? 0.65);
+const canUseReference = computed(() =>
+  !!props.sourceAssetId && PROVIDER_CAPABILITIES[chosenBackend.value]?.imageToImage === true,
+);
+watch(canUseReference, (can) => { if (!can) useReference.value = false; });
+
+const imageService = inject<{ getAssetCache(): { retrieve(id: string): Promise<{ blob: Blob } | null> } }>('imageService', null);
 
 watch(() => props.availableBackends, (opts) => {
   if (opts?.length && !opts.some((o) => o.value === chosenBackend.value)) {
@@ -61,12 +83,35 @@ const backendOptions = computed(() =>
 
 const dialogRef = ref<HTMLElement | null>(null);
 
-function confirm() {
+const blobCheckFailed = ref(false);
+
+async function confirm() {
   if (props.busy) return;
+  blobCheckFailed.value = false;
+  let reference: ImageReferenceInput | undefined;
+  if (useReference.value && props.sourceAssetId) {
+    if (imageService) {
+      try {
+        const entry = await imageService.getAssetCache().retrieve(props.sourceAssetId);
+        if (!entry) {
+          blobCheckFailed.value = true;
+          return;
+        }
+      } catch { /* proceed — cache check is best-effort */ }
+    }
+    reference = {
+      id: `ref_regen_${Date.now()}`,
+      role: 'source',
+      source: 'asset',
+      assetId: props.sourceAssetId,
+      denoiseStrength: referenceDenoise.value,
+    };
+  }
   emit('confirm', {
     backend: chosenBackend.value,
     positivePrompt: editedPositive.value,
     negativePrompt: editedNegative.value,
+    reference,
   });
 }
 function cancel() {
@@ -129,6 +174,29 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 
           <div v-if="initialBackend === 'civitai'" class="regen-hint" style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
             本次重新生成将按当前书架设置应用 LoRA，可能与原图不同。
+          </div>
+
+          <div v-if="canUseReference" class="regen-ref-block">
+            <label class="regen-ref-toggle">
+              <input type="checkbox" v-model="useReference" :disabled="busy" />
+              <span>用原图作参考重绘</span>
+            </label>
+            <div v-if="useReference" class="regen-ref-controls">
+              <div class="regen-label">重绘幅度</div>
+              <div class="regen-ref-slider">
+                <input type="range" min="0.1" max="1" step="0.05" v-model.number="referenceDenoise" />
+                <span class="regen-ref-val">{{ referenceDenoise.toFixed(2) }}</span>
+              </div>
+              <div class="regen-ref-marks">
+                <span>0.25 近似原图</span>
+                <span>0.55 保留构图</span>
+                <span>0.80 大幅重绘</span>
+              </div>
+              <p v-if="blobCheckFailed" class="regen-hint" style="color: var(--color-error, #f87171); margin-top: 4px;">
+                原图缓存缺失，无法参考重绘。请取消勾选或删除后重新生成。
+              </p>
+              <p class="regen-hint">参考重绘会把源图发送给当前生成后端。</p>
+            </div>
           </div>
 
           <div class="regen-prompt-block">
@@ -265,6 +333,15 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 }
 .regen-prompt-textarea:disabled { opacity: 0.6; cursor: not-allowed; }
 .regen-prompt-textarea--neg { color: var(--color-text-secondary); }
+
+.regen-ref-block { display: flex; flex-direction: column; gap: var(--space-xs); }
+.regen-ref-toggle { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text); cursor: pointer; }
+.regen-ref-toggle input[type="checkbox"] { accent-color: var(--color-sage-400); width: 16px; height: 16px; }
+.regen-ref-controls { display: flex; flex-direction: column; gap: var(--space-2xs); padding-left: var(--space-md); }
+.regen-ref-slider { display: flex; align-items: center; gap: var(--space-sm); }
+.regen-ref-slider input[type="range"] { flex: 1; accent-color: var(--color-sage-400); }
+.regen-ref-val { font-size: var(--font-size-xs); min-width: 32px; text-align: right; color: var(--color-text-secondary); }
+.regen-ref-marks { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--color-text-muted); }
 
 .regen-footer {
   display: flex;

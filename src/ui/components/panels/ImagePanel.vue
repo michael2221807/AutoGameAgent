@@ -9,7 +9,8 @@
 import { ref, computed, inject, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { ImageService } from '@/engine/image/image-service';
-import type { ImageBackendType, ImageTask } from '@/engine/image/types';
+import type { ImageBackendType, ImageTask, ArtistPreset, ImageAsset } from '@/engine/image/types';
+import { generateReferenceId } from '@/engine/image/utils';
 import type { GameTime } from '@/engine/image/scene-context';
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 import ImageViewer from '@/ui/components/image/ImageViewer.vue';
@@ -17,6 +18,8 @@ import RegenerateSameModal from '@/ui/components/image/RegenerateSameModal.vue';
 import CivitaiLoraShelf from '@/ui/components/image/CivitaiLoraShelf.vue';
 import { prepareCivitaiLora } from '@/engine/image/civitai-lora';
 import { buildPromptStyleInjection } from '@/engine/image/style-preset-injection';
+import { resolveStyleParams } from '@/engine/image/style-param-resolver';
+import { PROVIDER_CAPABILITIES } from '@/engine/image/provider-capabilities';
 import type { CivitaiLoraShelfItem, CivitaiLoraScope, CivitaiLoraSnapshot } from '@/engine/image/types';
 import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
@@ -95,6 +98,90 @@ const sizeScale = ref<'1x' | '2x'>('2x');
 const manualWidth = ref('1024');
 const manualHeight = ref('1024');
 const backgroundMode = ref(true);
+const backendSupportsImg2Img = computed(() =>
+  PROVIDER_CAPABILITIES[backend.value]?.imageToImage === true,
+);
+const npcReferenceEnabled = ref(false);
+const npcReferenceSource = ref('upload');
+const npcReferenceDenoise = ref(0.65);
+const npcReferenceFile = ref<File | null>(null);
+const npcReferenceDataUrl = ref<string | null>(null);
+const npcReferenceAssetId = ref<string | null>(null);
+const npcReferenceNoise = ref(0.1);
+const refConfigDenoiseDefault = computed(() =>
+  (get('系统.扩展.image.config.reference.defaultDenoiseStrength') as number | undefined) ?? 0.65,
+);
+const refConfigMaxUploadBytes = computed(() =>
+  (get('系统.扩展.image.config.reference.maxUploadBytes') as number | undefined) ?? 10485760,
+);
+const refConfigPersist = computed(() =>
+  get('系统.扩展.image.config.reference.persistUploadedReferences') !== false,
+);
+watch(npcReferenceEnabled, (v) => { if (v) npcReferenceDenoise.value = refConfigDenoiseDefault.value; });
+
+function validateUploadSize(file: File): boolean {
+  if (file.size > refConfigMaxUploadBytes.value) {
+    const limitMB = (refConfigMaxUploadBytes.value / 1048576).toFixed(0);
+    eventBus.emit('ui:toast', { type: 'error', message: `文件大小 ${(file.size / 1048576).toFixed(1)}MB 超过上限 ${limitMB}MB`, duration: 3000 });
+    return false;
+  }
+  return true;
+}
+
+async function persistUploadedReference(file: File, _dataUrl: string): Promise<string | null> {
+  if (!imageService || !refConfigPersist.value) return null;
+  const assetId = `ref_upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const blob = file;
+  const asset: ImageAsset = {
+    id: assetId,
+    taskId: '',
+    storageKey: assetId,
+    mimeType: file.type || 'image/png',
+    width: 0,
+    height: 0,
+    sizeBytes: file.size,
+    backend: 'civitai',
+    createdAt: Date.now(),
+    origin: 'upload',
+  };
+  try {
+    await imageService.getAssetCache().store(asset, blob);
+    imageService.state.addReferenceEntry({
+      id: generateReferenceId(),
+      assetId,
+      name: file.name.replace(/\.\w+$/, ''),
+      mimeType: file.type || 'image/png',
+      width: 0,
+      height: 0,
+      sizeBytes: file.size,
+      source: 'upload',
+      createdAt: Date.now(),
+    });
+    return assetId;
+  } catch (err) {
+    console.warn('[ImagePanel] Failed to persist uploaded reference:', err);
+    return null;
+  }
+}
+
+async function onNpcReferenceFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  if (!validateUploadSize(file)) { (e.target as HTMLInputElement).value = ''; return; }
+  npcReferenceFile.value = file;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      npcReferenceDataUrl.value = reader.result as string;
+      npcReferenceAssetId.value = await persistUploadedReference(file, reader.result as string);
+    } catch (err) {
+      console.warn('[ImagePanel] Reference persist failed:', err);
+      npcReferenceAssetId.value = null;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 const isGenerating = ref(false);
 const lastTask = ref<ImageTask | null>(null);
 const manualFlowStage = ref<'idle' | 'confirm' | 'submitting'>('idle');
@@ -315,7 +402,7 @@ const selectedNpcData = computed(() => {
 const pngPresetOptions = computed<SelectOption[]>(() => [
   { label: '不启用', value: '' },
   ...artistPresets.value
-    .filter((p) => p.scope === 'npc' && p.id.startsWith('png_'))
+    .filter((p) => p.scope === 'npc' && (p.id.startsWith('png_') || p.id.startsWith('img_')))
     .map((p) => ({ label: p.name, value: p.id })),
 ]);
 
@@ -453,6 +540,28 @@ async function submitGenerate() {
     const bodyText = String(npc?.['身材描写'] ?? npc?.['身材'] ?? '');
     const outfitText = String(npc?.['衣着风格'] ?? npc?.['衣着'] ?? '');
 
+    let reference: import('@/engine/image/types').ImageReferenceInput | undefined;
+    if (npcReferenceEnabled.value && backendSupportsImg2Img.value) {
+      if (npcReferenceSource.value === 'upload' && (npcReferenceAssetId.value || npcReferenceDataUrl.value)) {
+        reference = npcReferenceAssetId.value
+          ? { id: generateReferenceId(), role: 'source', source: 'asset', assetId: npcReferenceAssetId.value, denoiseStrength: npcReferenceDenoise.value }
+          : { id: generateReferenceId(), role: 'source', source: 'data_url', dataUrl: npcReferenceDataUrl.value!, denoiseStrength: npcReferenceDenoise.value };
+      } else if (npcReferenceSource.value === 'avatar') {
+        const archive = selectedNpcData.value?.['图片档案'] as Record<string, unknown> | undefined;
+        const avatarId = String(archive?.['已选头像图片ID'] ?? archive?.['已选立绘图片ID'] ?? '');
+        if (avatarId) reference = { id: `ref_npc_${Date.now()}`, role: 'source', source: 'asset', assetId: avatarId, denoiseStrength: npcReferenceDenoise.value };
+      }
+      if (!reference) {
+        eventBus.emit('ui:toast', { type: 'warning', message: '参考重绘已开启但未选择有效参考图，将以普通文生图模式生成', duration: 3000 });
+      }
+      if (reference && backend.value === 'novelai') {
+        reference.providerMeta = { noise: npcReferenceNoise.value };
+      }
+    }
+
+    const pngPresetObj = selectedPngPreset.value ? artistPresets.value.find((p) => p.id === selectedPngPreset.value) : undefined;
+    const styleApplicability = pngPresetObj ? resolveStyleParams(pngPresetObj, backend.value) : null;
+
     const task = await imageService.generateCharacterImage({
       characterName: selectedNpc.value,
       description: String(npc?.['描述'] ?? ''),
@@ -470,6 +579,8 @@ async function submitGenerate() {
       extraNegative: styleInjection.extraNegative,
       npcDataJson: JSON.stringify(npcBaseData, null, 2),
       useTransformer: get('系统.扩展.image.config.useTransformer') !== false,
+      reference,
+      styleParamOverrides: styleApplicability?.applied,
     });
     lastTask.value = task;
     if (task.status === 'failed') {
@@ -531,6 +642,7 @@ async function retryTask(task: ImageTask) {
       // P3 env-tags (2026-04-19): retry path must forward the current env
       // state too — otherwise a retried scene image silently loses weather
       // / festival / environment context that the original had.
+      const retryAnchors = imageService.collectSceneRoleAnchors();
       await imageService.generateSceneImage({
         sceneDescription: task.positivePrompt ?? '',
         location: '',
@@ -539,6 +651,8 @@ async function retryTask(task: ImageTask) {
         festival: get(DEFAULT_ENGINE_PATHS.festival),
         environment: get(DEFAULT_ENGINE_PATHS.environmentTags),
         backend: task.backend ?? 'novelai',
+        presentNpcs: retryAnchors.presentNpcs,
+        roleAnchors: retryAnchors.roleAnchors.length > 0 ? retryAnchors.roleAnchors : undefined,
       });
     } else {
       await imageService.generateCharacterImage({
@@ -591,6 +705,8 @@ async function generateSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
       secretArtistPreset.value,
       secretPngPreset.value,
     ]);
+    const secretPngObj = secretPngPreset.value ? artistPresets.value.find((p) => p.id === secretPngPreset.value) : undefined;
+    const secretStyleApplicability = secretPngObj ? resolveStyleParams(secretPngObj, backend.value) : null;
     const task = await imageService.generateSecretPartImage({
       characterName: selectedNpc.value,
       part: partKey,
@@ -598,6 +714,7 @@ async function generateSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
       artistPrefix: styleInjection.artistPrefix,
       extraNegative: styleInjection.extraNegative,
       extraPrompt: secretExtraPrompt.value || undefined,
+      styleParamOverrides: secretStyleApplicability?.applied,
     });
     // Mirror the regular generate flow — push result into lastTask so the NPC
     // preview panel picks up the latest image instead of staying blank.
@@ -624,6 +741,8 @@ async function generateAllSecretParts() {
       secretArtistPreset.value,
       secretPngPreset.value,
     ]);
+    const secretPngObj2 = secretPngPreset.value ? artistPresets.value.find((p) => p.id === secretPngPreset.value) : undefined;
+    const secretStyleApplicability2 = secretPngObj2 ? resolveStyleParams(secretPngObj2, backend.value) : null;
     for (const part of secretParts) {
       const task = await imageService.generateSecretPartImage({
         characterName: selectedNpc.value,
@@ -632,6 +751,7 @@ async function generateAllSecretParts() {
         artistPrefix: styleInjection.artistPrefix,
         extraNegative: styleInjection.extraNegative,
         extraPrompt: secretExtraPrompt.value || undefined,
+        styleParamOverrides: secretStyleApplicability2?.applied,
       });
       if (task.status === 'complete') lastCompleted = task;
     }
@@ -639,6 +759,48 @@ async function generateAllSecretParts() {
     secretStatusText.value = '三处特写已完成，可在图库/历史查看。';
   } catch {
     secretStatusText.value = '部分特写提交失败，请查看队列。';
+  } finally {
+    secretBusy.value = '';
+  }
+}
+
+async function generateSecretPartWithReference(partKey: 'breast' | 'vagina' | 'anus') {
+  if (!imageService || !selectedNpc.value) return;
+  const prevAssetId = getSecretPartAssetId(partKey);
+  if (!prevAssetId) {
+    eventBus.emit('ui:toast', { type: 'error', message: '没有上一张结果可作为参考', duration: 2000 });
+    return;
+  }
+  const entry = await imageService.getAssetCache().retrieve(prevAssetId);
+  if (!entry) {
+    eventBus.emit('ui:toast', { type: 'error', message: '上一张结果缓存缺失', duration: 2000 });
+    return;
+  }
+  const part = secretParts.find((p) => p.key === partKey);
+  if (!part) return;
+  secretBusy.value = partKey;
+  secretStatusText.value = `${part.label}参考重绘已提交…`;
+  try {
+    const styleInjection = buildPromptStyleInjection(artistPresets.value, [secretArtistPreset.value, secretPngPreset.value]);
+    const secretRef: import('@/engine/image/types').ImageReferenceInput = {
+      id: generateReferenceId(), role: 'source', source: 'asset', assetId: prevAssetId,
+      denoiseStrength: refConfigDenoiseDefault.value,
+    };
+    const task = await imageService.generateSecretPartImage({
+      characterName: selectedNpc.value,
+      part: partKey,
+      backend: backend.value,
+      artistPrefix: styleInjection.artistPrefix,
+      extraNegative: styleInjection.extraNegative,
+      extraPrompt: secretExtraPrompt.value || undefined,
+      reference: secretRef,
+    });
+    lastTask.value = task;
+    secretStatusText.value = task.status === 'failed'
+      ? `${part.label}参考重绘失败：${task.error ?? '未知错误'}`
+      : `${part.label}参考重绘完成。`;
+  } catch (err) {
+    secretStatusText.value = `${part.label}参考重绘失败：${(err as Error).message}`;
   } finally {
     secretBusy.value = '';
   }
@@ -677,6 +839,8 @@ interface RegenPayload {
   initialBackend: ImageBackendType;
   artStyle?: string;
   civitaiLoraSnapshot?: CivitaiLoraSnapshot;
+  sourceAssetId?: string;
+  preActivateReference?: boolean;
 }
 const regenPayload = ref<RegenPayload | null>(null);
 const regenBusy = ref(false);
@@ -694,7 +858,7 @@ function cancelRegenerate() {
   regenPayload.value = null;
 }
 
-async function confirmRegenerate(opts: { backend: ImageBackendType; positivePrompt: string; negativePrompt: string }) {
+async function confirmRegenerate(opts: { backend: ImageBackendType; positivePrompt: string; negativePrompt: string; reference?: import('@/engine/image/types').ImageReferenceInput }) {
   if (!imageService || !regenPayload.value || regenBusy.value) return;
   const p = regenPayload.value;
   regenBusy.value = true;
@@ -710,6 +874,7 @@ async function confirmRegenerate(opts: { backend: ImageBackendType; positiveProm
       height: p.height,
       backend: opts.backend,
       artStyle: p.artStyle,
+      reference: opts.reference,
     });
     if (task.status === 'failed') {
       eventBus.emit('ui:toast', { type: 'error', message: `同款生成失败：${task.error ?? '未知错误'}`, duration: 2500 });
@@ -741,7 +906,7 @@ function partLabel(part?: string): string {
   return map[part] ?? part;
 }
 
-function openRegenerateFromTask(task: ImageTask) {
+function openRegenerateFromTask(task: ImageTask, asReference = false) {
   const isSecret = task.subjectType === 'secret_part';
   const subjectLabel = task.subjectType === 'scene'
     ? '场景'
@@ -757,17 +922,19 @@ function openRegenerateFromTask(task: ImageTask) {
     subtitle,
     targetCharacter: task.targetCharacter,
     composition: task.subjectType === 'character' ? 'portrait' : undefined,
-    part: isSecret ? (task as ImageTask & { part?: 'breast' | 'vagina' | 'anus' }).part : undefined,
+    part: isSecret ? task.part : undefined,
     positivePrompt: task.positivePrompt ?? '',
     negativePrompt: task.negativePrompt ?? '',
     width: task.width,
     height: task.height,
     initialBackend: task.backend,
     civitaiLoraSnapshot: task.providerMeta?.civitai,
+    sourceAssetId: task.status === 'complete' ? task.resultAssetId : undefined,
+    preActivateReference: asReference,
   });
 }
 
-function openRegenerateFromGalleryImage(npcName: string, img: GalleryImage) {
+function openRegenerateFromGalleryImage(npcName: string, img: GalleryImage, asReference = false) {
   const comp = String(img.composition ?? '');
   const isSecret = comp === 'secret_part';
   const part = img.part;
@@ -776,7 +943,7 @@ function openRegenerateFromGalleryImage(npcName: string, img: GalleryImage) {
   const bk = img.backend ?? backend.value;
   openRegenerateModal({
     subjectType: isSecret ? 'secret_part' : 'character',
-    subjectLabel: npcName,
+    subjectLabel: npcName === '__player__' ? '主角' : npcName,
     subtitle: buildRegenSubtitle([
       isSecret ? `私密特写 · ${partLabel(part)}` : compositionLabel(comp),
       `${width} × ${height}`,
@@ -794,10 +961,12 @@ function openRegenerateFromGalleryImage(npcName: string, img: GalleryImage) {
     initialBackend: bk,
     artStyle: img.artStyle || undefined,
     civitaiLoraSnapshot: img.providerMeta?.civitai,
+    sourceAssetId: img.id,
+    preActivateReference: asReference,
   });
 }
 
-function openRegenerateFromHistoryEntry(entry: { type: 'scene' | 'character'; name: string; composition?: string; positivePrompt?: string; negativePrompt?: string; width?: number; height?: number; backend?: ImageBackendType; part?: 'breast' | 'vagina' | 'anus'; artStyle?: string; providerMeta?: { civitai?: CivitaiLoraSnapshot } }) {
+function openRegenerateFromHistoryEntry(entry: { type: 'scene' | 'character'; name: string; composition?: string; positivePrompt?: string; negativePrompt?: string; width?: number; height?: number; backend?: ImageBackendType; part?: 'breast' | 'vagina' | 'anus'; artStyle?: string; assetId?: string; providerMeta?: CombinedHistoryEntry['providerMeta'] }, asReference = false) {
   const isScene = entry.type === 'scene';
   const isSecret = entry.composition === 'secret_part';
   const width = entry.width ?? (isScene ? 1024 : 832);
@@ -823,6 +992,8 @@ function openRegenerateFromHistoryEntry(entry: { type: 'scene' | 'character'; na
     initialBackend: bk,
     artStyle: entry.artStyle,
     civitaiLoraSnapshot: entry.providerMeta?.civitai,
+    sourceAssetId: entry.assetId,
+    preActivateReference: asReference,
   });
 }
 
@@ -834,7 +1005,75 @@ function extractLoraSnapshot(obj: Record<string, unknown>): CivitaiLoraSnapshot 
   return snap as CivitaiLoraSnapshot;
 }
 
-function openRegenerateFromSceneRecord(record: Record<string, unknown>) {
+function extractProviderMeta(obj: Record<string, unknown>): CombinedHistoryEntry['providerMeta'] {
+  const meta = obj.providerMeta;
+  if (!meta || typeof meta !== 'object') return undefined;
+  const m = meta as Record<string, unknown>;
+  const result: NonNullable<CombinedHistoryEntry['providerMeta']> = {};
+  const snap = extractLoraSnapshot(obj);
+  if (snap) result.civitai = snap;
+  if (m.reference && typeof m.reference === 'object') {
+    result.reference = m.reference as NonNullable<CombinedHistoryEntry['providerMeta']>['reference'];
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+async function analyzeImageFromCard(assetId: string) {
+  if (!imageService) return;
+  try {
+    const entry = await imageService.getAssetCache().retrieve(assetId);
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法提炼', duration: 2000 }); return; }
+    activeTab.value = 'presets';
+    understandingFile.value = new File([entry.blob], `asset_${assetId}`, { type: entry.metadata.mimeType });
+    understandingCoverDataUrl.value = null;
+    understandingMode.value = true;
+    understandingResult.value = null;
+    understandingError.value = '';
+    understandingEditDraft.value = '';
+    try {
+      const img = new Image();
+      const objUrl = URL.createObjectURL(entry.blob);
+      await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(); img.src = objUrl; });
+      const canvas = document.createElement('canvas'); canvas.width = 80; canvas.height = 56;
+      const ctx = canvas.getContext('2d');
+      if (ctx) { ctx.drawImage(img, 0, 0, 80, 56); understandingCoverDataUrl.value = canvas.toDataURL('image/jpeg', 0.6); }
+      URL.revokeObjectURL(objUrl);
+    } catch { /* cover optional */ }
+  } catch (err) {
+    eventBus.emit('ui:toast', { type: 'error', message: `提炼画风失败: ${(err as Error).message}`, duration: 2500 });
+  }
+}
+
+async function saveAsReferenceMaterial(assetId: string, source: 'gallery' | 'scene' | 'player', name?: string) {
+  if (!imageService) return;
+  try {
+    const entry = await imageService.getAssetCache().retrieve(assetId);
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法保存为参考素材', duration: 2000 }); return; }
+    const refAssetId = `ref_copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const refAsset: ImageAsset = {
+      id: refAssetId, taskId: '', storageKey: refAssetId,
+      mimeType: entry.metadata.mimeType, width: entry.metadata.width, height: entry.metadata.height,
+      sizeBytes: entry.metadata.sizeBytes, backend: entry.metadata.backend, createdAt: Date.now(), origin: 'reference',
+    };
+    await imageService.getAssetCache().store(refAsset, entry.blob);
+    imageService.state.addReferenceEntry({
+      id: generateReferenceId(),
+      assetId: refAssetId,
+      name: name ?? `ref_${assetId.slice(0, 12)}`,
+      mimeType: entry.metadata.mimeType,
+      width: entry.metadata.width,
+      height: entry.metadata.height,
+      sizeBytes: entry.metadata.sizeBytes,
+      source,
+      createdAt: Date.now(),
+    });
+    eventBus.emit('ui:toast', { type: 'success', message: '已保存为参考素材（独立副本）', duration: 2000 });
+  } catch (err) {
+    eventBus.emit('ui:toast', { type: 'error', message: `保存参考素材失败: ${(err as Error).message}`, duration: 2500 });
+  }
+}
+
+function openRegenerateFromSceneRecord(record: Record<string, unknown>, asReference = false) {
   const width = Number(record.width) || 1024;
   const height = Number(record.height) || 576;
   const rawBackend = String(record.backend ?? '');
@@ -853,6 +1092,8 @@ function openRegenerateFromSceneRecord(record: Record<string, unknown>) {
     height,
     initialBackend: bk,
     civitaiLoraSnapshot: extractLoraSnapshot(record),
+    sourceAssetId: typeof record.id === 'string' ? record.id : undefined,
+    preActivateReference: asReference,
   });
 }
 
@@ -900,10 +1141,10 @@ const currentWallpaperId = computed(() => {
 const selectedScenePreset = ref('');
 const selectedScenePngPreset = ref('');
 const sceneScopedPresets = computed(() =>
-  artistPresets.value.filter((p) => p.scope === 'scene' && !p.id.startsWith('png_'))
+  artistPresets.value.filter((p) => p.scope === 'scene' && !(p.id.startsWith('png_') || p.id.startsWith('img_')))
 );
 const scenePngPresets = computed(() =>
-  artistPresets.value.filter((p) => p.scope === 'scene' && p.id.startsWith('png_'))
+  artistPresets.value.filter((p) => p.scope === 'scene' && (p.id.startsWith('png_') || p.id.startsWith('img_')))
 );
 
 const sceneResolution = ref('1024x576');
@@ -916,6 +1157,34 @@ const sceneExtraPrompt = ref('');
 const sceneGenerating = ref(false);
 const sceneError = ref('');
 const sceneStatusText = ref('');
+const sceneReferenceEnabled = ref(false);
+const sceneReferenceSource = ref('upload');
+const sceneReferenceDenoise = ref(0.55);
+const sceneReferenceNoise = ref(0.1);
+const sceneReferenceFile = ref<File | null>(null);
+const sceneReferenceDataUrl = ref<string | null>(null);
+const sceneReferenceAssetId = ref<string | null>(null);
+watch(sceneReferenceEnabled, (v) => {
+  if (v) sceneReferenceDenoise.value = Math.min(refConfigDenoiseDefault.value, 0.55);
+});
+
+async function onSceneReferenceFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  if (!validateUploadSize(file)) { (e.target as HTMLInputElement).value = ''; return; }
+  sceneReferenceFile.value = file;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      sceneReferenceDataUrl.value = reader.result as string;
+      sceneReferenceAssetId.value = await persistUploadedReference(file, reader.result as string);
+    } catch (err) {
+      console.warn('[ImagePanel] Scene reference persist failed:', err);
+      sceneReferenceAssetId.value = null;
+    }
+  };
+  reader.readAsDataURL(file);
+}
 
 // Scene archive from state tree (MRJH sceneImageArchiveWorkflow)
 const sceneArchiveRaw = useValue<Record<string, unknown>>('系统.扩展.image.sceneArchive');
@@ -1050,6 +1319,27 @@ async function generateScene() {
       selectedScenePreset.value,
       selectedScenePngPreset.value,
     ]);
+    let sceneRef: import('@/engine/image/types').ImageReferenceInput | undefined;
+    if (sceneReferenceEnabled.value && backendSupportsImg2Img.value) {
+      if (sceneReferenceSource.value === 'upload' && (sceneReferenceAssetId.value || sceneReferenceDataUrl.value)) {
+        sceneRef = sceneReferenceAssetId.value
+          ? { id: generateReferenceId(), role: 'source', source: 'asset', assetId: sceneReferenceAssetId.value, denoiseStrength: sceneReferenceDenoise.value }
+          : { id: generateReferenceId(), role: 'source', source: 'data_url', dataUrl: sceneReferenceDataUrl.value!, denoiseStrength: sceneReferenceDenoise.value };
+      } else if (sceneReferenceSource.value === 'wallpaper') {
+        const wallId = String(get('系统.扩展.image.sceneArchive.当前壁纸图片ID') ?? '');
+        if (wallId) sceneRef = { id: generateReferenceId(), role: 'source', source: 'asset', assetId: wallId, denoiseStrength: sceneReferenceDenoise.value };
+      }
+      if (!sceneRef) {
+        eventBus.emit('ui:toast', { type: 'warning', message: '参考构图已开启但未选择有效参考图，将以普通文生图模式生成', duration: 3000 });
+      }
+      if (sceneRef && backend.value === 'novelai') {
+        sceneRef.providerMeta = { noise: sceneReferenceNoise.value };
+      }
+    }
+    const scenePngPresetObj = selectedScenePngPreset.value ? artistPresets.value.find((p) => p.id === selectedScenePngPreset.value) : undefined;
+    const sceneStyleApplicability = scenePngPresetObj ? resolveStyleParams(scenePngPresetObj, backend.value) : null;
+
+    const sceneAnchors = imageService.collectSceneRoleAnchors();
     const task = await imageService.generateSceneImage({
       sceneDescription: sceneExtraPrompt.value || '当前场景',
       location: get('角色.基础信息.当前位置') as string ?? '',
@@ -1063,6 +1353,10 @@ async function generateScene() {
       artistPrefix: styleInjection.artistPrefix,
       extraNegative: styleInjection.extraNegative,
       preset: { id: 'scene_custom', name: '场景自定义', positivePrefix: '', positiveSuffix: '', negative: '', source: 'manual', width: sceneW, height: sceneH },
+      reference: sceneRef,
+      styleParamOverrides: sceneStyleApplicability?.applied,
+      presentNpcs: sceneAnchors.presentNpcs,
+      roleAnchors: sceneAnchors.roleAnchors.length > 0 ? sceneAnchors.roleAnchors : undefined,
     });
     if (task.status === 'failed') {
       sceneError.value = task.error ?? '场景生成失败';
@@ -1164,23 +1458,7 @@ const newPresetPositive = ref('');
 const newPresetNegative = ref('');
 const newPresetArtist = ref('');
 
-interface ArtistPreset {
-  id: string;
-  name: string;
-  scope: 'npc' | 'scene';
-  artistString: string;
-  positive: string;
-  negative: string;
-  /** PNG import metadata (only present for PNG-imported presets) */
-  pngMeta?: {
-    source?: string;
-    originalPrompt?: string;
-    rawText?: string;
-    parsedParams?: Record<string, unknown>;
-    replicateParams?: boolean;
-    coverDataUrl?: string;
-  };
-}
+// ArtistPreset type imported from '@/engine/image/types' (promoted from UI-local in Phase 1)
 
 const artistPresets = computed<ArtistPreset[]>(() => {
   const raw = get('系统.扩展.image.artistPresets');
@@ -1190,20 +1468,26 @@ const artistPresets = computed<ArtistPreset[]>(() => {
 
 // Split presets: PNG presets vs artist-only presets
 const pngPresets = computed(() =>
-  artistPresets.value.filter((p) => p.id.startsWith('png_'))
+  artistPresets.value.filter((p) => (p.id.startsWith('png_') || p.id.startsWith('img_')))
 );
 const artistOnlyPresets = computed(() =>
-  artistPresets.value.filter((p) => p.scope === presetScope.value && !p.id.startsWith('png_'))
+  artistPresets.value.filter((p) => p.scope === presetScope.value && !(p.id.startsWith('png_') || p.id.startsWith('img_')))
 );
 
 // Always NPC-scoped presets (for Manual + Secret sections, independent of Presets tab scope)
 const npcArtistPresets = computed(() =>
-  artistPresets.value.filter((p) => p.scope === 'npc' && !p.id.startsWith('png_'))
+  artistPresets.value.filter((p) => p.scope === 'npc' && !(p.id.startsWith('png_') || p.id.startsWith('img_')))
 );
 
 const selectedPreset = computed(() =>
   artistPresets.value.find((p) => p.id === selectedPresetId.value) ?? null
 );
+
+const selectedPresetParamPreview = computed(() => {
+  const p = selectedPreset.value;
+  if (!p) return null;
+  return resolveStyleParams(p, (backend.value as import('@/engine/image/types').ImageBackendType) || 'novelai');
+});
 
 function createPreset() {
   const name = newPresetName.value.trim() || `预设 ${Date.now()}`;
@@ -1223,9 +1507,10 @@ function createPreset() {
 
 function savePreset() {
   if (!selectedPreset.value) return;
+  const updatedName = newPresetName.value.trim() || selectedPreset.value.name;
   const list = artistPresets.value.map((p) =>
     p.id === selectedPresetId.value
-      ? { ...p, positive: newPresetPositive.value, negative: newPresetNegative.value, artistString: newPresetArtist.value }
+      ? { ...p, name: updatedName, positive: newPresetPositive.value, negative: newPresetNegative.value, artistString: newPresetArtist.value }
       : p
   );
   setValue('系统.扩展.image.artistPresets', list);
@@ -1292,6 +1577,142 @@ function importArtistPresets(event: Event) {
 const pngImporting = ref(false);
 const pngImportStatus = ref('');
 
+// Image understanding (提炼) state
+const understandingMode = ref(false);
+const understandingFile = ref<File | null>(null);
+const understandingCoverDataUrl = ref<string | null>(null);
+const understandingTask = ref<'tags' | 'caption' | 'both'>('both');
+const understandingLoading = ref(false);
+const understandingResult = ref<import('@/engine/image/types').ImageUnderstandingResult | null>(null);
+const understandingEditDraft = ref('');
+const understandingError = ref('');
+
+async function openUnderstandingForFile(file: File) {
+  understandingFile.value = file;
+  understandingMode.value = true;
+  understandingResult.value = null;
+  understandingError.value = '';
+  understandingEditDraft.value = '';
+  try {
+    const img = new Image();
+    const objUrl = URL.createObjectURL(file);
+    await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(); img.src = objUrl; });
+    const canvas = document.createElement('canvas');
+    canvas.width = 80; canvas.height = 56;
+    const ctx = canvas.getContext('2d');
+    if (ctx) { ctx.drawImage(img, 0, 0, 80, 56); understandingCoverDataUrl.value = canvas.toDataURL('image/jpeg', 0.6); }
+    URL.revokeObjectURL(objUrl);
+  } catch { understandingCoverDataUrl.value = null; }
+}
+
+async function runUnderstanding() {
+  if (!imageService || !understandingFile.value) return;
+  understandingLoading.value = true;
+  understandingError.value = '';
+  try {
+    const reader = new FileReader();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('read'));
+      reader.readAsDataURL(understandingFile.value!);
+    });
+    const refConfig = imageService.getReferenceConfig();
+    const result = await imageService.analyzeImage({
+      backend: 'civitai',
+      image: { id: generateReferenceId(), role: 'source', source: 'data_url', dataUrl },
+      task: understandingTask.value,
+      threshold: refConfig.civitai.wdThreshold,
+      temperature: refConfig.civitai.captionTemperature,
+      maxNewTokens: refConfig.civitai.captionMaxNewTokens,
+    });
+    understandingResult.value = result;
+    understandingEditDraft.value = result.positiveDraft;
+    if (understandingTask.value === 'both' && !result.caption && result.tags?.length) {
+      eventBus.emit('ui:toast', { type: 'warning', message: 'Civitai Caption 服务暂时不可用，已返回标签结果', duration: 4000 });
+    }
+  } catch (err) {
+    understandingError.value = (err as Error).message;
+  } finally {
+    understandingLoading.value = false;
+  }
+}
+
+function saveUnderstandingAsPreset(scope: 'npc' | 'scene') {
+  if (!understandingResult.value) return;
+  const preset: ArtistPreset = {
+    id: `img_${Date.now()}`,
+    name: understandingFile.value?.name?.replace(/\.\w+$/, '') ?? '提炼预设',
+    scope,
+    artistString: '',
+    positive: understandingEditDraft.value || understandingResult.value.positiveDraft,
+    negative: understandingResult.value.negativeDraft ?? '',
+    pngMeta: {
+      source: `civitai_${understandingResult.value.task}`,
+      originalPrompt: understandingResult.value.positiveDraft,
+      rawText: JSON.stringify(understandingResult.value.raw ?? {}),
+      coverDataUrl: understandingCoverDataUrl.value ?? undefined,
+      replicateParams: false,
+    },
+  };
+  const list = [...artistPresets.value, preset];
+  setValue('系统.扩展.image.artistPresets', list);
+  selectedPresetId.value = preset.id;
+  understandingMode.value = false;
+  loadPresetIntoEditor();
+  eventBus.emit('ui:toast', { type: 'success', message: `已保存为${scope === 'npc' ? 'NPC' : '场景'}画风预设`, duration: 2000 });
+}
+
+function importImageForUnderstanding(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  input.value = '';
+  if (!validateUploadSize(file)) return;
+  void openUnderstandingForFile(file);
+}
+
+// ── Reference Library (P1-8) ──
+const referenceLibrary = computed(() => imageService?.state.getReferenceLibrary() ?? []);
+const refLibThumbnails = ref<Record<string, string>>({});
+
+async function loadRefLibThumbnail(assetId: string): Promise<string | null> {
+  if (assetId in refLibThumbnails.value) return refLibThumbnails.value[assetId] || null;
+  if (!imageService) return null;
+  try {
+    const entry = await imageService.getAssetCache().retrieve(assetId);
+    if (!entry) {
+      refLibThumbnails.value = { ...refLibThumbnails.value, [assetId]: '' };
+      return null;
+    }
+    const img = new Image();
+    const objUrl = URL.createObjectURL(entry.blob);
+    await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(); img.src = objUrl; });
+    const canvas = document.createElement('canvas'); canvas.width = 60; canvas.height = 42;
+    const ctx = canvas.getContext('2d');
+    let thumb = '';
+    if (ctx) { ctx.drawImage(img, 0, 0, 60, 42); thumb = canvas.toDataURL('image/jpeg', 0.5); }
+    URL.revokeObjectURL(objUrl);
+    refLibThumbnails.value = { ...refLibThumbnails.value, [assetId]: thumb || '' };
+    return thumb || null;
+  } catch {
+    refLibThumbnails.value = { ...refLibThumbnails.value, [assetId]: '' };
+    return null;
+  }
+}
+
+async function deleteReferenceEntry(id: string) {
+  if (!imageService) return;
+  const lib = imageService.state.getReferenceLibrary();
+  const entry = lib.find((e) => e.id === id);
+  imageService.state.removeReferenceEntry(id);
+  if (entry?.assetId) {
+    try { await imageService.getAssetCache().delete(entry.assetId); } catch { /* best effort */ }
+    const { [entry.assetId]: _, ...rest } = refLibThumbnails.value;
+    refLibThumbnails.value = rest;
+  }
+  eventBus.emit('ui:toast', { type: 'info', message: '已删除参考素材及图片', duration: 1500 });
+}
+
 async function importPng(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -1305,8 +1726,9 @@ async function importPng(event: Event) {
     const metadata = await extractPngMetadata(file);
 
     if (!metadata.positive && !metadata.rawText) {
-      pngImportStatus.value = '未找到有效的 PNG 元数据';
+      pngImportStatus.value = '未找到 PNG 元数据 — 可尝试图片提炼';
       pngImporting.value = false;
+      void openUnderstandingForFile(file);
       return;
     }
 
@@ -1372,6 +1794,7 @@ async function importPng(event: Event) {
 
 function loadPresetIntoEditor() {
   if (selectedPreset.value) {
+    newPresetName.value = selectedPreset.value.name;
     newPresetPositive.value = selectedPreset.value.positive;
     newPresetNegative.value = selectedPreset.value.negative;
     newPresetArtist.value = selectedPreset.value.artistString;
@@ -1944,7 +2367,7 @@ interface CombinedHistoryEntry {
   height?: number;
   backend?: ImageBackendType;
   part?: 'breast' | 'vagina' | 'anus';
-  providerMeta?: { civitai?: CivitaiLoraSnapshot };
+  providerMeta?: { civitai?: CivitaiLoraSnapshot; reference?: { mode: string; sourceAssetId?: string; denoiseStrength?: number; provider?: string } };
 }
 
 const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
@@ -1978,7 +2401,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
           height: Number(record.height) || undefined,
           backend: (record.backend as ImageBackendType | undefined) ?? undefined,
           part: record.part as 'breast' | 'vagina' | 'anus' | undefined,
-          providerMeta: extractLoraSnapshot(record) ? { civitai: extractLoraSnapshot(record)! } : undefined,
+          providerMeta: extractProviderMeta(record),
         });
       }
     }
@@ -2003,7 +2426,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       height: Number(record.height) || undefined,
       backend: record.backend ?? undefined,
       part: record.part ?? undefined,
-      providerMeta: extractLoraSnapshot(record as unknown as Record<string, unknown>) ? { civitai: extractLoraSnapshot(record as unknown as Record<string, unknown>)! } : undefined,
+      providerMeta: extractProviderMeta(record as unknown as Record<string, unknown>),
     });
   }
 
@@ -2025,7 +2448,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       width: Number(record.width) || undefined,
       height: Number(record.height) || undefined,
       backend: (record.backend as ImageBackendType | undefined) ?? undefined,
-      providerMeta: extractLoraSnapshot(record) ? { civitai: extractLoraSnapshot(record)! } : undefined,
+      providerMeta: extractProviderMeta(record),
     });
   }
 
@@ -2127,7 +2550,7 @@ interface GalleryImage {
   height?: number;
   /** Backend that produced the record; initial value when opening the regen modal. */
   backend?: ImageBackendType;
-  providerMeta?: { civitai?: CivitaiLoraSnapshot };
+  providerMeta?: { civitai?: CivitaiLoraSnapshot; reference?: { mode: string; sourceAssetId?: string; denoiseStrength?: number; provider?: string } };
 }
 
 // Player archive for Gallery/History integration (MRJH: __player__ pseudo-NPC)
@@ -2506,6 +2929,45 @@ function clearNpcImages() {
               <AgaToggle v-model="backgroundMode" />
             </div>
 
+            <!-- Reference redraw (R9: single toggle) -->
+            <div v-if="backendSupportsImg2Img" class="form-section">
+              <div class="form-section form-section--inline">
+                <label class="form-label">参考重绘</label>
+                <AgaToggle v-model="npcReferenceEnabled" />
+              </div>
+              <div v-if="npcReferenceEnabled" class="ref-controls">
+                <label class="form-label">参考图来源</label>
+                <AgaSelect
+                  :options="[
+                    { label: '上传图片', value: 'upload' },
+                    { label: '使用当前头像/立绘', value: 'avatar' },
+                  ]"
+                  v-model="npcReferenceSource"
+                />
+                <div v-if="npcReferenceSource === 'upload'" style="margin-top: var(--space-xs);">
+                  <label class="ref-upload-btn">
+                    {{ npcReferenceFile ? npcReferenceFile.name : '选择图片…' }}
+                    <input type="file" accept="image/*" style="display:none" @change="onNpcReferenceFileChange" />
+                  </label>
+                </div>
+                <label class="form-label" style="margin-top: var(--space-xs);">重绘幅度</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="range" min="0.1" max="1" step="0.05" v-model.number="npcReferenceDenoise" style="flex:1" />
+                  <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ npcReferenceDenoise.toFixed(2) }}</span>
+                </div>
+                <div class="ref-marks"><span>0.25 近似原图</span><span>0.55 保留构图</span><span>0.80 大幅重绘</span></div>
+                <div v-if="backend === 'novelai'" style="margin-top:6px;">
+                  <label class="form-label">Noise（增加细节变化）</label>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" min="0" max="1" step="0.05" v-model.number="npcReferenceNoise" style="flex:1" />
+                    <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ npcReferenceNoise.toFixed(2) }}</span>
+                  </div>
+                </div>
+                <p class="form-hint" style="margin-top:4px;">参考重绘会把源图发送给当前生成后端。</p>
+              </div>
+            </div>
+            <p v-else class="form-hint" style="margin-top:0;">当前后端不支持参考重绘</p>
+
             <div class="form-actions">
               <AgaButton
                 variant="primary"
@@ -2619,6 +3081,12 @@ function clearNpcImages() {
                     <button type="button" class="secret-card-btn" :disabled="!!secretBusy" @click="generateSecretPart(part.key)">
                       {{ secretBusy === part.key ? '生成中...' : '生成' }}
                     </button>
+                    <button
+                      v-if="getSecretPartAssetId(part.key) && backendSupportsImg2Img"
+                      type="button" class="secret-card-btn" style="font-size:0.7rem;"
+                      :disabled="!!secretBusy"
+                      @click="generateSecretPartWithReference(part.key)"
+                    >参考重绘</button>
                   </div>
                   <div
                     class="secret-card-image"
@@ -2765,6 +3233,7 @@ function clearNpcImages() {
                     <span v-if="isCurrentPortrait(img.id)" class="gallery-usage-badge">已设立绘</span>
                     <span v-if="isCurrentBackground(img.id)" class="gallery-usage-badge">已设背景</span>
                     <span v-if="currentWallpaperId === img.id" class="gallery-usage-badge">常驻壁纸</span>
+                    <span v-if="img.providerMeta?.reference" class="gallery-usage-badge gallery-usage-badge--ref">参考图</span>
                   </div>
                 </div>
                 <div class="gallery-card-meta">
@@ -2780,6 +3249,16 @@ function clearNpcImages() {
                     <div v-if="apiConfigLabel(img)" class="gallery-meta-cell gallery-meta-cell--wide" :title="apiConfigLabel(img)">
                       <div class="gallery-meta-label">API 配置</div>
                       <div class="gallery-meta-value">{{ apiConfigLabel(img) }}</div>
+                    </div>
+                  </div>
+                  <div v-if="img.providerMeta?.reference" class="gallery-meta-grid" style="margin-top:4px;">
+                    <div class="gallery-meta-cell">
+                      <div class="gallery-meta-label">参考模式</div>
+                      <div class="gallery-meta-value">{{ img.providerMeta.reference.mode }}</div>
+                    </div>
+                    <div v-if="img.providerMeta.reference.denoiseStrength != null" class="gallery-meta-cell">
+                      <div class="gallery-meta-label">重绘幅度</div>
+                      <div class="gallery-meta-value">{{ img.providerMeta.reference.denoiseStrength }}</div>
                     </div>
                   </div>
                   <div v-if="img.positivePrompt || img.negativePrompt" class="gallery-card-prompts">
@@ -2839,6 +3318,13 @@ function clearNpcImages() {
                       variant="secondary" size="sm"
                       @click="openRegenerateFromGalleryImage(galleryNpc, img)"
                     >生成同款</AgaButton>
+                    <AgaButton
+                      v-if="img.positivePrompt && backendSupportsImg2Img"
+                      variant="secondary" size="sm"
+                      @click="openRegenerateFromGalleryImage(galleryNpc, img, true)"
+                    >参考重绘</AgaButton>
+                    <AgaButton v-if="img.status !== 'failed'" variant="ghost" size="sm" @click="analyzeImageFromCard(img.id)">提炼画风</AgaButton>
+                    <AgaButton v-if="img.status !== 'failed'" variant="ghost" size="sm" @click="saveAsReferenceMaterial(img.id, 'gallery', galleryNpc)">保存为参考素材</AgaButton>
                     <AgaButton
                       v-if="img.status === 'complete' && !isPersistentWallpaper(img.id)"
                       variant="ghost" size="sm"
@@ -2996,6 +3482,44 @@ function clearNpcImages() {
               <p class="form-hint">开启后，场景生成会直接进入后台队列。</p>
             </div>
 
+            <!-- Scene reference redraw -->
+            <div v-if="backendSupportsImg2Img" class="scene-section">
+              <div class="form-section form-section--inline">
+                <label class="form-label">参考构图</label>
+                <AgaToggle v-model="sceneReferenceEnabled" />
+              </div>
+              <div v-if="sceneReferenceEnabled" class="ref-controls">
+                <label class="form-label">参考图来源</label>
+                <AgaSelect
+                  :options="[
+                    { label: '上传图片', value: 'upload' },
+                    { label: '当前场景壁纸', value: 'wallpaper' },
+                  ]"
+                  v-model="sceneReferenceSource"
+                />
+                <div v-if="sceneReferenceSource === 'upload'" style="margin-top:var(--space-xs);">
+                  <label class="ref-upload-btn">
+                    {{ sceneReferenceFile ? sceneReferenceFile.name : '选择图片…' }}
+                    <input type="file" accept="image/*" style="display:none" @change="onSceneReferenceFileChange" />
+                  </label>
+                </div>
+                <label class="form-label" style="margin-top:var(--space-xs);">重绘幅度</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="range" min="0.1" max="1" step="0.05" v-model.number="sceneReferenceDenoise" style="flex:1" />
+                  <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ sceneReferenceDenoise.toFixed(2) }}</span>
+                </div>
+                <div class="ref-marks"><span>0.25 保留画面</span><span>0.55 保留构图</span><span>0.80 大幅重绘</span></div>
+                <div v-if="backend === 'novelai'" style="margin-top:6px;">
+                  <label class="form-label">Noise（增加细节变化）</label>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" min="0" max="1" step="0.05" v-model.number="sceneReferenceNoise" style="flex:1" />
+                    <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ sceneReferenceNoise.toFixed(2) }}</span>
+                  </div>
+                </div>
+                <p class="form-hint" style="margin-top:4px;">参考重绘会把源图发送给当前生成后端。</p>
+              </div>
+            </div>
+
             <!-- Status text -->
             <div v-if="sceneStatusText" class="scene-status-text">{{ sceneStatusText }}</div>
 
@@ -3074,6 +3598,13 @@ function clearNpcImages() {
                         variant="secondary" size="sm"
                         @click="openRegenerateFromSceneRecord(record as Record<string, unknown>)"
                       >生成同款</AgaButton>
+                      <AgaButton
+                        v-if="record.positivePrompt && backendSupportsImg2Img"
+                        variant="secondary" size="sm"
+                        @click="openRegenerateFromSceneRecord(record as Record<string, unknown>, true)"
+                      >参考重绘</AgaButton>
+                      <AgaButton variant="ghost" size="sm" @click="analyzeImageFromCard(String(record.id ?? ''))">提炼画风</AgaButton>
+                      <AgaButton variant="ghost" size="sm" @click="saveAsReferenceMaterial(String(record.id ?? ''), 'scene')">保存为参考素材</AgaButton>
                       <AgaButton
                         v-if="!isCurrentSceneWallpaper(String(record.id ?? ''))"
                         variant="secondary" size="sm"
@@ -3191,6 +3722,16 @@ function clearNpcImages() {
                 @click="openRegenerateFromTask(task)"
               >同提示词重新生成</AgaButton>
               <AgaButton
+                v-if="task.status === 'complete' && task.resultAssetId && backendSupportsImg2Img"
+                variant="secondary" size="sm"
+                @click="openRegenerateFromTask(task, true)"
+              >参考重绘</AgaButton>
+              <AgaButton
+                v-if="task.status === 'complete' && task.resultAssetId"
+                variant="ghost" size="sm"
+                @click="saveAsReferenceMaterial(task.resultAssetId, 'gallery')"
+              >保存为参考素材</AgaButton>
+              <AgaButton
                 v-if="task.status === 'failed' && task.subjectType !== 'scene' && task.targetCharacter"
                 variant="ghost" size="sm"
                 @click="openManualGenerateForRetry(task.targetCharacter!)"
@@ -3249,6 +3790,7 @@ function clearNpcImages() {
                   <div class="history-card-sub-v2">
                     <span v-if="entry.composition" class="history-comp-badge">{{ entry.composition }}</span>
                     <span v-if="entry.providerMeta?.civitai?.loras?.length" class="lora-badge">LoRA ×{{ entry.providerMeta.civitai.loras.length }}</span>
+                    <span v-if="entry.providerMeta?.reference" class="lora-badge" style="color: var(--color-sage-400);">参考图</span>
                     <span>{{ new Date(entry.timestamp).toLocaleString() }}</span>
                   </div>
                 </div>
@@ -3295,6 +3837,13 @@ function clearNpcImages() {
                   variant="secondary" size="sm"
                   @click="openRegenerateFromHistoryEntry(entry)"
                 >生成同款</AgaButton>
+                <AgaButton
+                  v-if="entry.positivePrompt && entry.assetId && backendSupportsImg2Img"
+                  variant="secondary" size="sm"
+                  @click="openRegenerateFromHistoryEntry(entry, true)"
+                >参考重绘</AgaButton>
+                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="analyzeImageFromCard(entry.assetId)">提炼画风</AgaButton>
+                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="saveAsReferenceMaterial(entry.assetId, entry.type === 'scene' ? 'scene' : 'gallery', entry.name)">保存为参考素材</AgaButton>
                 <template v-if="entry.status === 'complete' && entry.assetId">
                   <AgaButton
                     v-if="entry.type === 'scene' && !isCurrentSceneWallpaper(entry.assetId)"
@@ -3347,7 +3896,7 @@ function clearNpcImages() {
             <div class="form-section">
               <label class="form-label">NPC PNG 预设</label>
               <AgaSelect
-                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'npc' && p.id.startsWith('png_')).map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'npc' && (p.id.startsWith('png_') || p.id.startsWith('img_'))).map(p => ({ label: p.name, value: p.id }))]"
                 :model-value="String(get('系统.扩展.image.config.defaultNpcPngPreset') ?? '')"
                 @update:model-value="setValue('系统.扩展.image.config.defaultNpcPngPreset', $event)"
               />
@@ -3363,7 +3912,7 @@ function clearNpcImages() {
             <div class="form-section">
               <label class="form-label">场景 PNG 预设</label>
               <AgaSelect
-                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'scene' && p.id.startsWith('png_')).map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'scene' && (p.id.startsWith('png_') || p.id.startsWith('img_'))).map(p => ({ label: p.name, value: p.id }))]"
                 :model-value="String(get('系统.扩展.image.config.defaultScenePngPreset') ?? '')"
                 @update:model-value="setValue('系统.扩展.image.config.defaultScenePngPreset', $event)"
               />
@@ -3490,13 +4039,13 @@ function clearNpcImages() {
           </div>
         </div>
 
-        <!-- Section: PNG 画风预设 (MRJH: separate section with thumbnail list) -->
+        <!-- Section: 图片风格素材 (renamed from PNG画风预设 — R6) -->
         <div class="preset-card">
-          <span class="preset-card-badge">PNG画风预设</span>
+          <span class="preset-card-badge">图片风格素材</span>
           <div class="preset-card-header">
             <div>
-              <h3 class="section-label">PNG 解析与画风复用</h3>
-              <p class="form-hint">导入 PNG 后自动解析并提炼画风，可保存为预设。</p>
+              <h3 class="section-label">PNG 元数据 · 图片提炼 · 画师串</h3>
+              <p class="form-hint">导入 PNG 解析元数据，或导入任意图片提炼画风。</p>
             </div>
             <div class="preset-card-actions">
               <AgaButton variant="ghost" size="sm" @click="exportArtistPresets">导出预设</AgaButton>
@@ -3508,10 +4057,102 @@ function clearNpcImages() {
                 导入 PNG
                 <input type="file" accept="image/png" style="display:none" @change="importPng" />
               </label>
+              <label class="png-import-btn">
+                导入图片并提炼
+                <input type="file" accept="image/png,image/jpeg,image/webp" style="display:none" @change="importImageForUnderstanding" />
+              </label>
             </div>
           </div>
 
-          <div class="presets-layout">
+          <!-- Understanding panel (A3-A5) -->
+          <div v-if="understandingMode" class="understanding-panel">
+            <div class="understanding-header">
+              <div class="understanding-preview">
+                <img v-if="understandingCoverDataUrl" :src="understandingCoverDataUrl" alt="preview" style="width:60px;height:42px;border-radius:4px;object-fit:cover" />
+                <span v-else class="form-hint">无预览</span>
+              </div>
+              <div>
+                <span class="form-label">{{ understandingFile?.name ?? '未知文件' }}</span>
+                <span class="form-hint">{{ understandingFile ? `${(understandingFile.size / 1024).toFixed(0)}KB` : '' }}</span>
+              </div>
+              <AgaButton variant="ghost" size="sm" @click="understandingMode = false">关闭</AgaButton>
+            </div>
+
+            <div class="understanding-controls">
+              <div class="form-section">
+                <label class="form-label">分析模式</label>
+                <AgaSelect
+                  :options="[
+                    { label: '标签 (WD Tagging)', value: 'tags' },
+                    { label: '描述 (Captioning)', value: 'caption' },
+                    { label: '标签 + 描述', value: 'both' },
+                  ]"
+                  v-model="understandingTask"
+                />
+              </div>
+              <p class="form-hint" style="color: var(--color-amber-400, #fbbf24);">图片提炼固定使用 Civitai API（无论生图后端），需要已配置的 Civitai API 密钥和 Buzz 余额。Mature 内容可能需要对应账号权限。</p>
+              <AgaButton variant="primary" size="sm" :loading="understandingLoading" @click="runUnderstanding">
+                {{ understandingLoading ? '提炼中…' : '开始提炼' }}
+              </AgaButton>
+              <span v-if="understandingError" class="form-hint" style="color: var(--color-error, #f87171);">{{ understandingError }}</span>
+            </div>
+
+            <div v-if="understandingResult" class="understanding-result">
+              <div v-if="understandingResult.tags?.length" class="form-section">
+                <label class="form-label">标签 ({{ understandingResult.tags.length }})</label>
+                <div class="understanding-tags">
+                  <span v-for="tag in understandingResult.tags.slice(0, 30)" :key="tag.text" class="understanding-tag">
+                    {{ tag.text }} <span v-if="tag.confidence" class="understanding-tag-conf">{{ (tag.confidence * 100).toFixed(0) }}%</span>
+                  </span>
+                </div>
+              </div>
+              <div v-if="understandingResult.caption" class="form-section">
+                <label class="form-label">描述</label>
+                <p class="form-hint">{{ understandingResult.caption }}</p>
+              </div>
+              <div class="form-section">
+                <label class="form-label">生成的提示词（可编辑）</label>
+                <textarea v-model="understandingEditDraft" class="form-textarea" rows="4" />
+              </div>
+              <div class="understanding-save-row">
+                <AgaButton variant="primary" size="sm" @click="saveUnderstandingAsPreset('npc')">保存为 NPC 画风</AgaButton>
+                <AgaButton variant="secondary" size="sm" @click="saveUnderstandingAsPreset('scene')">保存为场景画风</AgaButton>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reference Library (P1-8) -->
+          <div v-if="!understandingMode && referenceLibrary.length > 0" class="ref-lib-section">
+            <div class="ref-lib-header">
+              <span class="form-label">参考素材库 ({{ referenceLibrary.length }})</span>
+            </div>
+            <div class="ref-lib-list">
+              <div v-for="entry in referenceLibrary" :key="entry.id" class="ref-lib-item">
+                <div class="ref-lib-thumb" @vue:mounted="loadRefLibThumbnail(entry.assetId)">
+                  <img v-if="refLibThumbnails[entry.assetId]" :src="refLibThumbnails[entry.assetId]" alt="thumb" />
+                  <span v-else class="form-hint" style="font-size:0.6rem">{{ refLibThumbnails[entry.assetId] === '' ? '缺失' : '…' }}</span>
+                </div>
+                <div class="ref-lib-info">
+                  <span class="ref-lib-name">{{ entry.name }}</span>
+                  <span class="form-hint">{{ entry.source }} · {{ new Date(entry.createdAt).toLocaleDateString() }}</span>
+                </div>
+                <div class="ref-lib-actions">
+                  <button type="button" class="secret-card-btn" style="font-size:0.65rem;" @click="deleteReferenceEntry(entry.id)">删除</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sub-group labels (A6) -->
+          <div v-if="!understandingMode" class="preset-subgroups">
+            <span class="preset-subgroup-label">PNG 元数据</span>
+            <span class="preset-subgroup-sep">·</span>
+            <span class="preset-subgroup-label" :class="{ 'preset-subgroup-label--active': understandingMode }">图片提炼</span>
+            <span class="preset-subgroup-sep">·</span>
+            <span class="preset-subgroup-label">画师串</span>
+          </div>
+
+          <div v-if="!understandingMode" class="presets-layout">
             <!-- PNG preset list with thumbnails (220px) -->
             <div class="png-preset-list-col">
               <h4 class="form-label">预设列表</h4>
@@ -3551,7 +4192,7 @@ function clearNpcImages() {
                   <div class="png-source-info">
                     <div class="form-section">
                       <label class="form-label">预设名称</label>
-                      <input v-model="newPresetArtist" class="form-input" :placeholder="selectedPreset.name" />
+                      <input v-model="newPresetName" class="form-input" :placeholder="selectedPreset.name" />
                     </div>
                     <div class="png-source-meta">
                       <span class="form-hint">来源: {{ selectedPreset.pngMeta.source ?? '未知' }}</span>
@@ -3582,6 +4223,26 @@ function clearNpcImages() {
                   />
                 </div>
                 <span class="form-hint">开启后，解析出的步数、采样器、CFG 等参数一并下发到生图后端（分辨率与 Seed 自动剔除）。</span>
+
+                <!-- Param applicability preview (R10) -->
+                <div v-if="selectedPreset.pngMeta.replicateParams && selectedPresetParamPreview" class="replicate-preview">
+                  <div v-if="Object.keys(selectedPresetParamPreview.applied).length > 0" class="replicate-group">
+                    <span class="replicate-group-label replicate-group-label--ok">将应用</span>
+                    <div class="replicate-chips">
+                      <span v-for="(val, key) in selectedPresetParamPreview.applied" :key="key" class="replicate-chip replicate-chip--ok">
+                        {{ key }}: {{ val }}
+                      </span>
+                    </div>
+                  </div>
+                  <div v-if="selectedPresetParamPreview.notApplicable.length > 0" class="replicate-group">
+                    <span class="replicate-group-label replicate-group-label--na">无法应用</span>
+                    <div class="replicate-chips">
+                      <span v-for="na in selectedPresetParamPreview.notApplicable" :key="na.key" class="replicate-chip replicate-chip--na" :title="na.reason">
+                        {{ na.key }}: {{ na.value }} ({{ na.reason }})
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
                 <!-- Expandable metadata -->
                 <details class="prompt-details">
@@ -4229,6 +4890,89 @@ function clearNpcImages() {
           <p v-if="civitaiWhatifResult" class="form-hint" style="margin-top: 4px;">{{ civitaiWhatifResult }}</p>
         </div>
 
+        <!-- §7.2.5 Reference / Understanding settings (always visible) -->
+        <div class="preset-card">
+          <span class="preset-card-badge">参考图与图片提炼</span>
+          <div class="settings-row">
+            <div>
+              <span class="form-label">默认重绘幅度</span>
+              <span class="form-hint">参考重绘时的初始强度，0 = 近似原图，1 = 大幅重绘</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:140px">
+              <input
+                type="range" min="0.1" max="1" step="0.05" style="flex:1"
+                :value="get('系统.扩展.image.config.reference.defaultDenoiseStrength') ?? 0.65"
+                @input="setValue('系统.扩展.image.config.reference.defaultDenoiseStrength', Number(($event.target as HTMLInputElement).value))"
+              />
+              <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ Number(get('系统.扩展.image.config.reference.defaultDenoiseStrength') ?? 0.65).toFixed(2) }}</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <span class="form-label">上传图片大小上限</span>
+            </div>
+            <AgaSelect
+              :options="[
+                { label: '5 MB', value: '5242880' },
+                { label: '10 MB', value: '10485760' },
+                { label: '20 MB', value: '20971520' },
+              ]"
+              :model-value="String(get('系统.扩展.image.config.reference.maxUploadBytes') ?? 10485760)"
+              @update:model-value="setValue('系统.扩展.image.config.reference.maxUploadBytes', Number($event))"
+            />
+          </div>
+          <div class="settings-row">
+            <div>
+              <span class="form-label">保存上传的参考图</span>
+              <span class="form-hint">关闭后参考图仅在当前会话有效</span>
+            </div>
+            <AgaToggle
+              :model-value="get('系统.扩展.image.config.reference.persistUploadedReferences') !== false"
+              @update:model-value="setValue('系统.扩展.image.config.reference.persistUploadedReferences', $event)"
+            />
+          </div>
+
+          <details class="form-advanced">
+            <summary>Civitai 图片提炼参数</summary>
+            <div class="settings-grid-3">
+              <div class="form-section">
+                <label class="form-label">WD Tag 阈值</label>
+                <input
+                  type="number" min="0.1" max="0.9" step="0.05" class="form-input"
+                  :value="get('系统.扩展.image.config.reference.civitai.wdThreshold') ?? 0.35"
+                  @change="setValue('系统.扩展.image.config.reference.civitai.wdThreshold', Math.max(0.1, Math.min(0.9, Number(($event.target as HTMLInputElement).value) || 0.35)))"
+                />
+              </div>
+              <div class="form-section">
+                <label class="form-label">Caption 温度</label>
+                <input
+                  type="number" min="0" max="1" step="0.1" class="form-input"
+                  :value="get('系统.扩展.image.config.reference.civitai.captionTemperature') ?? 0.2"
+                  @change="setValue('系统.扩展.image.config.reference.civitai.captionTemperature', Math.max(0, Math.min(1, Number(($event.target as HTMLInputElement).value) || 0.2)))"
+                />
+              </div>
+              <div class="form-section">
+                <label class="form-label">Caption 最大 Token</label>
+                <input
+                  type="number" min="20" max="500" class="form-input"
+                  :value="get('系统.扩展.image.config.reference.civitai.captionMaxNewTokens') ?? 160"
+                  @change="setValue('系统.扩展.image.config.reference.civitai.captionMaxNewTokens', Math.max(20, Math.min(500, Math.floor(Number(($event.target as HTMLInputElement).value) || 160))))"
+                />
+              </div>
+            </div>
+          </details>
+
+          <div class="settings-row" style="margin-top: 4px;">
+            <div>
+              <span class="form-label">NovelAI 参考重绘</span>
+              <span class="form-hint">需先通过接口验证后才能启用</span>
+            </div>
+            <span class="preset-card-badge" style="font-size: 0.7rem;">
+              {{ get('系统.扩展.image.config.reference.novelai.validationStatus') === 'validated' ? '已验证' : '未验证' }}
+            </span>
+          </div>
+        </div>
+
         <!-- §7.3 Transformer section -->
         <div class="preset-card">
           <span class="preset-card-badge">转化器</span>
@@ -4538,6 +5282,9 @@ function clearNpcImages() {
       :available-backends="backendOptions"
       :busy="regenBusy"
       :civitai-lora-snapshot="regenPayload.civitaiLoraSnapshot"
+      :source-asset-id="regenPayload.sourceAssetId"
+      :default-denoise-strength="refConfigDenoiseDefault"
+      :pre-activate-reference="regenPayload.preActivateReference"
       @confirm="confirmRegenerate"
       @cancel="cancelRegenerate"
     />
@@ -5084,6 +5831,12 @@ function clearNpcImages() {
   backdrop-filter: blur(4px);
   box-shadow: 0 0 10px rgba(var(--color-primary-rgb, 212, 175, 55), 0.3);
 }
+.gallery-usage-badge--ref {
+  border-color: var(--color-sage-400, #a3be8c);
+  color: var(--color-sage-400, #a3be8c);
+  background: rgba(163, 190, 140, 0.15);
+  box-shadow: none;
+}
 .gallery-card-meta {
   padding: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);
   background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.15));
@@ -5361,6 +6114,41 @@ function clearNpcImages() {
   border-bottom: 1px solid var(--color-border); border-left: 1px solid var(--color-border);
   border-bottom-left-radius: var(--radius-md);
 }
+.understanding-panel { display: flex; flex-direction: column; gap: var(--space-sm); padding: var(--space-sm) 0; }
+.understanding-header { display: flex; align-items: center; gap: var(--space-sm); }
+.understanding-preview { flex-shrink: 0; }
+.understanding-controls { display: flex; flex-direction: column; gap: var(--space-xs); }
+.understanding-result { display: flex; flex-direction: column; gap: var(--space-sm); border-top: 1px solid var(--color-border); padding-top: var(--space-sm); }
+.understanding-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.understanding-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: var(--radius-sm); background: rgba(163, 190, 140, 0.1); color: var(--color-sage-300, #b5cea8); }
+.understanding-tag-conf { color: var(--color-text-muted); margin-left: 2px; }
+.understanding-save-row { display: flex; gap: var(--space-sm); }
+.ref-lib-section { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-sm); margin-bottom: var(--space-sm); }
+.ref-lib-header { margin-bottom: var(--space-xs); }
+.ref-lib-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.ref-lib-item { display: flex; align-items: center; gap: var(--space-xs); padding: 4px; border-radius: var(--radius-sm); background: rgba(255,255,255,0.02); }
+.ref-lib-thumb { width: 48px; height: 34px; border-radius: 3px; overflow: hidden; flex-shrink: 0; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; }
+.ref-lib-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ref-lib-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ref-lib-name { font-size: 0.75rem; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ref-lib-actions { flex-shrink: 0; }
+.preset-subgroups { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) 0; }
+.preset-subgroup-label { font-size: 0.75rem; color: var(--color-text-muted); }
+.preset-subgroup-label--active { color: var(--color-sage-400); font-weight: 500; }
+.preset-subgroup-sep { color: var(--color-text-muted); font-size: 0.65rem; }
+.ref-controls { display: flex; flex-direction: column; gap: var(--space-2xs); padding: var(--space-xs) 0 0 var(--space-sm); border-left: 2px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent); margin-left: 2px; }
+.ref-marks { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--color-text-muted); }
+.ref-upload-btn { display: inline-block; padding: 4px 12px; font-size: 0.8rem; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-secondary); cursor: pointer; transition: border-color var(--duration-fast); }
+.ref-upload-btn:hover { border-color: var(--color-sage-400); }
+.replicate-preview { display: flex; flex-direction: column; gap: var(--space-xs); margin-top: var(--space-xs); }
+.replicate-group { display: flex; flex-direction: column; gap: 2px; }
+.replicate-group-label { font-size: 0.7rem; font-weight: 500; }
+.replicate-group-label--ok { color: var(--color-sage-400, #a3be8c); }
+.replicate-group-label--na { color: var(--color-text-muted); }
+.replicate-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.replicate-chip { font-size: 0.7rem; padding: 1px 6px; border-radius: var(--radius-sm); }
+.replicate-chip--ok { background: rgba(163, 190, 140, 0.12); color: var(--color-sage-300, #b5cea8); }
+.replicate-chip--na { background: rgba(255, 255, 255, 0.04); color: var(--color-text-muted); }
 .auto-bindings { margin-bottom: var(--space-lg); padding: var(--space-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .bindings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin-top: var(--space-sm); }
 

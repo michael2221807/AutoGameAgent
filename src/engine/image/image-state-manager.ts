@@ -23,7 +23,7 @@
  */
 import type { StateManager } from '../core/state-manager';
 import type { EnginePathConfig } from '../pipeline/types';
-import type { SecretPartType } from './types';
+import type { SecretPartType, ReferenceLibraryEntry } from './types';
 import { eventBus } from '../core/event-bus';
 
 /** Player pseudo-NPC identifier (MRJH: 主角角色锚点标识) */
@@ -247,7 +247,40 @@ export class ImageStateManager {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // §6 — Internal helpers
+  // §6 — Reference Library CRUD
+  // ═══════════════════════════════════════════════════════════
+
+  private static readonly REF_LIB_PATH = '系统.扩展.image.referenceLibrary';
+
+  getReferenceLibrary(): ReferenceLibraryEntry[] {
+    const raw = this.stateManager.get<unknown>(ImageStateManager.REF_LIB_PATH);
+    return Array.isArray(raw) ? raw as ReferenceLibraryEntry[] : [];
+  }
+
+  addReferenceEntry(entry: ReferenceLibraryEntry): void {
+    const lib = this.getReferenceLibrary().filter((e) => e.id !== entry.id);
+    this.stateManager.set(ImageStateManager.REF_LIB_PATH, [...lib, entry], 'system');
+    eventBus.emit('engine:request-save');
+  }
+
+  removeReferenceEntry(id: string): void {
+    const lib = this.getReferenceLibrary().filter((e) => e.id !== id);
+    this.stateManager.set(ImageStateManager.REF_LIB_PATH, lib, 'system');
+    eventBus.emit('engine:request-save');
+  }
+
+  updateReferenceLastUsed(id: string): void {
+    const lib = this.getReferenceLibrary();
+    if (!lib.some((e) => e.id === id)) return;
+    const updated = lib.map((e) =>
+      e.id === id ? { ...e, lastUsedAt: Date.now() } : e,
+    );
+    this.stateManager.set(ImageStateManager.REF_LIB_PATH, updated, 'system');
+    eventBus.emit('engine:request-save');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // §7 — Internal helpers
   // ═══════════════════════════════════════════════════════════
 
   private findNpc(npcName: string): Record<string, unknown> | null {

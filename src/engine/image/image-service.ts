@@ -20,7 +20,9 @@ import { ImagePromptComposer } from './prompt-composer';
 import { ImageProviderRegistry } from './provider-registry';
 import { ImageAssetCache } from './asset-cache';
 import { ImageTaskQueue } from './task-queue';
-import type { ImageTask, ImageAsset, ImageBackendType, ImageSubjectType, CharacterAnchor, StylePreset, CivitaiLoraShelfItem, CivitaiLoraSnapshot } from './types';
+import type { ImageTask, ImageAsset, ImageBackendType, ImageSubjectType, CharacterAnchor, StylePreset, CivitaiLoraShelfItem, CivitaiLoraSnapshot, ImageReferenceInput, ImageUnderstandingRequest, ImageUnderstandingResult } from './types';
+import { supportsImageToImage, supportsImageUnderstanding } from './provider-capabilities';
+import { blobToDataUrl } from './utils';
 import { prepareCivitaiLora, resolveLoraScope, validateShelfForGeneration } from './civitai-lora';
 import { joinPromptFragments } from './style-preset-injection';
 import { normalizeSingleCharacterOutput, processTransformerOutput, type SerializationStrategy } from './output-processor';
@@ -114,6 +116,39 @@ export class ImageService {
   }
 
   /**
+   * Collect present NPCs and their scene-linked anchors for scene generation.
+   * Returns `presentNpcs` (names) and `roleAnchors` (enabled + sceneLink anchors).
+   */
+  collectSceneRoleAnchors(): { presentNpcs: string[]; roleAnchors: Array<{ name: string; positive: string }> } {
+    const list = this.stateManager.get<Array<Record<string, unknown>>>(this.paths.relationships);
+    if (!Array.isArray(list)) return { presentNpcs: [], roleAnchors: [] };
+
+    const nameKey = this.paths.npcFieldNames?.name ?? '名称';
+    const presenceKey = this.paths.npcFieldNames?.isPresent ?? '是否在场';
+    const presentNames = list
+      .filter((n) => n[presenceKey] === true)
+      .map((n) => String(n[nameKey] ?? ''))
+      .filter(Boolean);
+
+    if (presentNames.length === 0) return { presentNpcs: [], roleAnchors: [] };
+
+    const anchors = this.stateManager.get<Array<Record<string, unknown>>>('系统.扩展.image.characterAnchors');
+    if (!Array.isArray(anchors) || anchors.length === 0) return { presentNpcs: presentNames, roleAnchors: [] };
+
+    const roleAnchors: Array<{ name: string; positive: string }> = [];
+    for (const name of presentNames) {
+      const anchor = anchors.find(
+        (a) => a.npcName === name && a.enabled === true && a.sceneLink === true,
+      );
+      if (anchor && typeof anchor.positive === 'string' && anchor.positive.trim()) {
+        roleAnchors.push({ name, positive: anchor.positive as string });
+      }
+    }
+
+    return { presentNpcs: presentNames, roleAnchors };
+  }
+
+  /**
    * Look up the current image-gen API config's model name so archive records
    * can display which backend + model actually produced the image. Returns an
    * empty string if no config is bound — UI shows '未记录' in that case.
@@ -202,6 +237,8 @@ export class ImageService {
     artistPrefix?: string;
     extraNegative?: string;
     backend: ImageBackendType;
+    reference?: ImageReferenceInput;
+    styleParamOverrides?: Record<string, unknown>;
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
 
@@ -275,14 +312,17 @@ export class ImageService {
         loraSnapshot = prep.snapshot;
       }
 
+      const refMeta = params.reference ? {
+        reference: { mode: 'image_to_image' as const, sourceAssetId: params.reference.assetId, denoiseStrength: params.reference.denoiseStrength, provider: params.backend },
+      } : {};
       this.queue.updateStatus(task.id, 'generating', {
         positivePrompt: composed.positive,
         negativePrompt: composed.negative,
-        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
+        providerMeta: { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta },
       });
       eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
 
-      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams, params.reference, params.styleParamOverrides);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -327,6 +367,8 @@ export class ImageService {
      *  Default: true. Forced true for NovelAI backend.
      *  FRONTEND TODO: Settings tab "使用词组转化器" toggle (Phase 7) */
     useTransformer?: boolean;
+    reference?: ImageReferenceInput;
+    styleParamOverrides?: Record<string, unknown>;
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
 
@@ -429,14 +471,17 @@ export class ImageService {
         loraSnapshot = prep.snapshot;
       }
 
+      const refMeta = params.reference ? {
+        reference: { mode: 'image_to_image' as const, sourceAssetId: params.reference.assetId, denoiseStrength: params.reference.denoiseStrength, provider: params.backend },
+      } : {};
       this.queue.updateStatus(task.id, 'generating', {
         positivePrompt: composed.positive,
         negativePrompt: composed.negative,
-        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
+        providerMeta: { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta },
       });
       eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
 
-      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams, params.reference, params.styleParamOverrides);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -457,7 +502,7 @@ export class ImageService {
           apiConfigName: this.getCurrentApiConfigName(params.backend),
           artStyle: params.artStyle,
           createdAt: Date.now(),
-          ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
+          providerMeta: { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta },
         });
       }
 
@@ -494,6 +539,8 @@ export class ImageService {
     extraNegative?: string;
     extraPrompt?: string;
     backend: ImageBackendType;
+    reference?: ImageReferenceInput;
+    styleParamOverrides?: Record<string, unknown>;
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
 
@@ -507,6 +554,7 @@ export class ImageService {
     const task = this.queue.create({
       subjectType: 'secret_part',
       targetCharacter: params.characterName,
+      part: params.part,
       width: params.preset?.width ?? 1024,
       height: params.preset?.height ?? 1024,
       backend: params.backend,
@@ -566,14 +614,17 @@ export class ImageService {
         loraSnapshot = prep.snapshot;
       }
 
+      const refMeta = params.reference ? {
+        reference: { mode: 'image_to_image' as const, sourceAssetId: params.reference.assetId, denoiseStrength: params.reference.denoiseStrength, provider: params.backend },
+      } : {};
       this.queue.updateStatus(task.id, 'generating', {
         positivePrompt: composed.positive,
         negativePrompt: composed.negative,
-        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
+        providerMeta: { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta },
       });
       eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
 
-      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams, params.reference, params.styleParamOverrides);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -587,7 +638,8 @@ export class ImageService {
         const createdAt = Date.now();
         const modelName = this.getCurrentModelName(params.backend);
         const apiName = this.getCurrentApiConfigName(params.backend);
-        const metaSpread = loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {};
+        const archiveMeta = { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta };
+        const metaSpread = Object.keys(archiveMeta).length > 0 ? { providerMeta: archiveMeta } : {};
         this.state.setSecretPartResult(params.characterName, params.part, {
           id: asset.id,
           taskId: task.id,
@@ -635,6 +687,25 @@ export class ImageService {
   getTaskQueue(): ImageTaskQueue { return this.queue; }
   getAssetCache(): ImageAssetCache { return this.cache; }
 
+  getReferenceConfig(): {
+    defaultDenoiseStrength: number;
+    maxUploadBytes: number;
+    persistUploadedReferences: boolean;
+    civitai: { wdThreshold: number; captionTemperature: number; captionMaxNewTokens: number };
+  } {
+    const base = '系统.扩展.image.config.reference';
+    return {
+      defaultDenoiseStrength: this.stateManager.get<number>(`${base}.defaultDenoiseStrength`) ?? 0.65,
+      maxUploadBytes: this.stateManager.get<number>(`${base}.maxUploadBytes`) ?? 10 * 1024 * 1024,
+      persistUploadedReferences: this.stateManager.get<boolean>(`${base}.persistUploadedReferences`) !== false,
+      civitai: {
+        wdThreshold: this.stateManager.get<number>(`${base}.civitai.wdThreshold`) ?? 0.35,
+        captionTemperature: this.stateManager.get<number>(`${base}.civitai.captionTemperature`) ?? 0.2,
+        captionMaxNewTokens: this.stateManager.get<number>(`${base}.civitai.captionMaxNewTokens`) ?? 160,
+      },
+    };
+  }
+
   /**
    * Regenerate an image using already-composed positive + negative prompts,
    * bypassing tokenizer and composer entirely. The prompts are passed through
@@ -664,6 +735,8 @@ export class ImageService {
     part?: import('./types').SecretPartType;
     /** Optional metadata passthrough for audit/display */
     artStyle?: string;
+    reference?: ImageReferenceInput;
+    styleParamOverrides?: Record<string, unknown>;
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
 
@@ -687,6 +760,7 @@ export class ImageService {
     const task = this.queue.create({
       subjectType: params.subjectType,
       targetCharacter: params.targetCharacter,
+      part: params.part,
       width: params.width,
       height: params.height,
       backend: params.backend,
@@ -711,14 +785,17 @@ export class ImageService {
         loraSnapshot = prep.snapshot;
       }
 
+      const refMeta = params.reference ? {
+        reference: { mode: 'image_to_image' as const, sourceAssetId: params.reference.assetId, denoiseStrength: params.reference.denoiseStrength, provider: params.backend },
+      } : {};
       this.queue.updateStatus(task.id, 'generating', {
         positivePrompt: composed.positive,
         negativePrompt: composed.negative,
-        ...(loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {}),
+        providerMeta: { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta },
       });
       eventBus.emit('image:task-update', { taskId: task.id, status: 'generating' });
 
-      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams);
+      const blob = await this.callProvider(params.backend, composed, civitaiProviderParams, params.reference, params.styleParamOverrides);
       const asset = await this.storeAsset(task, blob, params.backend);
 
       this.queue.updateStatus(task.id, 'complete', { resultAssetId: asset.id });
@@ -727,7 +804,8 @@ export class ImageService {
       const createdAt = Date.now();
       const modelName = this.getCurrentModelName(params.backend);
       const apiName = this.getCurrentApiConfigName(params.backend);
-      const metaSpread = loraSnapshot ? { providerMeta: { civitai: loraSnapshot } } : {};
+      const archiveMeta = { ...(loraSnapshot ? { civitai: loraSnapshot } : {}), ...refMeta };
+      const metaSpread = Object.keys(archiveMeta).length > 0 ? { providerMeta: archiveMeta } : {};
       if (params.subjectType === 'scene') {
         this.writeToSceneArchive(asset.id, this.queue.get(task.id)!);
       } else if (params.subjectType === 'secret_part' && params.targetCharacter && params.part) {
@@ -935,6 +1013,8 @@ export class ImageService {
     backend: ImageBackendType,
     composed: { positive: string; negative: string; width: number; height: number },
     presetParams?: Record<string, unknown>,
+    reference?: ImageReferenceInput,
+    styleParamOverrides?: Record<string, unknown>,
   ): Promise<Blob> {
     const config = this.aiService.getImageConfigForBackend(backend);
     if (!config) throw new Error(`[ImageService] 未找到 "${backend}" 后端的图像 API 配置 — 请在 API 管理中添加`);
@@ -970,6 +1050,32 @@ export class ImageService {
       }
     }
 
+    if (styleParamOverrides && Object.keys(styleParamOverrides).length > 0) {
+      resolvedParams = { ...resolvedParams, ...styleParamOverrides };
+    }
+
+    if (reference) {
+      const refBase = '系统.扩展.image.config.reference';
+      if (backend === 'civitai' && this.stateManager.get<boolean>(`${refBase}.civitai.imageToImageEnabled`) === false) {
+        throw new Error('[ImageService] Civitai 参考重绘已在设置中禁用');
+      }
+      if (backend === 'novelai' && this.stateManager.get<boolean>(`${refBase}.novelai.imageToImageEnabled`) === false) {
+        throw new Error('[ImageService] NovelAI 参考重绘已在设置中禁用');
+      }
+      if (!supportsImageToImage(provider)) {
+        throw new Error(`[ImageService] "${backend}" 后端不支持参考图生成`);
+      }
+      const resolved = await this.resolveReferenceAsset(reference);
+      return provider.imageToImage(
+        composed.positive,
+        composed.negative,
+        composed.width,
+        composed.height,
+        resolved,
+        resolvedParams,
+      );
+    }
+
     return provider.generate(
       composed.positive,
       composed.negative,
@@ -977,6 +1083,53 @@ export class ImageService {
       composed.height,
       resolvedParams,
     );
+  }
+
+  private async resolveReferenceAsset(ref: ImageReferenceInput): Promise<ImageReferenceInput> {
+    if (ref.source === 'asset') {
+      if (!ref.assetId) throw new Error('[ImageService] 参考图来源为 asset 但未提供 assetId');
+      const entry = await this.cache.retrieve(ref.assetId);
+      if (!entry) throw new Error(`[ImageService] 参考图资产 ${ref.assetId} 未找到`);
+      const dataUrl = await blobToDataUrl(entry.blob);
+      return { ...ref, dataUrl, source: 'data_url' };
+    }
+    if (!ref.dataUrl && !ref.url) {
+      throw new Error('[ImageService] 参考图缺少 dataUrl 或 url');
+    }
+    return ref;
+  }
+
+  async analyzeImage(request: ImageUnderstandingRequest): Promise<ImageUnderstandingResult> {
+    if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
+
+    if (request.backend === 'civitai'
+      && this.stateManager.get<boolean>('系统.扩展.image.config.reference.civitai.understandingEnabled') === false) {
+      throw new Error('[ImageService] Civitai 图片提炼已在设置中禁用');
+    }
+
+    const config = this.aiService.getImageConfigForBackend(request.backend);
+    if (!config) throw new Error(`[ImageService] 未找到 "${request.backend}" 后端的图像 API 配置`);
+
+    const provider = this.providerRegistry.resolve({
+      backend: request.backend,
+      endpoint: config.url,
+      apiKey: config.apiKey,
+      model: config.model,
+    });
+    if (!supportsImageUnderstanding(provider)) {
+      throw new Error(`[ImageService] "${request.backend}" 后端不支持图片提炼`);
+    }
+
+    const resolvedImage = await this.resolveReferenceAsset(request.image);
+
+    let providerOptions: Record<string, unknown> | undefined;
+    if (request.backend === 'civitai') {
+      const base = '系统.扩展.image.config.civitai';
+      providerOptions = {
+        allowMatureContent: this.stateManager.get<boolean>(`${base}.allowMatureContent`) === true,
+      };
+    }
+    return provider.describeImage({ ...request, image: resolvedImage }, providerOptions);
   }
 
   private async storeAsset(task: ImageTask, blob: Blob, backend: ImageBackendType): Promise<ImageAsset> {
@@ -990,6 +1143,7 @@ export class ImageService {
       sizeBytes: blob.size,
       backend,
       createdAt: Date.now(),
+      origin: 'generated',
     };
     asset.storageKey = asset.id;
     await this.cache.store(asset, blob);

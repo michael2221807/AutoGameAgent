@@ -32,6 +32,10 @@ import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import type { ImageService } from '@/engine/image/image-service';
 import type { ImageBackendType, CivitaiLoraSnapshot } from '@/engine/image/types';
 import { buildPromptStyleInjection, type PromptStylePresetLike } from '@/engine/image/style-preset-injection';
+import { resolveStyleParams } from '@/engine/image/style-param-resolver';
+import { PROVIDER_CAPABILITIES } from '@/engine/image/provider-capabilities';
+import type { ArtistPreset } from '@/engine/image/types';
+import { generateReferenceId } from '@/engine/image/utils';
 
 const P = DEFAULT_ENGINE_PATHS;
 
@@ -87,6 +91,47 @@ function resolveDefaultBackend(): ImageBackendType {
   return VALID_BACKENDS.has(first ?? '') ? first as ImageBackendType : 'novelai' as ImageBackendType;
 }
 
+const playerDefaultBackend = computed(() => resolveDefaultBackend());
+
+async function analyzePlayerImageFromCard(assetId: string) {
+  if (!imageService) return;
+  try {
+    const entry = await imageService.getAssetCache().retrieve(assetId);
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法提炼', duration: 2000 }); return; }
+    eventBus.emit('ui:toast', { type: 'info', message: '请前往图像工作台使用图片提炼功能', duration: 3000 });
+  } catch (err) {
+    eventBus.emit('ui:toast', { type: 'error', message: `操作失败: ${(err as Error).message}`, duration: 2000 });
+  }
+}
+
+async function savePlayerAsReferenceMaterial(assetId: string) {
+  if (!imageService) return;
+  try {
+    const entry = await imageService.getAssetCache().retrieve(assetId);
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法保存', duration: 2000 }); return; }
+    const refAssetId = `ref_copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await imageService.getAssetCache().store({
+      id: refAssetId, taskId: '', storageKey: refAssetId,
+      mimeType: entry.metadata.mimeType, width: entry.metadata.width, height: entry.metadata.height,
+      sizeBytes: entry.metadata.sizeBytes, backend: entry.metadata.backend, createdAt: Date.now(), origin: 'reference',
+    }, entry.blob);
+    imageService.state.addReferenceEntry({
+      id: generateReferenceId(),
+      assetId: refAssetId,
+      name: `主角_${assetId.slice(0, 12)}`,
+      mimeType: entry.metadata.mimeType,
+      width: entry.metadata.width,
+      height: entry.metadata.height,
+      sizeBytes: entry.metadata.sizeBytes,
+      source: 'player',
+      createdAt: Date.now(),
+    });
+    eventBus.emit('ui:toast', { type: 'success', message: '已保存为参考素材（独立副本）', duration: 2000 });
+  } catch (err) {
+    eventBus.emit('ui:toast', { type: 'error', message: `保存失败: ${(err as Error).message}`, duration: 2000 });
+  }
+}
+
 function extractLoraSnapshot(record: Record<string, unknown>): CivitaiLoraSnapshot | undefined {
   const meta = record.providerMeta;
   if (!meta || typeof meta !== 'object') return undefined;
@@ -125,6 +170,58 @@ const playerSize = ref('');
 const playerGenerating = ref(false);
 const playerGenError = ref('');
 
+const playerRefEnabled = ref(false);
+const playerRefSource = ref('upload');
+const playerRefDenoise = ref(0.65);
+const playerRefFile = ref<File | null>(null);
+const playerRefDataUrl = ref<string | null>(null);
+const playerRefAssetId = ref<string | null>(null);
+const playerRefConfigDenoise = computed(() =>
+  (get('系统.扩展.image.config.reference.defaultDenoiseStrength') as number | undefined) ?? 0.65,
+);
+const playerRefConfigMaxBytes = computed(() =>
+  (get('系统.扩展.image.config.reference.maxUploadBytes') as number | undefined) ?? 10485760,
+);
+const playerRefConfigPersist = computed(() =>
+  get('系统.扩展.image.config.reference.persistUploadedReferences') !== false,
+);
+watch(playerRefEnabled, (v) => { if (v) playerRefDenoise.value = playerRefConfigDenoise.value; });
+
+async function onPlayerRefFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  if (file.size > playerRefConfigMaxBytes.value) {
+    const limitMB = (playerRefConfigMaxBytes.value / 1048576).toFixed(0);
+    eventBus.emit('ui:toast', { type: 'error', message: `文件大小超过上限 ${limitMB}MB`, duration: 3000 });
+    (e.target as HTMLInputElement).value = '';
+    return;
+  }
+  playerRefFile.value = file;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    playerRefDataUrl.value = reader.result as string;
+    if (imageService && playerRefConfigPersist.value) {
+      const aid = `ref_upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        const { generateReferenceId } = await import('@/engine/image/utils');
+        await imageService.getAssetCache().store({
+          id: aid, taskId: '', storageKey: aid,
+          mimeType: file.type || 'image/png', width: 0, height: 0,
+          sizeBytes: file.size, backend: 'civitai', createdAt: Date.now(), origin: 'upload',
+        }, file);
+        imageService.state.addReferenceEntry({
+          id: generateReferenceId(), assetId: aid,
+          name: file.name.replace(/\.\w+$/, ''),
+          mimeType: file.type || 'image/png', width: 0, height: 0,
+          sizeBytes: file.size, source: 'upload', createdAt: Date.now(),
+        });
+        playerRefAssetId.value = aid;
+      } catch { playerRefAssetId.value = null; }
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 const playerArchiveReactive = useValue<Record<string, unknown>>('角色.图片档案');
 const playerArchive = computed(() => {
   const raw = playerArchiveReactive.value;
@@ -150,13 +247,13 @@ const playerImageStats = computed(() => ({
 const playerArtistPresetOptions = computed<SelectOption[]>(() => {
   const raw = get('系统.扩展.image.artistPresets');
   if (!Array.isArray(raw)) return [{ label: '不使用', value: '' }];
-  const npcPresets = (raw as Array<Record<string, unknown>>).filter((p) => p.scope === 'npc' && !String(p.id ?? '').startsWith('png_'));
+  const npcPresets = (raw as Array<Record<string, unknown>>).filter((p) => p.scope === 'npc' && !String(p.id ?? '').startsWith('png_') && !String(p.id ?? '').startsWith('img_'));
   return [{ label: '不使用', value: '' }, ...npcPresets.map((p) => ({ label: String(p.name ?? ''), value: String(p.id ?? '') }))];
 });
 const playerPngPresetOptions = computed<SelectOption[]>(() => {
   const raw = get('系统.扩展.image.artistPresets');
   if (!Array.isArray(raw)) return [{ label: '不启用', value: '' }];
-  const pngPresets = (raw as Array<Record<string, unknown>>).filter((p) => p.scope === 'npc' && String(p.id ?? '').startsWith('png_'));
+  const pngPresets = (raw as Array<Record<string, unknown>>).filter((p) => p.scope === 'npc' && (String(p.id ?? '').startsWith('png_') || String(p.id ?? '').startsWith('img_')));
   return [{ label: '不启用', value: '' }, ...pngPresets.map((p) => ({ label: String(p.name ?? ''), value: String(p.id ?? '') }))];
 });
 
@@ -305,6 +402,28 @@ async function generatePlayerImage() {
       if (m) { w = Number(m[1]); h = Number(m[2]); }
     }
 
+    // Resolve replicateParams from selected PNG preset
+    const allPresets = Array.isArray(rawPresets) ? rawPresets as ArtistPreset[] : [];
+    const playerPngObj = playerPngPreset.value ? allPresets.find((p) => p.id === playerPngPreset.value) : undefined;
+    const playerStyleApplicability = playerPngObj ? resolveStyleParams(playerPngObj, defaultBackend) : null;
+
+    // Build reference if enabled
+    let playerReference: import('@/engine/image/types').ImageReferenceInput | undefined;
+    if (playerRefEnabled.value && PROVIDER_CAPABILITIES[defaultBackend]?.imageToImage) {
+      const refId = `ref_player_${Date.now()}`;
+      if (playerRefSource.value === 'upload' && (playerRefAssetId.value || playerRefDataUrl.value)) {
+        playerReference = playerRefAssetId.value
+          ? { id: refId, role: 'source', source: 'asset', assetId: playerRefAssetId.value, denoiseStrength: playerRefDenoise.value }
+          : { id: refId, role: 'source', source: 'data_url', dataUrl: playerRefDataUrl.value!, denoiseStrength: playerRefDenoise.value };
+      } else if (playerRefSource.value === 'avatar' || playerRefSource.value === 'portrait') {
+        const archive = get('角色.图片档案') as Record<string, unknown> | undefined;
+        const assetId = playerRefSource.value === 'avatar'
+          ? String(archive?.['已选头像图片ID'] ?? '')
+          : String(archive?.['已选立绘图片ID'] ?? '');
+        if (assetId) playerReference = { id: refId, role: 'source', source: 'asset', assetId, denoiseStrength: playerRefDenoise.value };
+      }
+    }
+
     // Use __player__ as characterName so image-service writes to 角色.图片档案 via ImageStateManager
     const task = await imageService.generateCharacterImage({
       characterName: '__player__',
@@ -319,6 +438,8 @@ async function generatePlayerImage() {
       extraNegative: styleInjection.extraNegative,
       npcDataJson: JSON.stringify(npcData, null, 2),
       preset: w && h ? { id: 'custom', name: '自定义', positivePrefix: '', positiveSuffix: '', negative: '', width: w, height: h, source: 'manual' } : undefined,
+      reference: playerReference,
+      styleParamOverrides: playerStyleApplicability?.applied,
     });
 
     if (task.status === 'failed') {
@@ -373,11 +494,13 @@ interface PlayerRegenPayload {
   initialBackend: ImageBackendType;
   artStyle?: string;
   civitaiLoraSnapshot?: CivitaiLoraSnapshot;
+  sourceAssetId?: string;
+  preActivateReference?: boolean;
 }
 const playerRegenPayload = ref<PlayerRegenPayload | null>(null);
 const playerRegenBusy = ref(false);
 
-function openPlayerRegenerate(img: Record<string, unknown>) {
+function openPlayerRegenerate(img: Record<string, unknown>, asReference = false) {
   const positive = String(img.positivePrompt ?? '');
   if (!positive.trim()) {
     eventBus.emit('ui:toast', { type: 'error', message: '该记录未保存提示词，无法同款生成', duration: 2000 });
@@ -401,6 +524,8 @@ function openPlayerRegenerate(img: Record<string, unknown>) {
     initialBackend: bk,
     artStyle: String(img.artStyle ?? '') || undefined,
     civitaiLoraSnapshot: extractLoraSnapshot(img),
+    sourceAssetId: typeof img.id === 'string' ? img.id : undefined,
+    preActivateReference: asReference,
   };
 }
 
@@ -409,7 +534,7 @@ function cancelPlayerRegenerate() {
   playerRegenPayload.value = null;
 }
 
-async function confirmPlayerRegenerate(opts: { backend: ImageBackendType }) {
+async function confirmPlayerRegenerate(opts: { backend: ImageBackendType; positivePrompt: string; negativePrompt: string; reference?: import('@/engine/image/types').ImageReferenceInput }) {
   if (!imageService || !playerRegenPayload.value || playerRegenBusy.value) return;
   const p = playerRegenPayload.value;
   playerRegenBusy.value = true;
@@ -418,12 +543,13 @@ async function confirmPlayerRegenerate(opts: { backend: ImageBackendType }) {
       subjectType: 'character',
       targetCharacter: '__player__',
       composition: p.composition,
-      positivePrompt: p.positivePrompt,
-      negativePrompt: p.negativePrompt,
+      positivePrompt: opts.positivePrompt,
+      negativePrompt: opts.negativePrompt,
       width: p.width,
       height: p.height,
       backend: opts.backend,
       artStyle: p.artStyle,
+      reference: opts.reference,
     });
     if (task.status === 'failed') {
       eventBus.emit('ui:toast', { type: 'error', message: `同款生成失败：${task.error ?? '未知错误'}`, duration: 2500 });
@@ -1200,6 +1326,41 @@ const avatarInitial = computed<string>(() => {
               <input v-model="playerSize" class="pi-select" placeholder="如 832x1216（留空使用默认）" style="max-width:200px" />
             </div>
 
+            <!-- Reference redraw (C1) -->
+            <div v-if="PROVIDER_CAPABILITIES[playerDefaultBackend]?.imageToImage" class="pi-form-row" style="flex-direction:column;align-items:stretch">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <label class="pi-label" style="margin:0">参考重绘</label>
+                <AgaToggle v-model="playerRefEnabled" />
+              </div>
+              <div v-if="playerRefEnabled" style="display:flex;flex-direction:column;gap:6px;padding-left:12px;border-left:2px solid rgba(163,190,140,0.3);margin-top:6px;">
+                <label class="pi-label">来源</label>
+                <AgaSelect
+                  :options="[
+                    { label: '上传图片', value: 'upload' },
+                    { label: '当前头像', value: 'avatar' },
+                    { label: '当前立绘', value: 'portrait' },
+                  ]"
+                  v-model="playerRefSource"
+                />
+                <div v-if="playerRefSource === 'upload'" style="margin-top:4px;">
+                  <label style="display:inline-block;padding:4px 12px;font-size:0.8rem;border:1px dashed var(--color-border);border-radius:6px;color:var(--color-text-secondary);cursor:pointer;">
+                    {{ playerRefFile ? playerRefFile.name : '选择图片…' }}
+                    <input type="file" accept="image/*" style="display:none" @change="onPlayerRefFileChange" />
+                  </label>
+                </div>
+                <label class="pi-label" style="margin-top:4px;">重绘幅度</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="range" min="0.1" max="1" step="0.05" v-model.number="playerRefDenoise" style="flex:1" />
+                  <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ playerRefDenoise.toFixed(2) }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--color-text-muted);">
+                  <span>0.25 近似原图</span><span>0.55 保留构图</span><span>0.80 大幅重绘</span>
+                </div>
+                <p style="font-size:0.75rem;color:var(--color-text-muted);margin-top:2px;">参考重绘会把源图发送给当前生成后端。</p>
+              </div>
+            </div>
+            <p v-else style="font-size:0.75rem;color:var(--color-text-muted);margin:0;">当前后端不支持参考重绘</p>
+
             <AgaButton
               class="pi-gen-btn"
               :loading="playerGenerating"
@@ -1297,6 +1458,13 @@ const avatarInitial = computed<string>(() => {
                     @click="openPlayerRegenerate(img as Record<string, unknown>)"
                   >生成同款</AgaButton>
                   <AgaButton
+                    v-if="img.positivePrompt && PROVIDER_CAPABILITIES[playerDefaultBackend]?.imageToImage"
+                    size="sm"
+                    @click="openPlayerRegenerate(img as Record<string, unknown>, true)"
+                  >参考重绘</AgaButton>
+                  <AgaButton size="sm" variant="ghost" @click="analyzePlayerImageFromCard(String(img.id))">提炼画风</AgaButton>
+                  <AgaButton size="sm" variant="ghost" @click="savePlayerAsReferenceMaterial(String(img.id))">保存为参考素材</AgaButton>
+                  <AgaButton
                     v-if="img.status !== 'failed' && img.composition !== 'secret_part'"
                     size="sm"
                     variant="secondary"
@@ -1331,6 +1499,9 @@ const avatarInitial = computed<string>(() => {
       :available-backends="availableBackendOptions"
       :busy="playerRegenBusy"
       :civitai-lora-snapshot="playerRegenPayload.civitaiLoraSnapshot"
+      :source-asset-id="playerRegenPayload.sourceAssetId"
+      :default-denoise-strength="Number(get('系统.扩展.image.config.reference.defaultDenoiseStrength') ?? 0.65)"
+      :pre-activate-reference="playerRegenPayload.preActivateReference"
       @confirm="confirmPlayerRegenerate"
       @cancel="cancelPlayerRegenerate"
     />

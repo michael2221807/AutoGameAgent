@@ -251,7 +251,7 @@ async function exportSingleSave(_slot: SaveSlotMeta): Promise<void> {
     if (saveManager && sid) {
       await saveManager.saveGame(pid, sid, store.toSnapshot() as GameStateTree);
     }
-    const blob = await backupService.exportProfile(pid);
+    const blob = await backupService.exportProfile(pid, { includeReferenceAssets: includeReferenceAssets.value });
     const charName = store.characterName || pid;
     const safeName = String(charName).replace(/[\\/:*?"<>|]/g, '_');
     const today = new Date().toISOString().slice(0, 10);
@@ -371,6 +371,7 @@ const pendingImportInfo = ref<{
 
 // 仅全量导入时需要用户勾选确认（破坏性操作）
 const fullImportAcknowledged = ref(false);
+const includeReferenceAssets = ref(false);
 
 async function exportFullBackup(): Promise<void> {
   if (!backupService || isExportingBackup.value) return;
@@ -383,7 +384,7 @@ async function exportFullBackup(): Promise<void> {
     if (saveManager && pid && sid) {
       await saveManager.saveGame(pid, sid, store.toSnapshot() as GameStateTree);
     }
-    const blob = await backupService.exportAll();
+    const blob = await backupService.exportAll({ includeReferenceAssets: includeReferenceAssets.value });
     const today = new Date().toISOString().slice(0, 10);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -889,6 +890,10 @@ const showSettings = ref(false);
 
           <div class="backup-row">
             <p class="settings-title">完整备份</p>
+            <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--color-text-secondary);margin-bottom:4px;">
+              <input type="checkbox" v-model="includeReferenceAssets" style="accent-color:var(--color-sage-400)" />
+              包含参考素材图片
+            </label>
             <div class="backup-btns">
               <button class="btn btn--secondary btn--sm" :disabled="isExportingBackup" @click="exportFullBackup">
                 <span v-if="isExportingBackup" class="spinner" />

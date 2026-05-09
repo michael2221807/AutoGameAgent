@@ -672,6 +672,7 @@ export class GameOrchestrator {
           // P3 env-tags port (2026-04-19): forward env state so auto-gen scene
           // images reflect current weather/festival/environment (same plumbing
           // as ImagePanel.vue manual generation).
+          const sceneAnchors = this.subPipelines.imageService.collectSceneRoleAnchors();
           this.subPipelines.imageService.generateSceneImage({
             sceneDescription: ctx.parsedResponse.text.slice(0, 800),
             location,
@@ -681,6 +682,8 @@ export class GameOrchestrator {
             environment: paths ? stateManager.get<unknown>(paths.environmentTags) : undefined,
             backend: defaultBackend,
             compositionMode: 'auto',
+            presentNpcs: sceneAnchors.presentNpcs,
+            roleAnchors: sceneAnchors.roleAnchors.length > 0 ? sceneAnchors.roleAnchors : undefined,
           }).then(() => {
             eventBus.emit('ui:toast', { type: 'success', message: '场景图已生成', duration: 2000 });
           }).catch((err) => console.debug('[Orchestrator] Auto scene gen failed:', err));

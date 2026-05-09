@@ -115,6 +115,8 @@ export interface ImageTask {
   /** Image dimensions */
   width: number;
   height: number;
+  /** Secret-part sub-type (only for subjectType === 'secret_part') */
+  part?: SecretPartType;
   /** Result asset ID (populated on completion) */
   resultAssetId?: string;
   /** Error message (populated on failure) */
@@ -124,6 +126,12 @@ export interface ImageTask {
   /** Provider-specific metadata snapshot (e.g. Civitai LoRA config used) */
   providerMeta?: {
     civitai?: CivitaiLoraSnapshot;
+    reference?: {
+      mode: 'image_to_image';
+      sourceAssetId?: string;
+      denoiseStrength?: number;
+      provider: ImageBackendType;
+    };
   };
   /** Timestamps */
   createdAt: number;
@@ -150,6 +158,8 @@ export interface ImageAsset {
   backend: ImageBackendType;
   /** Generation timestamp */
   createdAt: number;
+  /** Asset origin — distinguishes generated images from uploaded references */
+  origin?: 'generated' | 'reference' | 'upload';
 }
 
 /**
@@ -242,3 +252,50 @@ export interface CivitaiLoraSnapshot {
   /** Post-parse merged networks object (NOT the raw JSON string from config) */
   additionalNetworks: Record<string, unknown>;
 }
+
+// ── Artist Preset types (promoted from ImagePanel.vue) ──
+
+export interface PngMeta {
+  source?: string;
+  originalPrompt?: string;
+  rawText?: string;
+  parsedParams?: Record<string, unknown>;
+  replicateParams?: boolean;
+  coverDataUrl?: string;
+}
+
+export interface ArtistPreset {
+  id: string;
+  name: string;
+  scope: 'npc' | 'scene';
+  artistString: string;
+  positive: string;
+  negative: string;
+  pngMeta?: PngMeta;
+}
+
+// ── Re-exports from reference-types and provider-capabilities ──
+
+export type {
+  ImageReferenceRole,
+  ImageReferenceSource,
+  ImageReferenceInput,
+  ImageGenerationMode,
+  ImageGenerationReferenceParams,
+  ImageUnderstandingRequest,
+  ImageUnderstandingTag,
+  ImageUnderstandingResult,
+  ReferenceLibraryEntry,
+} from './reference-types';
+
+export type {
+  ImageToImageProvider,
+  ImageUnderstandingProvider,
+  ImageProviderCapabilities,
+} from './provider-capabilities';
+
+export {
+  supportsImageToImage,
+  supportsImageUnderstanding,
+  PROVIDER_CAPABILITIES,
+} from './provider-capabilities';

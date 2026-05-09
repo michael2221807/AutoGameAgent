@@ -13,8 +13,11 @@
  * - V4/V4.5 models use structured `v4_prompt` + `characterPrompts`
  * - NAI weight syntax: `1.2::tag::` for emphasis, `{tag}` boost, `[tag]` dampen
  */
+// App doc: docs/user-guide/pages/game-image.md §参考重绘
 import { BaseImageProvider, IMAGE_GENERATE_TIMEOUT_MS } from './base';
 import type { ImageBackendType } from '../types';
+import type { ImageToImageProvider } from '../provider-capabilities';
+import type { ImageReferenceInput } from '../reference-types';
 import { unzipSync } from 'fflate';
 
 /** MRJH imageTasks.ts:79 — 默认NovelAI负面提示词 (verbatim) */
@@ -22,19 +25,18 @@ const DEFAULT_NEGATIVE = 'photorealistic, realistic, 3d, rendering, unreal engin
 
 const V4_MODEL_RE = /^nai-diffusion-4(?:-|$)/i;
 
-export class NovelAIImageProvider extends BaseImageProvider {
+export class NovelAIImageProvider extends BaseImageProvider implements ImageToImageProvider {
   readonly backend: ImageBackendType = 'novelai';
 
-  async generate(
+  private buildParameters(
     prompt: string,
     negative: string,
     width: number,
     height: number,
     options?: Record<string, unknown>,
-  ): Promise<Blob> {
+  ): { model: string; parameters: Record<string, unknown>; negativePrompt: string } {
     const model = this.model || 'nai-diffusion-4-5-full';
     const isV4 = V4_MODEL_RE.test(model);
-
     const seed = (options?.seed as number) ?? Math.floor(Math.random() * 4294967295);
     const steps = (options?.steps as number) ?? 28;
     const scale = (options?.cfgScale as number) ?? 5;
@@ -63,34 +65,26 @@ export class NovelAIImageProvider extends BaseImageProvider {
       noise_schedule: noiseSchedule,
     };
 
-    if (Number.isFinite(seed)) {
-      parameters.seed = seed;
-    }
+    if (Number.isFinite(seed)) parameters.seed = seed;
+    if (typeof options?.cfgRescale === 'number') parameters.cfg_rescale = options.cfgRescale;
 
     if (isV4) {
       parameters.v4_prompt = {
-        use_coords: false,
-        use_order: false,
+        use_coords: false, use_order: false,
         caption: { base_caption: prompt, char_captions: [] },
         legacy_uc: false,
       };
       parameters.v4_negative_prompt = {
-        use_coords: false,
-        use_order: false,
+        use_coords: false, use_order: false,
         caption: { base_caption: negativePrompt, char_captions: [] },
         legacy_uc: false,
       };
-
       const characterPrompts = options?.characterPrompts as Array<{
-        prompt: string;
-        uc: string;
-        center?: { x: number; y: number };
+        prompt: string; uc: string; center?: { x: number; y: number };
       }> | undefined;
-
       if (characterPrompts?.length) {
         parameters.v4_prompt = {
-          use_coords: false,
-          use_order: false,
+          use_coords: false, use_order: false,
           caption: {
             base_caption: prompt,
             char_captions: characterPrompts.map((cp) => ({
@@ -101,8 +95,7 @@ export class NovelAIImageProvider extends BaseImageProvider {
           legacy_uc: false,
         };
         parameters.v4_negative_prompt = {
-          use_coords: false,
-          use_order: false,
+          use_coords: false, use_order: false,
           caption: {
             base_caption: negativePrompt,
             char_captions: characterPrompts.map((cp) => ({
@@ -114,26 +107,21 @@ export class NovelAIImageProvider extends BaseImageProvider {
         };
       }
     } else {
-      if (negativePrompt) {
-        parameters.negative_prompt = negativePrompt;
-      }
+      if (negativePrompt) parameters.negative_prompt = negativePrompt;
     }
 
     if (sampler === 'k_euler_ancestral') {
       parameters.deliberate_euler_ancestral_bug = false;
-      parameters.prefer_brownian = true;
+      parameters.prefer_brownian = typeof options?.preferBrownian === 'boolean'
+        ? options.preferBrownian : true;
     }
 
-    const body = {
-      input: prompt,
-      model,
-      action: (options?.action as string) ?? 'generate',
-      parameters,
-    };
+    return { model, parameters, negativePrompt };
+  }
 
+  private async sendAndDecode(body: Record<string, unknown>): Promise<Blob> {
     const endpoint = this.endpoint.replace(/\/+$/, '');
     const url = `${endpoint}/ai/generate-image`;
-
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -143,13 +131,62 @@ export class NovelAIImageProvider extends BaseImageProvider {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(IMAGE_GENERATE_TIMEOUT_MS),
     });
-
     if (!response.ok) {
       const errText = await response.text().catch(() => `HTTP ${response.status}`);
       throw new Error(`[NovelAI] Image generation failed: ${response.status} — ${errText.slice(0, 200)}`);
     }
-
     return this.decodeZipResponse(response);
+  }
+
+  async generate(
+    prompt: string,
+    negative: string,
+    width: number,
+    height: number,
+    options?: Record<string, unknown>,
+  ): Promise<Blob> {
+    const { model, parameters } = this.buildParameters(prompt, negative, width, height, options);
+    return this.sendAndDecode({
+      input: prompt,
+      model,
+      action: (options?.action as string) ?? 'generate',
+      parameters,
+    });
+  }
+
+  async imageToImage(
+    prompt: string,
+    negative: string,
+    width: number,
+    height: number,
+    reference: ImageReferenceInput,
+    options?: Record<string, unknown>,
+  ): Promise<Blob> {
+    const { model, parameters } = this.buildParameters(prompt, negative, width, height, options);
+
+    const sourceDataUrl = reference.dataUrl ?? reference.url;
+    if (!sourceDataUrl) throw new Error('[NovelAI] 参考图缺少 dataUrl 或 url');
+    if (!sourceDataUrl.startsWith('data:')) {
+      throw new Error('[NovelAI] 参考图必须是 base64 data URL（不支持远程 URL）');
+    }
+    parameters.image = sourceDataUrl.replace(/^data:[^;]+;base64,/, '');
+    parameters.strength = reference.denoiseStrength ?? 0.55;
+    const noise = (typeof reference.providerMeta?.noise === 'number')
+      ? reference.providerMeta.noise : 0.1;
+    parameters.noise = noise;
+    if (noise > 0) {
+      parameters.extra_noise_seed = typeof parameters.seed === 'number'
+        ? parameters.seed
+        : Math.floor(Math.random() * 4294967295);
+    }
+    parameters.add_original_image = true;
+
+    return this.sendAndDecode({
+      input: prompt,
+      model,
+      action: 'img2img',
+      parameters,
+    });
   }
 
   async testConnection(): Promise<boolean> {

@@ -200,7 +200,7 @@ export class BackupService {
    *
    * @returns 包含 JSON 数据的 Blob（MIME: application/json）
    */
-  async exportAll(): Promise<Blob> {
+  async exportAll(options?: { includeReferenceAssets?: boolean }): Promise<Blob> {
     const root = this.profileManager.getRoot();
 
     /* ── 1. 角色档案元数据 ── */
@@ -251,8 +251,8 @@ export class BackupService {
     // 2026-04-14：遍历所有有 user 数据的 pack，导出每个的全量 customPresets
     const customPresets = await this.collectCustomPresets();
 
-    /* ── 8. 图片资产（已选用的头像/立绘/壁纸/秘档） ── */
-    const imageAssets = await this.collectSelectedImageAssets(saves);
+    /* ── 8. 图片资产（已选用的头像/立绘/壁纸/秘档 + opt-in 参考素材） ── */
+    const imageAssets = await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
 
     /* ── 组装备份包 ── */
     const bundle: BackupBundle = {
@@ -544,23 +544,26 @@ export class BackupService {
   }
 
   /**
-   * 从所有存档的状态树中收集"已选用"的图片 asset ID，
+   * 从所有存档的状态树中收集全部被引用的图片 asset ID，
    * 然后从 ImageAssetCache 导出对应的 blob。
    *
-   * 已选用的定义：
+   * 包含：
    * - 玩家/NPC 的 已选头像图片ID、已选立绘图片ID、已选背景图片ID
+   * - 生图历史中每条记录的 id（未被选用但仍在档案中的图片）
+   * - 最近生图结果
    * - 香闺秘档中各 part 的 assetId
-   * - 场景壁纸 当前壁纸图片ID
+   * - 场景壁纸 当前壁纸图片ID + 场景生图历史
    */
   private async collectSelectedImageAssets(
     saves: Record<string, unknown>,
+    includeReferenceAssets = false,
   ): Promise<Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }>> {
     if (!this.imageAssetCache) return [];
     const assetIds = new Set<string>();
 
     for (const saveData of Object.values(saves)) {
       if (!saveData || typeof saveData !== 'object') continue;
-      collectAssetIdsFromTree(saveData as Record<string, unknown>, assetIds);
+      collectAssetIdsFromTree(saveData as Record<string, unknown>, assetIds, includeReferenceAssets);
     }
 
     if (assetIds.size === 0) return [];
@@ -684,7 +687,7 @@ export class BackupService {
    * @returns 仅包含该角色数据的 JSON Blob
    * @throws 角色不存在时抛出
    */
-  async exportProfile(profileId: string): Promise<Blob> {
+  async exportProfile(profileId: string, options?: { includeReferenceAssets?: boolean }): Promise<Blob> {
     const profile = this.profileManager.getRoot().profiles[profileId];
     if (!profile) {
       throw new Error(`Profile "${profileId}" does not exist`);
@@ -711,12 +714,13 @@ export class BackupService {
       }
     }
 
+    const imageAssets = await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
+
     const bundle: BackupBundle = {
       version: BACKUP_FORMAT_VERSION,
       exportedAt: new Date().toISOString(),
       engineVersion: ENGINE_VERSION,
       bundleType: 'profile',
-      // 单角色备份不指定 activeProfile —— 导入时仅合并该角色
       activeProfile: null,
       profiles,
       saves,
@@ -724,6 +728,7 @@ export class BackupService {
       configs: {},
       prompts: {},
       engineSettings: {},
+      imageAssets,
     };
 
     return new Blob([JSON.stringify(bundle, null, 2)], {
@@ -968,15 +973,16 @@ function extractErrorMessage(err: unknown): string {
 }
 
 /**
- * 从 GameStateTree 中提取所有"已选用"的图片 asset ID。
+ * 从 GameStateTree 中提取所有被引用的图片 asset ID。
  *
  * 扫描路径：
  * - 角色.图片档案.已选头像图片ID / 已选立绘图片ID / 已选背景图片ID
- * - 社交.关系[].图片档案.已选头像图片ID / 已选立绘图片ID / 已选背景图片ID
+ * - 角色.图片档案.生图历史[].id + 最近生图结果
+ * - 社交.关系[].图片档案 — 同上
  * - 社交.关系[].图片档案.香闺秘档.{胸部|小穴|屁穴}.assetId
- * - 系统.扩展.image.sceneArchive.当前壁纸图片ID
+ * - 系统.扩展.image.sceneArchive.当前壁纸图片ID + 生图历史[].id
  */
-function collectAssetIdsFromTree(tree: Record<string, unknown>, ids: Set<string>): void {
+function collectAssetIdsFromTree(tree: Record<string, unknown>, ids: Set<string>, includeReferenceAssets = false): void {
   const addIfValid = (val: unknown) => {
     if (typeof val === 'string' && val.trim()) ids.add(val.trim());
   };
@@ -987,6 +993,14 @@ function collectAssetIdsFromTree(tree: Record<string, unknown>, ids: Set<string>
     if (!archive || typeof archive !== 'object' || Array.isArray(archive)) return;
     const a = archive as Record<string, unknown>;
     for (const f of SELECTION_FIELDS) addIfValid(a[f]);
+    addIfValid(a['最近生图结果']);
+    // 生图历史 — every entry's id is an asset reference
+    const history = a['生图历史'];
+    if (Array.isArray(history)) {
+      for (const entry of history) {
+        if (entry && typeof entry === 'object') addIfValid((entry as Record<string, unknown>).id);
+      }
+    }
     // 香闺秘档
     const secret = a['香闺秘档'];
     if (secret && typeof secret === 'object') {
@@ -1009,12 +1023,31 @@ function collectAssetIdsFromTree(tree: Record<string, unknown>, ids: Set<string>
     }
   }
 
-  // Scene wallpaper
+  // Scene archive
   const system = tree['系统'] as Record<string, unknown> | undefined;
   const ext = system?.['扩展'] as Record<string, unknown> | undefined;
   const image = ext?.['image'] as Record<string, unknown> | undefined;
   const sceneArchive = image?.['sceneArchive'] as Record<string, unknown> | undefined;
-  if (sceneArchive) addIfValid(sceneArchive['当前壁纸图片ID']);
+  if (sceneArchive) {
+    addIfValid(sceneArchive['当前壁纸图片ID']);
+    addIfValid(sceneArchive['最近生图结果']);
+    const sceneHistory = sceneArchive['生图历史'];
+    if (Array.isArray(sceneHistory)) {
+      for (const entry of sceneHistory) {
+        if (entry && typeof entry === 'object') addIfValid((entry as Record<string, unknown>).id);
+      }
+    }
+  }
+
+  // Reference library assets (opt-in — large blobs, user chooses at export time)
+  if (includeReferenceAssets) {
+    const referenceLib = image?.['referenceLibrary'];
+    if (Array.isArray(referenceLib)) {
+      for (const entry of referenceLib) {
+        if (entry && typeof entry === 'object') addIfValid((entry as Record<string, unknown>).assetId);
+      }
+    }
+  }
 }
 
 /**

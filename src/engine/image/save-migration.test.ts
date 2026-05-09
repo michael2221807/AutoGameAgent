@@ -64,7 +64,9 @@ describe('migrateImageState', () => {
       enabled: true,
       config: {
         civitai: { allowMatureContent: true, scheduler: 'DDIM', steps: 30, cfgScale: 5, seed: 42, clipSkip: 1, outputFormat: 'jpeg', additionalNetworksJson: '{}', controlNetsJson: '', loras: [] },
+        reference: { enabled: true },
       },
+      referenceLibrary: [],
     }, 'system');
     sm.set.mockClear();
 
@@ -90,8 +92,12 @@ describe('migrateImageState', () => {
     expect(novelai?.steps).toBe(28);
   });
 
-  it('does not run full init when image root already exists', () => {
-    sm.set('系统.扩展.image', { enabled: false, config: { civitai: { scheduler: 'Euler', loras: [] } } }, 'system');
+  it('does not run full init when image root already exists with all fields', () => {
+    sm.set('系统.扩展.image', {
+      enabled: false,
+      config: { civitai: { scheduler: 'Euler', loras: [] }, reference: { enabled: true } },
+      referenceLibrary: [],
+    }, 'system');
     sm.set.mockClear();
 
     const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
@@ -138,7 +144,9 @@ describe('migrateImageState', () => {
       enabled: true,
       config: {
         civitai: { scheduler: 'Euler', loras: existingLoras },
+        reference: { enabled: true },
       },
+      referenceLibrary: [],
     }, 'system');
     sm.set.mockClear();
 
@@ -147,6 +155,69 @@ describe('migrateImageState', () => {
 
     const loras = sm.get('系统.扩展.image.config.civitai.loras') as unknown[];
     expect(loras).toEqual(existingLoras);
+  });
+
+  it('adds reference config to existing save without it', () => {
+    sm.set('系统.扩展.image', {
+      enabled: true,
+      config: { civitai: { scheduler: 'Euler', loras: [] } },
+    }, 'system');
+    sm.set.mockClear();
+
+    const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+    expect(result).toBe(true);
+
+    const reference = sm.get('系统.扩展.image.config.reference') as Record<string, unknown> | undefined;
+    expect(reference).toBeDefined();
+    expect(reference?.enabled).toBe(true);
+    expect(reference?.defaultDenoiseStrength).toBe(0.65);
+    const civitaiRef = reference?.civitai as Record<string, unknown> | undefined;
+    expect(civitaiRef?.wdThreshold).toBe(0.35);
+  });
+
+  it('adds referenceLibrary to existing save without it', () => {
+    sm.set('系统.扩展.image', {
+      enabled: true,
+      config: { civitai: { scheduler: 'Euler', loras: [] }, reference: { enabled: true } },
+    }, 'system');
+    sm.set.mockClear();
+
+    const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+    expect(result).toBe(true);
+
+    const refLib = sm.get('系统.扩展.image.referenceLibrary');
+    expect(refLib).toEqual([]);
+  });
+
+  it('does not overwrite existing reference config', () => {
+    sm.set('系统.扩展.image', {
+      enabled: true,
+      config: {
+        civitai: { scheduler: 'Euler', loras: [] },
+        reference: { enabled: false, defaultDenoiseStrength: 0.5 },
+      },
+      referenceLibrary: [{ id: 'existing' }],
+    }, 'system');
+    sm.set.mockClear();
+
+    const result = migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+    expect(result).toBe(false);
+
+    const reference = sm.get('系统.扩展.image.config.reference') as Record<string, unknown> | undefined;
+    expect(reference?.enabled).toBe(false);
+    expect(reference?.defaultDenoiseStrength).toBe(0.5);
+    const refLib = sm.get('系统.扩展.image.referenceLibrary') as unknown[];
+    expect(refLib).toHaveLength(1);
+  });
+
+  it('full init includes reference config and referenceLibrary', () => {
+    migrateImageState(sm as unknown as import('../core/state-manager').StateManager);
+
+    const reference = sm.get('系统.扩展.image.config.reference') as Record<string, unknown> | undefined;
+    expect(reference).toBeDefined();
+    expect(reference?.enabled).toBe(true);
+    const refLib = sm.get('系统.扩展.image.referenceLibrary');
+    expect(refLib).toEqual([]);
   });
 
   it('full init includes loras[] in civitai defaults', () => {

@@ -67,6 +67,7 @@ const expandedProfiles = ref<Set<string>>(new Set());
 
 /** Global loading state for async operations */
 const isLoading = ref(false);
+const mgmtIncludeRefAssets = ref(false);
 
 /** Error message */
 const errorMessage = ref<string | null>(null);
@@ -431,7 +432,7 @@ async function exportFullBackup(): Promise<void> {
     if (saveManager && pid && sid) {
       await saveManager.saveGame(pid, sid, engineState.toSnapshot() as import('@/engine/types').GameStateTree);
     }
-    const blob = await backupService.exportAll();
+    const blob = await backupService.exportAll({ includeReferenceAssets: mgmtIncludeRefAssets.value });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -545,6 +546,10 @@ function triggerImportRawStateTree(): void {
       </button>
       <h1 class="mgmt-title">存档管理</h1>
       <div class="header-actions">
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:var(--color-text-secondary);">
+          <input type="checkbox" v-model="mgmtIncludeRefAssets" style="accent-color:var(--color-sage-400)" />
+          含参考素材
+        </label>
         <button
           class="btn btn-small btn-outline"
           type="button"

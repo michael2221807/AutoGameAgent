@@ -18,6 +18,7 @@ const {
   compositeSlotKey,
   parseCompositeKey,
   hasVectorContent,
+  collectAssetIdsFromTree,
   BACKUP_FORMAT_VERSION,
 } = _testExports;
 
@@ -310,5 +311,50 @@ describe('hasVectorContent', () => {
         entityVectors: { n: [2] },
       }),
     ).toBe(true);
+  });
+});
+
+// ─── collectAssetIdsFromTree ─────────────────────────────────
+
+describe('collectAssetIdsFromTree', () => {
+  it('collects standard asset IDs from NPC archives', () => {
+    const ids = new Set<string>();
+    collectAssetIdsFromTree({
+      社交: {
+        关系: [
+          { 图片档案: { 已选头像图片ID: 'avatar1', 已选立绘图片ID: 'portrait1', 已选背景图片ID: '', 生图历史: [] } },
+        ],
+      },
+    } as Record<string, unknown>, ids);
+    expect(ids.has('avatar1')).toBe(true);
+    expect(ids.has('portrait1')).toBe(true);
+    expect(ids.size).toBe(2);
+  });
+
+  it('does not collect referenceLibrary assets when includeReferenceAssets=false', () => {
+    const ids = new Set<string>();
+    collectAssetIdsFromTree({
+      系统: { 扩展: { image: { referenceLibrary: [{ assetId: 'ref1' }, { assetId: 'ref2' }] } } },
+    } as Record<string, unknown>, ids, false);
+    expect(ids.has('ref1')).toBe(false);
+    expect(ids.has('ref2')).toBe(false);
+  });
+
+  it('collects referenceLibrary assets when includeReferenceAssets=true', () => {
+    const ids = new Set<string>();
+    collectAssetIdsFromTree({
+      系统: { 扩展: { image: { referenceLibrary: [{ assetId: 'ref1' }, { assetId: 'ref2' }] } } },
+    } as Record<string, unknown>, ids, true);
+    expect(ids.has('ref1')).toBe(true);
+    expect(ids.has('ref2')).toBe(true);
+  });
+
+  it('ignores empty assetId in referenceLibrary', () => {
+    const ids = new Set<string>();
+    collectAssetIdsFromTree({
+      系统: { 扩展: { image: { referenceLibrary: [{ assetId: '' }, { assetId: 'valid' }] } } },
+    } as Record<string, unknown>, ids, true);
+    expect(ids.has('')).toBe(false);
+    expect(ids.has('valid')).toBe(true);
   });
 });

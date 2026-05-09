@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CivitaiImageProvider, CivitaiBlockedError } from './civitai';
+import { supportsImageToImage, supportsImageUnderstanding } from '../provider-capabilities';
+import type { ImageReferenceInput, ImageUnderstandingRequest } from '../reference-types';
 
 function makeProvider(model = 'urn:air:sdxl:checkpoint:civitai:101055@128078'): CivitaiImageProvider {
   return new CivitaiImageProvider('https://orchestration.civitai.com', 'test-key', model);
@@ -24,9 +26,46 @@ function mockFetchSequence(...responses: Array<{ status: number; body?: unknown;
   return calls;
 }
 
+function makeReference(overrides?: Partial<ImageReferenceInput>): ImageReferenceInput {
+  return {
+    id: 'ref_test',
+    role: 'source',
+    source: 'data_url',
+    dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+    denoiseStrength: 0.65,
+    ...overrides,
+  };
+}
+
+function makeUnderstandingRequest(task: 'tags' | 'caption' | 'both', overrides?: Partial<ImageUnderstandingRequest>): ImageUnderstandingRequest {
+  return {
+    backend: 'civitai',
+    image: makeReference(),
+    task,
+    threshold: 0.35,
+    temperature: 0.2,
+    maxNewTokens: 160,
+    ...overrides,
+  };
+}
+
 beforeEach(() => { vi.restoreAllMocks(); });
 
 describe('CivitaiImageProvider', () => {
+  // ── Capability type guards ──
+
+  describe('capability interfaces', () => {
+    it('supportsImageToImage returns true', () => {
+      expect(supportsImageToImage(makeProvider())).toBe(true);
+    });
+
+    it('supportsImageUnderstanding returns true', () => {
+      expect(supportsImageUnderstanding(makeProvider())).toBe(true);
+    });
+  });
+
+  // ── generate() — all existing tests preserved ──
+
   describe('generate()', () => {
     it('returns blob on successful generation', async () => {
       const imageBlob = new Blob(['png-data'], { type: 'image/png' });
@@ -138,13 +177,13 @@ describe('CivitaiImageProvider', () => {
       }
     });
 
-    it('throws when image is not available', async () => {
+    it('throws when image is not available and no job ID for polling', async () => {
       mockFetchSequence(
         { status: 200, body: { images: [{ id: 'x.jpeg', available: false }] } },
       );
 
       await expect(makeProvider().generate('test', '', 1024, 1024))
-        .rejects.toThrow('available=false');
+        .rejects.toThrow('无法获取任务 ID');
     });
 
     it('throws when response has no images', async () => {
@@ -260,6 +299,268 @@ describe('CivitaiImageProvider', () => {
         .rejects.toThrow('下载图片失败: 403');
     });
   });
+
+  // ── imageToImage() ──
+
+  describe('imageToImage()', () => {
+    it('sends sourceImage and sourceImageDenoiseStrenght (typo) in body', async () => {
+      const calls = mockFetchSequence(
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'https://example.com/img', width: 1024, height: 1024 }] } },
+        { status: 200 },
+      );
+
+      const ref = makeReference({ denoiseStrength: 0.7 });
+      await makeProvider().imageToImage('portrait', 'bad', 1024, 1024, ref);
+
+      const body = JSON.parse(calls[0].init?.body as string);
+      expect(body.sourceImage).toBe('data:image/png;base64,iVBORw0KGgo=');
+      expect(body.sourceImageDenoiseStrenght).toBe(0.7);
+      expect(body.prompt).toBe('portrait');
+      expect(body.negativePrompt).toBe('bad');
+    });
+
+    it('uses same textToImage endpoint', async () => {
+      const calls = mockFetchSequence(
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'https://example.com/img', width: 1024, height: 1024 }] } },
+        { status: 200 },
+      );
+
+      await makeProvider().imageToImage('test', '', 1024, 1024, makeReference());
+      expect(calls[0].url).toContain('/v2/consumer/recipes/textToImage');
+    });
+
+    it('includes allowMatureContent query', async () => {
+      const calls = mockFetchSequence(
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'https://example.com/img', width: 1024, height: 1024 }] } },
+        { status: 200 },
+      );
+
+      await makeProvider().imageToImage('test', '', 1024, 1024, makeReference(), { allowMatureContent: true });
+      expect(calls[0].url).toContain('allowMatureContent=true');
+    });
+
+    it('defaults denoiseStrength to 0.65', async () => {
+      const calls = mockFetchSequence(
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'https://example.com/img', width: 1024, height: 1024 }] } },
+        { status: 200 },
+      );
+
+      await makeProvider().imageToImage('test', '', 1024, 1024, makeReference({ denoiseStrength: undefined }));
+      const body = JSON.parse(calls[0].init?.body as string);
+      expect(body.sourceImageDenoiseStrenght).toBe(0.65);
+    });
+
+    it('clamps denoiseStrength to 0-1', async () => {
+      const calls = mockFetchSequence(
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'https://example.com/img', width: 1024, height: 1024 }] } },
+        { status: 200 },
+      );
+
+      await makeProvider().imageToImage('test', '', 1024, 1024, makeReference({ denoiseStrength: 1.5 }));
+      const body = JSON.parse(calls[0].init?.body as string);
+      expect(body.sourceImageDenoiseStrenght).toBe(1);
+    });
+
+    it('throws when reference has no dataUrl or url', async () => {
+      const ref = makeReference({ dataUrl: undefined, url: undefined });
+      await expect(makeProvider().imageToImage('test', '', 1024, 1024, ref))
+        .rejects.toThrow('参考图缺少 dataUrl 或 url');
+    });
+
+    it('falls back to url when dataUrl is absent', async () => {
+      const calls = mockFetchSequence(
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'https://example.com/img', width: 1024, height: 1024 }] } },
+        { status: 200 },
+      );
+
+      const ref = makeReference({ dataUrl: undefined, url: 'https://example.com/source.png' });
+      await makeProvider().imageToImage('test', '', 1024, 1024, ref);
+      const body = JSON.parse(calls[0].init?.body as string);
+      expect(body.sourceImage).toBe('https://example.com/source.png');
+    });
+
+    it('preserves LoRA additionalNetworks alongside sourceImage', async () => {
+      const networks = { 'urn:air:sdxl:lora:civitai:123@456': { type: 'Lora', strength: 0.8 } };
+      const calls = mockFetchSequence(
+        { status: 200, body: { images: [{ id: 'x.jpeg', available: true, url: 'https://example.com/img', width: 1024, height: 1024 }] } },
+        { status: 200 },
+      );
+
+      await makeProvider().imageToImage('test', '', 1024, 1024, makeReference(), {
+        additionalNetworksJson: JSON.stringify(networks),
+      });
+      const body = JSON.parse(calls[0].init?.body as string);
+      expect(body.additionalNetworks).toEqual(networks);
+      expect(body.sourceImage).toBeDefined();
+    });
+  });
+
+  // ── describeImage() ──
+
+  // imageUpload mock: describeImage now uploads data URLs first to get a hosted URL
+  const uploadOk = { status: 200, body: { blob: { url: 'https://cdn.civitai.com/test.png', id: 'blob_test', available: true } } };
+
+  describe('describeImage()', () => {
+    it('calls wdTagging for task=tags', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { tags: { '1girl': 0.95, 'solo': 0.9, 'portrait': 0.8 }, rating: { general: 0.8 } } },
+      );
+
+      const result = await makeProvider().describeImage(makeUnderstandingRequest('tags'));
+
+      expect(calls[0].url).toContain('/v2/consumer/recipes/imageUpload');
+      expect(calls[1].url).toContain('/v2/consumer/recipes/wdTagging');
+      expect(result.tags).toHaveLength(3);
+      expect(result.tags![0].text).toBe('1girl');
+      expect(result.tags![0].confidence).toBe(0.95);
+      expect(result.positiveDraft).toContain('1girl');
+      expect(result.caption).toBeUndefined();
+    });
+
+    it('calls mediaCaptioning recipe for task=caption', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { caption: 'A girl with long hair standing in a garden' } },
+      );
+
+      const result = await makeProvider().describeImage(makeUnderstandingRequest('caption'));
+
+      expect(calls[0].url).toContain('/v2/consumer/recipes/imageUpload');
+      expect(calls[1].url).toContain('/v2/consumer/recipes/mediaCaptioning');
+      expect(result.caption).toBe('A girl with long hair standing in a garden');
+      expect(result.positiveDraft).toBe('A girl with long hair standing in a garden');
+      expect(result.tags).toBeUndefined();
+    });
+
+    it('calls both for task=both, tags then caption', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { tags: { '1girl': 0.95, 'garden': 0.7 }, rating: null } },
+        { status: 200, body: { caption: 'A girl in a garden' } },
+      );
+
+      const result = await makeProvider().describeImage(makeUnderstandingRequest('both'));
+
+      expect(calls).toHaveLength(3);
+      expect(calls[0].url).toContain('/v2/consumer/recipes/imageUpload');
+      expect(calls[1].url).toContain('/v2/consumer/recipes/wdTagging');
+      expect(calls[2].url).toContain('/v2/consumer/recipes/mediaCaptioning');
+      expect(result.tags).toHaveLength(2);
+      expect(result.caption).toBe('A girl in a garden');
+      expect(result.positiveDraft).toContain('1girl');
+      expect(result.positiveDraft).toContain('A girl in a garden');
+    });
+
+    it('wdTagging URL includes allowMatureContent query', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { tags: { 'test': 0.5 } } },
+      );
+
+      await makeProvider().describeImage(
+        makeUnderstandingRequest('tags'),
+        { allowMatureContent: true },
+      );
+
+      expect(calls[0].url).toContain('allowMatureContent=true');
+      expect(calls[1].url).toContain('allowMatureContent=true');
+    });
+
+    it('mediaCaptioning URL includes allowMatureContent query', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { caption: 'test' } },
+      );
+
+      await makeProvider().describeImage(
+        makeUnderstandingRequest('caption'),
+        { allowMatureContent: true },
+      );
+
+      expect(calls[0].url).toContain('allowMatureContent=true');
+      expect(calls[1].url).toContain('allowMatureContent=true');
+    });
+
+    it('passes threshold to wdTagging body', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { tags: {} } },
+      );
+
+      await makeProvider().describeImage(makeUnderstandingRequest('tags', { threshold: 0.5 }));
+      const body = JSON.parse(calls[1].init?.body as string);
+      expect(body.threshold).toBe(0.5);
+    });
+
+    it('passes temperature and maxNewTokens to captioning body', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { caption: 'test' } },
+      );
+
+      await makeProvider().describeImage(makeUnderstandingRequest('caption', {
+        temperature: 0.8,
+        maxNewTokens: 200,
+      }));
+      const body = JSON.parse(calls[1].init?.body as string);
+      expect(body.temperature).toBe(0.8);
+      expect(body.maxNewTokens).toBe(200);
+    });
+
+    it('uploads data URL then sends hosted URL as mediaUrl', async () => {
+      const calls = mockFetchSequence(
+        uploadOk,
+        { status: 200, body: { tags: { 'test': 0.5 } } },
+      );
+
+      await makeProvider().describeImage(makeUnderstandingRequest('tags'));
+      expect(calls[0].url).toContain('/v2/consumer/recipes/imageUpload');
+      const tagBody = JSON.parse(calls[1].init?.body as string);
+      expect(tagBody.mediaUrl).toBe('https://cdn.civitai.com/test.png');
+    });
+
+    it('throws when reference has no dataUrl or url', async () => {
+      const req = makeUnderstandingRequest('tags', {
+        image: makeReference({ dataUrl: undefined, url: undefined }),
+      });
+      await expect(makeProvider().describeImage(req))
+        .rejects.toThrow('提炼图片缺少 dataUrl 或 url');
+    });
+
+    it('returns empty positiveDraft when no tags found', async () => {
+      mockFetchSequence(uploadOk, { status: 200, body: { tags: {} } });
+
+      const result = await makeProvider().describeImage(makeUnderstandingRequest('tags'));
+      expect(result.positiveDraft).toBe('');
+      expect(result.tags).toBeUndefined();
+    });
+
+    it('throws on wdTagging HTTP error', async () => {
+      mockFetchSequence(uploadOk, { status: 500, text: 'Internal error' });
+
+      await expect(makeProvider().describeImage(makeUnderstandingRequest('tags')))
+        .rejects.toThrow(/WD Tagging 失败.*500/);
+    });
+
+    it('throws on mediaCaptioning HTTP error', async () => {
+      mockFetchSequence(uploadOk, { status: 402, text: 'Insufficient Buzz' });
+
+      await expect(makeProvider().describeImage(makeUnderstandingRequest('caption')))
+        .rejects.toThrow(/Media Captioning 失败.*402/);
+    });
+
+    it('sets provider to civitai in result', async () => {
+      mockFetchSequence(uploadOk, { status: 200, body: { caption: 'test' } });
+
+      const result = await makeProvider().describeImage(makeUnderstandingRequest('caption'));
+      expect(result.provider).toBe('civitai');
+      expect(result.task).toBe('caption');
+      expect(result.createdAt).toBeGreaterThan(0);
+    });
+  });
+
+  // ── testConnection() — existing tests preserved ──
 
   describe('testConnection()', () => {
     it('returns true on 200', async () => {

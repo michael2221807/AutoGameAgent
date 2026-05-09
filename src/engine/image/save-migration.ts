@@ -50,6 +50,27 @@ const DEFAULT_IMAGE_STATE = {
       controlNetsJson: '',
       loras: [] as CivitaiLoraShelfItem[],
     },
+    reference: {
+      enabled: true,
+      persistUploadedReferences: true,
+      maxUploadBytes: 10 * 1024 * 1024,
+      defaultDenoiseStrength: 0.65,
+      preserveSourceDimensions: false,
+      civitai: {
+        imageToImageEnabled: true,
+        understandingEnabled: true,
+        wdTaggingModel: 'wd14-vit.v1',
+        wdThreshold: 0.35,
+        captionTemperature: 0.2,
+        captionMaxNewTokens: 160,
+      },
+      novelai: {
+        imageToImageEnabled: true,
+        validationStatus: 'validated' as const,
+        defaultStrength: 0.55,
+        defaultNoise: 0.1,
+      },
+    },
     transformer: {
       independentEnabled: false,
       endpoint: '',
@@ -90,6 +111,7 @@ const DEFAULT_IMAGE_STATE = {
     sceneEnabled: false,
     judgeEnabled: false,
   },
+  referenceLibrary: [],
   playerImages: [],
   playerAnchor: null,
   sceneArchive: {
@@ -121,6 +143,22 @@ export function migrateImageState(stateManager: StateManager): boolean {
       && stateManager.get<unknown>(lorasPath) == null) {
     stateManager.set(lorasPath, [], 'system');
     console.debug('[ImageMigration] Added loras[] to existing civitai config');
+    migrated = true;
+  }
+
+  // Field-level: add reference config if missing
+  const referencePath = `${IMAGE_ROOT_PATH}.config.reference`;
+  if (stateManager.get<unknown>(referencePath) == null) {
+    stateManager.set(referencePath, DEFAULT_IMAGE_STATE.config.reference, 'system');
+    console.debug('[ImageMigration] Added reference config defaults to existing save');
+    migrated = true;
+  }
+
+  // Field-level: add referenceLibrary if missing
+  const refLibPath = `${IMAGE_ROOT_PATH}.referenceLibrary`;
+  if (stateManager.get<unknown>(refLibPath) == null) {
+    stateManager.set(refLibPath, [], 'system');
+    console.debug('[ImageMigration] Added referenceLibrary[] to existing save');
     migrated = true;
   }
 
