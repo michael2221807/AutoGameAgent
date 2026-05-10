@@ -724,6 +724,7 @@ onMounted(() => {
   loadCotSettings();
   loadPresenceEnabled();
   loadBodyPolish();
+  loadLowLoadSettings();
   loadImageGen();
   // Sync state-tree toggles → aga_feature_toggles so API panel can read one source
   featureToggles.value.cot = cotSettings.value.enabled;
@@ -879,6 +880,49 @@ function toggleBodyPolish(): void {
   saveFeatureToggles();
   saveBodyPolishToLocalStorage();
   eventBus.emit('engine:request-save');
+}
+
+const lowLoadEnabled = ref(false);
+const lowLoadMaxRequests = ref(3);
+const AI_SETTINGS_KEY_SETTINGS = 'aga_ai_settings';
+
+function loadLowLoadSettings(): void {
+  try {
+    const raw = localStorage.getItem(AI_SETTINGS_KEY_SETTINGS);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    lowLoadEnabled.value = parsed.lowLoadMode === true;
+    if (typeof parsed.lowLoadMaxRequests === 'number') {
+      lowLoadMaxRequests.value = Math.max(1, Math.min(10, parsed.lowLoadMaxRequests));
+    }
+  } catch { /* ignore */ }
+}
+
+function saveLowLoadSettings(): void {
+  try {
+    const raw = localStorage.getItem(AI_SETTINGS_KEY_SETTINGS);
+    const existing = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    existing.lowLoadMode = lowLoadEnabled.value;
+    existing.lowLoadMaxRequests = lowLoadMaxRequests.value;
+    localStorage.setItem(AI_SETTINGS_KEY_SETTINGS, JSON.stringify(existing));
+    eventBus.emit('ai:rate-limiter-config', {
+      enabled: lowLoadEnabled.value,
+      maxRequests: lowLoadMaxRequests.value,
+    });
+  } catch { /* ignore */ }
+}
+
+function toggleLowLoad(): void {
+  lowLoadEnabled.value = !lowLoadEnabled.value;
+  saveLowLoadSettings();
+}
+
+function updateLowLoadMaxRequests(val: string): void {
+  const n = parseInt(val, 10);
+  if (isFinite(n) && n >= 1 && n <= 10) {
+    lowLoadMaxRequests.value = n;
+    saveLowLoadSettings();
+  }
 }
 
 const imageGenEnabled = ref(false);
@@ -1149,6 +1193,35 @@ onBeforeUnmount(() => {
         </div>
         <AgaToggle :model-value="featureToggles.text_optimization" @update:model-value="toggleFeature('text_optimization')" />
       </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">低负荷模式</span>
+          <span class="setting-desc">
+            限制每分钟发送的 API 请求数量。开启后超出配额的请求会排队等待，
+            避免触发 API 服务商的频率限制导致响应被截断。
+          </span>
+        </div>
+        <AgaToggle :model-value="lowLoadEnabled" @update:model-value="toggleLowLoad" />
+      </div>
+
+      <template v-if="lowLoadEnabled">
+        <div class="setting-row setting-row--indented">
+          <div class="setting-info">
+            <span class="setting-label">每分钟最大请求数</span>
+          </div>
+          <input
+            type="number"
+            class="setting-number-input"
+            :value="lowLoadMaxRequests"
+            min="1"
+            max="10"
+            step="1"
+            style="width: 70px"
+            @change="updateLowLoadMaxRequests(($event.target as HTMLInputElement).value)"
+          />
+        </div>
+      </template>
 
       <div class="setting-subsection-header">世界与记忆</div>
 

@@ -19,6 +19,8 @@ import { API_TIMEOUT_MS } from './types';
 import type { BaseProvider } from './providers/base-provider';
 import { OpenAIProvider } from './providers/openai-provider';
 import { ClaudeProvider } from './providers/claude-provider';
+import { RateLimiter } from './rate-limiter';
+import type { RateLimiterConfig } from './rate-limiter';
 import { GeminiProvider } from './providers/gemini-provider';
 import { eventBus } from '../core/event-bus';
 
@@ -33,6 +35,8 @@ export class AIService {
   private isAborted = false;
   /** 最大重试次数（0 = 不重试） */
   maxRetries = 1;
+  /** Low-load mode rate limiter — throttles LLM generate calls */
+  private rateLimiter = new RateLimiter();
 
   // ─── 配置管理 ───
 
@@ -126,6 +130,10 @@ export class AIService {
     );
   }
 
+  configureRateLimiter(opts: Partial<RateLimiterConfig>): void {
+    this.rateLimiter.configure(opts);
+  }
+
   /** 取消当前请求（包括重试中的） */
   cancel(): void {
     this.isAborted = true;
@@ -143,6 +151,8 @@ export class AIService {
 
   /** 实际发送请求 */
   private async doGenerate(options: GenerateOptions): Promise<string> {
+    await this.rateLimiter.acquire(options.signal);
+
     const config = this.getConfigForUsage(options.usageType ?? 'main');
     if (!config) throw new Error('未配置可用的 API');
 
@@ -211,6 +221,7 @@ export class AIService {
         // 取消信号 → 立即停止，不重试
         if (
           this.isAborted ||
+          (lastError instanceof DOMException && lastError.name === 'AbortError') ||
           lastError.message?.includes('取消') ||
           lastError.message?.includes('abort')
         ) {

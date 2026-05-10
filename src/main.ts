@@ -138,7 +138,25 @@ async function bootstrap(): Promise<void> {
     if (typeof savedAISettings.maxRetries === 'number') {
       aiService.maxRetries = savedAISettings.maxRetries;
     }
+    if (savedAISettings.lowLoadMode === true) {
+      aiService.configureRateLimiter({
+        enabled: true,
+        maxRequests: typeof savedAISettings.lowLoadMaxRequests === 'number'
+          ? savedAISettings.lowLoadMaxRequests : 3,
+        windowMs: 60_000,
+      });
+    }
   } catch { /* localStorage 不可用时静默忽略 */ }
+
+  // ── Low-load mode: SettingsPanel emits event → sync to aiService ──
+  eventBus.on<{ enabled: boolean; maxRequests: number }>('ai:rate-limiter-config', (payload) => {
+    if (!payload) return;
+    aiService.configureRateLimiter({
+      enabled: payload.enabled,
+      maxRequests: payload.maxRequests,
+      windowMs: 60_000,
+    });
+  });
 
   // ── #9: 响应式同步 API 配置变更到 AIService ──
   // 用户在 APIPanel 修改配置后，store 更新，watch 立即同步到 AIService 实例，
