@@ -253,13 +253,14 @@ export class FieldRepairPipeline {
     attempt: number,
   ): Promise<CombinedStepResult> {
     const chatHistory = this.loadChatHistory();
+    const hasChatHistory = chatHistory.length > 0;
 
     let baseMessages: AIMessage[];
     let messageSources: string[];
     let variables: Record<string, string> = {};
 
     if (fieldReport) {
-      variables = this.buildVariables(fieldReport);
+      variables = this.buildVariables(fieldReport, hasChatHistory);
       const flow = this.gamePack.promptFlows['fieldRepair'];
       if (flow) {
         const assembled = this.promptAssembler.assemble(flow, variables, chatHistory);
@@ -267,11 +268,11 @@ export class FieldRepairPipeline {
         messageSources = assembled.messageSources;
       } else {
         console.warn('[FieldRepair] No "fieldRepair" prompt flow in pack');
-        baseMessages = this.buildSimpleMessages(chatHistory);
+        baseMessages = this.buildSimpleMessages(chatHistory, hasChatHistory);
         messageSources = ['system_context', ...chatHistory.map(() => 'history')];
       }
     } else {
-      baseMessages = this.buildSimpleMessages(chatHistory);
+      baseMessages = this.buildSimpleMessages(chatHistory, hasChatHistory);
       messageSources = ['system_context', ...chatHistory.map(() => 'history')];
     }
 
@@ -279,15 +280,18 @@ export class FieldRepairPipeline {
     const parts: string[] = [];
     const formatParts: string[] = [];
 
-    // ── Problem 2 fix: explicitly highlight current round narrative ──
-    const currentNarrative = this.extractCurrentRoundNarrative();
-    if (currentNarrative) {
-      parts.push(
-        `<本回合叙事>\n` +
-        `以下是本回合刚生成的叙事内容，请基于此上下文完成后续任务：\n\n` +
-        `${currentNarrative}\n` +
-        `</本回合叙事>`,
-      );
+    // Only inject <本回合叙事> when chatHistory is empty — otherwise the latest
+    // narrative is already present as the last assistant message in chatHistory.
+    if (chatHistory.length === 0) {
+      const currentNarrative = this.extractCurrentRoundNarrative();
+      if (currentNarrative) {
+        parts.push(
+          `<本回合叙事>\n` +
+          `以下是本回合刚生成的叙事内容，请基于此上下文完成后续任务：\n\n` +
+          `${currentNarrative}\n` +
+          `</本回合叙事>`,
+        );
+      }
     }
 
     if (fieldReport) {
@@ -390,17 +394,38 @@ export class FieldRepairPipeline {
     const v2Edges = this.stateManager.get<EngramEdge[]>(engramPath + '.v2Edges') ?? [];
     if (v2Edges.length === 0) return null;
 
+    const engramConfig = loadEngramConfig();
+    const perFactCap = engramConfig.edgeReviewPerFactCap ?? 5;
+    const globalCap = engramConfig.edgeReviewGlobalCap ?? 40;
+
     const edgeMap = new Map(v2Edges.map((e) => [e.id, e]));
-    const matchedEdges: EngramEdge[] = [];
-    const matchedPairs: Array<{ newFact: string; oldEdgeId: string; similarity: number }> = [];
+    const validPairs: Array<{ newFact: string; oldEdgeId: string; similarity: number }> = [];
     for (const pair of pending) {
       const edge = edgeMap.get(pair.oldEdgeId);
       if (edge && isEdgeCurrentlyValid(edge)) {
-        matchedEdges.push(edge);
-        matchedPairs.push(pair);
+        validPairs.push(pair);
       }
     }
-    if (matchedEdges.length === 0) return null;
+    if (validPairs.length === 0) return null;
+
+    // Group by newFact, keep top-N per fact by similarity, then apply global cap
+    const grouped = new Map<string, Array<{ newFact: string; oldEdgeId: string; similarity: number }>>();
+    for (const p of validPairs) {
+      if (!grouped.has(p.newFact)) grouped.set(p.newFact, []);
+      grouped.get(p.newFact)!.push(p);
+    }
+    const cappedPairs: Array<{ newFact: string; oldEdgeId: string; similarity: number }> = [];
+    for (const pairs of grouped.values()) {
+      pairs.sort((a, b) => b.similarity - a.similarity);
+      cappedPairs.push(...pairs.slice(0, perFactCap));
+    }
+    cappedPairs.sort((a, b) => b.similarity - a.similarity);
+    const matchedPairs = cappedPairs.slice(0, globalCap);
+
+    const matchedEdgeIds = new Set(matchedPairs.map((p) => p.oldEdgeId));
+    const matchedEdges = [...matchedEdgeIds]
+      .map((id) => edgeMap.get(id))
+      .filter((e): e is EngramEdge => e != null);
 
     const reviewList = matchedPairs
       .map((p) => {
@@ -646,8 +671,9 @@ export class FieldRepairPipeline {
       return;
     }
 
-    const variables = this.buildVariables(report);
     const chatHistory = this.loadChatHistory();
+    const hasChatHistory = chatHistory.length > 0;
+    const variables = this.buildVariables(report, hasChatHistory);
     const assembled = this.promptAssembler.assemble(flow, variables, chatHistory);
 
     const enforcement = this.promptAssembler.renderSingle('narratorEnforcement', variables);
@@ -655,14 +681,16 @@ export class FieldRepairPipeline {
 
     if (enforcement) retryParts.push(enforcement);
 
-    const currentNarrative = this.extractCurrentRoundNarrative();
-    if (currentNarrative) {
-      retryParts.push(
-        `<本回合叙事>\n` +
-        `以下是本回合刚生成的叙事内容，请基于此上下文补齐字段：\n\n` +
-        `${currentNarrative}\n` +
-        `</本回合叙事>`,
-      );
+    if (!hasChatHistory) {
+      const currentNarrative = this.extractCurrentRoundNarrative();
+      if (currentNarrative) {
+        retryParts.push(
+          `<本回合叙事>\n` +
+          `以下是本回合刚生成的叙事内容，请基于此上下文补齐字段：\n\n` +
+          `${currentNarrative}\n` +
+          `</本回合叙事>`,
+        );
+      }
     }
 
     retryParts.push(
@@ -735,9 +763,9 @@ export class FieldRepairPipeline {
    * repair-specific `MISSING_FIELDS_SUMMARY`. We intentionally skip CoT /
    * Engram plugin vars — the repair prompt doesn't reference them.
    */
-  private buildVariables(report: FieldRepairReport): Record<string, string> {
+  private buildVariables(report: FieldRepairReport, skipShortTerm: boolean = false): Record<string, string> {
     const gameStateJson = this.buildGameStateJson();
-    const memoryBlock = this.buildMemoryBlock();
+    const memoryBlock = this.buildMemoryBlock(skipShortTerm);
     return {
       PLAYER_NAME: this.stateManager.get<string>(this.paths.playerName) ?? '',
       CURRENT_LOCATION: this.stateManager.get<string>(this.paths.playerLocation) ?? '',
@@ -763,10 +791,10 @@ export class FieldRepairPipeline {
    * falls back to a short summary from 记忆.短期 to keep the repair prompt
    * grounded without re-implementing the full retrieval stage.
    */
-  private buildMemoryBlock(): string {
+  private buildMemoryBlock(skipShortTerm: boolean = false): string {
     if (this.memoryRetriever) {
       try {
-        const retrieved = this.memoryRetriever.retrieve(this.stateManager);
+        const retrieved = this.memoryRetriever.retrieve(this.stateManager, skipShortTerm ? { skipShortTerm } : undefined);
         if (retrieved && retrieved.trim()) return retrieved;
       } catch {
         // swallow — fall through to short-term fallback
@@ -814,9 +842,9 @@ export class FieldRepairPipeline {
    * Simple system context for when no field repair prompt flow is available.
    * Used when only entity enrichment and/or edge review need to run.
    */
-  private buildSimpleMessages(chatHistory: AIMessage[]): AIMessage[] {
+  private buildSimpleMessages(chatHistory: AIMessage[], skipShortTerm: boolean = false): AIMessage[] {
     const gameStateJson = this.buildGameStateJson();
-    const memoryBlock = this.buildMemoryBlock();
+    const memoryBlock = this.buildMemoryBlock(skipShortTerm);
     const systemContent =
       `## 当前游戏状态\n\n\`\`\`json\n${gameStateJson}\n\`\`\`\n\n` +
       `## 记忆摘要\n\n${memoryBlock}`;

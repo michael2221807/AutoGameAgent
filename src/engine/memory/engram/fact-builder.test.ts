@@ -260,6 +260,101 @@ describe('buildFacts', () => {
     expect(result.newEdges[0].fact).toBe(fact2);
     expect(result.newEdges[0].id).toBe(engramEdgeId('Alice', 'Market', fact2));
   });
+
+  it('respects custom reviewThreshold — sim below threshold produces no review pair', () => {
+    const existingEdge = makeEdge({
+      id: engramEdgeId('Alice', 'Bob', 'old fact about Alice and Bob'),
+      sourceEntity: 'Alice',
+      targetEntity: 'Bob',
+      fact: 'old fact about Alice and Bob',
+      episodes: ['ep-1'],
+    });
+
+    // sim = 0.6 is below the custom threshold of 0.7
+    const vectorStore = makeMockVectorStore(0.6);
+    const edgeVectors: Record<string, number[]> = { [existingEdge.id]: [1, 0, 0] };
+    const newFact = 'a new fact about Alice and Bob for testing';
+    const newFactVectors = new Map([[newFact, [0.6, 0.4, 0]]]);
+
+    const params: FactBuilderParams = {
+      knowledgeFacts: [{ fact: newFact, sourceEntity: 'Alice', targetEntity: 'Bob' }],
+      entities: [makeEntity('Alice'), makeEntity('Bob')],
+      currentEventId: 'ev-2',
+      currentRound: 5,
+    };
+
+    const result = buildFacts(params, [existingEdge], vectorStore, edgeVectors, newFactVectors, {
+      reviewThreshold: 0.7,
+    });
+
+    expect(result.pendingReviewPairs).toHaveLength(0);
+  });
+
+  it('respects custom reviewThreshold — sim above threshold produces review pair', () => {
+    const existingEdge = makeEdge({
+      id: engramEdgeId('Alice', 'Bob', 'old fact about Alice and Bob'),
+      sourceEntity: 'Alice',
+      targetEntity: 'Bob',
+      fact: 'old fact about Alice and Bob',
+      episodes: ['ep-1'],
+    });
+
+    // sim = 0.75 is above the custom threshold of 0.7
+    const vectorStore = makeMockVectorStore(0.75);
+    const edgeVectors: Record<string, number[]> = { [existingEdge.id]: [1, 0, 0] };
+    const newFact = 'a new fact about Alice and Bob for testing';
+    const newFactVectors = new Map([[newFact, [0.75, 0.25, 0]]]);
+
+    const params: FactBuilderParams = {
+      knowledgeFacts: [{ fact: newFact, sourceEntity: 'Alice', targetEntity: 'Bob' }],
+      entities: [makeEntity('Alice'), makeEntity('Bob')],
+      currentEventId: 'ev-2',
+      currentRound: 5,
+    };
+
+    const result = buildFacts(params, [existingEdge], vectorStore, edgeVectors, newFactVectors, {
+      reviewThreshold: 0.7,
+    });
+
+    expect(result.pendingReviewPairs).toHaveLength(1);
+    expect(result.pendingReviewPairs[0].similarity).toBe(0.75);
+  });
+
+  it('respects perFactCap — broad search limited to N candidates', () => {
+    // Create 5 edges with different entity pairs (broad search, not same-entity-pair)
+    const edges: EngramEdge[] = [];
+    const edgeVectors: Record<string, number[]> = {};
+    for (let i = 0; i < 5; i++) {
+      const e = makeEdge({
+        id: engramEdgeId(`Src${i}`, `Tgt${i}`, `broad fact number ${i} for testing`),
+        sourceEntity: `Src${i}`,
+        targetEntity: `Tgt${i}`,
+        fact: `broad fact number ${i} for testing`,
+        episodes: ['ep-1'],
+      });
+      edges.push(e);
+      edgeVectors[e.id] = [1, 0, 0];
+    }
+
+    // sim = 0.8 for all — above any reasonable threshold
+    const vectorStore = makeMockVectorStore(0.8);
+    const newFact = 'a completely new fact from entity X to Y';
+    const newFactVectors = new Map([[newFact, [0.8, 0.2, 0]]]);
+
+    const params: FactBuilderParams = {
+      knowledgeFacts: [{ fact: newFact, sourceEntity: 'X', targetEntity: 'Y' }],
+      entities: [makeEntity('X'), makeEntity('Y'), ...edges.map((e) => makeEntity(e.sourceEntity)), ...edges.map((e) => makeEntity(e.targetEntity))],
+      currentEventId: 'ev-2',
+      currentRound: 5,
+    };
+
+    // With perFactCap=2, only top 2 broad candidates should be kept
+    const result = buildFacts(params, edges, vectorStore, edgeVectors, newFactVectors, {
+      perFactCap: 2,
+    });
+
+    expect(result.pendingReviewPairs).toHaveLength(2);
+  });
 });
 
 // ─── pruneEdgesV2 ───

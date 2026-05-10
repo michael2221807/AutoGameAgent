@@ -31,6 +31,8 @@ export interface RetrievalContext {
   playerName?: string;
   /** 最近活跃 NPC 名称列表（相关角色过滤的主体） */
   recentNpcNames?: string[];
+  /** 跳过短期记忆层（当 chatHistory 已包含相同内容时避免重复） */
+  skipShortTerm?: boolean;
 }
 
 export class MemoryRetriever {
@@ -104,14 +106,17 @@ export class MemoryRetriever {
     }
 
     // ── 短期记忆（原文叙事）放最后 —— 最近几轮的原始叙事 ──
-    const shortTerm = stateManager.get<ShortTermEntry[]>(this.config.shortTermPath) ?? [];
-    if (shortTerm.length > 0) {
-      sections.push(
-        this.formatSection(
-          '短期记忆（最近对话）',
-          shortTerm.map((e) => e.summary),
-        ),
-      );
+    // Skip when caller already injects the same content via chatHistory messages
+    if (!ctx?.skipShortTerm) {
+      const shortTerm = stateManager.get<ShortTermEntry[]>(this.config.shortTermPath) ?? [];
+      if (shortTerm.length > 0) {
+        sections.push(
+          this.formatSection(
+            '短期记忆（最近对话）',
+            shortTerm.map((e) => e.summary),
+          ),
+        );
+      }
     }
 
     return sections.join('\n\n');

@@ -145,6 +145,12 @@ export function normalizeEngramConfig(raw: unknown): EngramConfig {
       clamp(toNumber(r.shortTermWindow, d.shortTermWindow!), 0, 20),
     maxCandidates:
       clamp(toNumber(r.maxCandidates, d.maxCandidates!), 5, 100),
+    edgeReviewThreshold:
+      clamp(toNumber(r.edgeReviewThreshold, d.edgeReviewThreshold!), 0.5, 0.9),
+    edgeReviewPerFactCap:
+      clamp(toNumber(r.edgeReviewPerFactCap, d.edgeReviewPerFactCap!), 1, 20),
+    edgeReviewGlobalCap:
+      clamp(toNumber(r.edgeReviewGlobalCap, d.edgeReviewGlobalCap!), 10, 200),
   };
 }
 

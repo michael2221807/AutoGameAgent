@@ -96,6 +96,12 @@ export interface EngramConfig {
   shortTermWindow?: number;
   /** Maximum candidate count per retrieval (split 50/25/25 across edge/entity/event, default 20) */
   maxCandidates?: number;
+  /** Minimum cosine similarity for an existing edge to be flagged for contradiction review (default 0.65) */
+  edgeReviewThreshold?: number;
+  /** Maximum old edges matched per new fact during review candidate selection (default 5) */
+  edgeReviewPerFactCap?: number;
+  /** Maximum total review pairs sent to AI per combine-repair round (default 40) */
+  edgeReviewGlobalCap?: number;
 }
 
 /**
@@ -296,4 +302,7 @@ export const DEFAULT_ENGRAM_CONFIG: EngramConfig = {
   edgeCapacity: 800,
   shortTermWindow: 5,
   maxCandidates: 20,
+  edgeReviewThreshold: 0.65,
+  edgeReviewPerFactCap: 5,
+  edgeReviewGlobalCap: 40,
 };

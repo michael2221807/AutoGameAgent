@@ -164,7 +164,7 @@ export interface IMemoryRetriever {
    */
   retrieve(
     stateManager: StateManager,
-    ctx?: { playerName?: string; recentNpcNames?: string[] },
+    ctx?: { playerName?: string; recentNpcNames?: string[]; skipShortTerm?: boolean },
   ): string;
 }
 

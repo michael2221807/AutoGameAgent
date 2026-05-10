@@ -122,10 +122,16 @@ export class AICallStage implements PipelineStage {
       });
     }
 
+    // When thinking was injected as a separate system message, strip it from
+    // rawStep1 to avoid sending COT content twice in the step2 request.
+    const step1ContentForStep2 = step2ThinkingContext.length > 0
+      ? this.responseParser.extractAndSanitize(rawStep1).sanitized
+      : rawStep1;
+
     const step2Messages: AIMessage[] = [
       ...step2BaseMessages,
       ...step2ThinkingContext,
-      { role: 'assistant', content: rawStep1 },
+      { role: 'assistant', content: step1ContentForStep2 },
       { role: 'user', content: STEP2_FOLLOWUP_USER },
     ];
 

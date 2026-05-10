@@ -331,6 +331,10 @@ export class EngramManager {
         this.vectorStore,
         edgeVectors,
         newFactVectors,
+        {
+          reviewThreshold: config.edgeReviewThreshold!,
+          perFactCap: config.edgeReviewPerFactCap!,
+        },
       );
 
       const allEdges = [...engram.v2Edges, ...result.newEdges];

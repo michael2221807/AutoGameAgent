@@ -59,6 +59,7 @@ import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import Modal from '@/ui/components/common/Modal.vue';
 import FormattedText from '@/ui/components/common/FormattedText.vue';
 import RoundDivider from '@/ui/components/panels/RoundDivider.vue';
+import GameComposer from '@/ui/components/panels/GameComposer.vue';
 import ThinkingViewer from '@/ui/components/panels/ThinkingViewer.vue';
 import CommandsViewer from '@/ui/components/panels/CommandsViewer.vue';
 import RawResponseViewer from '@/ui/components/panels/RawResponseViewer.vue';
@@ -161,9 +162,6 @@ const environmentTags = useValue<unknown>(DEFAULT_ENGINE_PATHS.environmentTags);
 /** Persisted action options from state tree — survives page refresh */
 const persistedActionOptions = useValue<string[]>('元数据.当前行动选项');
 
-/** User input text bound to the textarea */
-const userInput = ref('');
-
 /** Whether the AI is currently generating a response (pipeline is running) */
 const isGenerating = ref(false);
 
@@ -184,17 +182,6 @@ const _PENDING_INPUT_KEY = 'aga_pending_input';
 let _lastSentInput = localStorage.getItem(_PENDING_INPUT_KEY) ?? '';
 const actionOptions = ref<string[]>(_savedActionOptions);
 
-// Collapse/expand the action-options strip. Persisted across sessions so the
-// user's preference sticks — long NPC-branch options otherwise eat the
-// viewport.
-const ACTION_OPTIONS_COLLAPSED_KEY = 'aga_action_options_collapsed';
-const actionOptionsCollapsed = ref<boolean>(
-  localStorage.getItem(ACTION_OPTIONS_COLLAPSED_KEY) === '1',
-);
-function toggleActionOptionsCollapsed(): void {
-  actionOptionsCollapsed.value = !actionOptionsCollapsed.value;
-  localStorage.setItem(ACTION_OPTIONS_COLLAPSED_KEY, actionOptionsCollapsed.value ? '1' : '0');
-}
 
 // ─── Streaming timer ──────────────────────────────────────────
 
@@ -298,7 +285,7 @@ const isUserScrolledUp = ref(false);
 // ─── Template refs ────────────────────────────────────────────
 
 const messagesContainer = ref<HTMLDivElement | null>(null);
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const composerRef = ref<{ restoreInput: (text: string) => void } | null>(null);
 
 // ─── Computed ─────────────────────────────────────────────────
 
@@ -377,11 +364,6 @@ const roundDisplay = computed(() => {
   return typeof r === 'number' && r > 0 ? `第 ${r} 回合` : '游戏开始';
 });
 
-/** Whether the send button should be enabled */
-const canSend = computed(() => {
-  return userInput.value.trim().length > 0 && !isGenerating.value;
-});
-
 // ─── Scroll management ───────────────────────────────────────
 
 /**
@@ -431,17 +413,15 @@ function onScroll(): void {
  * Send the current user input to the game pipeline.
  * Emits 'pipeline:user-input' on the event bus with the message text.
  */
-function sendMessage(): void {
-  const text = userInput.value.trim();
-  if (!text || isGenerating.value) return;
+function handleComposerSend(text: string): void {
+  const trimmed = text.trim();
+  if (!trimmed || isGenerating.value) return;
 
-  _lastSentInput = text;
-  localStorage.setItem(_PENDING_INPUT_KEY, text);
-  userInput.value = '';
-  resetTextareaHeight();
+  _lastSentInput = trimmed;
+  localStorage.setItem(_PENDING_INPUT_KEY, trimmed);
 
   if (eventBus) {
-    eventBus.emit('pipeline:user-input', { text });
+    eventBus.emit('pipeline:user-input', { text: trimmed });
   }
 }
 
@@ -468,16 +448,6 @@ async function copyText(text: string): Promise<void> {
   } catch {
     eventBus?.emit('ui:toast', { type: 'error', message: '复制失败' });
   }
-}
-
-function selectAction(option: string): void {
-  if (isGenerating.value) return;
-  userInput.value = option;
-  // 不清空 actionOptions — 保持显示，用户可以中途换选
-  nextTick(() => {
-    textareaRef.value?.focus();
-    autoResizeTextarea();
-  });
 }
 
 /** Cancel the current AI generation */
@@ -517,34 +487,6 @@ function handleRollback(): void {
   _pendingRollbackInput = lastUserInput;
 
   eventBus.emit('engine:rollback-requested', undefined);
-}
-
-/** Handle keyboard shortcuts in the textarea */
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    sendMessage();
-  }
-}
-
-/**
- * Auto-resize the textarea to fit its content, capped at a max height.
- * This provides a comfortable multi-line input without taking
- * excessive vertical space.
- */
-function autoResizeTextarea(): void {
-  const el = textareaRef.value;
-  if (!el) return;
-
-  el.style.height = 'auto';
-  const maxHeight = 120;
-  el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-}
-
-function resetTextareaHeight(): void {
-  const el = textareaRef.value;
-  if (!el) return;
-  el.style.height = 'auto';
 }
 
 // ─── Event bus subscriptions ──────────────────────────────────
@@ -636,9 +578,8 @@ onMounted(() => {
       streamingText.value = '';
       // 恢复用户刚才发送的输入，防止报错后丢失
       if (_lastSentInput) {
-        userInput.value = _lastSentInput;
+        composerRef.value?.restoreInput(_lastSentInput);
         _lastSentInput = '';
-        nextTick(() => autoResizeTextarea());
       }
       const errMsg = (payload as { error?: Error })?.error?.message ?? '未知错误';
       eventBus.emit('ui:toast', {
@@ -672,17 +613,15 @@ onMounted(() => {
       actionOptions.value = [];
       // Restore the rolled-back round's user input so the player can re-submit or edit
       if (_pendingRollbackInput) {
-        userInput.value = _pendingRollbackInput;
+        composerRef.value?.restoreInput(_pendingRollbackInput);
         _pendingRollbackInput = '';
-        nextTick(() => autoResizeTextarea());
       }
     }),
   );
 
   // Restore pending input that survived a page refresh
-  if (!userInput.value && _lastSentInput) {
-    userInput.value = _lastSentInput;
-    nextTick(() => autoResizeTextarea());
+  if (_lastSentInput) {
+    composerRef.value?.restoreInput(_lastSentInput);
   }
 
   /* Initial scroll to bottom when the panel mounts —— instant 避免首屏动画 */
@@ -865,120 +804,16 @@ watch(
       </Transition>
     </div>
 
-    <!--
-      Action options — displayed after the AI response.
-      Each option is a clickable button that sends the text as user input.
-      Hidden during generation to prevent premature interaction.
-      Includes a collapse toggle so long option lists don't dominate the viewport.
-    -->
-    <div
-      v-if="actionOptions.length > 0 && !isGenerating"
-      :class="['action-options', { 'action-options--collapsed': actionOptionsCollapsed }]"
-    >
-      <button
-        class="action-options__toggle"
-        :aria-expanded="!actionOptionsCollapsed"
-        :aria-label="actionOptionsCollapsed ? '展开行动选项' : '收起行动选项'"
-        :title="actionOptionsCollapsed ? '展开行动选项' : '收起行动选项'"
-        @click="toggleActionOptionsCollapsed"
-      >
-        <span class="action-options__hint">
-          {{ actionOptionsCollapsed ? `${actionOptions.length} 个行动选项` : '行动选项' }}
-        </span>
-        <svg
-          class="action-options__chevron"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-      <div class="action-options__list" aria-hidden="false">
-        <div
-          v-for="(option, idx) in actionOptions"
-          :key="idx"
-          class="action-option-row"
-        >
-          <button
-            class="action-copy"
-            title="复制文本"
-            @click.stop="copyText(option)"
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
-          </button>
-          <button
-            :class="['action-btn', { 'action-btn--selected': userInput === option }]"
-            @click="selectAction(option)"
-          >
-            {{ option }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Input area -->
-    <div class="input-area">
-      <!-- Cancel button visible during generation -->
-      <button
-        v-if="isGenerating"
-        class="cancel-btn"
-        @click="cancelGeneration"
-        aria-label="取消生成"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-        </svg>
-        取消
-      </button>
-
-      <div class="input-row">
-        <!--
-          Rollback button: reverts to the start of the previous round.
-          Disabled if no snapshot is available or AI is generating.
-        -->
-        <button
-          class="rollback-btn"
-          :disabled="!canRollback"
-          :title="canRollback ? '回滚到上回合' : '暂无可用快照'"
-          aria-label="回滚到上回合"
-          @click="showRollbackConfirm = true"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-        </button>
-
-        <textarea
-          ref="textareaRef"
-          v-model="userInput"
-          class="message-input"
-          placeholder="输入你的行动…"
-          rows="1"
-          :disabled="isGenerating"
-          @keydown="onKeydown"
-          @input="autoResizeTextarea"
-        />
-        <button
-          class="send-btn"
-          :disabled="!canSend"
-          @click="sendMessage"
-          aria-label="发送"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="22" y1="2" x2="11" y2="13" />
-            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-          </svg>
-        </button>
-      </div>
-    </div>
+    <GameComposer
+      ref="composerRef"
+      :action-options="actionOptions"
+      :is-generating="isGenerating"
+      :can-rollback="canRollback"
+      @send="handleComposerSend"
+      @copy-option="copyText"
+      @cancel-generation="cancelGeneration"
+      @request-rollback="showRollbackConfirm = true"
+    />
 
     <!-- ── Rollback confirmation modal ── -->
     <Modal v-model="showRollbackConfirm" title="确认回滚">
@@ -1352,260 +1187,6 @@ watch(
   50%      { opacity: 1;    transform: translateY(-3px); }
 }
 
-/* ── Action options ─────────────────────────────────────────── */
-
-.action-options {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-surface);
-  flex-shrink: 0;
-}
-
-.action-options__toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px var(--sidebar-right-reserve, 40px) 6px var(--sidebar-left-reserve, 40px);
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  font-family: var(--font-sans);
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: padding-left var(--duration-open) var(--ease-droplet),
-              padding-right var(--duration-open) var(--ease-droplet),
-              opacity var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
-}
-.action-options__toggle:hover {
-  opacity: 1;
-  color: var(--color-sage-300);
-}
-.action-options--collapsed .action-options__toggle {
-  padding-top: 10px;
-  padding-bottom: 10px;
-  opacity: 0.9;
-}
-.action-options__hint {
-  font-variant-numeric: tabular-nums;
-}
-.action-options__chevron {
-  flex-shrink: 0;
-  transition: transform var(--duration-normal) var(--ease-out);
-}
-.action-options--collapsed .action-options__chevron {
-  transform: rotate(-180deg);
-}
-
-.action-options__list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.25rem var(--sidebar-right-reserve, 40px) 0.65rem var(--sidebar-left-reserve, 40px);
-  max-height: 60vh;
-  opacity: 1;
-  overflow: hidden;
-  transition: max-height var(--duration-normal) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out),
-              padding-left var(--duration-open) var(--ease-droplet),
-              padding-right var(--duration-open) var(--ease-droplet);
-}
-.action-options--collapsed .action-options__list {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  pointer-events: none;
-}
-
-.action-option-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-.action-copy {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  margin-top: 3px;
-  flex-shrink: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  opacity: 0.4;
-  transition: color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out);
-}
-.action-option-row:hover .action-copy { opacity: 0.85; }
-.action-copy:hover {
-  opacity: 1;
-  color: var(--color-sage-300);
-  border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent);
-  background: var(--color-sage-muted);
-}
-
-.action-btn {
-  padding: 0.42rem 0.85rem;
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  font-family: var(--font-serif-cjk);
-  font-size: 0.82rem;
-  line-height: 1.5;
-  color: var(--color-text);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
-  white-space: normal;
-  word-break: break-word;
-  text-align: left;
-  max-width: 100%;
-  letter-spacing: 0.02em;
-}
-
-.action-btn:hover {
-  border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
-  background: color-mix(in oklch, var(--color-sage-400) 8%, var(--color-surface-elevated));
-  color: var(--color-sage-100);
-  box-shadow: 0 0 14px color-mix(in oklch, var(--color-sage-400) 18%, transparent);
-}
-.action-btn--selected {
-  border-color: color-mix(in oklch, var(--color-sage-400) 55%, transparent);
-  background: color-mix(in oklch, var(--color-sage-400) 14%, var(--color-surface-elevated));
-  color: var(--color-sage-100);
-  font-weight: 500;
-}
-
-/* ── Input area ─────────────────────────────────────────────── */
-
-.input-area {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  /* Dynamic horizontal padding — sidebar-reserve pattern. */
-  padding: 0.625rem var(--sidebar-right-reserve, 40px) 0.75rem var(--sidebar-left-reserve, 40px);
-  transition: padding-left var(--duration-open) var(--ease-droplet),
-              padding-right var(--duration-open) var(--ease-droplet);
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-surface);
-  flex-shrink: 0;
-}
-
-.cancel-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  align-self: center;
-  padding: 0.3rem 0.85rem;
-  background: color-mix(in oklch, var(--color-danger) 10%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-danger) 40%, transparent);
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  color: color-mix(in oklch, var(--color-danger) 95%, var(--color-text));
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out);
-}
-
-.cancel-btn:hover {
-  background: color-mix(in oklch, var(--color-danger) 18%, transparent);
-  border-color: color-mix(in oklch, var(--color-danger) 60%, transparent);
-}
-
-.input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-}
-
-.message-input {
-  flex: 1;
-  padding: 0.55rem 0.85rem;
-  background: var(--color-surface-input);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  color: var(--color-text);
-  font-family: var(--font-serif-cjk);
-  font-size: 0.92rem;
-  line-height: 1.6;
-  letter-spacing: 0.01em;
-  resize: none;
-  outline: none;
-  min-height: 42px;
-  max-height: 120px;
-  overflow-y: auto;
-  transition: border-color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.message-input::placeholder {
-  color: var(--color-text-muted);
-  opacity: 0.7;
-  font-style: italic;
-}
-
-.message-input:focus {
-  border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
-  background: color-mix(in oklch, var(--color-sage-400) 3%, var(--color-surface-input));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
-}
-
-.message-input:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* Send button — sage beacon outline, not a filled primary block.
-   Accents are beacons, not buttons: the send icon glows softly when
-   enabled, fills with sage-muted on hover. Never #fff on sage. */
-.send-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  background: transparent;
-  border: 1px solid color-mix(in oklch, var(--color-sage-400) 45%, transparent);
-  border-radius: var(--radius-lg);
-  color: var(--color-sage-300);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out);
-}
-
-.send-btn:hover:not(:disabled) {
-  color: var(--color-sage-100);
-  background: var(--color-sage-muted);
-  border-color: var(--color-sage-400);
-  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
-}
-
-.send-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 /* ── Streaming meta (elapsed time + char count) ────────────── */
 
 .streaming-meta {
@@ -1652,36 +1233,6 @@ watch(
   color: var(--color-sage-100);
   background: color-mix(in oklch, var(--color-sage-400) 22%, transparent);
   box-shadow: 0 0 14px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
-}
-
-/* ── Rollback button — amber hover (warmth = confirm-intent cue) ── */
-
-.rollback-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 42px;
-  flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out);
-}
-
-.rollback-btn:hover:not(:disabled) {
-  color: var(--color-amber-400);
-  border-color: color-mix(in oklch, var(--color-amber-400) 45%, transparent);
-  background: color-mix(in oklch, var(--color-amber-400) 6%, transparent);
-}
-
-.rollback-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
 }
 
 /* ── Modal content (rollback confirm) ───────────────────────── */
@@ -1747,22 +1298,6 @@ watch(
     padding-left: var(--space-sm);
     padding-right: var(--space-sm);
   }
-  .action-options__toggle {
-    padding-left: var(--space-md);
-    padding-right: var(--space-md);
-  }
-  .action-options__list {
-    padding-left: var(--space-md);
-    padding-right: var(--space-md);
-  }
-  .input-area {
-    padding-left: var(--space-sm);
-    padding-right: var(--space-sm);
-    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  }
-  .action-btn {
-    min-height: 44px;
-  }
 }
 
 /* Small phone refinements — overrides 767px block above */
@@ -1772,15 +1307,6 @@ watch(
   }
   .message--user {
     max-width: 82%;
-  }
-  .input-area {
-    padding: 0.5rem 0.75rem;
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
-  }
-  .action-options__toggle,
-  .action-options__list {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
   }
 }
 </style>

@@ -32,15 +32,23 @@ export interface FactBuildResult {
   renamedEdgeIds: Array<{ oldId: string; newId: string }>;
 }
 
+export interface FactBuilderOptions {
+  reviewThreshold?: number;
+  perFactCap?: number;
+}
+
 export function buildFacts(
   params: FactBuilderParams,
   existingEdges: EngramEdge[],
   vectorStore: VectorStore | null,
   edgeVectors: Record<string, number[]>,
   newFactVectors: Map<string, number[]>,
+  options?: FactBuilderOptions,
 ): FactBuildResult {
   const { knowledgeFacts, entities, currentEventId, currentRound } = params;
   const entityNames = new Set(entities.map((e) => e.name));
+  const reviewThreshold = options?.reviewThreshold ?? 0.65;
+  const perFactCap = options?.perFactCap ?? 5;
 
   const edgeMap = new Map(existingEdges.map((e) => [e.id, e]));
   const newEdges: EngramEdge[] = [];
@@ -116,7 +124,7 @@ export function buildFacts(
           reinforcedIds.push(edge.id);
           isDuplicate = true;
           break;
-        } else if (sim > 0.5) {
+        } else if (sim > reviewThreshold) {
           if (!reviewedEdgeIds.has(edge.id)) {
             pendingReviewPairs.push({ newFact: kf.fact, oldEdgeId: edge.id, similarity: sim });
             reviewedEdgeIds.add(edge.id);
@@ -141,12 +149,12 @@ export function buildFacts(
         if ((eSrc === srcLower && eTgt === tgtLower) || (eSrc === tgtLower && eTgt === srcLower)) continue;
 
         const sim = vectorStore.cosineSimilarity(newVec, oldVec);
-        if (sim > 0.5) {
+        if (sim > reviewThreshold) {
           broadCandidates.push({ edgeId: edge.id, sim });
         }
       }
       broadCandidates.sort((a, b) => b.sim - a.sim);
-      for (const bc of broadCandidates.slice(0, 10)) {
+      for (const bc of broadCandidates.slice(0, perFactCap)) {
         if (!reviewedEdgeIds.has(bc.edgeId)) {
           pendingReviewPairs.push({ newFact: kf.fact, oldEdgeId: bc.edgeId, similarity: bc.sim });
           reviewedEdgeIds.add(bc.edgeId);
