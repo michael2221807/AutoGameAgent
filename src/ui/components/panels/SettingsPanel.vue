@@ -1206,13 +1206,14 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-if="lowLoadEnabled">
-        <div class="setting-row setting-row--indented">
+        <div class="setting-row setting-row--indent">
           <div class="setting-info">
             <span class="setting-label">每分钟最大请求数</span>
+            <span class="setting-desc">超出此数量的请求会排队等待（1-10）</span>
           </div>
           <input
             type="number"
-            class="setting-number-input"
+            class="form-input form-input--sm"
             :value="lowLoadMaxRequests"
             min="1"
             max="10"
