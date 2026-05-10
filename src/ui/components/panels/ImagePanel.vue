@@ -1233,37 +1233,68 @@ function toggleRound(originalIndex: number) {
 interface SceneNpcEntry {
   name: string;
   isPresent: boolean;
+  isPlayer: boolean;
   appearance: string;
   bodyDescription: string;
   outfitStyle: string;
   description: string;
 }
+const scenePlayerName = useValue<string>(DEFAULT_ENGINE_PATHS.playerName);
 const sceneNpcList = computed<SceneNpcEntry[]>(() => {
-  const list = relationships.value;
-  if (!Array.isArray(list)) return [];
   const nameKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.name ?? '名称';
   const presenceKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.isPresent ?? '是否在场';
   const appearanceKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.appearance ?? '外貌描述';
   const bodyKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.bodyDescription ?? '身材描写';
   const outfitKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.outfitStyle ?? '衣着风格';
   const descKey = DEFAULT_ENGINE_PATHS.npcFieldNames?.description ?? '描述';
-  return list
-    .map((npc) => ({
-      name: String(npc[nameKey] ?? ''),
-      isPresent: npc[presenceKey] === true,
-      appearance: String(npc[appearanceKey] ?? ''),
-      bodyDescription: String(npc[bodyKey] ?? ''),
-      outfitStyle: String(npc[outfitKey] ?? ''),
-      description: String(npc[descKey] ?? ''),
-    }))
-    .filter((n) => n.name)
-    .sort((a, b) => (a.isPresent === b.isPresent ? 0 : a.isPresent ? -1 : 1));
+
+  const entries: SceneNpcEntry[] = [];
+
+  // Player character (always first, always "present")
+  const pName = scenePlayerName.value || '主角';
+  entries.push({
+    name: pName,
+    isPresent: true,
+    isPlayer: true,
+    appearance: String(get('角色.外貌描写') ?? get('角色.描述') ?? ''),
+    bodyDescription: String(get('角色.身材描写') ?? ''),
+    outfitStyle: '',
+    description: String(get(DEFAULT_ENGINE_PATHS.characterDescription) ?? ''),
+  });
+
+  // NPCs from relationships
+  const list = relationships.value;
+  if (Array.isArray(list)) {
+    for (const npc of list) {
+      const name = String(npc[nameKey] ?? '');
+      if (!name) continue;
+      entries.push({
+        name,
+        isPresent: npc[presenceKey] === true,
+        isPlayer: false,
+        appearance: String(npc[appearanceKey] ?? ''),
+        bodyDescription: String(npc[bodyKey] ?? ''),
+        outfitStyle: String(npc[outfitKey] ?? ''),
+        description: String(npc[descKey] ?? ''),
+      });
+    }
+  }
+
+  // Sort: player first (already), then present NPCs, then others
+  return entries.sort((a, b) => {
+    if (a.isPlayer) return -1;
+    if (b.isPlayer) return 1;
+    if (a.isPresent !== b.isPresent) return a.isPresent ? -1 : 1;
+    return 0;
+  });
 });
 const selectedNpcNames = ref<Set<string>>(new Set());
 let npcAutoInitDone = false;
 watch(sceneNpcList, (npcs) => {
   if (!npcAutoInitDone && npcs.length > 0) {
-    selectedNpcNames.value = new Set(npcs.filter((n) => n.isPresent).map((n) => n.name));
+    selectedNpcNames.value = new Set(
+      npcs.filter((n) => n.isPresent || n.isPlayer).map((n) => n.name),
+    );
     npcAutoInitDone = true;
   }
 }, { immediate: true });
@@ -3580,7 +3611,8 @@ function clearNpcImages() {
                 >
                   <span class="npc-selector__check">{{ selectedNpcNames.has(npc.name) ? '☑' : '☐' }}</span>
                   <span class="npc-selector__name">{{ npc.name }}</span>
-                  <span v-if="npc.isPresent" class="npc-selector__badge">在场</span>
+                  <span v-if="npc.isPlayer" class="npc-selector__badge npc-selector__badge--player">主角</span>
+                  <span v-else-if="npc.isPresent" class="npc-selector__badge">在场</span>
                 </div>
               </div>
             </div>
@@ -6101,6 +6133,10 @@ function clearNpcImages() {
   border-radius: var(--radius-xs);
   background: rgba(var(--color-success-rgb, 76,175,80), 0.15);
   color: var(--color-success, #4CAF50);
+}
+.npc-selector__badge--player {
+  background: rgba(var(--color-primary-rgb, 212,175,55), 0.15);
+  color: var(--color-primary, #d4af37);
 }
 
 /* Scene queue section */
