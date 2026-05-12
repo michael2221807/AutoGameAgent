@@ -1,25 +1,13 @@
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-memory.md
-/**
- * MemoryPanel — displays short-term, mid-term, long-term, and sent memory lists.
- *
- * B.5 新增：
- * - 已发送 Tab（读取 `元数据.已发送记忆ID`，对短期+中期条目标注发送状态）
- * - 配置区（读取 `系统.记忆配置.*`，只读展示）
- * - 叙事小说导出（将短期+中期记忆合并为 .txt 文件）
- */
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
 import { eventBus } from '@/engine/core/event-bus';
 
-const { isLoaded, useValue, get } = useGameState();
+const { isLoaded, useValue } = useGameState();
 const { getConfig } = useConfig();
 
-/**
- * Memory path configuration — customizable per game pack.
- * Falls back to sensible defaults if the pack doesn't define memory paths.
- */
 interface MemoryPathConfig {
   shortTerm: string;
   midTerm: string;
@@ -37,19 +25,15 @@ const memoryConfig = computed<MemoryPathConfig>(() => {
   return { ...defaultMemoryPaths, ...cfg };
 });
 
-/** Individual memory entry — varies by game pack; normalized to display format */
 interface MemoryEntry {
   id: string;
   content: string;
   timestamp?: string;
   tags?: string[];
+  round?: number;
   [key: string]: unknown;
 }
 
-/**
- * Normalize raw memory data into a displayable list.
- * Handles arrays of strings, arrays of objects, or single objects.
- */
 function normalizeMemoryEntries(raw: unknown): MemoryEntry[] {
   if (!raw) return [];
 
@@ -62,12 +46,14 @@ function normalizeMemoryEntries(raw: unknown): MemoryEntry[] {
         const obj = entry as Record<string, unknown>;
         return {
           id: String(obj['id'] ?? `mem_${idx}`),
-          content: String(obj['内容'] ?? obj['content'] ?? obj['记忆主体'] ?? JSON.stringify(obj)),
+          content: String(obj['内容'] ?? obj['content'] ?? obj['记忆主体'] ?? obj['summary'] ?? JSON.stringify(obj)),
           timestamp: (() => {
-            const ts = obj['时间'] ?? obj['事件时间'];
+            const ts = obj['时间'] ?? obj['事件时间'] ?? obj['timestamp'];
+            if (typeof ts === 'number') return new Date(ts).toLocaleString('zh-CN');
             return typeof ts === 'string' ? ts : undefined;
           })(),
           tags: Array.isArray(obj['标签']) ? obj['标签'] as string[] : undefined,
+          round: typeof obj['round'] === 'number' ? obj['round'] : undefined,
         };
       }
       return { id: `mem_${idx}`, content: String(entry) };
@@ -96,9 +82,7 @@ const implicitMidTermEntries = computed(() => normalizeMemoryEntries(implicitMid
 const midTermEntries = computed(() => normalizeMemoryEntries(midTermRaw.value));
 const longTermEntries = computed(() => normalizeMemoryEntries(longTermRaw.value));
 
-// ─── 叙事历史（替代旧版"已发送"tab）───
-// 引擎没有 "已发送记忆ID" 概念，改为展示 narrativeHistory（全部 user+assistant 消息对）。
-// 这也是小说导出的数据源。
+// ─── Narrative history ───
 
 interface NarrativeMsg { role: string; content: string; _delta?: unknown }
 const narrativeHistoryRaw = useValue<unknown>('元数据.叙事历史');
@@ -113,30 +97,54 @@ const narrativeEntries = computed<NarrativeMsg[]>(() => {
 type TabKey = 'memory' | 'narrative' | 'config';
 const activeTab = ref<TabKey>('memory');
 
-// ─── Collapsible sections (memory tab) ───
+// ─── Collapsible sections ───
 
-interface SectionConfig {
+interface TierConfig {
   key: string;
   title: string;
+  hint: string;
   entries: typeof shortTermEntries;
-  color: string;
+  tierClass: string;
 }
 
-const sections = computed<SectionConfig[]>(() => [
-  { key: 'short', title: '短期记忆', entries: shortTermEntries, color: 'var(--color-success, #22c55e)' },
-  { key: 'implicit', title: '隐式中期', entries: implicitMidTermEntries, color: 'var(--color-info, #38bdf8)' },
-  { key: 'mid', title: '中期记忆', entries: midTermEntries, color: 'var(--color-warning, #f59e0b)' },
-  { key: 'long', title: '长期记忆', entries: longTermEntries, color: 'var(--color-primary, #6366f1)' },
+const tiers = computed<TierConfig[]>(() => [
+  {
+    key: 'short',
+    title: '短期记忆',
+    hint: '最近几回合的叙事快照，作为 AI 的即时上下文',
+    entries: shortTermEntries,
+    tierClass: 'tier--short',
+  },
+  {
+    key: 'implicit',
+    title: '隐式中期',
+    hint: 'AI 对每段短期记忆的结构化理解，与短期 1:1 配对',
+    entries: implicitMidTermEntries,
+    tierClass: 'tier--implicit',
+  },
+  {
+    key: 'mid',
+    title: '中期记忆',
+    hint: '短期记忆溢出后升级而来，积累到阈值时触发长期总结',
+    entries: midTermEntries,
+    tierClass: 'tier--mid',
+  },
+  {
+    key: 'long',
+    title: '长期记忆',
+    hint: '世界观演化的产物，AI 对整个故事弧线的深层理解',
+    entries: longTermEntries,
+    tierClass: 'tier--long',
+  },
 ]);
 
-const collapsedSections = ref<Set<string>>(new Set());
+const collapsedSections = ref<Set<string>>(new Set(['implicit', 'mid', 'long']));
 
 function toggleSection(key: string): void {
-  if (collapsedSections.value.has(key)) {
-    collapsedSections.value.delete(key);
-  } else {
-    collapsedSections.value.add(key);
-  }
+  const next = new Set(collapsedSections.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  collapsedSections.value = next;
 }
 
 function isSectionOpen(key: string): boolean {
@@ -147,31 +155,98 @@ function isSectionOpen(key: string): boolean {
 
 const expandedEntryId = ref<string | null>(null);
 
-function toggleEntry(id: string): void {
-  expandedEntryId.value = expandedEntryId.value === id ? null : id;
+function toggleEntry(sectionKey: string, entryId: string): void {
+  const compositeId = `${sectionKey}:${entryId}`;
+  expandedEntryId.value = expandedEntryId.value === compositeId ? null : compositeId;
 }
 
-// ─── Memory config display ───
+function isEntryExpanded(sectionKey: string, entryId: string): boolean {
+  return expandedEntryId.value === `${sectionKey}:${entryId}`;
+}
 
-const memorySystemConfig = computed<Record<string, string>>(() => {
-  const raw = get<unknown>('系统.记忆配置');
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    return Object.fromEntries(
-      Object.entries(raw as Record<string, unknown>).map(([k, v]) => [k, String(v)])
-    );
+// ─── Memory config (read from localStorage + defaults) ───
+
+const MEMORY_SETTINGS_KEY = 'aga_memory_settings';
+
+interface MemoryEffectiveConfig {
+  shortTermLimit: number;
+  midTermRefineThreshold: number;
+  longTermSummaryThreshold: number;
+  longTermSummarizeCount: number;
+  midTermKeep: number;
+  longTermCap: number;
+}
+
+const defaultConfig: MemoryEffectiveConfig = {
+  shortTermLimit: 5,
+  midTermRefineThreshold: 25,
+  longTermSummaryThreshold: 50,
+  longTermSummarizeCount: 50,
+  midTermKeep: 0,
+  longTermCap: 30,
+};
+
+const effectiveConfig = ref<MemoryEffectiveConfig>({ ...defaultConfig });
+
+function loadEffectiveConfig(): void {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MEMORY_SETTINGS_KEY) ?? '{}') as Record<string, unknown>;
+    const safeNum = (v: unknown, fallback: number): number => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    effectiveConfig.value = {
+      shortTermLimit:          safeNum(raw.shortTermLimit,          defaultConfig.shortTermLimit),
+      midTermRefineThreshold:  safeNum(raw.midTermRefineThreshold,  defaultConfig.midTermRefineThreshold),
+      longTermSummaryThreshold: safeNum(raw.longTermSummaryThreshold, defaultConfig.longTermSummaryThreshold),
+      longTermSummarizeCount:  safeNum(raw.longTermSummarizeCount,  defaultConfig.longTermSummarizeCount),
+      midTermKeep:             safeNum(raw.midTermKeep,             defaultConfig.midTermKeep),
+      longTermCap:             safeNum(raw.longTermCap,             defaultConfig.longTermCap),
+    };
+  } catch {
+    effectiveConfig.value = { ...defaultConfig };
   }
-  return {};
+}
+
+onMounted(loadEffectiveConfig);
+
+interface ConfigDisplayRow {
+  key: string;
+  label: string;
+  desc: string;
+  value: number;
+  group: 'capacity' | 'threshold';
+}
+
+const configRows = computed<ConfigDisplayRow[]>(() => {
+  const c = effectiveConfig.value;
+  return [
+    { key: 'shortTermLimit',          label: '短期记忆容量',   desc: '短期记忆保留的最近条目数',             value: c.shortTermLimit,          group: 'capacity' },
+    { key: 'longTermCap',             label: '长期记忆上限',   desc: '长期记忆的最大存储条目数',             value: c.longTermCap,             group: 'capacity' },
+    { key: 'midTermRefineThreshold',  label: '中期提炼阈值',   desc: '中期记忆累积达此数量时触发长期总结',   value: c.midTermRefineThreshold,  group: 'threshold' },
+    { key: 'longTermSummaryThreshold', label: '长期总结阈值',  desc: '触发世界观演化的中期记忆量',           value: c.longTermSummaryThreshold, group: 'threshold' },
+    { key: 'longTermSummarizeCount',  label: '长期总结批次',   desc: '每次长期总结消费的中期记忆数',         value: c.longTermSummarizeCount,  group: 'threshold' },
+    { key: 'midTermKeep',             label: '中期保留数',     desc: '长期总结后保留的最新中期记忆条目',     value: c.midTermKeep,             group: 'threshold' },
+  ];
 });
 
-const configEntries = computed(() =>
-  Object.entries(memorySystemConfig.value).map(([key, value]) => ({ key, value }))
-);
+const capacityRows = computed(() => configRows.value.filter(r => r.group === 'capacity'));
+const thresholdRows = computed(() => configRows.value.filter(r => r.group === 'threshold'));
 
 // ─── Tab badge counts ───
 
 const totalNarrativeCount = computed(() => narrativeEntries.value.length);
 
-// ─── Export 叙事小说 ───
+// ─── Config row radius helper ───
+
+function configRowRadiusClass(idx: number, total: number): string {
+  if (total === 1) return 'config-row--solo';
+  if (idx === 0) return 'config-row--first';
+  if (idx === total - 1) return 'config-row--last';
+  return 'config-row--mid';
+}
+
+// ─── Export ───
 
 function exportNarrative(): void {
   const entries = narrativeEntries.value;
@@ -188,22 +263,29 @@ function exportNarrative(): void {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `narrative-export-${Date.now()}.txt`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 100);
 }
 </script>
 
 <template>
   <div class="memory-panel">
     <template v-if="isLoaded">
+      <!-- ── Header ── -->
       <header class="panel-header">
         <h2 class="panel-title">记忆系统</h2>
-        <button class="btn-export" @click="exportNarrative" title="导出叙事小说（短期+中期）">
-          导出叙事
-        </button>
+        <div class="header-actions">
+          <button class="btn-ghost" @click="exportNarrative" title="将全部叙事历史导出为文本文件">
+            导出叙事
+          </button>
+        </div>
       </header>
 
-      <!-- ─── Tabs ─── -->
+      <!-- ── Tab Bar (pill-segmented) ── -->
       <div class="tab-bar">
         <button
           :class="['tab-btn', { 'tab-btn--active': activeTab === 'memory' }]"
@@ -220,113 +302,182 @@ function exportNarrative(): void {
         </button>
         <button
           :class="['tab-btn', { 'tab-btn--active': activeTab === 'config' }]"
-          @click="activeTab = 'config'"
+          @click="activeTab = 'config'; loadEffectiveConfig()"
         >
           配置
         </button>
       </div>
 
-      <!-- ─── Memory tab ─── -->
-      <div v-if="activeTab === 'memory'" class="sections">
+      <!-- ═══ Tab 1: Memory List ═══ -->
+      <div v-if="activeTab === 'memory'" class="memory-sections">
         <section
-          v-for="section in sections"
-          :key="section.key"
-          class="memory-section"
+          v-for="tier in tiers"
+          :key="tier.key"
+          :class="['memory-tier', tier.tierClass]"
         >
-          <!-- Section header (collapsible) -->
           <button
-            class="section-header"
-            @click="toggleSection(section.key)"
+            class="tier-header"
+            :aria-expanded="isSectionOpen(tier.key)"
+            @click="toggleSection(tier.key)"
           >
-            <div class="section-title-area">
-              <span class="section-indicator" :style="{ background: section.color }" />
-              <span class="section-title">{{ section.title }}</span>
-              <span class="section-badge" :style="{ background: section.color }">
-                {{ section.entries.value.length }}
-              </span>
+            <div class="tier-title-group">
+              <span :class="['tier-indicator', `tier-indicator--${tier.key}`]" />
+              <span class="tier-label">{{ tier.title }}</span>
+              <span class="tier-count">{{ tier.entries.value.length }} 条</span>
             </div>
             <svg
-              :class="['chevron', { 'chevron--open': isSectionOpen(section.key) }]"
+              :class="['tier-chevron', { 'tier-chevron--open': isSectionOpen(tier.key) }]"
               viewBox="0 0 20 20"
               fill="currentColor"
-              width="14"
-              height="14"
             >
-              <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+              <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
             </svg>
           </button>
 
-          <!-- Section content -->
-          <Transition name="section-expand">
-            <div v-if="isSectionOpen(section.key)" class="section-content">
-              <template v-if="section.entries.value.length">
+          <Transition name="tier-expand">
+            <div v-if="isSectionOpen(tier.key)" class="tier-body">
+              <!-- Tier hint — helps the user understand what this layer does -->
+              <p class="tier-hint">{{ tier.hint }}</p>
+
+              <template v-if="tier.entries.value.length">
                 <div
-                  v-for="entry in section.entries.value"
+                  v-for="entry in tier.entries.value"
                   :key="entry.id"
-                  :class="['memory-entry', { 'memory-entry--expanded': expandedEntryId === entry.id }]"
-                  @click="toggleEntry(entry.id)"
+                  :class="['mem-entry', { 'mem-entry--expanded': isEntryExpanded(tier.key, entry.id) }]"
+                  @click="toggleEntry(tier.key, entry.id)"
                 >
-                  <div class="entry-header-row">
-                    <div class="entry-content">
-                      {{ entry.content }}
-                    </div>
-                  </div>
-                  <div v-if="expandedEntryId === entry.id" class="entry-details">
-                    <span v-if="entry.timestamp" class="entry-time">{{ entry.timestamp }}</span>
-                    <div v-if="entry.tags?.length" class="entry-tags">
-                      <span v-for="tag in entry.tags" :key="tag" class="entry-tag">{{ tag }}</span>
-                    </div>
+                  <div class="mem-text">{{ entry.content }}</div>
+                  <div v-if="isEntryExpanded(tier.key, entry.id)" class="mem-meta">
+                    <span v-if="entry.round != null" class="mem-round-badge">Round {{ entry.round }}</span>
+                    <span v-if="entry.timestamp" class="mem-time">{{ entry.timestamp }}</span>
+                    <template v-if="entry.tags?.length">
+                      <span v-for="tag in entry.tags" :key="tag" class="mem-tag">{{ tag }}</span>
+                    </template>
                   </div>
                 </div>
               </template>
-              <p v-else class="empty-hint">暂无记忆数据</p>
+
+              <div v-else class="tier-empty">
+                <p class="tier-empty-text">这段旅程尚未在此层留下印记</p>
+              </div>
             </div>
           </Transition>
         </section>
       </div>
 
-      <!-- ─── 叙事历史 tab ─── -->
-      <div v-else-if="activeTab === 'narrative'" class="sections">
-        <div v-if="narrativeEntries.length" class="section-content section-content--flat narrative-list">
-          <div
-            v-for="(msg, idx) in narrativeEntries"
-            :key="idx"
-            :class="['narrative-entry', `narrative-entry--${msg.role}`]"
-          >
-            <span class="narrative-role">{{ msg.role === 'user' ? '玩家' : '叙事' }}</span>
-            <div class="narrative-text">{{ msg.content }}</div>
-          </div>
-        </div>
-        <div v-else class="empty-state-tab">
-          <p class="empty-hint">暂无叙事历史</p>
-          <p class="empty-hint" style="opacity: 0.4;">每回合 AI 叙事和玩家输入会追加到此处</p>
+      <!-- ═══ Tab 2: Narrative History ═══ -->
+      <div v-else-if="activeTab === 'narrative'" class="narrative-container">
+        <template v-if="narrativeEntries.length">
+          <template v-for="(msg, idx) in narrativeEntries" :key="idx">
+            <div :class="['narrative-block', `narrative-block--${msg.role}`]">
+              <div :class="['narrative-role', { 'narrative-role--user': msg.role === 'user' }]">
+                <span class="narrative-role-dot" />
+                {{ msg.role === 'user' ? '玩家' : '叙事' }}
+              </div>
+              <div class="narrative-prose">{{ msg.content }}</div>
+            </div>
+            <div
+              v-if="idx < narrativeEntries.length - 1 && msg.role === 'assistant' && narrativeEntries[idx + 1]?.role === 'user'"
+              class="narrative-divider"
+            />
+          </template>
+        </template>
+
+        <div v-else class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <p class="empty-title">叙事历史尚为空白</p>
+          <p class="empty-hint">每回合的 AI 叙事和你的选择都会沉淀于此，渐渐织成独属于你的故事</p>
         </div>
       </div>
 
-      <!-- ─── Config tab ─── -->
-      <div v-else-if="activeTab === 'config'" class="config-section">
-        <p class="config-note">以下为 <code>系统.记忆配置</code> 的当前值（只读）</p>
-        <div v-if="configEntries.length" class="config-list">
-          <div v-for="cfg in configEntries" :key="cfg.key" class="config-row">
-            <span class="config-key">{{ cfg.key }}</span>
-            <span class="config-value">{{ cfg.value }}</span>
+      <!-- ═══ Tab 3: Configuration ═══ -->
+      <div v-else-if="activeTab === 'config'" class="config-container">
+        <!-- Memory flow visualization -->
+        <div class="config-visual-header">
+          <div class="memory-flow">
+            <div class="flow-node">
+              <div class="flow-dot flow-dot--short">{{ effectiveConfig.shortTermLimit }}</div>
+              <span class="flow-label">短期</span>
+            </div>
+            <div class="flow-arrow" />
+            <div class="flow-node">
+              <div class="flow-dot flow-dot--implicit">1:1</div>
+              <span class="flow-label">隐式中期</span>
+            </div>
+            <div class="flow-arrow" />
+            <div class="flow-node">
+              <div class="flow-dot flow-dot--mid">{{ effectiveConfig.midTermRefineThreshold }}</div>
+              <span class="flow-label">中期</span>
+            </div>
+            <div class="flow-arrow" />
+            <div class="flow-node">
+              <div class="flow-dot flow-dot--long">{{ effectiveConfig.longTermCap }}</div>
+              <span class="flow-label">长期</span>
+            </div>
+          </div>
+          <p class="flow-caption">记忆从短期逐层沉淀，数字表示各层的容量或阈值</p>
+        </div>
+
+        <!-- Capacity group -->
+        <div class="config-group">
+          <div class="config-group-label">容量限制</div>
+          <div
+            v-for="(row, idx) in capacityRows"
+            :key="row.key"
+            :class="['config-row', configRowRadiusClass(idx, capacityRows.length)]"
+          >
+            <div class="config-label">
+              <span class="config-key">{{ row.label }}</span>
+              <span class="config-desc">{{ row.desc }}</span>
+            </div>
+            <span class="config-value config-value--number">{{ row.value }}</span>
           </div>
         </div>
-        <p v-else class="empty-hint">暂无记忆配置数据</p>
+
+        <!-- Threshold group -->
+        <div class="config-group">
+          <div class="config-group-label">升级阈值</div>
+          <div
+            v-for="(row, idx) in thresholdRows"
+            :key="row.key"
+            :class="['config-row', configRowRadiusClass(idx, thresholdRows.length)]"
+          >
+            <div class="config-label">
+              <span class="config-key">{{ row.label }}</span>
+              <span class="config-desc">{{ row.desc }}</span>
+            </div>
+            <span class="config-value config-value--number">{{ row.value }}</span>
+          </div>
+        </div>
+
+        <!-- Footer hint -->
+        <div class="config-footer">
+          <svg class="config-footer-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+          </svg>
+          以上配置来自引擎默认值与设置面板覆盖。如需修改，请前往设置面板的记忆区域。
+        </div>
       </div>
     </template>
 
+    <!-- Not loaded state -->
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p class="empty-title">尚未加载游戏数据</p>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* ═══════════════════════════════════════════════════════════
+   MEMORY PANEL — Sanctuary Aesthetic
+   Glass panels, beacon indicators, CJK serif typography.
+   ═══════════════════════════════════════════════════════════ */
 .memory-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   padding: 20px var(--sidebar-right-reserve, 40px) 20px var(--sidebar-left-reserve, 40px);
   height: 100%;
   overflow-y: auto;
@@ -334,64 +485,83 @@ function exportNarrative(): void {
               padding-right var(--duration-open) var(--ease-droplet);
 }
 
+/* ── Header ── */
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 2px;
 }
 
 .panel-title {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--color-text, #e0e0e6);
+  font-family: var(--font-serif-cjk);
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--color-text);
 }
 
-.btn-export {
-  padding: 4px 10px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
-.btn-export:hover {
-  color: var(--color-text-bone);
+
+.btn-ghost {
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+  letter-spacing: 0.02em;
+}
+.btn-ghost:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.06);
   border-color: var(--color-sage-600);
 }
 
-/* ── Tabs ── */
+/* ── Tab Bar (pill-segmented) ── */
 .tab-bar {
   display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--color-border, #2a2a3a);
-  padding-bottom: 4px;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: var(--radius-lg);
 }
 
 .tab-btn {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 8px 16px;
   font-size: 0.78rem;
   font-weight: 500;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-muted);
   background: transparent;
   border: none;
-  border-radius: 6px 6px 0 0;
+  border-radius: calc(var(--radius-lg) - 2px);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--duration-normal) var(--ease-out);
+  letter-spacing: 0.02em;
 }
 .tab-btn:hover {
-  color: var(--color-text, #e0e0e6);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
 }
 .tab-btn--active {
-  color: var(--color-sage-400);
-  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  color: var(--color-text);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .tab-badge {
@@ -399,313 +569,586 @@ function exportNarrative(): void {
   align-items: center;
   justify-content: center;
   min-width: 18px;
-  height: 18px;
+  height: 17px;
   padding: 0 5px;
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: var(--color-text-bone);
-  background: var(--color-sage-500);
-  border-radius: 9px;
+  background: var(--color-sage-600);
+  border-radius: var(--radius-full);
+  letter-spacing: -0.02em;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.tab-btn--active .tab-badge {
+  background: var(--color-sage-400);
 }
 
-/* ── Sections ── */
-.sections {
+/* ═══════════════════════════════════════════════════════════
+   TAB 1: MEMORY TIERS
+   ═══════════════════════════════════════════════════════════ */
+.memory-sections {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.memory-section {
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 10px;
+/* Glass panel per tier */
+.memory-tier {
+  position: relative;
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
 }
 
-.section-header {
+/* Gradient edge (replaces hard 1px border) */
+.memory-tier::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Tier header */
+.tier-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  padding: 14px 16px;
+  background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--color-text, #e0e0e6);
-  transition: background 0.15s ease;
+  color: var(--color-text);
+  user-select: none;
+  transition: background var(--duration-fast) var(--ease-out);
 }
-.section-header:hover {
-  background: rgba(255, 255, 255, 0.04);
+.tier-header:hover {
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.section-title-area {
+.tier-title-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-.section-indicator {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+/* Beacon-style indicator with glow halo */
+.tier-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  position: relative;
+  flex-shrink: 0;
+}
+.tier-indicator::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: var(--radius-full);
+  background: inherit;
+  opacity: 0.3;
+  filter: blur(4px);
 }
 
-.section-title {
-  font-size: 0.88rem;
+.tier-indicator--short    { background: var(--color-success); }
+.tier-indicator--implicit { background: var(--color-info); }
+.tier-indicator--mid      { background: var(--color-amber-400); }
+.tier-indicator--long     { background: var(--color-sage-400); }
+
+.tier-label {
+  font-size: 0.82rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
-.section-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
+.tier-count {
   font-size: 0.65rem;
-  font-weight: 700;
-  color: var(--color-text-bone);
-  border-radius: 10px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-full);
+  letter-spacing: 0.02em;
 }
 
-.chevron {
-  transition: transform 0.2s ease;
-  color: var(--color-text-secondary, #8888a0);
-}
-.chevron--open {
-  transform: rotate(0deg);
-}
-.chevron:not(.chevron--open) {
+.tier-chevron {
+  color: var(--color-text-muted);
+  width: 14px;
+  height: 14px;
+  transition: transform var(--duration-normal) var(--ease-out);
   transform: rotate(-90deg);
 }
+.tier-chevron--open {
+  transform: rotate(0deg);
+}
 
-/* ── Section content ── */
-.section-content {
+/* Tier body */
+.tier-body {
+  padding: 0 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-}
-.section-content--flat {
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 10px;
+  gap: 6px;
 }
 
-/* ── Memory entries ── */
-.memory-entry {
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.memory-entry:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-.memory-entry--expanded {
-  background: rgba(255, 255, 255, 0.04);
-}
-.memory-entry--sent {
-  box-shadow: inset 3px 0 0 var(--color-sage-400);
-}
-
-.entry-header-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.entry-content {
-  flex: 1;
-  font-size: 0.82rem;
-  color: var(--color-text, #e0e0e6);
+.tier-hint {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  padding: 0 4px 4px;
   line-height: 1.5;
-  overflow: hidden;
+  margin: 0;
+}
+
+/* Memory entry */
+.mem-entry {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  position: relative;
+}
+.mem-entry:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+/* Left accent bar (tier-colored) */
+.mem-entry::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 1px;
+  opacity: 0.35;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.mem-entry:hover::before {
+  opacity: 0.7;
+}
+.tier--short .mem-entry::before    { background: var(--color-success); }
+.tier--implicit .mem-entry::before { background: var(--color-info); }
+.tier--mid .mem-entry::before      { background: var(--color-amber-400); }
+.tier--long .mem-entry::before     { background: var(--color-sage-400); }
+
+.mem-text {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.82rem;
+  line-height: 1.75;
+  color: var(--color-text);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  overflow: hidden;
+  letter-spacing: 0.01em;
 }
-.memory-entry--expanded .entry-content {
+.mem-entry--expanded .mem-text {
   -webkit-line-clamp: unset;
 }
 
-.sent-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: var(--color-sage-400);
-  opacity: 0.8;
-}
-
-.entry-details {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+/* Entry metadata (shown on expand) */
+.mem-meta {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.entry-id {
-  font-size: 0.68rem;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--color-text-secondary, #8888a0);
-}
-
-.entry-time {
-  font-size: 0.72rem;
-  color: var(--color-text-secondary, #8888a0);
-}
-
-.entry-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.entry-tag {
-  padding: 1px 6px;
-  font-size: 0.68rem;
-  font-weight: 500;
-  color: var(--color-sage-400);
-  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-  border-radius: 6px;
-}
-
-/* ── Narrative tab ── */
-.narrative-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 500px;
-  overflow-y: auto;
-}
-.narrative-entry {
-  padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-.narrative-entry--user {
-  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
-  box-shadow: inset 3px 0 0 var(--color-sage-400);
-}
-.narrative-entry--assistant {
-  background: color-mix(in oklch, var(--color-success) 5%, transparent);
-  box-shadow: inset 3px 0 0 var(--color-success);
-}
-.narrative-role {
-  display: inline-block;
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  margin-bottom: 2px;
-  opacity: 0.6;
-}
-.narrative-text {
-  font-family: var(--font-serif-cjk);
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: var(--narrative-line-height, 1.88);
-  letter-spacing: var(--narrative-letter-spacing, 0.01em);
-}
-
-/* ── Config tab ── */
-.config-section {
-  display: flex;
-  flex-direction: column;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
   gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.config-note {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #8888a0);
-  opacity: 0.7;
-}
-
-.config-note code {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.72rem;
+.mem-round-badge {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
   color: var(--color-sage-400);
+  padding: 1px 7px;
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  border-radius: var(--radius-full);
 }
 
-.config-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.mem-time {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
 }
 
-.config-row {
-  display: flex;
-  gap: 12px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
+.mem-tag {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  color: var(--color-sage-400);
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+}
+
+/* Empty tier */
+.tier-empty {
+  padding: 20px 16px;
+  text-align: center;
+}
+.tier-empty-text {
   font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin: 0;
 }
 
-.config-key {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--color-warning, #f59e0b);
-  min-width: 120px;
-  flex-shrink: 0;
+/* Tier expand transition */
+.tier-expand-enter-active {
+  transition: opacity var(--duration-normal) var(--ease-out),
+              max-height var(--duration-normal) var(--ease-out);
+  overflow: hidden;
+  max-height: 2000px;
 }
-
-.config-value {
-  color: var(--color-text, #e0e0e6);
-  word-break: break-all;
+.tier-expand-leave-active {
+  transition: opacity var(--duration-fast) var(--ease-out),
+              max-height var(--duration-fast) var(--ease-out);
+  overflow: hidden;
 }
-
-/* ── Transitions ── */
-.section-expand-enter-active {
-  transition: all 0.25s ease;
-}
-.section-expand-leave-active {
-  transition: all 0.15s ease;
-}
-.section-expand-enter-from,
-.section-expand-leave-to {
+.tier-expand-enter-from,
+.tier-expand-leave-to {
   opacity: 0;
   max-height: 0;
-  padding: 0 8px;
+  padding: 0 12px;
 }
 
-/* ── Empty states ── */
-.empty-hint {
-  font-size: 0.82rem;
-  color: var(--color-text-secondary, #8888a0);
+/* ═══════════════════════════════════════════════════════════
+   TAB 2: NARRATIVE HISTORY
+   ═══════════════════════════════════════════════════════════ */
+.narrative-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.narrative-block {
+  position: relative;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.narrative-block:hover {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* Player input — subsidiary awareness */
+.narrative-block--user {
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+}
+.narrative-block--user:hover {
+  border-left-color: color-mix(in oklch, var(--color-sage-400) 65%, transparent);
+}
+
+/* AI narration — focal awareness, given more breathing room */
+.narrative-block--assistant {
+  padding: 20px 18px;
+}
+
+.narrative-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+.narrative-role--user {
+  color: var(--color-sage-600);
+}
+
+.narrative-role-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
   opacity: 0.6;
-  padding: 8px;
-  text-align: center;
-  margin: 0;
 }
 
-.empty-state {
+.narrative-prose {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.88rem;
+  line-height: var(--narrative-line-height, 1.88);
+  letter-spacing: var(--narrative-letter-spacing, 0.015em);
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Pair divider — gradient fade, not hard line */
+.narrative-divider {
+  height: 1px;
+  margin: 8px 18px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 20%,
+    rgba(255, 255, 255, 0.04) 80%,
+    transparent 100%
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB 3: CONFIGURATION
+   ═══════════════════════════════════════════════════════════ */
+.config-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Flow visualization header — glass panel */
+.config-visual-header {
+  position: relative;
+  padding: 20px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.config-visual-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.memory-flow {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  color: var(--color-text-secondary, #8888a0);
-  font-size: 0.88rem;
+  gap: 0;
+  padding: 8px 0 4px;
 }
 
-.empty-state-tab {
+.flow-node {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 32px 16px;
   gap: 6px;
+  min-width: 72px;
 }
 
-/* ── Scrollbar ── */
-.memory-panel::-webkit-scrollbar { width: 5px; }
-.memory-panel::-webkit-scrollbar-track { background: transparent; }
-.memory-panel::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 3px; }
+.flow-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  position: relative;
+}
+.flow-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: var(--radius-full);
+  background: inherit;
+  opacity: 0.15;
+  filter: blur(6px);
+}
+.flow-dot--short    { background: var(--color-success); }
+.flow-dot--implicit { background: var(--color-info); }
+.flow-dot--mid      { background: var(--color-amber-400); }
+.flow-dot--long     { background: var(--color-sage-400); }
 
+.flow-label {
+  font-size: 0.65rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.flow-arrow {
+  width: 36px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-border), var(--color-text-muted), var(--color-border));
+  position: relative;
+  margin: 0 -4px;
+  margin-bottom: 20px;
+}
+.flow-arrow::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-top: 1px solid var(--color-text-muted);
+  border-right: 1px solid var(--color-text-muted);
+  transform: rotate(45deg);
+}
+
+.flow-caption {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+}
+
+/* Config group */
+.config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-group-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  padding: 0 4px 8px;
+}
+
+/* Config rows — iOS-style single column */
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.config-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.config-row + .config-row {
+  margin-top: 1px;
+}
+
+/* Rounded corner variants for grouped rows */
+.config-row--solo  { border-radius: var(--radius-md); }
+.config-row--first { border-radius: var(--radius-md) var(--radius-md) var(--radius-sm) var(--radius-sm); }
+.config-row--last  { border-radius: var(--radius-sm) var(--radius-sm) var(--radius-md) var(--radius-md); }
+.config-row--mid   { border-radius: var(--radius-sm); }
+
+.config-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-key {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.config-desc {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+}
+
+.config-value {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  min-width: 48px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.config-value--number {
+  color: var(--color-amber-400);
+  background: color-mix(in oklch, var(--color-amber-400) 6%, transparent);
+}
+
+/* Footer hint */
+.config-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 4px;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.config-footer-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--color-sage-600);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EMPTY STATES
+   ═══════════════════════════════════════════════════════════ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 8px;
+}
+
+.empty-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--color-text-muted);
+  opacity: 0.3;
+  margin-bottom: 4px;
+}
+
+.empty-title {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.empty-hint {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  text-align: center;
+  margin: 0;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCROLLBAR & RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
-  .memory-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+  .memory-panel {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+    transition: none;
+  }
+  .flow-arrow { width: 24px; }
+  .flow-node { min-width: 56px; }
+  .flow-dot { width: 28px; height: 28px; font-size: 0.6rem; }
 }
 </style>
