@@ -16,8 +16,11 @@
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, nextTick, toRaw } from 'vue';
 import cytoscape from 'cytoscape';
+import fcose from 'cytoscape-fcose';
 import type { Core as CyCore, NodeSingular, EventObject } from 'cytoscape';
 import { useGameState } from '@/ui/composables/useGameState';
+
+cytoscape.use(fcose);
 import { useMobile } from '@/ui/composables/useMobile';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -316,6 +319,25 @@ function buildGraphData() {
   return { nodes, edges };
 }
 
+// ─── Layout config ──────────────────────────────────────────────
+
+function getLayoutConfig(): cytoscape.LayoutOptions {
+  return {
+    name: 'fcose',
+    animate: false,
+    nodeDimensionsIncludeLabels: true,
+    quality: 'proof',
+    nodeSeparation: 60,
+    idealEdgeLength: () => 50,
+    nodeRepulsion: () => 6000,
+    packComponents: true,
+    tile: true,
+    tilingPaddingVertical: 20,
+    tilingPaddingHorizontal: 20,
+    numIter: 2500,
+  } as cytoscape.LayoutOptions;
+}
+
 // ─── Cytoscape lifecycle ─────────────────────────────────────────
 
 function initCytoscape(): void {
@@ -458,31 +480,7 @@ function initCytoscape(): void {
         },
       },
     ],
-    layout: {
-      name: 'cose',
-      animate: false,
-      nodeDimensionsIncludeLabels: true,
-      // 2026-04-15 tuning v2：**激进紧凑** —— 尽可能靠近但不重叠
-      //
-      // 策略：大幅降低 nodeRepulsion + 提高 nodeOverlap 惩罚
-      //   - nodeRepulsion 4500→1500：节点间互斥力大幅削弱（原值会把空间撑成
-      //     巨大留白）。物理上这让节点自由漂浮更近
-      //   - nodeOverlap 默认→25：**重叠惩罚加倍**。repulsion 低导致的潜在
-      //     重叠由这个 term 在迭代中修正。两者配合 = "尽量靠近 + 拒绝重叠"
-      //   - idealEdgeLength 70→45：兄弟 chain edge 的目标长度缩短
-      //   - componentSpacing 35→18：分离 subgraph 之间更紧
-      //   - nestingFactor 0.8→1.2：compound 内部 edge 权重进一步加强，
-      //     children 被拉得更靠近 parent 中心
-      //   - padding 30→15：cose 边缘留白减半
-      //   - numIter 默认 1000：保留，让算法有足够时间收敛到无重叠
-      idealEdgeLength: () => 45,
-      nodeRepulsion: () => 1500,
-      nodeOverlap: 25,
-      padding: 15,
-      componentSpacing: 18,
-      nestingFactor: 1.2,
-      numIter: isMobile.value ? 300 : 1000,
-    } as cytoscape.LayoutOptions,
+    layout: getLayoutConfig(),
     userZoomingEnabled: true,
     userPanningEnabled: true,
     boxSelectionEnabled: false,
@@ -556,6 +554,49 @@ function initCytoscape(): void {
         { duration: 300, easing: 'ease-out-cubic' },
       );
     }
+  });
+
+  // ── Drag-end overlap resolution (fcose only) ──
+  let relayoutPending = false;
+  cyInstance.on('free', 'node', (evt: EventObject) => {
+    if (!cyInstance || relayoutPending) return;
+    const dragged = evt.target as NodeSingular;
+    const parentId = dragged.data('parent') ?? null;
+    const bb = dragged.boundingBox();
+    const siblings = cyInstance.nodes().filter((n) =>
+      n.id() !== dragged.id() && (n.data('parent') ?? null) === parentId,
+    );
+    let overlaps = false;
+    siblings.forEach((sib) => {
+      const sbb = sib.boundingBox();
+      if (bb.x1 < sbb.x2 && bb.x2 > sbb.x1 && bb.y1 < sbb.y2 && bb.y2 > sbb.y1) overlaps = true;
+    });
+    if (!overlaps) return;
+
+    relayoutPending = true;
+    const unfixed = new Set<string>();
+    unfixed.add(dragged.id());
+    dragged.descendants().forEach((d) => unfixed.add(d.id()));
+    const fixed: Array<{ nodeId: string; position: { x: number; y: number } }> = [];
+    cyInstance.nodes().forEach((n) => {
+      if (n.isParent() || unfixed.has(n.id())) return;
+      fixed.push({ nodeId: n.id(), position: { ...n.position() } });
+    });
+    const ly = cyInstance.layout({
+      name: 'fcose',
+      animate: true,
+      animationDuration: 200,
+      animationEasing: 'ease-out',
+      quality: 'default',
+      nodeDimensionsIncludeLabels: true,
+      nodeSeparation: 60,
+      idealEdgeLength: () => 50,
+      nodeRepulsion: () => 6000,
+      numIter: 300,
+      fixedNodeConstraint: fixed,
+    } as cytoscape.LayoutOptions);
+    ly.on('layoutstop', () => { relayoutPending = false; });
+    ly.run();
   });
 
   // ── Hover tooltip ──
