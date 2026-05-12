@@ -153,6 +153,7 @@ const compositionOptions: SelectOption[] = [
   { label: '头像 (1:1)', value: 'portrait' },
   { label: '半身 (3:4)', value: 'half-body' },
   { label: '立绘 (全身)', value: 'full-length' },
+  { label: '自定义 (构图描述)', value: 'custom' },
 ];
 const styleOptions: SelectOption[] = [
   { label: '通用', value: 'generic' },
@@ -162,6 +163,8 @@ const styleOptions: SelectOption[] = [
 ];
 
 const playerComposition = ref('portrait');
+const playerCustomComposition = ref('');
+const isPlayerCustomComposition = computed(() => playerComposition.value === 'custom');
 const playerStyle = ref('generic');
 const playerExtraPrompt = ref('');
 const playerArtistPreset = ref('');
@@ -370,6 +373,10 @@ function deletePlayerAnchor() {
 
 async function generatePlayerImage() {
   if (!imageService || playerGenerating.value) return;
+  if (isPlayerCustomComposition.value && !playerCustomComposition.value.trim()) {
+    playerGenError.value = '请先填写自定义构图描述。';
+    return;
+  }
   playerGenerating.value = true;
   playerGenError.value = '';
   try {
@@ -429,7 +436,8 @@ async function generatePlayerImage() {
       characterName: '__player__',
       description: playerDesc,
       backend: defaultBackend,
-      composition: playerComposition.value as 'portrait' | 'half-body' | 'full-length',
+      composition: playerComposition.value as 'portrait' | 'half-body' | 'full-length' | 'custom',
+      customComposition: playerCustomComposition.value || undefined,
       artStyle: playerStyle.value === 'generic' ? '通用' : playerStyle.value === 'anime' ? '二次元' : playerStyle.value === 'realistic' ? '写实' : '国风',
       extraPrompt: playerExtraPrompt.value || undefined,
       anchorPositive: anchor?.enabled !== false ? String(anchor?.positivePrompt ?? '') || undefined : undefined,
@@ -478,7 +486,7 @@ function deletePlayerImage(assetId: string) {
 interface PlayerRegenPayload {
   subjectLabel: string;
   subtitle?: string;
-  composition: 'portrait' | 'half-body' | 'full-length';
+  composition: 'portrait' | 'half-body' | 'full-length' | 'custom';
   positivePrompt: string;
   negativePrompt: string;
   width: number;
@@ -498,13 +506,13 @@ function openPlayerRegenerate(img: Record<string, unknown>, asReference = false)
     eventBus.emit('ui:toast', { type: 'error', message: '该记录未保存提示词，无法同款生成', duration: 2000 });
     return;
   }
-  const comp = (String(img.composition ?? 'portrait') as 'portrait' | 'half-body' | 'full-length');
+  const comp = (String(img.composition ?? 'portrait') as 'portrait' | 'half-body' | 'full-length' | 'custom');
   const width = Number(img.width) || 832;
   const height = Number(img.height) || 1216;
   const rawBackend = String(img.backend ?? '');
   const bk = (rawBackend as ImageBackendType) || resolveDefaultBackend();
   const playerName = String(name.value ?? '主角');
-  const compLabel = comp === 'portrait' ? '头像' : comp === 'half-body' ? '半身' : '立绘';
+  const compLabel = comp === 'portrait' ? '头像' : comp === 'half-body' ? '半身' : comp === 'custom' ? '自定义' : '立绘';
   playerRegenPayload.value = {
     subjectLabel: playerName,
     subtitle: [compLabel, `${width} × ${height}`, bk].filter(Boolean).join(' · '),
@@ -1486,6 +1494,10 @@ const avatarInitial = computed<string>(() => {
               <label class="pi-label">构图</label>
               <AgaSelect v-model="playerComposition" :options="compositionOptions" />
             </div>
+            <div v-if="isPlayerCustomComposition" class="pi-form-row">
+              <label class="pi-label">构图描述</label>
+              <input v-model="playerCustomComposition" class="pi-select" placeholder="例如：45度侧脸半身、古风战斗姿势、低机位仰拍" />
+            </div>
 
             <div class="pi-form-row">
               <label class="pi-label">画风</label>
@@ -1715,7 +1727,7 @@ const avatarInitial = computed<string>(() => {
                   <ImageDisplay :asset-id="String(img.id)" :fallback-letter="name?.charAt(0) ?? '?'" size="lg" />
                   <div class="player-img-badges">
                     <span class="player-img-badge player-img-badge--status">{{ img.status === 'failed' ? '失败' : '成功' }}</span>
-                    <span v-if="img.composition" class="player-img-badge">{{ img.composition === 'portrait' ? '头像' : img.composition === 'half-body' ? '半身' : '立绘' }}</span>
+                    <span v-if="img.composition" class="player-img-badge">{{ img.composition === 'portrait' ? '头像' : img.composition === 'half-body' ? '半身' : img.composition === 'custom' ? '自定义' : '立绘' }}</span>
                     <span v-if="playerAvatarId === String(img.id)" class="player-img-badge player-img-badge--selected">已设头像</span>
                     <span v-if="playerPortraitId === String(img.id)" class="player-img-badge player-img-badge--selected">已设立绘</span>
                   </div>
