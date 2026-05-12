@@ -1139,16 +1139,156 @@ function exportNarrative(): void {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SCROLLBAR & RESPONSIVE
+   MOBILE RESPONSIVE (max-width: 767px)
+   Touch-friendly targets, adapted typography, safe-area.
+   Glass blur is globally reduced to 8px by mobile.css.
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
+  /* ── Panel shell ── */
   .memory-panel {
-    padding-left: var(--space-md);
-    padding-right: var(--space-md);
+    padding: 16px var(--space-md);
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    gap: 12px;
     transition: none;
   }
-  .flow-arrow { width: 24px; }
-  .flow-node { min-width: 56px; }
-  .flow-dot { width: 28px; height: 28px; font-size: 0.6rem; }
+
+  /* ── Header ── */
+  .panel-header { padding: 0; }
+  .panel-title { font-size: 1rem; }
+  .btn-ghost {
+    padding: 8px 14px;
+    font-size: 0.75rem;
+    min-height: 36px;
+  }
+
+  /* ── Tab bar — larger touch targets ── */
+  .tab-bar {
+    padding: 3px;
+    border-radius: var(--radius-md);
+  }
+  .tab-btn {
+    padding: 10px 8px;
+    font-size: 0.78rem;
+    min-height: 40px;
+    border-radius: calc(var(--radius-md) - 2px);
+  }
+  .tab-badge {
+    min-width: 16px;
+    height: 16px;
+    font-size: 0.58rem;
+  }
+
+  /* ── Memory tiers ── */
+  .memory-sections { gap: 10px; }
+
+  .memory-tier {
+    border-radius: var(--radius-md);
+  }
+
+  .tier-header {
+    padding: 14px;
+    min-height: 48px;
+  }
+  .tier-label { font-size: 0.82rem; }
+
+  .tier-body {
+    padding: 0 10px 10px;
+    gap: 6px;
+  }
+  .tier-hint {
+    font-size: 0.68rem;
+    padding: 0 2px 2px;
+  }
+
+  /* ── Memory entries — touch-friendly ── */
+  .mem-entry {
+    padding: 14px 12px;
+    min-height: 44px;
+  }
+  .mem-entry::before {
+    width: 3px;
+    top: 10px;
+    bottom: 10px;
+  }
+  .mem-text {
+    font-size: 0.82rem;
+    line-height: 1.7;
+  }
+  .mem-meta {
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  /* ── Narrative tab ── */
+  .narrative-block {
+    padding: 12px 14px;
+  }
+  .narrative-block--assistant {
+    padding: 16px 14px;
+  }
+  .narrative-prose {
+    font-size: 0.86rem;
+    line-height: 1.82;
+  }
+  .narrative-divider {
+    margin: 6px 14px;
+  }
+
+  /* ── Config tab ── */
+  .config-visual-header {
+    padding: 16px 12px;
+  }
+
+  /* Flow diagram — compact for narrow screens */
+  .flow-node { min-width: 52px; }
+  .flow-dot {
+    width: 28px;
+    height: 28px;
+    font-size: 0.6rem;
+  }
+  .flow-arrow {
+    width: 20px;
+    margin-bottom: 18px;
+  }
+  .flow-label { font-size: 0.6rem; }
+  .flow-caption { font-size: 0.64rem; }
+
+  /* Config rows — stack label/value vertically on tight screens */
+  .config-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 12px;
+    min-height: 44px;
+  }
+  .config-value {
+    align-self: flex-end;
+    font-size: 0.78rem;
+  }
+  .config-key { font-size: 0.78rem; }
+  .config-desc { font-size: 0.66rem; }
+  .config-footer { font-size: 0.66rem; }
+
+  /* ── Empty states ── */
+  .empty-state { padding: 36px 16px; }
+  .empty-icon { width: 32px; height: 32px; }
+  .empty-hint { max-width: 260px; }
+}
+
+/* ── Extra-narrow (< 380px, e.g. iPhone SE) ── */
+@media (max-width: 380px) {
+  .memory-panel { padding: 12px var(--space-sm); }
+  .tab-btn { padding: 10px 4px; font-size: 0.72rem; }
+  .flow-node { min-width: 44px; }
+  .flow-dot { width: 24px; height: 24px; font-size: 0.55rem; }
+  .flow-arrow { width: 14px; }
+  .config-row { padding: 10px; }
+}
+
+/* ── Touch device scrollbar hiding (matches mobile.css pattern) ── */
+@media (hover: none) and (pointer: coarse) {
+  .memory-panel { scrollbar-width: none; }
+  .memory-panel::-webkit-scrollbar { display: none; }
 }
 </style>
