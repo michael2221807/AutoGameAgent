@@ -1,5 +1,7 @@
 <div align="center">
 
+**English** | [中文](README.zh-CN.md)
+
 <img src="public/favicon.svg" alt="AutoGameAgent" width="80" />
 
 # AutoGameAgent
@@ -19,6 +21,12 @@ Build immersive, persistent story worlds powered by large language models.
 
 A browser-based game engine that uses LLMs (Claude, GPT, Ollama, etc.) to generate rich narrative experiences with persistent world state, deep character systems, and semantic memory. Players create characters, explore AI-generated worlds, build relationships with NPCs, and shape emergent stories through natural language.
 
+### [Play Now &rarr; michael2221807.github.io/AutoGameAgent](https://michael2221807.github.io/AutoGameAgent/)
+
+No installation required. Bring your own API key and start playing in seconds.
+
+---
+
 [Getting Started](#getting-started) ·
 [Features](#features) ·
 [Architecture](#architecture) ·
@@ -32,20 +40,25 @@ A browser-based game engine that uses LLMs (Claude, GPT, Ollama, etc.) to genera
 
 ## Getting Started
 
+### Play Online (Recommended)
+
+Visit **[michael2221807.github.io/AutoGameAgent](https://michael2221807.github.io/AutoGameAgent/)** and follow these steps:
+
+1. Click **API Configuration** on the home screen
+2. Add at least one LLM API (OpenAI, Anthropic, Ollama, SiliconFlow, etc.) and assign it to the `main` usage type
+3. Click **New Character** to create your first character
+4. Follow the creation wizard, then click **Start Game**
+
+> All data is stored locally in your browser (IndexedDB + localStorage). Nothing is sent to our servers.
+
+### Run Locally
+
 ```bash
 git clone https://github.com/michael2221807/AutoGameAgent.git
 cd AutoGameAgent
 npm install
 npm run dev
 ```
-
-**First-time setup:**
-
-1. Open the app in your browser
-2. Click **API Configuration** on the home screen
-3. Add at least one LLM API (OpenAI, Anthropic, Ollama, SiliconFlow, etc.) and assign it to the `main` usage type
-4. Click **New Character** to create your first character
-5. Follow the creation wizard, then click **Start Game**
 
 ---
 
