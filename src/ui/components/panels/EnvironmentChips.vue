@@ -36,13 +36,13 @@ function open(): void {
     <button
       type="button"
       class="env-chips"
-      :title="overflow > 0 ? `共 ${sanitized.length} 个环境标签，点击查看全部` : '点击查看详情'"
-      :aria-label="`环境标签：${summary}`"
+      :title="overflow > 0 ? $t('mainGame.env.environment.overflowTooltip', { n: sanitized.length }) : $t('mainGame.env.environment.defaultTooltip')"
+      :aria-label="`${$t('mainGame.env.environment.label')}: ${summary}`"
       aria-haspopup="dialog"
       :aria-expanded="popoverOpen"
       @click="open"
     >
-      <span class="env-chips__label">环境</span>
+      <span class="env-chips__label">{{ $t('mainGame.env.environment.label') }}</span>
       <span class="env-chips__value">{{ summary }}</span>
     </button>
 

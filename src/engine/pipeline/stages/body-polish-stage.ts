@@ -89,7 +89,7 @@ export class BodyPolishStage implements PipelineStage {
     if (!originalText.trim()) return ctx;
 
     const polishStartedAt = performance.now();
-    ctx.onProgress?.('[BodyPolish:润色中]');
+    ctx.onProgress?.({ i18nKey: 'engine.progress.bodyPolish', message: '[BodyPolish:润色中]' });
 
     try {
       // Prefer pack / worldbook-overridden prompt content (so users can customize

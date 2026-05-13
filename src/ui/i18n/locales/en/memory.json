@@ -1,0 +1,55 @@
+{
+  "memory.title": "Memory System",
+  "memory.export.button": "Export Narrative",
+  "memory.export.buttonTitle": "Export all narrative history as a text file",
+  "memory.export.emptyToast": "Narrative history is empty",
+  "memory.export.fileHeader": "# Narrative Export",
+
+  "memory.tab.memoryList": "Memory List",
+  "memory.tab.narrative": "Narrative History",
+  "memory.tab.config": "Config",
+
+  "memory.tier.short.title": "Short-term Memory",
+  "memory.tier.short.hint": "Narrative snapshots from recent rounds, serving as the AI's immediate context",
+  "memory.tier.implicit.title": "Implicit Mid-term",
+  "memory.tier.implicit.hint": "The AI's structured understanding of each short-term memory, paired 1:1",
+  "memory.tier.mid.title": "Mid-term Memory",
+  "memory.tier.mid.hint": "Promoted from short-term overflow; triggers long-term summary when threshold is reached",
+  "memory.tier.long.title": "Long-term Memory",
+  "memory.tier.long.hint": "The product of worldview evolution — the AI's deep understanding of the entire story arc",
+
+  "memory.tier.countSuffix": "{n} entries",
+  "memory.tier.emptyState": "This journey has not yet left a trace at this tier",
+
+  "memory.narrative.rolePlayer": "Player",
+  "memory.narrative.roleNarrator": "Narrator",
+  "memory.narrative.emptyTitle": "Narrative history is still blank",
+  "memory.narrative.emptyHint": "Each round's AI narration and your choices will settle here, gradually weaving a story that belongs to you alone",
+  "memory.narrative.exportPlayerPrefix": "[Player] ",
+
+  "memory.config.flowLabel.short": "Short",
+  "memory.config.flowLabel.implicit": "Implicit Mid",
+  "memory.config.flowLabel.mid": "Mid",
+  "memory.config.flowLabel.long": "Long",
+  "memory.config.flowCaption": "Memory sinks layer by layer from short-term; numbers indicate capacity or threshold at each tier",
+
+  "memory.config.group.capacity": "Capacity Limits",
+  "memory.config.group.threshold": "Upgrade Thresholds",
+
+  "memory.config.row.shortTermLimit.label": "Short-term Capacity",
+  "memory.config.row.shortTermLimit.desc": "Number of recent entries retained in short-term memory",
+  "memory.config.row.longTermCap.label": "Long-term Cap",
+  "memory.config.row.longTermCap.desc": "Maximum number of entries stored in long-term memory",
+  "memory.config.row.midTermRefineThreshold.label": "Mid-term Refine Threshold",
+  "memory.config.row.midTermRefineThreshold.desc": "Triggers long-term summary when mid-term memory reaches this count",
+  "memory.config.row.longTermSummaryThreshold.label": "Long-term Summary Threshold",
+  "memory.config.row.longTermSummaryThreshold.desc": "Amount of mid-term memory that triggers worldview evolution",
+  "memory.config.row.longTermSummarizeCount.label": "Long-term Summary Batch",
+  "memory.config.row.longTermSummarizeCount.desc": "Number of mid-term memories consumed per long-term summary",
+  "memory.config.row.midTermKeep.label": "Mid-term Retain Count",
+  "memory.config.row.midTermKeep.desc": "Number of newest mid-term entries retained after long-term summary",
+
+  "memory.config.footerHint": "These settings come from engine defaults and settings panel overrides. To modify, go to the memory section in the Settings panel.",
+
+  "memory.notLoaded": "Game data not yet loaded"
+}

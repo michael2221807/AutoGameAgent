@@ -12,7 +12,7 @@
       class="toast-container"
       role="log"
       aria-live="polite"
-      aria-label="通知消息"
+      :aria-label="$t('common.toast.ariaContainer')"
     >
       <TransitionGroup name="toast-slide" tag="div" class="toast-stack">
         <div
@@ -45,7 +45,7 @@
           <!-- Dismiss button -->
           <button
             class="toast__close"
-            aria-label="关闭通知"
+            :aria-label="$t('common.toast.ariaClose')"
             @click="dismiss(toast.id)"
           >
             <svg viewBox="0 0 20 20" fill="currentColor">
@@ -68,8 +68,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { eventBus } from '@/engine/core/event-bus';
 import type { ToastPayload } from '@/engine/types';
+
+const { t } = useI18n();
 
 /**
  * Internal toast entry with tracking metadata.
@@ -96,10 +99,10 @@ const visibleToasts = ref<ToastEntry[]>([]);
 /** Maps toast type to a human-readable label for screen readers */
 function toastTypeLabel(type: ToastEntry['type']): string {
   const labels: Record<ToastEntry['type'], string> = {
-    info: '提示',
-    success: '成功',
-    warning: '警告',
-    error: '错误',
+    info: t('common.toast.type.info'),
+    success: t('common.toast.type.success'),
+    warning: t('common.toast.type.warning'),
+    error: t('common.toast.type.error'),
   };
   return labels[type];
 }
@@ -150,14 +153,18 @@ function dismiss(id: number): void {
 /** Handle incoming toast events from the engine event bus */
 function handleToastEvent(payload: unknown): void {
   const p = payload as ToastPayload;
-  if (!p || !p.message) return;
+  if (!p || (!p.message && !p.i18nKey)) return;
+
+  const displayMessage = p.i18nKey
+    ? t(p.i18nKey, p.i18nParams ?? {})
+    : p.message ?? '';
 
   const rawDuration = p.duration ?? DEFAULT_DURATION;
   const duration = rawDuration > 0 ? Math.max(rawDuration, MIN_DURATION) : 0;
   const toast: ToastEntry = {
     id: nextId++,
     type: p.type ?? 'info',
-    message: p.message,
+    message: displayMessage,
     duration,
     paused: false,
     timerId: null,

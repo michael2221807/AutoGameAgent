@@ -53,13 +53,13 @@ function indexByValue(options: ImageSizeOption[]): Map<string, ImageSizeOption> 
 // ═══════════════════════════════════════════════════════════
 
 export const COMMON_SIZE_OPTIONS: ImageSizeOption[] = [
-  createSizeOption(512, 512, '1:1', '图标', 'square'),
-  createSizeOption(640, 640, '1:1', '图标', 'square'),
-  createSizeOption(512, 768, '2:3', '竖直', 'portrait'),
-  createSizeOption(768, 512, '3:2', '水平', 'landscape'),
+  createSizeOption(512, 512, '1:1', 'Icon', 'square'),
+  createSizeOption(640, 640, '1:1', 'Icon', 'square'),
+  createSizeOption(512, 768, '2:3', 'Portrait', 'portrait'),
+  createSizeOption(768, 512, '3:2', 'Landscape', 'landscape'),
   createSizeOption(1024, 1024, '1:1', 'SDXL', 'square'),
-  createSizeOption(1216, 832, '19:13', '超高清', 'landscape'),
-  createSizeOption(832, 1216, '13:19', '超高清', 'portrait'),
+  createSizeOption(1216, 832, '19:13', 'Ultra HD', 'landscape'),
+  createSizeOption(832, 1216, '13:19', 'Ultra HD', 'portrait'),
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -67,21 +67,21 @@ export const COMMON_SIZE_OPTIONS: ImageSizeOption[] = [
 // ═══════════════════════════════════════════════════════════
 
 const SCENE_EXTRA_SIZE_OPTIONS: ImageSizeOption[] = [
-  createSizeOption(576, 1024, '9:16', '竖屏', 'portrait'),
-  createSizeOption(720, 1280, '9:16', '竖屏高清', 'portrait'),
-  createSizeOption(864, 1536, '9:16', '竖屏高精', 'portrait'),
-  createSizeOption(768, 1024, '3:4', '竖屏', 'portrait'),
-  createSizeOption(832, 1216, '13:19', '超高清', 'portrait'),
-  createSizeOption(1024, 1280, '4:5', '竖屏', 'portrait'),
-  createSizeOption(1024, 1536, '2:3', '竖屏', 'portrait'),
-  createSizeOption(1024, 576, '16:9', '横屏', 'landscape'),
-  createSizeOption(1216, 832, '19:13', '超高清', 'landscape'),
-  createSizeOption(1280, 720, '16:9', '横屏高清', 'landscape'),
-  createSizeOption(1536, 864, '16:9', '横屏高精', 'landscape'),
-  createSizeOption(1152, 640, '18:10', '横屏', 'landscape'),
-  createSizeOption(1024, 640, '8:5', '横屏', 'landscape'),
-  createSizeOption(1024, 768, '4:3', '横屏', 'landscape'),
-  createSizeOption(1024, 832, '5:4', '横屏', 'landscape'),
+  createSizeOption(576, 1024, '9:16', 'Portrait', 'portrait'),
+  createSizeOption(720, 1280, '9:16', 'Portrait HD', 'portrait'),
+  createSizeOption(864, 1536, '9:16', 'Portrait HQ', 'portrait'),
+  createSizeOption(768, 1024, '3:4', 'Portrait', 'portrait'),
+  createSizeOption(832, 1216, '13:19', 'Ultra HD', 'portrait'),
+  createSizeOption(1024, 1280, '4:5', 'Portrait', 'portrait'),
+  createSizeOption(1024, 1536, '2:3', 'Portrait', 'portrait'),
+  createSizeOption(1024, 576, '16:9', 'Landscape', 'landscape'),
+  createSizeOption(1216, 832, '19:13', 'Ultra HD', 'landscape'),
+  createSizeOption(1280, 720, '16:9', 'Landscape HD', 'landscape'),
+  createSizeOption(1536, 864, '16:9', 'Landscape HQ', 'landscape'),
+  createSizeOption(1152, 640, '18:10', 'Landscape', 'landscape'),
+  createSizeOption(1024, 640, '8:5', 'Landscape', 'landscape'),
+  createSizeOption(1024, 768, '4:3', 'Landscape', 'landscape'),
+  createSizeOption(1024, 832, '5:4', 'Landscape', 'landscape'),
 ];
 
 const ALL_SIZE_OPTIONS_MAP = indexByValue(dedup([

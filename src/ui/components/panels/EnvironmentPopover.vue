@@ -33,12 +33,12 @@ defineEmits<{
 <template>
   <Modal
     :model-value="modelValue"
-    :title="title ?? '周遭环境'"
+    :title="title ?? $t('mainGame.env.environment.popoverTitle')"
     width="360px"
     @update:model-value="(v) => $emit('update:modelValue', v)"
   >
     <div v-if="tags.length === 0" class="env-popover__empty">
-      风平浪静，并无特殊环境。
+      {{ $t('mainGame.env.environment.emptyState') }}
     </div>
     <div v-else class="env-popover__list">
       <div

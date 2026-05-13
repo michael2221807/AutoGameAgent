@@ -5,7 +5,6 @@
  * Teleports to <body>; traps focus; Escape to cancel; click-outside to cancel.
  */
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
-
 defineProps<{
   title?: string;
   message: string;
@@ -43,19 +42,19 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <div class="aga-confirm-overlay" @click.self="cancel">
-      <div ref="dialogRef" class="aga-confirm-dialog" role="dialog" :aria-label="title ?? '确认'">
+      <div ref="dialogRef" class="aga-confirm-dialog" role="dialog" :aria-label="title ?? $t('modal.confirm.ariaDialog')">
         <h3 v-if="title" class="aga-confirm__title">{{ title }}</h3>
         <p class="aga-confirm__message">{{ message }}</p>
         <div class="aga-confirm__actions">
           <button class="aga-confirm__btn aga-confirm__btn--cancel" @click="cancel">
-            {{ cancelLabel ?? '取消' }}
+            {{ cancelLabel ?? $t('modal.confirm.defaultCancel') }}
           </button>
           <button
             class="aga-confirm__btn"
             :class="variant === 'danger' ? 'aga-confirm__btn--danger' : 'aga-confirm__btn--confirm'"
             @click="confirm"
           >
-            {{ confirmLabel ?? '确认' }}
+            {{ confirmLabel ?? $t('modal.confirm.defaultConfirm') }}
           </button>
         </div>
       </div>

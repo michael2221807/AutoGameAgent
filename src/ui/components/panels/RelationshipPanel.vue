@@ -14,6 +14,7 @@
  *   对齐 demo design note §70 "人物关系中的所有页面都在每项数据上增加一编辑按键"
  */
 import { ref, computed, onActivated, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useMobile } from '@/ui/composables/useMobile';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -27,6 +28,7 @@ import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 import ImageViewer from '@/ui/components/image/ImageViewer.vue';
 import { useRouter, useRoute } from 'vue-router';
 
+const { t } = useI18n();
 const { isLoaded, useValue, setValue, get } = useGameState();
 
 /** 身体部位条目 */
@@ -108,15 +110,15 @@ type SortMode = 'name' | 'affinity' | 'gender' | 'importance' | 'recent' | 'loca
 const SORT_KEY = 'aga_rel_sort';
 const SORT_DIR_KEY = 'aga_rel_sort_dir';
 
-const sortOptions: Array<{ label: string; value: SortMode }> = [
-  { label: '首字母', value: 'name' },
-  { label: '亲密度', value: 'affinity' },
-  { label: '性别', value: 'gender' },
-  { label: '重点角色', value: 'importance' },
-  { label: '最近互动', value: 'recent' },
-  { label: '位置', value: 'location' },
-  { label: '在场', value: 'presence' },
-];
+const sortOptions = computed<Array<{ label: string; value: SortMode }>>(() => [
+  { label: t('relationship.sort.name'), value: 'name' },
+  { label: t('relationship.sort.affinity'), value: 'affinity' },
+  { label: t('relationship.sort.gender'), value: 'gender' },
+  { label: t('relationship.sort.importance'), value: 'importance' },
+  { label: t('relationship.sort.recent'), value: 'recent' },
+  { label: t('relationship.sort.location'), value: 'location' },
+  { label: t('relationship.sort.presence'), value: 'presence' },
+]);
 
 const sortMode = ref<SortMode>(
   (localStorage.getItem(SORT_KEY) as SortMode) || 'name',
@@ -218,7 +220,7 @@ function toggleHeartbeatLock(npc: NpcRelation, event: Event): void {
   const locked = !npc.心跳锁定;
   eventBus.emit('ui:toast', {
     type: locked ? 'info' : 'success',
-    message: `${npc.名称} 心跳锁定已${locked ? '开启' : '关闭'}`,
+    message: locked ? t('relationship.toast.heartbeatLockOn', { name: npc.名称 }) : t('relationship.toast.heartbeatLockOff', { name: npc.名称 }),
     duration: 1200,
   });
 }
@@ -266,8 +268,8 @@ const typeSummary = computed<Array<[string, number]>>(() => {
   const list = Array.isArray(relationships.value) ? relationships.value : [];
   const counts: Record<string, number> = {};
   for (const r of list) {
-    const t = r.类型 ?? '未分类';
-    counts[t] = (counts[t] ?? 0) + 1;
+    const tp = r.类型 ?? t('relationship.typeSummary.uncategorized');
+    counts[tp] = (counts[tp] ?? 0) + 1;
   }
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 });
@@ -524,7 +526,7 @@ function saveNpc(): void {
   if (!trimmedName) {
     eventBus.emit('ui:toast', {
       type: 'error',
-      message: 'NPC 名称不能为空',
+      message: t('relationship.toast.nameRequired'),
       duration: 2000,
     });
     return;
@@ -546,7 +548,7 @@ function saveNpc(): void {
   showEditModal.value = false;
   eventBus.emit('ui:toast', {
     type: 'success',
-    message: editIndex.value >= 0 ? '已更新 NPC 信息' : '已添加新 NPC',
+    message: editIndex.value >= 0 ? t('relationship.toast.updated') : t('relationship.toast.added'),
     duration: 1500,
   });
 }
@@ -563,7 +565,7 @@ function openChat(npc: NpcRelation, event: Event): void {
   if (!name) {
     eventBus.emit('ui:toast', {
       type: 'warning',
-      message: '该 NPC 尚未设置名称，无法私聊',
+      message: t('relationship.toast.noName'),
       duration: 2500,
     });
     return;
@@ -603,7 +605,7 @@ function deleteNpc(): void {
   list.splice(editIndex.value, 1);
   setValue(DEFAULT_ENGINE_PATHS.relationships, list);
   showEditModal.value = false;
-  eventBus.emit('ui:toast', { type: 'warning', message: '已删除 NPC', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'warning', message: t('relationship.toast.deleted'), duration: 1500 });
 }
 
 /** Affinity color gradient: red → yellow → green */
@@ -628,6 +630,32 @@ function typeClass(type: string | undefined): string {
   };
   return map[type ?? ''] ?? 'type--default';
 }
+
+/** Map state-tree NPC type value (always Chinese) to translated display label. */
+function displayType(type: string | undefined): string {
+  if (!type) return '—';
+  const map: Record<string, string> = {
+    重点: t('relationship.editForm.typeOption.key'),
+    同伴: t('relationship.editForm.typeOption.companion'),
+    商人: t('relationship.editForm.typeOption.merchant'),
+    中立: t('relationship.editForm.typeOption.neutral'),
+    敌对: t('relationship.editForm.typeOption.hostile'),
+    普通: t('relationship.editForm.typeOption.normal'),
+  };
+  return map[type] ?? type;
+}
+
+/** Map state-tree body-part name (always Chinese) to translated display label. */
+function displayBodyPartName(name: string | undefined): string {
+  if (!name) return '';
+  const map: Record<string, string> = {
+    嘴: t('relationship.bodyPart.mouth'),
+    胸部: t('relationship.bodyPart.breast'),
+    小穴: t('relationship.bodyPart.vagina'),
+    屁穴: t('relationship.bodyPart.anus'),
+  };
+  return map[name] ?? name;
+}
 </script>
 
 <template>
@@ -638,7 +666,7 @@ function typeClass(type: string | undefined): string {
         <aside class="rel-roster">
           <div class="roster-header">
             <div class="roster-title">
-              社交关系
+              {{ $t('relationship.roster.title') }}
               <span v-if="relationships?.length" class="badge">{{ relationships.length }}</span>
             </div>
             <button class="btn-add" @click="openAddNew">+</button>
@@ -647,7 +675,7 @@ function typeClass(type: string | undefined): string {
             v-model="searchQuery"
             type="text"
             class="roster-search"
-            placeholder="搜索 NPC…"
+            :placeholder="$t('relationship.search.placeholder')"
           />
           <div class="sort-bar">
             <button
@@ -678,20 +706,20 @@ function typeClass(type: string | undefined): string {
                   <span class="rc-name">{{ npc.名称 }}</span>
                   <div class="rc-meta">
                     <span :class="['rc-presence', npc['是否在场'] ? 'rc-presence--on' : 'rc-presence--off']">
-                      {{ npc['是否在场'] ? '在场' : '离线' }}
+                      {{ npc['是否在场'] ? $t('relationship.card.present') : $t('relationship.card.offline') }}
                     </span>
-                    <span v-if="npc.类型" :class="['rc-type-label', typeClass(npc.类型)]">{{ npc.类型 }}</span>
+                    <span v-if="npc.类型" :class="['rc-type-label', typeClass(npc.类型)]">{{ displayType(npc.类型) }}</span>
                   </div>
                   <span v-if="npc.位置" class="rc-location">{{ shortLocation(npc.位置) }}</span>
                 </div>
                 <div class="rc-right">
                   <span class="rc-affinity" :style="{ color: affinityColor(npc.好感度 ?? 50) }">♡ {{ npc.好感度 ?? '—' }}</span>
-                  <span v-if="npc['是否主要角色']" class="rc-badge-main">MAIN</span>
+                  <span v-if="npc['是否主要角色']" class="rc-badge-main">{{ $t('relationship.card.mainBadge') }}</span>
                 </div>
               </div>
             </template>
             <div v-else class="roster-empty">
-              <p>{{ searchQuery ? '无匹配' : '暂无 NPC' }}</p>
+              <p>{{ searchQuery ? $t('relationship.card.noMatch') : $t('relationship.card.empty') }}</p>
             </div>
           </div>
           <div v-if="typeSummary.length" class="roster-stats">
@@ -699,7 +727,7 @@ function typeClass(type: string | undefined): string {
               v-for="([type, count]) in typeSummary"
               :key="type"
               :class="['type-stat', typeClass(type)]"
-            >{{ type }} {{ count }}</span>
+            >{{ displayType(type) }} {{ count }}</span>
           </div>
         </aside>
 
@@ -708,7 +736,7 @@ function typeClass(type: string | undefined): string {
           <template v-if="selectedNpc">
             <!-- Hero header -->
             <div class="rd-hero">
-              <button class="rd-hero-avatar-btn" title="点击生成/管理图片" @click="openImageWorkbench(selectedNpc.名称, $event)">
+              <button class="rd-hero-avatar-btn" :title="$t('relationship.detail.avatarTitle')" @click="openImageWorkbench(selectedNpc.名称, $event)">
                 <ImageDisplay
                   :asset-id="selectedNpc['图片档案']?.['已选头像图片ID']"
                   :fallback-letter="selectedNpc.名称?.charAt(0) ?? '?'"
@@ -719,25 +747,25 @@ function typeClass(type: string | undefined): string {
               <div class="rd-hero-info">
                 <h2 class="rd-hero-name">{{ selectedNpc.名称 }}</h2>
                 <div class="rd-hero-chips">
-                  <span v-if="selectedNpc.性别 || selectedNpc.年龄" class="rd-chip">{{ [selectedNpc.性别, selectedNpc.年龄 ? selectedNpc.年龄 + '岁' : ''].filter(Boolean).join(' | ') }}</span>
+                  <span v-if="selectedNpc.性别 || selectedNpc.年龄" class="rd-chip">{{ [selectedNpc.性别, selectedNpc.年龄 ? selectedNpc.年龄 + $t('relationship.detail.ageSuffix') : ''].filter(Boolean).join(' | ') }}</span>
                   <span v-if="selectedNpc.描述" class="rd-chip">{{ selectedNpc.描述 }}</span>
-                  <span v-if="selectedNpc['是否在场']" class="rd-chip rd-chip--presence">在场中</span>
+                  <span v-if="selectedNpc['是否在场']" class="rd-chip rd-chip--presence">{{ $t('relationship.detail.presenceOn') }}</span>
                 </div>
                 <div class="rd-hero-actions">
-                  <button class="rd-action-btn" @click="togglePresence(selectedNpc, $event)">◎ {{ selectedNpc['是否在场'] ? '标为离场' : '标为在场' }}</button>
-                  <button class="rd-action-btn" @click="toggleMajorRole(selectedNpc, $event)">☆ {{ selectedNpc['是否主要角色'] ? '取消重要' : '设为重要' }}</button>
-                  <button class="rd-action-btn" @click="toggleAttention(selectedNpc, $event)">👁 {{ selectedNpc.关注 ? '取消关注' : '关注' }}</button>
-                  <button class="rd-action-btn" @click="toggleHeartbeatLock(selectedNpc, $event)">{{ selectedNpc.心跳锁定 ? '🔓 解除锁定' : '🔒 心跳锁定' }}</button>
-                  <button class="rd-action-btn" @click="openChat(selectedNpc, $event)">💬 私聊</button>
-                  <button class="rd-action-btn" @click="openEdit(selectedNpc, detailNpcIdx)">✏ 编辑</button>
-                  <button class="rd-action-btn" @click="openAiEdit(selectedNpc)">🤖 AI编辑</button>
-                  <button class="rd-action-btn" @click="openImageWorkbench(selectedNpc.名称, $event)">🖼 生图</button>
+                  <button class="rd-action-btn" @click="togglePresence(selectedNpc, $event)">◎ {{ selectedNpc['是否在场'] ? $t('relationship.detail.markLeave') : $t('relationship.detail.markPresent') }}</button>
+                  <button class="rd-action-btn" @click="toggleMajorRole(selectedNpc, $event)">☆ {{ selectedNpc['是否主要角色'] ? $t('relationship.detail.cancelMajor') : $t('relationship.detail.setMajor') }}</button>
+                  <button class="rd-action-btn" @click="toggleAttention(selectedNpc, $event)">👁 {{ selectedNpc.关注 ? $t('relationship.detail.unwatch') : $t('relationship.detail.watch') }}</button>
+                  <button class="rd-action-btn" @click="toggleHeartbeatLock(selectedNpc, $event)">{{ selectedNpc.心跳锁定 ? '🔓 ' + $t('relationship.detail.unlockHeartbeat') : '🔒 ' + $t('relationship.detail.lockHeartbeat') }}</button>
+                  <button class="rd-action-btn" @click="openChat(selectedNpc, $event)">💬 {{ $t('relationship.detail.privateChat') }}</button>
+                  <button class="rd-action-btn" @click="openEdit(selectedNpc, detailNpcIdx)">✏ {{ $t('relationship.detail.edit') }}</button>
+                  <button class="rd-action-btn" @click="openAiEdit(selectedNpc)">🤖 {{ $t('relationship.detail.aiEdit') }}</button>
+                  <button class="rd-action-btn" @click="openImageWorkbench(selectedNpc.名称, $event)">🖼 {{ $t('relationship.detail.generateImage') }}</button>
                 </div>
               </div>
               <div class="rd-affinity-block">
                 <div class="rd-affinity-label">AFFECTION POINT</div>
                 <div class="rd-affinity-num" :style="{ color: affinityColor(selectedNpc.好感度 ?? 50) }">{{ selectedNpc.好感度 ?? '—' }}</div>
-                <span v-if="selectedNpc.类型" :class="['rd-affinity-type', typeClass(selectedNpc.类型)]">{{ selectedNpc.类型 }}</span>
+                <span v-if="selectedNpc.类型" :class="['rd-affinity-type', typeClass(selectedNpc.类型)]">{{ displayType(selectedNpc.类型) }}</span>
               </div>
             </div>
 
@@ -747,7 +775,7 @@ function typeClass(type: string | undefined): string {
               <div class="rd-main">
                 <!-- 人物生平 -->
                 <div v-if="selectedNpc.描述 || selectedNpc.背景" class="rd-section">
-                  <div class="rd-section-title">● 人物生平</div>
+                  <div class="rd-section-title">{{ $t('relationship.detail.sectionBiography') }}</div>
                   <p v-if="selectedNpc.描述" class="prose prose--focal">{{ selectedNpc.描述 }}</p>
                   <p v-if="selectedNpc.背景" class="prose">{{ selectedNpc.背景 }}</p>
                 </div>
@@ -759,42 +787,42 @@ function typeClass(type: string | undefined): string {
 
                 <!-- 内心想法 -->
                 <div v-if="selectedNpc.内心想法" class="thought-cloud">
-                  <span class="section-hint">内心想法</span>
+                  <span class="section-hint">{{ $t('relationship.detail.innerThoughts') }}</span>
                   <p class="thought-text">{{ selectedNpc.内心想法 }}</p>
                 </div>
 
                 <!-- 在做事项 -->
                 <div v-if="selectedNpc.在做事项" class="action-strip">
-                  <span class="section-hint">在做事项</span>
+                  <span class="section-hint">{{ $t('relationship.detail.currentActivity') }}</span>
                   <p class="action-text">{{ selectedNpc.在做事项 }}</p>
                 </div>
 
                 <!-- 最近对话 -->
                 <div v-if="selectedNpc.私聊历史?.length" class="chat-section">
-                  <div class="rd-section-title">● 最近对话</div>
+                  <div class="rd-section-title">{{ $t('relationship.detail.sectionRecentChat') }}</div>
                   <div class="chat-list">
                     <div v-for="(msg, ci) in selectedNpc.私聊历史.slice(-8)" :key="ci" :class="['chat-bubble', `chat-bubble--${msg.role}`]">
-                      <span class="chat-who">{{ msg.role === 'user' ? '你' : selectedNpc.名称 }}</span>
+                      <span class="chat-who">{{ msg.role === 'user' ? $t('relationship.detail.chatYou') : selectedNpc.名称 }}</span>
                       <span>{{ msg.content }}</span>
                     </div>
                   </div>
-                  <p v-if="selectedNpc.私聊历史.length > 8" class="hint">最近 8 条 / 共 {{ selectedNpc.私聊历史.length }}</p>
+                  <p v-if="selectedNpc.私聊历史.length > 8" class="hint">{{ $t('relationship.detail.recentChatSummary', { shown: 8, total: selectedNpc.私聊历史.length }) }}</p>
                 </div>
 
                 <!-- 共同记忆 -->
                 <div v-if="selectedNpc.记忆?.length" class="rd-section">
-                  <div class="rd-section-title">● 共同记忆</div>
+                  <div class="rd-section-title">{{ $t('relationship.detail.sectionSharedMemory') }}</div>
                   <NpcMemoryTimeline :memories="selectedNpc.记忆 ?? []" :summaries="selectedNpc.总结记忆" />
                 </div>
 
-                <p v-if="!selectedNpc.描述 && !selectedNpc.背景 && !selectedNpc.内心想法 && !selectedNpc.在做事项 && !selectedNpc.私聊历史?.length && !selectedNpc.记忆?.length && !selectedNpc.性格特征?.length" class="hint">暂无详细信息</p>
+                <p v-if="!selectedNpc.描述 && !selectedNpc.背景 && !selectedNpc.内心想法 && !selectedNpc.在做事项 && !selectedNpc.私聊历史?.length && !selectedNpc.记忆?.length && !selectedNpc.性格特征?.length" class="hint">{{ $t('relationship.detail.noDetail') }}</p>
 
                 <!-- Portrait gallery (bottom of main column) -->
                 <div v-if="selectedNpc['图片档案']?.['已选立绘图片ID']" class="portrait-gallery">
                   <div class="portrait-frame" @click="openPortraitViewer(selectedNpc['图片档案']['已选立绘图片ID'])">
                     <ImageDisplay :asset-id="selectedNpc['图片档案']['已选立绘图片ID']" :fallback-letter="selectedNpc.名称?.charAt(0) ?? '?'" size="lg" class="portrait-image" />
                     <div class="portrait-vignette" />
-                    <div class="portrait-hint">点击查看大图</div>
+                    <div class="portrait-hint">{{ $t('relationship.detail.clickFullImage') }}</div>
                   </div>
                 </div>
               </div>
@@ -803,74 +831,74 @@ function typeClass(type: string | undefined): string {
               <div class="rd-side">
                 <!-- 外貌/容颜 -->
                 <div v-if="selectedNpc.外貌描述" class="rd-section">
-                  <div class="rd-section-title">● 容颜</div>
+                  <div class="rd-section-title">{{ $t('relationship.detail.sectionAppearance') }}</div>
                   <div class="rd-quote">{{ selectedNpc.外貌描述 }}</div>
                 </div>
 
                 <!-- 身材/衣着 info -->
                 <div v-if="selectedNpc.性别 || selectedNpc.年龄 || selectedNpc.身材描写 || selectedNpc.衣着风格" class="rd-side-info">
                   <div v-if="selectedNpc.性别 || selectedNpc.年龄" class="rd-side-row">
-                    <span class="rd-side-label">生日</span><span class="rd-side-val">不详</span>
-                    <span class="rd-side-label" style="margin-left:16px">称呼</span><span class="rd-side-val">{{ selectedNpc.类型 ?? '—' }}</span>
+                    <span class="rd-side-label">{{ $t('relationship.detail.birthday') }}</span><span class="rd-side-val">{{ $t('relationship.detail.birthdayUnknown') }}</span>
+                    <span class="rd-side-label" style="margin-left:16px">{{ $t('relationship.detail.titleLabel') }}</span><span class="rd-side-val">{{ displayType(selectedNpc.类型) }}</span>
                   </div>
                   <div v-if="selectedNpc.身材描写" class="rd-side-row">
-                    <span class="rd-side-label">身材</span><span class="rd-side-val">{{ selectedNpc.身材描写 }}</span>
+                    <span class="rd-side-label">{{ $t('relationship.detail.physique') }}</span><span class="rd-side-val">{{ selectedNpc.身材描写 }}</span>
                   </div>
                   <div v-if="selectedNpc.衣着风格" class="rd-side-row">
-                    <span class="rd-side-label">衣着</span><span class="rd-side-val">{{ selectedNpc.衣着风格 }}</span>
+                    <span class="rd-side-label">{{ $t('relationship.detail.attire') }}</span><span class="rd-side-val">{{ selectedNpc.衣着风格 }}</span>
                   </div>
                 </div>
 
                 <!-- 香闺秘档 (NSFW) -->
                 <div v-if="nsfwEnabled && selectedNpc.私密信息" class="nsfw-card">
-                  <div class="rd-section-title rd-section-title--nsfw">♥ 香闺秘档 <span class="nsfw-badge">TOP SECRET</span></div>
+                  <div class="rd-section-title rd-section-title--nsfw">♥ {{ $t('relationship.nsfw.sectionTitle') }} <span class="nsfw-badge">TOP SECRET</span></div>
 
                   <div v-if="selectedNpc.私密信息.性格倾向 || selectedNpc.私密信息.性取向" class="nsfw-row">
-                    <div v-if="selectedNpc.私密信息.性格倾向" class="nsfw-field"><span class="section-hint">性格倾向</span><span class="nsfw-val">{{ selectedNpc.私密信息.性格倾向 }}</span></div>
-                    <div v-if="selectedNpc.私密信息.性取向" class="nsfw-field"><span class="section-hint">性取向</span><span class="nsfw-val">{{ selectedNpc.私密信息.性取向 }}</span></div>
+                    <div v-if="selectedNpc.私密信息.性格倾向" class="nsfw-field"><span class="section-hint">{{ $t('relationship.nsfw.personalityDisposition') }}</span><span class="nsfw-val">{{ selectedNpc.私密信息.性格倾向 }}</span></div>
+                    <div v-if="selectedNpc.私密信息.性取向" class="nsfw-field"><span class="section-hint">{{ $t('relationship.nsfw.sexualOrientation') }}</span><span class="nsfw-val">{{ selectedNpc.私密信息.性取向 }}</span></div>
                   </div>
-                  <div v-if="selectedNpc.私密信息.当前性状态" class="nsfw-field" style="margin-top:8px"><span class="section-hint">当前状态</span><p class="nsfw-status">{{ selectedNpc.私密信息.当前性状态 }}</p></div>
+                  <div v-if="selectedNpc.私密信息.当前性状态" class="nsfw-field" style="margin-top:8px"><span class="section-hint">{{ $t('relationship.nsfw.currentStatus') }}</span><p class="nsfw-status">{{ selectedNpc.私密信息.当前性状态 }}</p></div>
                   <div v-if="selectedNpc.私密信息.性渴望程度 != null" style="margin-top:10px">
-                    <span class="section-hint">性渴望程度</span>
+                    <span class="section-hint">{{ $t('relationship.nsfw.desireLevel') }}</span>
                     <div class="desire-bar-wrap"><div class="desire-bar"><div class="desire-fill" :style="{ width: selectedNpc.私密信息.性渴望程度 + '%' }" /></div><span class="desire-num">{{ selectedNpc.私密信息.性渴望程度 }}</span></div>
                   </div>
-                  <div v-if="selectedNpc.私密信息.体液分泌状态" class="nsfw-field" style="margin-top:8px"><span class="section-hint">体液状态</span><span class="nsfw-val">{{ selectedNpc.私密信息.体液分泌状态 }}</span></div>
-                  <div v-if="selectedNpc.私密信息.性交总次数 != null" class="nsfw-field" style="margin-top:6px"><span class="section-hint">性交次数</span><span class="nsfw-val">{{ selectedNpc.私密信息.性交总次数 }}</span></div>
+                  <div v-if="selectedNpc.私密信息.体液分泌状态" class="nsfw-field" style="margin-top:8px"><span class="section-hint">{{ $t('relationship.nsfw.fluidStatus') }}</span><span class="nsfw-val">{{ selectedNpc.私密信息.体液分泌状态 }}</span></div>
+                  <div v-if="selectedNpc.私密信息.性交总次数 != null" class="nsfw-field" style="margin-top:6px"><span class="section-hint">{{ $t('relationship.nsfw.sexualEncounters') }}</span><span class="nsfw-val">{{ selectedNpc.私密信息.性交总次数 }}</span></div>
 
                   <!-- 身体部位 -->
-                  <div v-if="selectedNpc.私密信息.身体部位?.length" style="margin-top:10px"><span class="section-hint" style="display:block;margin-bottom:6px">身体部位</span><div class="bp-grid">
+                  <div v-if="selectedNpc.私密信息.身体部位?.length" style="margin-top:10px"><span class="section-hint" style="display:block;margin-bottom:6px">{{ $t('relationship.nsfw.bodyParts') }}</span><div class="bp-grid">
                     <div v-for="(bp, bi) in selectedNpc.私密信息.身体部位" :key="bi" class="bp-card">
                       <div class="bp-head">
-                        {{ bp.部位名称 }}
+                        {{ displayBodyPartName(bp.部位名称) }}
                         <span v-if="bp.特殊印记" class="bp-mark">{{ bp.特殊印记 }}</span>
-                        <button v-if="bp.已选背景图片ID" class="bp-view-toggle" @click="bodyPartViewMode[`${selectedNpc.名称}_${bi}`] = bodyPartViewMode[`${selectedNpc.名称}_${bi}`] === 'image' ? 'text' : 'image'">{{ bodyPartViewMode[`${selectedNpc.名称}_${bi}`] === 'image' ? '看文' : '看图' }}</button>
+                        <button v-if="bp.已选背景图片ID" class="bp-view-toggle" @click="bodyPartViewMode[`${selectedNpc.名称}_${bi}`] = bodyPartViewMode[`${selectedNpc.名称}_${bi}`] === 'image' ? 'text' : 'image'">{{ bodyPartViewMode[`${selectedNpc.名称}_${bi}`] === 'image' ? $t('relationship.detail.viewText') : $t('relationship.detail.viewImage') }}</button>
                       </div>
                       <template v-if="bodyPartViewMode[`${selectedNpc.名称}_${bi}`] === 'image' && bp.已选背景图片ID">
                         <ImageDisplay :asset-id="bp.已选背景图片ID" :fallback-letter="bp.部位名称?.charAt(0) ?? '?'" size="lg" class="bp-image" />
                       </template>
                       <template v-else><p v-if="bp.特征描述" class="bp-desc">{{ bp.特征描述 }}</p></template>
                       <div class="bp-meters">
-                        <div class="bp-meter"><span>敏感</span><div class="bp-bar"><div class="bp-fill" :style="{width:(bp.敏感度??0)+'%'}" /></div><span>{{bp.敏感度??0}}</span></div>
-                        <div class="bp-meter"><span>开发</span><div class="bp-bar"><div class="bp-fill bp-fill--dev" :style="{width:(bp.开发度??0)+'%'}" /></div><span>{{bp.开发度??0}}</span></div>
+                        <div class="bp-meter"><span>{{ $t('relationship.nsfw.sensitivity') }}</span><div class="bp-bar"><div class="bp-fill" :style="{width:(bp.敏感度??0)+'%'}" /></div><span>{{bp.敏感度??0}}</span></div>
+                        <div class="bp-meter"><span>{{ $t('relationship.nsfw.development') }}</span><div class="bp-bar"><div class="bp-fill bp-fill--dev" :style="{width:(bp.开发度??0)+'%'}" /></div><span>{{bp.开发度??0}}</span></div>
                       </div>
                     </div>
                   </div></div>
 
                   <!-- 处女状态 -->
                   <div v-if="selectedNpc.私密信息['是否为处女/处男'] !== undefined" class="nsfw-field" style="margin-top:10px">
-                    <span class="section-hint">处女/处男状态</span>
-                    <span class="nsfw-val">{{ selectedNpc.私密信息['是否为处女/处男'] === true ? '是' : selectedNpc.私密信息['是否为处女/处男'] === false ? '否' : '未设' }}</span>
+                    <span class="section-hint">{{ $t('relationship.nsfw.virginStatus') }}</span>
+                    <span class="nsfw-val">{{ selectedNpc.私密信息['是否为处女/处男'] === true ? $t('relationship.detail.virginYes') : selectedNpc.私密信息['是否为处女/处男'] === false ? $t('relationship.detail.virginNo') : $t('relationship.detail.virginUnset') }}</span>
                   </div>
                   <template v-if="selectedNpc.私密信息['是否为处女/处男'] === false || selectedNpc.私密信息.初夜夺取者">
-                    <div v-if="selectedNpc.私密信息.初夜夺取者" class="nsfw-field" style="margin-top:8px"><span class="section-hint">初夜夺取者</span><span class="nsfw-val">{{ selectedNpc.私密信息.初夜夺取者 }}</span></div>
-                    <div v-if="selectedNpc.私密信息.初夜时间" class="nsfw-field" style="margin-top:6px"><span class="section-hint">初夜时间</span><span class="nsfw-val">{{ selectedNpc.私密信息.初夜时间 }}</span></div>
-                    <div v-if="selectedNpc.私密信息.初夜描述" class="nsfw-field" style="margin-top:8px"><span class="section-hint">初夜描述</span><p class="nsfw-status">{{ selectedNpc.私密信息.初夜描述 }}</p></div>
+                    <div v-if="selectedNpc.私密信息.初夜夺取者" class="nsfw-field" style="margin-top:8px"><span class="section-hint">{{ $t('relationship.nsfw.firstNightTaker') }}</span><span class="nsfw-val">{{ selectedNpc.私密信息.初夜夺取者 }}</span></div>
+                    <div v-if="selectedNpc.私密信息.初夜时间" class="nsfw-field" style="margin-top:6px"><span class="section-hint">{{ $t('relationship.nsfw.firstNightTime') }}</span><span class="nsfw-val">{{ selectedNpc.私密信息.初夜时间 }}</span></div>
+                    <div v-if="selectedNpc.私密信息.初夜描述" class="nsfw-field" style="margin-top:8px"><span class="section-hint">{{ $t('relationship.nsfw.firstNightDescription') }}</span><p class="nsfw-status">{{ selectedNpc.私密信息.初夜描述 }}</p></div>
                   </template>
 
                   <!-- 偏好 -->
-                  <div v-if="selectedNpc.私密信息.性癖好?.length" style="margin-top:10px"><span class="section-hint">性癖好</span><div class="tag-row"><span v-for="f in selectedNpc.私密信息.性癖好" :key="f" class="detail-tag detail-tag--nsfw">{{ f }}</span></div></div>
-                  <div v-if="selectedNpc.私密信息.特殊体质?.length" style="margin-top:8px"><span class="section-hint">特殊体质</span><div class="tag-row"><span v-for="t in selectedNpc.私密信息.特殊体质" :key="t" class="detail-tag detail-tag--trait">{{ t }}</span></div></div>
-                  <div v-if="selectedNpc.私密信息.性伴侣名单?.length" style="margin-top:8px"><span class="section-hint">性伴侣</span><div class="tag-row"><span v-for="p in selectedNpc.私密信息.性伴侣名单" :key="p" class="detail-tag">{{ p }}</span></div></div>
+                  <div v-if="selectedNpc.私密信息.性癖好?.length" style="margin-top:10px"><span class="section-hint">{{ $t('relationship.nsfw.fetishes') }}</span><div class="tag-row"><span v-for="f in selectedNpc.私密信息.性癖好" :key="f" class="detail-tag detail-tag--nsfw">{{ f }}</span></div></div>
+                  <div v-if="selectedNpc.私密信息.特殊体质?.length" style="margin-top:8px"><span class="section-hint">{{ $t('relationship.nsfw.specialPhysique') }}</span><div class="tag-row"><span v-for="t in selectedNpc.私密信息.特殊体质" :key="t" class="detail-tag detail-tag--trait">{{ t }}</span></div></div>
+                  <div v-if="selectedNpc.私密信息.性伴侣名单?.length" style="margin-top:8px"><span class="section-hint">{{ $t('relationship.nsfw.sexualPartners') }}</span><div class="tag-row"><span v-for="p in selectedNpc.私密信息.性伴侣名单" :key="p" class="detail-tag">{{ p }}</span></div></div>
                 </div>
               </div>
             </div>
@@ -881,197 +909,197 @@ function typeClass(type: string | undefined): string {
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            <p>选择左侧名册中的角色查看详情</p>
+            <p>{{ $t('relationship.detail.emptyState') }}</p>
           </div>
         </main>
       </div>
     </template>
 
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p>{{ $t('map.notLoaded') }}</p>
     </div>
 
     <!-- ─── NPC Edit Modal ─── -->
-    <Modal v-model="showEditModal" :title="editIndex >= 0 ? '编辑 NPC' : '添加 NPC'" width="520px">
+    <Modal v-model="showEditModal" :title="editIndex >= 0 ? $t('relationship.edit.titleEdit') : $t('relationship.edit.titleAdd')" width="520px">
       <div class="edit-form">
         <!-- 基本信息 -->
         <div class="form-section">
-          <h4 class="form-section-title">基本信息</h4>
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionBasic') }}</h4>
 
           <div class="form-row">
             <div class="form-group form-group--half">
-              <label class="form-label">名称</label>
-              <input v-model="editForm.名称" type="text" class="form-input" placeholder="NPC 名称" />
+              <label class="form-label">{{ $t('relationship.editForm.label.name') }}</label>
+              <input v-model="editForm.名称" type="text" class="form-input" :placeholder="$t('relationship.editForm.placeholder.npcName')" />
             </div>
             <div class="form-group form-group--half">
-              <label class="form-label">类型</label>
+              <label class="form-label">{{ $t('relationship.editForm.label.type') }}</label>
               <select v-model="editForm.类型" class="form-input">
-                <option value="">未分类</option>
-                <option value="重点">重点</option>
-                <option value="同伴">同伴</option>
-                <option value="商人">商人</option>
-                <option value="中立">中立</option>
-                <option value="敌对">敌对</option>
-                <option value="普通">普通</option>
+                <option value="">{{ $t('relationship.editForm.typeOption.uncategorized') }}</option>
+                <option value="重点">{{ $t('relationship.editForm.typeOption.key') }}</option>
+                <option value="同伴">{{ $t('relationship.editForm.typeOption.companion') }}</option>
+                <option value="商人">{{ $t('relationship.editForm.typeOption.merchant') }}</option>
+                <option value="中立">{{ $t('relationship.editForm.typeOption.neutral') }}</option>
+                <option value="敌对">{{ $t('relationship.editForm.typeOption.hostile') }}</option>
+                <option value="普通">{{ $t('relationship.editForm.typeOption.normal') }}</option>
               </select>
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group form-group--half">
-              <label class="form-label">性别</label>
+              <label class="form-label">{{ $t('relationship.editForm.label.gender') }}</label>
               <select v-model="editForm.性别" class="form-input">
-                <option value="">未设置</option>
-                <option value="男">男</option>
-                <option value="女">女</option>
-                <option value="其他">其他</option>
+                <option value="">{{ $t('relationship.editForm.genderOption.unset') }}</option>
+                <option value="男">{{ $t('relationship.editForm.genderOption.male') }}</option>
+                <option value="女">{{ $t('relationship.editForm.genderOption.female') }}</option>
+                <option value="其他">{{ $t('relationship.editForm.genderOption.other') }}</option>
               </select>
             </div>
             <div class="form-group form-group--half">
-              <label class="form-label">年龄</label>
+              <label class="form-label">{{ $t('relationship.editForm.label.age') }}</label>
               <input v-model.number="editForm.年龄" type="number" class="form-input" min="0" />
             </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">好感度 ({{ editForm.好感度 }})</label>
+            <label class="form-label">{{ $t('relationship.editForm.label.affinity') }} ({{ editForm.好感度 }})</label>
             <input v-model.number="editForm.好感度" type="range" min="0" max="100" class="form-range" />
           </div>
 
           <div class="form-group">
-            <label class="form-label">当前位置</label>
-            <input v-model="editForm.位置" type="text" class="form-input" placeholder="当前位置" />
+            <label class="form-label">{{ $t('relationship.edit.placeholder.location') }}</label>
+            <input v-model="editForm.位置" type="text" class="form-input" :placeholder="$t('relationship.edit.placeholder.location')" />
           </div>
         </div>
 
         <!-- 外貌与描述 -->
         <div class="form-section">
-          <h4 class="form-section-title">描述与视觉档案</h4>
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionVisual') }}</h4>
 
           <div class="form-group">
-            <label class="form-label">一句话描述</label>
-            <input v-model="editForm.描述" type="text" class="form-input" placeholder="身份/气质一句话概述" />
-            <span class="form-hint">列表卡片与摘要用；不写外貌细节。</span>
+            <label class="form-label">{{ $t('relationship.edit.placeholder.description') }}</label>
+            <input v-model="editForm.描述" type="text" class="form-input" :placeholder="$t('relationship.edit.placeholder.description')" />
+            <span class="form-hint">{{ $t('relationship.editForm.hint.descriptionUsage') }}</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">外貌描述</label>
-            <textarea v-model="editForm.外貌描述" class="form-textarea" rows="3" placeholder="面容、发型发色、瞳色、肤色、体型基调、神情气质…" />
-            <span class="form-hint">生图 tokenizer / 锚点提取的主视觉输入；长期稳定。</span>
+            <label class="form-label">{{ $t('relationship.editForm.label.appearance') }}</label>
+            <textarea v-model="editForm.外貌描述" class="form-textarea" rows="3" :placeholder="$t('relationship.editForm.placeholder.appearance')" />
+            <span class="form-hint">{{ $t('relationship.editForm.hint.appearanceUsage') }}</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">身材描写</label>
-            <textarea v-model="editForm.身材描写" class="form-textarea" rows="2" placeholder="身高、体态、胸/腰/臀、肌肉脂肪分布、气场…" />
+            <label class="form-label">{{ $t('relationship.editForm.label.physique') }}</label>
+            <textarea v-model="editForm.身材描写" class="form-textarea" rows="2" :placeholder="$t('relationship.editForm.placeholder.physique')" />
           </div>
 
           <div class="form-group">
-            <label class="form-label">衣着风格</label>
-            <textarea v-model="editForm.衣着风格" class="form-textarea" rows="2" placeholder="日常穿着偏好：材质、色调、款式、常驻佩饰…" />
-            <span class="form-hint">临时/场景穿着写在叙事文本里，不在此处。</span>
+            <label class="form-label">{{ $t('relationship.editForm.label.attire') }}</label>
+            <textarea v-model="editForm.衣着风格" class="form-textarea" rows="2" :placeholder="$t('relationship.editForm.placeholder.attire')" />
+            <span class="form-hint">{{ $t('relationship.editForm.hint.attire') }}</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">背景故事</label>
-            <textarea v-model="editForm.背景" class="form-textarea" rows="3" placeholder="出身、经历、目的…" />
+            <label class="form-label">{{ $t('relationship.editForm.label.background') }}</label>
+            <textarea v-model="editForm.背景" class="form-textarea" rows="3" :placeholder="$t('relationship.editForm.placeholder.background')" />
           </div>
         </div>
 
         <!-- 当前状态 -->
         <div class="form-section">
-          <h4 class="form-section-title">当前状态</h4>
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionStatus') }}</h4>
 
           <div class="form-group">
-            <label class="form-label">内心想法</label>
-            <textarea v-model="editForm.内心想法" class="form-textarea" rows="2" placeholder="NPC 当前的内心想法…" />
+            <label class="form-label">{{ $t('relationship.editForm.label.innerThoughts') }}</label>
+            <textarea v-model="editForm.内心想法" class="form-textarea" rows="2" :placeholder="$t('relationship.editForm.placeholder.innerThoughts')" />
           </div>
 
           <div class="form-group">
-            <label class="form-label">在做事项</label>
-            <input v-model="editForm.在做事项" type="text" class="form-input" placeholder="如：在茶馆里打探消息" />
+            <label class="form-label">{{ $t('relationship.editForm.label.currentActivity') }}</label>
+            <input v-model="editForm.在做事项" type="text" class="form-input" :placeholder="$t('relationship.editForm.placeholder.currentActivity')" />
           </div>
         </div>
 
         <!-- 性格特征 tag list -->
         <div class="form-section">
-          <h4 class="form-section-title">性格特征</h4>
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionTraits') }}</h4>
 
           <div class="tag-list">
             <span v-for="(trait, idx) in editForm.性格特征" :key="idx" class="tag-item">
               {{ trait }}
-              <button class="tag-delete" @click="removeTrait(idx)" aria-label="删除">&times;</button>
+              <button class="tag-delete" @click="removeTrait(idx)" :aria-label="$t('common.actions.delete')">&times;</button>
             </span>
-            <span v-if="editForm.性格特征.length === 0" class="tag-empty">尚未添加特征</span>
+            <span v-if="editForm.性格特征.length === 0" class="tag-empty">{{ $t('relationship.editForm.traits.empty') }}</span>
           </div>
           <div class="tag-input-row">
             <input
               v-model="newTraitInput"
               type="text"
               class="form-input tag-input"
-              placeholder="例如：多疑、沉稳"
+              :placeholder="$t('relationship.editForm.traits.placeholder')"
               @keyup.enter="addTrait"
             />
-            <button class="btn-secondary btn-sm" @click="addTrait">添加</button>
+            <button class="btn-secondary btn-sm" @click="addTrait">{{ $t('relationship.editForm.traits.add') }}</button>
           </div>
         </div>
 
         <!-- 记忆 list -->
         <div class="form-section">
-          <h4 class="form-section-title">记忆条目</h4>
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionMemory') }}</h4>
 
           <div class="memory-list">
             <div v-for="(mem, idx) in editForm.记忆" :key="idx" class="memory-item">
               <!-- Social-1: 同 display 侧，混合 string/{内容,时间} 形态 — 统一渲染。 -->
               <span class="memory-text">{{ formatMemoryEntry(mem) }}</span>
-              <button class="memory-delete" @click="removeMemory(idx)" aria-label="删除">&times;</button>
+              <button class="memory-delete" @click="removeMemory(idx)" :aria-label="$t('common.actions.delete')">&times;</button>
             </div>
-            <div v-if="editForm.记忆.length === 0" class="memory-empty">尚无记忆条目</div>
+            <div v-if="editForm.记忆.length === 0" class="memory-empty">{{ $t('relationship.editForm.memory.empty') }}</div>
           </div>
           <div class="tag-input-row">
             <input
               v-model="newMemoryInput"
               type="text"
               class="form-input tag-input"
-              placeholder="例如：初次与玩家在茶馆相遇"
+              :placeholder="$t('relationship.editForm.memory.placeholder')"
               @keyup.enter="addMemory"
             />
-            <button class="btn-secondary btn-sm" @click="addMemory">添加</button>
+            <button class="btn-secondary btn-sm" @click="addMemory">{{ $t('relationship.editForm.memory.add') }}</button>
           </div>
         </div>
 
         <!-- 私密信息（NSFW 开启时显示） -->
         <div v-if="nsfwEnabled" class="form-section">
-          <h4 class="form-section-title" style="color: #e879a0;">私密信息</h4>
+          <h4 class="form-section-title" style="color: #e879a0;">{{ $t('relationship.editForm.sectionNsfw') }}</h4>
 
           <div class="form-row">
             <div class="form-group form-group--half">
-              <label class="form-label">性格倾向</label>
-              <input v-model="editForm.私密信息.性格倾向" type="text" class="form-input" placeholder="温顺/支配/…" />
+              <label class="form-label">{{ $t('relationship.editForm.nsfw.personalityDisposition') }}</label>
+              <input v-model="editForm.私密信息.性格倾向" type="text" class="form-input" :placeholder="$t('relationship.editForm.nsfw.placeholder.disposition')" />
             </div>
             <div class="form-group form-group--half">
-              <label class="form-label">性取向</label>
-              <input v-model="editForm.私密信息.性取向" type="text" class="form-input" placeholder="异性恋/双性恋/…" />
+              <label class="form-label">{{ $t('relationship.editForm.nsfw.sexualOrientation') }}</label>
+              <input v-model="editForm.私密信息.性取向" type="text" class="form-input" :placeholder="$t('relationship.editForm.nsfw.placeholder.orientation')" />
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group form-group--half">
-              <label class="form-label">当前性状态</label>
+              <label class="form-label">{{ $t('relationship.editForm.nsfw.currentStatus') }}</label>
               <input v-model="editForm.私密信息.当前性状态" type="text" class="form-input" />
             </div>
             <div class="form-group form-group--half">
-              <label class="form-label">体液分泌状态</label>
+              <label class="form-label">{{ $t('relationship.editForm.nsfw.fluidStatus') }}</label>
               <input v-model="editForm.私密信息.体液分泌状态" type="text" class="form-input" />
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group form-group--half">
-              <label class="form-label">性渴望程度 ({{ editForm.私密信息.性渴望程度 ?? 0 }})</label>
+              <label class="form-label">{{ $t('relationship.editForm.nsfw.desireLevel') }} ({{ editForm.私密信息.性渴望程度 ?? 0 }})</label>
               <input type="range" min="0" max="100" v-model.number="editForm.私密信息.性渴望程度" class="form-range" />
             </div>
             <div class="form-group form-group--half">
-              <label class="form-label">性交总次数</label>
+              <label class="form-label">{{ $t('relationship.editForm.nsfw.sexualEncounters') }}</label>
               <input v-model.number="editForm.私密信息.性交总次数" type="number" min="0" class="form-input" />
             </div>
           </div>
@@ -1084,48 +1112,48 @@ function typeClass(type: string | undefined): string {
                 :checked="editForm.私密信息['是否为处女/处男'] === true"
                 @change="(e) => editForm.私密信息['是否为处女/处男'] = (e.target as HTMLInputElement).checked"
               />
-              <span>仍为处女/处男</span>
+              <span>{{ $t('relationship.editForm.nsfw.virginCheckbox') }}</span>
             </label>
-            <span class="form-hint">取消勾选 → 必须填写下方「初夜」3 字段。</span>
+            <span class="form-hint">{{ $t('relationship.editForm.nsfw.virginHint') }}</span>
           </div>
 
           <div v-if="isNonVirgin()" class="nested-block">
-            <h5 class="nested-title">初夜档案（非处女/处男必填）</h5>
+            <h5 class="nested-title">{{ $t('relationship.editForm.nsfw.firstNightTitle') }}</h5>
             <div class="form-row">
               <div class="form-group form-group--half">
-                <label class="form-label">初夜夺取者</label>
+                <label class="form-label">{{ $t('relationship.editForm.nsfw.firstNightTaker') }}</label>
                 <input
                   v-model="editForm.私密信息.初夜夺取者"
                   type="text"
                   class="form-input"
-                  placeholder="人名 / 未知 / 童年被拐…"
+                  :placeholder="$t('relationship.editForm.nsfw.placeholder.firstNightTaker')"
                 />
               </div>
               <div class="form-group form-group--half">
-                <label class="form-label">初夜时间</label>
+                <label class="form-label">{{ $t('relationship.editForm.nsfw.firstNightTime') }}</label>
                 <input
                   v-model="editForm.私密信息.初夜时间"
                   type="text"
                   class="form-input"
-                  placeholder="如「14 岁冬」「入赘前夜」"
+                  :placeholder="$t('relationship.editForm.nsfw.placeholder.firstNightTime')"
                 />
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">初夜描述</label>
+              <label class="form-label">{{ $t('relationship.editForm.nsfw.firstNightDescription') }}</label>
               <textarea
                 v-model="editForm.私密信息.初夜描述"
                 class="form-textarea"
                 rows="3"
-                placeholder="50-200 字：地点、氛围、关系性质、NPC 当时感受…"
+                :placeholder="$t('relationship.editForm.nsfw.placeholder.firstNightDescription')"
               />
             </div>
           </div>
 
           <!-- 身体部位编辑器 — 4 个固定部位 + 可追加的其他部位 -->
           <div class="nested-block">
-            <h5 class="nested-title">身体部位</h5>
-            <span class="form-hint">固定 4 项（嘴 / 胸部 / 小穴 / 屁穴）用于生图特写流程，必须填写「特征描述」。可在下方追加任意额外部位。</span>
+            <h5 class="nested-title">{{ $t('relationship.editForm.nsfw.bodyPartsTitle') }}</h5>
+            <span class="form-hint">{{ $t('relationship.editForm.nsfw.bodyPartsHint') }}</span>
 
             <div
               v-for="partName in REQUIRED_BODY_PARTS"
@@ -1133,33 +1161,33 @@ function typeClass(type: string | undefined): string {
               class="bp-edit-card"
             >
               <div class="bp-edit-head">
-                <span class="bp-edit-name bp-edit-name--fixed">{{ partName }}</span>
-                <span class="bp-edit-badge">必填</span>
+                <span class="bp-edit-name bp-edit-name--fixed">{{ displayBodyPartName(partName) }}</span>
+                <span class="bp-edit-badge">{{ $t('relationship.editForm.nsfw.required') }}</span>
               </div>
               <template v-if="indexOfBodyPart(partName) >= 0">
                 <div class="form-group">
-                  <label class="form-label">特征描述</label>
+                  <label class="form-label">{{ $t('relationship.editForm.nsfw.featureDescription') }}</label>
                   <textarea
                     v-model="editForm.私密信息.身体部位![indexOfBodyPart(partName)].特征描述"
                     class="form-textarea"
                     rows="2"
-                    placeholder="具体形态、触感、尺寸、颜色、细节…"
+                    :placeholder="$t('relationship.editForm.nsfw.placeholder.featureDescription')"
                   />
                 </div>
                 <div class="form-row">
                   <div class="form-group form-group--half">
-                    <label class="form-label">特殊印记</label>
+                    <label class="form-label">{{ $t('relationship.editForm.nsfw.specialMark') }}</label>
                     <input
                       v-model="editForm.私密信息.身体部位![indexOfBodyPart(partName)].特殊印记"
                       type="text"
                       class="form-input"
-                      placeholder="环、纹、伤…（可留空）"
+                      :placeholder="$t('relationship.editForm.nsfw.placeholder.specialMark')"
                     />
                   </div>
                 </div>
                 <div class="form-row">
                   <div class="form-group form-group--half">
-                    <label class="form-label">敏感度 ({{ editForm.私密信息.身体部位![indexOfBodyPart(partName)].敏感度 ?? 0 }})</label>
+                    <label class="form-label">{{ $t('relationship.editForm.nsfw.sensitivity') }} ({{ editForm.私密信息.身体部位![indexOfBodyPart(partName)].敏感度 ?? 0 }})</label>
                     <input
                       type="range" min="0" max="100"
                       v-model.number="editForm.私密信息.身体部位![indexOfBodyPart(partName)].敏感度"
@@ -1167,7 +1195,7 @@ function typeClass(type: string | undefined): string {
                     />
                   </div>
                   <div class="form-group form-group--half">
-                    <label class="form-label">开发度 ({{ editForm.私密信息.身体部位![indexOfBodyPart(partName)].开发度 ?? 0 }})</label>
+                    <label class="form-label">{{ $t('relationship.editForm.nsfw.development') }} ({{ editForm.私密信息.身体部位![indexOfBodyPart(partName)].开发度 ?? 0 }})</label>
                     <input
                       type="range" min="0" max="100"
                       v-model.number="editForm.私密信息.身体部位![indexOfBodyPart(partName)].开发度"
@@ -1189,17 +1217,17 @@ function typeClass(type: string | undefined): string {
                   v-model="editForm.私密信息.身体部位![idx].部位名称"
                   type="text"
                   class="form-input bp-name-input"
-                  placeholder="部位名称（如 乳首 / 臀部 / 后穴 / 阳具）"
+                  :placeholder="$t('relationship.editForm.nsfw.placeholder.partName')"
                 />
                 <button
                   type="button"
                   class="bp-remove-btn"
                   @click="removeBodyPart(idx)"
-                  aria-label="删除此部位"
-                >移除</button>
+                  :aria-label="$t('common.actions.delete')"
+                >{{ $t('relationship.editForm.nsfw.removeBodyPart') }}</button>
               </div>
               <div class="form-group">
-                <label class="form-label">特征描述</label>
+                <label class="form-label">{{ $t('relationship.editForm.nsfw.featureDescription') }}</label>
                 <textarea
                   v-model="editForm.私密信息.身体部位![idx].特征描述"
                   class="form-textarea"
@@ -1208,49 +1236,49 @@ function typeClass(type: string | undefined): string {
               </div>
               <div class="form-row">
                 <div class="form-group form-group--half">
-                  <label class="form-label">特殊印记</label>
+                  <label class="form-label">{{ $t('relationship.editForm.nsfw.specialMark') }}</label>
                   <input v-model="editForm.私密信息.身体部位![idx].特殊印记" type="text" class="form-input" />
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group form-group--half">
-                  <label class="form-label">敏感度 ({{ editForm.私密信息.身体部位![idx].敏感度 ?? 0 }})</label>
+                  <label class="form-label">{{ $t('relationship.editForm.nsfw.sensitivity') }} ({{ editForm.私密信息.身体部位![idx].敏感度 ?? 0 }})</label>
                   <input type="range" min="0" max="100" v-model.number="editForm.私密信息.身体部位![idx].敏感度" class="form-range" />
                 </div>
                 <div class="form-group form-group--half">
-                  <label class="form-label">开发度 ({{ editForm.私密信息.身体部位![idx].开发度 ?? 0 }})</label>
+                  <label class="form-label">{{ $t('relationship.editForm.nsfw.development') }} ({{ editForm.私密信息.身体部位![idx].开发度 ?? 0 }})</label>
                   <input type="range" min="0" max="100" v-model.number="editForm.私密信息.身体部位![idx].开发度" class="form-range" />
                 </div>
               </div>
             </div>
 
             <button type="button" class="btn-secondary btn-sm bp-add-btn" @click="addExtraBodyPart">
-              + 追加其他部位
+              {{ $t('relationship.editForm.nsfw.addBodyPart') }}
             </button>
           </div>
         </div>
 
         <!-- Flags -->
         <div class="form-section">
-          <h4 class="form-section-title">标记</h4>
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionFlags') }}</h4>
 
           <div class="form-group form-group--row">
             <label class="form-check-label">
               <input type="checkbox" v-model="editForm.关注" />
-              <span>关注（置顶显示）</span>
+              <span>{{ $t('relationship.editForm.flags.watch') }}</span>
             </label>
             <label class="form-check-label">
               <input type="checkbox" v-model="editForm.心跳锁定" />
-              <span>心跳锁定（AI 不更新此 NPC）</span>
+              <span>{{ $t('relationship.editForm.flags.heartbeatLock') }}</span>
             </label>
           </div>
         </div>
       </div>
       <template #footer>
-        <button v-if="editIndex >= 0" class="btn-danger" @click="deleteNpc">删除</button>
+        <button v-if="editIndex >= 0" class="btn-danger" @click="deleteNpc">{{ $t('common.actions.delete') }}</button>
         <div style="flex: 1" />
-        <button class="btn-secondary" @click="showEditModal = false">取消</button>
-        <button class="btn-primary" :disabled="!editForm.名称?.trim()" @click="saveNpc">保存</button>
+        <button class="btn-secondary" @click="showEditModal = false">{{ $t('common.actions.cancel') }}</button>
+        <button class="btn-primary" :disabled="!editForm.名称?.trim()" @click="saveNpc">{{ $t('common.actions.save') }}</button>
       </template>
     </Modal>
 

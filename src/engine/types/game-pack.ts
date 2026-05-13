@@ -39,6 +39,10 @@ export interface GamePackManifest {
   presets: Record<string, string>;
   /** 规则配置文件路径映射（key=规则类型, value=文件路径） */
   rules: Record<string, string>;
+  /** Locale-specific prompt directories (key=locale, value=directory prefix e.g. "prompts-en") */
+  promptLocales?: Record<string, string>;
+  /** Locale-specific i18n files (key=locale, value=relative path e.g. "i18n/en.json") */
+  i18nFiles?: Record<string, string>;
 }
 
 /**
@@ -66,6 +70,10 @@ export interface GamePack {
   displaySettings?: Record<string, unknown>;
   /** 国际化文案（可选，key=locale, value=键值对） */
   i18n?: Record<string, Record<string, string>>;
+  /** Engine-level prompt fragments (extracted from context-assembly for i18n) */
+  engineFragments?: Record<string, string>;
+  /** Transformer preset defaults (image generation AI instructions, locale-aware) */
+  transformerDefaults?: Record<string, unknown>;
 }
 
 // ─── 创角流程相关类型 ───
@@ -211,6 +219,8 @@ export interface FormFieldConfig {
   type: 'text' | 'number' | 'select' | 'textarea';
   /** 显示标签 */
   label?: string;
+  /** 占位提示文本 */
+  placeholder?: string;
   /** 是否必填 */
   required?: boolean;
   /** 默认值 */

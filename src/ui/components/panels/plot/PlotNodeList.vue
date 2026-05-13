@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { PlotNode, PlotGauge, GaugeCondition, PlotEvalLog } from '@/engine/plot/types';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   nodes: PlotNode[];
@@ -28,7 +31,7 @@ function roundInfo(node: PlotNode): string {
   if (node.status !== 'active' || !node.activatedAtRound) return '';
   const elapsed = props.currentRound - node.activatedAtRound;
   const max = node.maxRounds ? `/${node.maxRounds}` : '';
-  return `[${elapsed}${max}轮]`;
+  return `[${elapsed}${max}${t('plot.node.roundUnit')}]`;
 }
 
 function conditionLabel(cond: GaugeCondition): string {
@@ -70,7 +73,7 @@ const activeNodeCurrentTier = computed(() => {
             {{ roundInfo(node) }}
           </span>
           <span v-if="node.importance === 'critical'" class="node-item__badge node-item__badge--critical">
-            关键
+            {{ $t('plot.node.importance.critical') }}
           </span>
         </div>
 
@@ -79,7 +82,7 @@ const activeNodeCurrentTier = computed(() => {
         </p>
 
         <div v-if="node.status === 'active' && activeNodeCurrentTier" class="node-item__tier">
-          Tier {{ activeNodeCurrentTier }} 引导中
+          {{ $t('plot.node.tierGuiding', { tier: activeNodeCurrentTier }) }}
         </div>
 
         <!-- Evaluation status for active node -->
@@ -95,14 +98,14 @@ const activeNodeCurrentTier = computed(() => {
         </p>
 
         <div v-if="node.activationConditions.length > 0 && node.status === 'pending'" class="node-item__conditions">
-          需要：
+          {{ $t('plot.node.requires') }}
           <span v-for="(cond, ci) in node.activationConditions" :key="ci" class="node-item__cond-tag">
             {{ conditionLabel(cond) }}
           </span>
         </div>
 
         <div v-if="node.completionConditions.length > 0 && node.status === 'active'" class="node-item__conditions">
-          完成条件：
+          {{ $t('plot.node.completionConditions') }}
           <span v-for="(cond, ci) in node.completionConditions" :key="ci" class="node-item__cond-tag">
             {{ conditionLabel(cond) }}
           </span>
@@ -116,13 +119,13 @@ const activeNodeCurrentTier = computed(() => {
       <div class="node-item__actions">
         <button
           class="node-action-btn node-action-btn--insert"
-          title="在此节点后插入"
+          :title="$t('plot.node.insertAfter')"
           @click.stop="emit('insert-after', idx)"
         >+</button>
         <button
           v-if="node.status === 'pending'"
           class="node-action-btn node-action-btn--remove"
-          title="移除节点"
+          :title="$t('plot.node.removeNode')"
           @click.stop="emit('remove', node.id)"
         >&times;</button>
       </div>
@@ -130,9 +133,9 @@ const activeNodeCurrentTier = computed(() => {
 
     <button
       class="insert-btn"
-      title="在末尾添加节点"
+      :title="$t('plot.node.addAtEnd')"
       @click="emit('insert-after', nodes.length - 1)"
-    >+ 添加节点</button>
+    >+ {{ $t('plot.node.addTitle') }}</button>
   </div>
 </template>
 

@@ -73,7 +73,7 @@ onBeforeUnmount(() => {
             <slot name="header">
               <h3 class="modal-title">{{ title }}</h3>
             </slot>
-            <button class="modal-close-btn" aria-label="关闭" @click="close">✕</button>
+            <button class="modal-close-btn" :aria-label="$t('modal.base.ariaClose')" @click="close">✕</button>
           </header>
 
           <!-- 内容区 -->

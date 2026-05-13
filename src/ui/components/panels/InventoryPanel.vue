@@ -13,10 +13,13 @@
  * 2. currency 类型错误为 number，读取容器对象 → 显示 0
  */
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useActionQueueStore } from '@/engine/stores/engine-action-queue';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
+
+const { t } = useI18n();
 
 const { isLoaded, useValue } = useGameState();
 const actionQueue = useActionQueueStore();
@@ -150,34 +153,34 @@ function handleUse(item: DisplayItem): void {
   actionQueue.addAction({
     id: generateActionId(),
     type: 'use_item',
-    description: `使用物品「${item.名称}」`,
+    description: t('inventory.toast.useDesc', { name: item.名称 }),
     data: { itemName: item.名称, itemId: item._id },
     createdAt: Date.now(),
   });
-  eventBus.emit('ui:toast', { type: 'info', message: `已将「使用 ${item.名称}」加入操作队列`, duration: 2000 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('inventory.toast.useQueued', { name: item.名称 }), duration: 2000 });
 }
 
 function handleEquip(item: DisplayItem): void {
-  const action = item.已装备 ? '卸下' : '装备';
+  const action = item.已装备 ? t('inventory.action.unequip') : t('inventory.action.equip');
   actionQueue.addAction({
     id: generateActionId(),
     type: item.已装备 ? 'unequip_item' : 'equip_item',
-    description: `${action}物品「${item.名称}」`,
+    description: t('inventory.toast.equipDesc', { action, name: item.名称 }),
     data: { itemName: item.名称, itemId: item._id },
     createdAt: Date.now(),
   });
-  eventBus.emit('ui:toast', { type: 'info', message: `已将「${action} ${item.名称}」加入操作队列`, duration: 2000 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('inventory.toast.equipQueued', { action, name: item.名称 }), duration: 2000 });
 }
 
 function handleDrop(item: DisplayItem): void {
   actionQueue.addAction({
     id: generateActionId(),
     type: 'drop_item',
-    description: `丢弃物品「${item.名称}」`,
+    description: t('inventory.toast.dropDesc', { name: item.名称 }),
     data: { itemName: item.名称, itemId: item._id },
     createdAt: Date.now(),
   });
-  eventBus.emit('ui:toast', { type: 'warning', message: `已将「丢弃 ${item.名称}」加入操作队列`, duration: 2000 });
+  eventBus.emit('ui:toast', { type: 'warning', message: t('inventory.toast.dropQueued', { name: item.名称 }), duration: 2000 });
 }
 
 /** Icon character based on item type */
@@ -199,7 +202,7 @@ function itemTypeIcon(type: string | undefined): string {
     <template v-if="isLoaded">
       <!-- ─── Header with currency ─── -->
       <header class="panel-header">
-        <h2 class="panel-title">背包</h2>
+        <h2 class="panel-title">{{ t('inventory.title') }}</h2>
         <div class="currency-bar">
           <template v-if="currencyEntries.length > 0">
             <div
@@ -212,7 +215,7 @@ function itemTypeIcon(type: string | undefined): string {
               <span class="currency-amount">{{ c.amount }}</span>
             </div>
           </template>
-          <span v-else class="currency-empty">无货币</span>
+          <span v-else class="currency-empty">{{ t('inventory.noCurrency') }}</span>
         </div>
       </header>
 
@@ -222,19 +225,19 @@ function itemTypeIcon(type: string | undefined): string {
           v-model="searchQuery"
           type="text"
           class="search-field"
-          placeholder="搜索物品…"
+          :placeholder="t('inventory.search.placeholder')"
         />
         <select v-model="filterType" class="filter-select">
-          <option value="all">全部</option>
+          <option value="all">{{ t('inventory.filter.all') }}</option>
           <option v-for="t in itemTypes" :key="t" :value="t">{{ t }}</option>
         </select>
       </div>
 
       <!-- ─── Item count ─── -->
       <div class="item-summary">
-        <span class="item-count">共 {{ filteredItems.length }} 件物品</span>
+        <span class="item-count">{{ t('inventory.itemCount', { count: filteredItems.length }) }}</span>
         <span v-if="allItems.length !== filteredItems.length" class="filter-hint">
-          （全部 {{ allItems.length }} 件）
+          {{ t('inventory.itemCountFiltered', { total: allItems.length }) }}
         </span>
       </div>
 
@@ -250,7 +253,7 @@ function itemTypeIcon(type: string | undefined): string {
           <div class="item-info">
             <div class="item-name-row">
               <span class="item-name">{{ item.名称 }}</span>
-              <span v-if="item.已装备" class="equipped-badge">已装备</span>
+              <span v-if="item.已装备" class="equipped-badge">{{ t('inventory.badge.equipped') }}</span>
               <span
                 v-if="getQualityLabel(item)"
                 class="quality-badge"
@@ -269,27 +272,27 @@ function itemTypeIcon(type: string | undefined): string {
           <!-- Expanded actions on selection -->
           <Transition name="actions-slide">
             <div v-if="selectedItem?._id === item._id" class="item-actions" @click.stop>
-              <button class="action-btn action-btn--use" @click="handleUse(item)">使用</button>
+              <button class="action-btn action-btn--use" @click="handleUse(item)">{{ t('inventory.action.use') }}</button>
               <button
                 v-if="item.可装备"
                 class="action-btn action-btn--equip"
                 @click="handleEquip(item)"
               >
-                {{ item.已装备 ? '卸下' : '装备' }}
+                {{ item.已装备 ? t('inventory.action.unequip') : t('inventory.action.equip') }}
               </button>
-              <button class="action-btn action-btn--drop" @click="handleDrop(item)">丢弃</button>
+              <button class="action-btn action-btn--drop" @click="handleDrop(item)">{{ t('inventory.action.drop') }}</button>
             </div>
           </Transition>
         </div>
       </div>
 
       <div v-else class="empty-state">
-        <p>{{ searchQuery || filterType !== 'all' ? '没有匹配的物品' : '背包为空' }}</p>
+        <p>{{ searchQuery || filterType !== 'all' ? t('inventory.noMatch') : t('inventory.empty') }}</p>
       </div>
     </template>
 
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p>{{ t('inventory.notLoaded') }}</p>
     </div>
   </div>
 </template>

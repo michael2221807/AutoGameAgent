@@ -14,6 +14,10 @@ import { useGameState } from '@/ui/composables/useGameState';
 import type { ProfileManager } from '@/engine/persistence/profile-manager';
 import type { SaveManager } from '@/engine/persistence/save-manager';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import { useLocale } from '@/ui/composables/useLocale';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const SETTINGS_KEY = 'aga_user_settings';
 
@@ -67,6 +71,15 @@ watch(settings, () => {
   applyRootMetrics(settings.value.fontSize, uiScale.value);
 }, { deep: true });
 
+const { setLocale } = useLocale();
+let initialLanguage = '';
+watch(() => settings.value.language, (newLang) => {
+  if (initialLanguage && newLang !== initialLanguage) {
+    saveSettings();
+    void setLocale(newLang);
+  }
+});
+
 // ─── Actions ───
 
 function resetAll(): void {
@@ -78,13 +91,13 @@ function resetAll(): void {
   localStorage.setItem(DEBUG_KEY, JSON.stringify(debugSettings.value));
   textReplaceRules.value = [];
   localStorage.setItem(TEXT_REPLACE_KEY, JSON.stringify([]));
-  eventBus.emit('ui:toast', { type: 'info', message: '已重置所有设置', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('settings.resetAll.toast'), duration: 1500 });
 }
 
 function applyFontSize(): void {
   const size = settings.value.fontSize;
   applyRootMetrics(size, uiScale.value);
-  eventBus.emit('ui:toast', { type: 'success', message: `字体大小已调整为 ${size}px`, duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('settings.ui.fontSize.toast', { size }), duration: 1200 });
 }
 
 // Font size × UI scale both drive the root font-size so rem units scale
@@ -100,15 +113,21 @@ function applyRootMetrics(fontPx: number, scalePct: number): void {
 
 function applyThemeColor(): void {
   document.documentElement.style.setProperty('--color-primary', settings.value.themeAccent);
-  eventBus.emit('ui:toast', { type: 'success', message: '主题颜色已更新', duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('settings.ui.themeAccent.toast'), duration: 1200 });
 }
 
-const languageOptions = [
-  { value: 'zh-CN', label: '简体中文' },
-  { value: 'zh-TW', label: '繁體中文' },
-  { value: 'en', label: 'English' },
-  { value: 'ja', label: '日本語' },
-];
+import { SUPPORTED_LOCALES } from '@/ui/i18n';
+
+const localeDisplayNames: Record<string, string> = {
+  'zh-CN': '简体中文',
+  'zh-TW': '繁體中文',
+  'en': 'English',
+  'ja': '日本語',
+};
+const languageOptions = SUPPORTED_LOCALES.map(loc => ({
+  value: loc,
+  label: localeDisplayNames[loc] ?? loc,
+}));
 
 /** Whether settings differ from defaults */
 const hasChanges = computed(() =>
@@ -254,11 +273,11 @@ const defaultNsfw: NsfwSettings = {
 
 const nsfwSettings = ref<NsfwSettings>({ ...defaultNsfw });
 
-const nsfwGenderOptions: Array<{ value: NsfwGenderFilter; label: string }> = [
-  { value: 'all',    label: '全部性别' },
-  { value: 'male',   label: '仅男性 NPC' },
-  { value: 'female', label: '仅女性 NPC' },
-];
+const nsfwGenderOptions = computed<Array<{ value: NsfwGenderFilter; label: string }>>(() => [
+  { value: 'all',    label: t('settings.nsfw.genderFilter.all') },
+  { value: 'male',   label: t('settings.nsfw.genderFilter.male') },
+  { value: 'female', label: t('settings.nsfw.genderFilter.female') },
+]);
 
 function loadNsfwSettings(): void {
   try {
@@ -305,7 +324,21 @@ function syncNsfwToStateTree(): void {
 
 // 启动时和游戏加载时都要同步（游戏加载后 isLoaded 变 true，此时再 sync 一次）
 watch(() => isLoaded.value, (loaded) => {
-  if (loaded) syncNsfwToStateTree();
+  if (loaded) {
+    syncNsfwToStateTree();
+    loadCotSettings();
+    loadPresenceEnabled();
+    loadBodyPolish();
+    loadImageGen();
+    featureToggles.value.cot = cotSettings.value.enabled;
+    featureToggles.value.bodyPolish = bodyPolishEnabled.value;
+    featureToggles.value.imageGeneration = imageGenEnabled.value;
+    saveFeatureToggles();
+    saveCotToLocalStorage();
+    savePresenceToLocalStorage();
+    saveBodyPolishToLocalStorage();
+    saveImageGenToLocalStorage();
+  }
 });
 
 watch(nsfwSettings, () => saveNsfwSettings(), { deep: true });
@@ -493,12 +526,12 @@ function openEditRule(rule: TextReplaceRule): void {
 
 function submitRuleForm(): void {
   if (!ruleForm.value.pattern.trim()) {
-    ruleFormError.value = '匹配模式不能为空';
+    ruleFormError.value = t('settings.textReplace.patternRequired');
     return;
   }
   if (ruleForm.value.mode === 'regex') {
     try { new RegExp(ruleForm.value.pattern); }
-    catch { ruleFormError.value = '正则表达式格式无效'; return; }
+    catch { ruleFormError.value = t('settings.textReplace.regexInvalid'); return; }
   }
   if (editingRule.value) {
     const idx = textReplaceRules.value.findIndex((r) => r.id === editingRule.value!.id);
@@ -537,7 +570,7 @@ function exportSettings(): void {
   a.download = `aga-settings-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
-  eventBus.emit('ui:toast', { type: 'success', message: '设置已导出', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('settings.advanced.importExport.exportToast'), duration: 1500 });
 }
 
 function openImportSettings(): void {
@@ -561,9 +594,9 @@ function openImportSettings(): void {
         );
         saveTextRules();
       }
-      eventBus.emit('ui:toast', { type: 'success', message: '设置已导入', duration: 1500 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('settings.advanced.importExport.importToast'), duration: 1500 });
     } catch {
-      eventBus.emit('ui:toast', { type: 'error', message: '设置文件解析失败', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('settings.advanced.importExport.importError'), duration: 2000 });
     }
   };
   input.click();
@@ -603,7 +636,7 @@ function clearCache(): void {
   }
   keysToRemove.forEach((k) => localStorage.removeItem(k));
   showClearCacheConfirm.value = false;
-  eventBus.emit('ui:toast', { type: 'success', message: `已清除 ${keysToRemove.length} 条缓存`, duration: 2000 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('settings.advanced.clearCache.toast', { count: keysToRemove.length }), duration: 2000 });
 }
 
 // ─── 6.1 UI 缩放 ─────────────────────────────────────────────
@@ -663,10 +696,10 @@ async function exportAllSaves(): Promise<void> {
     a.download = `autogame-all-saves-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    eventBus.emit('ui:toast', { type: 'success', message: '所有存档已导出', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('settings.data.exportAllSaves.toast'), duration: 2000 });
   } catch (err) {
     console.error('[Settings] exportAllSaves failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '导出失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('settings.data.exportAllSaves.error'), duration: 2500 });
   } finally {
     isExportingAllSaves.value = false;
   }
@@ -681,10 +714,10 @@ function openImportSaves(): void {
     if (!file) return;
     try {
       const raw = JSON.parse(await file.text()) as { profiles?: unknown[] };
-      if (!Array.isArray(raw.profiles)) throw new Error('无效格式：缺少 profiles 数组');
-      eventBus.emit('ui:toast', { type: 'info', message: `找到 ${raw.profiles.length} 个档案，功能待完整后端实现`, duration: 3000 });
+      if (!Array.isArray(raw.profiles)) throw new Error(t('settings.data.importInvalidFormat'));
+      eventBus.emit('ui:toast', { type: 'info', message: t('settings.data.importProfilesFound', { count: raw.profiles.length }), duration: 3000 });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '解析失败';
+      const msg = err instanceof Error ? err.message : t('settings.data.importParseFailed');
       eventBus.emit('ui:toast', { type: 'error', message: msg, duration: 3000 });
     }
   };
@@ -701,12 +734,12 @@ async function clearAllData(): Promise<void> {
       try { indexedDB.deleteDatabase(dbName); } catch { /* best effort */ }
     }
     localStorage.clear();
-    eventBus.emit('ui:toast', { type: 'success', message: '所有数据已清除', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('settings.data.clearAll.toast'), duration: 2000 });
     showClearAllConfirm.value = false;
     void router.push('/');
   } catch (err) {
     console.error('[Settings] clearAllData failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '清除失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('settings.data.clearAll.error'), duration: 2500 });
   }
 }
 
@@ -714,6 +747,7 @@ async function clearAllData(): Promise<void> {
 
 onMounted(() => {
   loadSettings();
+  initialLanguage = settings.value.language;
   loadActionOptions();
   loadDebugSettings();
   loadPlotSettings();
@@ -726,16 +760,18 @@ onMounted(() => {
   loadBodyPolish();
   loadLowLoadSettings();
   loadImageGen();
-  // Sync state-tree toggles → aga_feature_toggles so API panel can read one source
-  featureToggles.value.cot = cotSettings.value.enabled;
-  featureToggles.value.bodyPolish = bodyPolishEnabled.value;
-  featureToggles.value.imageGeneration = imageGenEnabled.value;
-  saveFeatureToggles();
-  // Sync state-tree values → localStorage so they survive page reloads / import-export
-  saveCotToLocalStorage();
-  savePresenceToLocalStorage();
-  saveBodyPolishToLocalStorage();
-  saveImageGenToLocalStorage();
+  // Sync state-tree toggles → localStorage only when game is already loaded;
+  // otherwise defer to the isLoaded watcher to avoid overwriting user settings with defaults.
+  if (isLoaded.value) {
+    featureToggles.value.cot = cotSettings.value.enabled;
+    featureToggles.value.bodyPolish = bodyPolishEnabled.value;
+    featureToggles.value.imageGeneration = imageGenEnabled.value;
+    saveFeatureToggles();
+    saveCotToLocalStorage();
+    savePresenceToLocalStorage();
+    saveBodyPolishToLocalStorage();
+    saveImageGenToLocalStorage();
+  }
   // fontSize × uiScale are coupled — apply together so rem units scale correctly
   applyRootMetrics(settings.value.fontSize, uiScale.value);
 });
@@ -954,25 +990,25 @@ interface NavCategory {
   label: string;
 }
 
-const navCategories: NavCategory[] = [
-  { id: 'settings-nsfw', label: '内容过滤' },
-  { id: 'settings-ai-features', label: 'AI 功能开关' },
-  { id: 'settings-ui', label: '界面偏好' },
-  { id: 'settings-game', label: '游戏设置' },
-  { id: 'settings-action', label: '行动选项' },
-  { id: 'settings-heartbeat', label: '世界心跳' },
-  { id: 'settings-npc', label: 'NPC 设置' },
-  { id: 'settings-plot', label: '剧情导向' },
-  { id: 'settings-memory', label: '记忆系统' },
-  { id: 'settings-advanced', label: '高级设置' },
-  { id: 'settings-scale', label: '界面缩放' },
-  { id: 'settings-data', label: '数据管理' },
-];
+const navCategories = computed<NavCategory[]>(() => [
+  { id: 'settings-nsfw', label: t('settings.nav.nsfw') },
+  { id: 'settings-ai-features', label: t('settings.nav.aiFeatures') },
+  { id: 'settings-ui', label: t('settings.nav.ui') },
+  { id: 'settings-game', label: t('settings.nav.game') },
+  { id: 'settings-action', label: t('settings.nav.action') },
+  { id: 'settings-heartbeat', label: t('settings.nav.heartbeat') },
+  { id: 'settings-npc', label: t('settings.nav.npc') },
+  { id: 'settings-plot', label: t('settings.nav.plot') },
+  { id: 'settings-memory', label: t('settings.nav.memory') },
+  { id: 'settings-advanced', label: t('settings.nav.advanced') },
+  { id: 'settings-scale', label: t('settings.nav.scale') },
+  { id: 'settings-data', label: t('settings.nav.data') },
+]);
 
 function sectionMatchesSearch(sectionId: string): boolean {
   const q = settingsSearch.value.trim().toLowerCase();
   if (!q) return true;
-  const cat = navCategories.find((c) => c.id === sectionId);
+  const cat = navCategories.value.find((c) => c.id === sectionId);
   if (cat && cat.label.toLowerCase().includes(q)) return true;
   const container = settingsContentRef.value;
   if (!container) return true;
@@ -983,8 +1019,8 @@ function sectionMatchesSearch(sectionId: string): boolean {
 
 const visibleCategoryIds = computed(() => {
   const q = settingsSearch.value.trim().toLowerCase();
-  if (!q) return new Set(navCategories.map((c) => c.id));
-  return new Set(navCategories.filter((c) => sectionMatchesSearch(c.id)).map((c) => c.id));
+  if (!q) return new Set(navCategories.value.map((c) => c.id));
+  return new Set(navCategories.value.filter((c) => sectionMatchesSearch(c.id)).map((c) => c.id));
 });
 
 let scrollSuppressed = false;
@@ -1022,7 +1058,7 @@ function setupScrollSpy(): void {
           visibleSections.delete(entry.target.id);
         }
       }
-      for (const cat of navCategories) {
+      for (const cat of navCategories.value) {
         if (visibleSections.has(cat.id)) {
           activeNavId.value = cat.id;
           break;
@@ -1032,7 +1068,7 @@ function setupScrollSpy(): void {
     { root: container, rootMargin: '0px 0px -70% 0px', threshold: 0 },
   );
 
-  for (const cat of navCategories) {
+  for (const cat of navCategories.value) {
     const el = container.querySelector(`#${cat.id}`);
     if (el) scrollSpyObserver.observe(el);
   }
@@ -1050,14 +1086,14 @@ onBeforeUnmount(() => {
 <template>
   <div class="settings-panel settings-panel--vscode">
     <header class="panel-header">
-      <h2 class="panel-title">设置</h2>
+      <h2 class="panel-title">{{ $t('settings.title') }}</h2>
       <input
         v-model="settingsSearch"
         type="text"
         class="settings-search"
-        placeholder="搜索设置…"
+        :placeholder="$t('settings.search.placeholder')"
       />
-      <button v-if="hasChanges" class="btn-secondary" @click="resetAll">重置全部</button>
+      <button v-if="hasChanges" class="btn-secondary" @click="resetAll">{{ $t('settings.resetAll') }}</button>
     </header>
 
     <div class="settings-layout">
@@ -1079,21 +1115,20 @@ onBeforeUnmount(() => {
 
     <!-- ─── NSFW 内容开关 ─── -->
     <section id="settings-nsfw" v-show="visibleCategoryIds.has('settings-nsfw')" class="settings-section">
-      <h3 class="section-title">内容过滤</h3>
+      <h3 class="section-title">{{ $t('settings.nsfw.sectionTitle') }}</h3>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">成人内容 (NSFW)</span>
+          <span class="setting-label">{{ $t('settings.nsfw.label') }}</span>
           <span class="setting-desc">
-            开启后 AI 会生成成人向扩展内容（NPC 私密信息、角色身体等）。
-            关闭后相关 prompt 指令不发送给 AI，已有数据保留但不再影响生成。
+            {{ $t('settings.nsfw.desc') }}
           </span>
         </div>
         <button
           :class="['toggle-switch', { 'toggle-switch--on': nsfwSettings.nsfwMode }]"
           role="switch"
           :aria-checked="nsfwSettings.nsfwMode"
-          aria-label="成人内容开关"
+          :aria-label="$t('settings.nsfw.ariaLabel')"
           @click="nsfwSettings.nsfwMode = !nsfwSettings.nsfwMode"
         >
           <span class="toggle-track"><span class="toggle-thumb" /></span>
@@ -1102,9 +1137,9 @@ onBeforeUnmount(() => {
 
       <div class="setting-row" :class="{ 'setting-row--disabled': !nsfwSettings.nsfwMode }">
         <div class="setting-info">
-          <span class="setting-label">性别过滤</span>
+          <span class="setting-label">{{ $t('settings.nsfw.genderFilter.label') }}</span>
           <span class="setting-desc">
-            只为匹配性别的 NPC 生成扩展字段。玩家法身不受此过滤影响。
+            {{ $t('settings.nsfw.genderFilter.desc') }}
           </span>
         </div>
         <select
@@ -1121,20 +1156,18 @@ onBeforeUnmount(() => {
 
     <!-- ─── AI 功能开关 ─── -->
     <section id="settings-ai-features" v-show="visibleCategoryIds.has('settings-ai-features')" class="settings-section">
-      <h3 class="section-title">AI 功能开关</h3>
+      <h3 class="section-title">{{ $t('settings.aiFeatures.sectionTitle') }}</h3>
       <p class="setting-desc" style="margin-bottom: 12px; opacity: 0.7">
-        控制各项可选 AI 功能的启用状态。关闭后对应功能不会消耗 API 额度。
-        在「API 管理 → 功能分配」中可为每项功能指定不同的 API。
+        {{ $t('settings.aiFeatures.desc') }}
       </p>
 
-      <div class="setting-subsection-header">正文生成</div>
+      <div class="setting-subsection-header">{{ $t('settings.aiFeatures.subsection.narrative') }}</div>
 
       <div v-if="isLoaded" class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">思维链推理（CoT）</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.cot.label') }}</span>
           <span class="setting-desc">
-            主回合生成前执行独立推理步骤，让 AI 先"想清楚"再写故事。
-            提升剧情逻辑一致性和技能判定质量，但会额外消耗一次 API 调用。
+            {{ $t('settings.aiFeatures.cot.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="cotSettings.enabled" @update:model-value="toggleCotSetting('enabled')" />
@@ -1143,22 +1176,22 @@ onBeforeUnmount(() => {
       <template v-if="cotSettings.enabled && isLoaded">
         <div class="setting-row setting-row--indent">
           <div class="setting-info">
-            <span class="setting-label">判定推理（Judge）</span>
-            <span class="setting-desc">技能检定和博弈时进行独立推理分析</span>
+            <span class="setting-label">{{ $t('settings.aiFeatures.cot.judge.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.aiFeatures.cot.judge.desc') }}</span>
           </div>
           <AgaToggle :model-value="cotSettings.judgeEnabled" @update:model-value="toggleCotSetting('judgeEnabled')" />
         </div>
         <div class="setting-row setting-row--indent">
           <div class="setting-info">
-            <span class="setting-label">Step2 注入推理上下文</span>
-            <span class="setting-desc">将 Step1 推理结果注入 Step2 的指令生成（分步模式下）</span>
+            <span class="setting-label">{{ $t('settings.aiFeatures.cot.injectStep2.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.aiFeatures.cot.injectStep2.desc') }}</span>
           </div>
           <AgaToggle :model-value="cotSettings.injectStep2" @update:model-value="toggleCotSetting('injectStep2')" />
         </div>
         <div class="setting-row setting-row--indent">
           <div class="setting-info">
-            <span class="setting-label">推理历史保留轮数</span>
-            <span class="setting-desc">保留最近 N 轮的推理内容用于上下文注入（1-10）</span>
+            <span class="setting-label">{{ $t('settings.aiFeatures.cot.ringSize.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.aiFeatures.cot.ringSize.desc') }}</span>
           </div>
           <input
             type="number"
@@ -1174,10 +1207,9 @@ onBeforeUnmount(() => {
 
       <div v-if="isLoaded" class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">文本润色（Body Polish）</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.bodyPolish.label') }}</span>
           <span class="setting-desc">
-            主回合叙事生成完成后，由独立 AI 对文本进行修辞润色。
-            可提升文笔质量，但每回合额外消耗一次 API 调用。
+            {{ $t('settings.aiFeatures.bodyPolish.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="bodyPolishEnabled" @update:model-value="toggleBodyPolish" />
@@ -1185,10 +1217,9 @@ onBeforeUnmount(() => {
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">文本优化</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.textOptimization.label') }}</span>
           <span class="setting-desc">
-            对 AI 生成文本做语法和文笔后处理。与润色类似但更轻量，
-            适合分配给较便宜的模型以节省成本。
+            {{ $t('settings.aiFeatures.textOptimization.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="featureToggles.text_optimization" @update:model-value="toggleFeature('text_optimization')" />
@@ -1196,10 +1227,9 @@ onBeforeUnmount(() => {
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">低负荷模式</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.lowLoad.label') }}</span>
           <span class="setting-desc">
-            限制每分钟发送的 API 请求数量。开启后超出配额的请求会排队等待，
-            避免触发 API 服务商的频率限制导致响应被截断。
+            {{ $t('settings.aiFeatures.lowLoad.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="lowLoadEnabled" @update:model-value="toggleLowLoad" />
@@ -1208,8 +1238,8 @@ onBeforeUnmount(() => {
       <template v-if="lowLoadEnabled">
         <div class="setting-row setting-row--indent">
           <div class="setting-info">
-            <span class="setting-label">每分钟最大请求数</span>
-            <span class="setting-desc">超出此数量的请求会排队等待（1-10）</span>
+            <span class="setting-label">{{ $t('settings.aiFeatures.lowLoad.maxRequests.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.aiFeatures.lowLoad.maxRequests.desc') }}</span>
           </div>
           <input
             type="number"
@@ -1224,27 +1254,25 @@ onBeforeUnmount(() => {
         </div>
       </template>
 
-      <div class="setting-subsection-header">世界与记忆</div>
+      <div class="setting-subsection-header">{{ $t('settings.aiFeatures.subsection.worldMemory') }}</div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">世界心跳</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.worldHeartbeat.label') }}</span>
           <span class="setting-desc">
-            每隔数回合自动让 AI 更新世界背景状态（天气变化、势力动态、物价波动等），
-            模拟一个"活着的世界"。关闭后世界状态固定不变。
+            {{ $t('settings.aiFeatures.worldHeartbeat.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="featureToggles.world_heartbeat" @update:model-value="toggleFeature('world_heartbeat')" />
       </div>
 
-      <div class="setting-subsection-header">NPC 与社交</div>
+      <div class="setting-subsection-header">{{ $t('settings.aiFeatures.subsection.npcSocial') }}</div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">NPC 私聊</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.npcChat.label') }}</span>
           <span class="setting-desc">
-            在关系面板中与 NPC 发起独立于主回合的 1:1 对话。
-            关闭后关系面板中不显示私聊入口。
+            {{ $t('settings.aiFeatures.npcChat.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="featureToggles.npc_chat" @update:model-value="toggleFeature('npc_chat')" />
@@ -1252,10 +1280,9 @@ onBeforeUnmount(() => {
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">地点 NPC 自动生成</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.locationNpcGen.label') }}</span>
           <span class="setting-desc">
-            玩家到达新地点时自动用 AI 生成当地 NPC。
-            关闭后只会遇到剧情预设的 NPC。
+            {{ $t('settings.aiFeatures.locationNpcGen.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="featureToggles.location_npc_generation" @update:model-value="toggleFeature('location_npc_generation')" />
@@ -1263,49 +1290,45 @@ onBeforeUnmount(() => {
 
       <div v-if="isLoaded" class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">NPC 在场分区</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.presence.label') }}</span>
           <span class="setting-desc">
-            AI 区分当前场景中在场和不在场的 NPC，
-            为在场角色提供更丰富的上下文描述和互动。
+            {{ $t('settings.aiFeatures.presence.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="presenceEnabled" @update:model-value="togglePresenceEnabled" />
       </div>
 
-      <div class="setting-subsection-header">剧情与指令</div>
+      <div class="setting-subsection-header">{{ $t('settings.aiFeatures.subsection.plotDirective') }}</div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">剧情大纲 AI 拆解</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.plotDecompose.label') }}</span>
           <span class="setting-desc">
-            创建剧情弧线时，用 AI 将你输入的大纲自动拆解为可追踪的节点链。
-            关闭后需要手动创建每个节点。
+            {{ $t('settings.aiFeatures.plotDecompose.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="featureToggles.plot_decompose" @update:model-value="toggleFeature('plot_decompose')" />
       </div>
 
-      <div class="setting-subsection-header">修复与补齐</div>
+      <div class="setting-subsection-header">{{ $t('settings.aiFeatures.subsection.repair') }}</div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">字段自动补齐</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.fieldRepair.label') }}</span>
           <span class="setting-desc">
-            AI 回复缺少必填字段（属性、装备等）时自动发起补齐请求，
-            减少数据缺失问题。每次补齐消耗一次额外 API 调用。
+            {{ $t('settings.aiFeatures.fieldRepair.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="featureToggles.field_repair" @update:model-value="toggleFeature('field_repair')" />
       </div>
 
-      <div class="setting-subsection-header">图像相关</div>
+      <div class="setting-subsection-header">{{ $t('settings.aiFeatures.subsection.image') }}</div>
 
       <div v-if="isLoaded" class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">图像生成</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.imageGen.label') }}</span>
           <span class="setting-desc">
-            开启后可在图像工作台中生成场景和角色插图。
-            需要配置图像生成 API（DALL-E / ComfyUI / SD WebUI 等）。
+            {{ $t('settings.aiFeatures.imageGen.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="imageGenEnabled" @update:model-value="toggleImageGen" />
@@ -1313,19 +1336,18 @@ onBeforeUnmount(() => {
 
       <template v-if="imageGenEnabled">
         <p class="setting-desc setting-row--indent" style="padding: var(--space-sm) 0">
-          图像生成的详细设置已迁移至
-          <router-link to="/game?panel=image&tab=settings" class="settings-link">图像工作台 → 设置</router-link>。
+          {{ $t('settings.aiFeatures.imageGen.migratedHint') }}
+          <router-link to="/game?panel=image&tab=settings" class="settings-link">{{ $t('settings.aiFeatures.imageGen.migratedLink') }}</router-link>
         </p>
       </template>
 
-      <div class="setting-subsection-header">工具</div>
+      <div class="setting-subsection-header">{{ $t('settings.aiFeatures.subsection.utility') }}</div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">AI 助手</span>
+          <span class="setting-label">{{ $t('settings.aiFeatures.assistant.label') }}</span>
           <span class="setting-desc">
-            游戏内 AI 聊天助手，可回答关于游戏世界、角色、规则等方面的问题。
-            使用独立的 API 调用，不影响主回合叙事。
+            {{ $t('settings.aiFeatures.assistant.desc') }}
           </span>
         </div>
         <AgaToggle :model-value="featureToggles.assistant" @update:model-value="toggleFeature('assistant')" />
@@ -1334,26 +1356,26 @@ onBeforeUnmount(() => {
 
     <!-- ─── UI preferences ─── -->
     <section id="settings-ui" v-show="visibleCategoryIds.has('settings-ui')" class="settings-section">
-      <h3 class="section-title">界面偏好</h3>
+      <h3 class="section-title">{{ $t('settings.ui.sectionTitle') }}</h3>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">字体大小</span>
-          <span class="setting-desc">调整全局文字大小</span>
+          <span class="setting-label">{{ $t('settings.ui.fontSize.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.ui.fontSize.desc') }}</span>
         </div>
         <div class="font-size-control">
           <button class="adj-btn" @click="settings.fontSize = Math.max(10, settings.fontSize - 1)">−</button>
           <span class="font-size-value">{{ settings.fontSize }}px</span>
           <button class="adj-btn" @click="settings.fontSize = Math.min(24, settings.fontSize + 1)">+</button>
-          <button class="btn-sm" @click="applyFontSize">应用</button>
-          <button class="btn-sm btn-sm--muted" @click="settings.fontSize = 14; applyFontSize()">重置</button>
+          <button class="btn-sm" @click="applyFontSize">{{ $t('settings.ui.fontSize.apply') }}</button>
+          <button class="btn-sm btn-sm--muted" @click="settings.fontSize = 14; applyFontSize()">{{ $t('settings.ui.fontSize.reset') }}</button>
         </div>
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">主题色</span>
-          <span class="setting-desc">自定义界面强调色</span>
+          <span class="setting-label">{{ $t('settings.ui.themeAccent.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.ui.themeAccent.desc') }}</span>
         </div>
         <div class="color-control">
           <input
@@ -1362,15 +1384,15 @@ onBeforeUnmount(() => {
             class="color-picker"
           />
           <span class="color-value">{{ settings.themeAccent }}</span>
-          <button class="btn-sm" @click="applyThemeColor">应用</button>
-          <button class="btn-sm btn-sm--muted" @click="settings.themeAccent = '#91c49b'; applyThemeColor()">重置</button>
+          <button class="btn-sm" @click="applyThemeColor">{{ $t('settings.ui.themeAccent.apply') }}</button>
+          <button class="btn-sm btn-sm--muted" @click="settings.themeAccent = '#91c49b'; applyThemeColor()">{{ $t('settings.ui.themeAccent.reset') }}</button>
         </div>
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">显示行动选项</span>
-          <span class="setting-desc">AI 回复后展示可选行动</span>
+          <span class="setting-label">{{ $t('settings.ui.showActions.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.ui.showActions.desc') }}</span>
         </div>
         <button
           :class="['toggle-switch', { 'toggle-switch--on': settings.showActionOptions }]"
@@ -1384,8 +1406,8 @@ onBeforeUnmount(() => {
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">启用动画</span>
-          <span class="setting-desc">界面过渡和动画效果</span>
+          <span class="setting-label">{{ $t('settings.ui.enableAnimations.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.ui.enableAnimations.desc') }}</span>
         </div>
         <button
           :class="['toggle-switch', { 'toggle-switch--on': settings.enableAnimations }]"
@@ -1400,12 +1422,12 @@ onBeforeUnmount(() => {
 
     <!-- ─── Game settings ─── -->
     <section id="settings-game" v-show="visibleCategoryIds.has('settings-game')" class="settings-section">
-      <h3 class="section-title">游戏设置</h3>
+      <h3 class="section-title">{{ $t('settings.game.sectionTitle') }}</h3>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">自动保存间隔</span>
-          <span class="setting-desc">每隔多少回合自动保存</span>
+          <span class="setting-label">{{ $t('settings.game.autoSaveInterval.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.game.autoSaveInterval.desc') }}</span>
         </div>
         <div class="number-control">
           <input
@@ -1415,14 +1437,14 @@ onBeforeUnmount(() => {
             max="50"
             class="number-input"
           />
-          <span class="number-unit">回合</span>
+          <span class="number-unit">{{ $t('settings.game.autoSaveInterval.unit') }}</span>
         </div>
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">语言</span>
-          <span class="setting-desc">界面显示语言</span>
+          <span class="setting-label">{{ $t('settings.game.language.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.game.language.desc') }}</span>
         </div>
         <select v-model="settings.language" class="setting-select">
           <option v-for="opt in languageOptions" :key="opt.value" :value="opt.value">
@@ -1434,21 +1456,21 @@ onBeforeUnmount(() => {
 
     <!-- ─── B.2.1 行动选项深度设置 ─── -->
     <section v-if="settings.showActionOptions" v-show="visibleCategoryIds.has('settings-action')" id="settings-action" class="settings-section">
-      <h3 class="section-title">行动选项深度</h3>
+      <h3 class="section-title">{{ $t('settings.action.sectionTitle') }}</h3>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">行动模式</span>
-          <span class="setting-desc">控制 AI 生成行动选项的风格</span>
+          <span class="setting-label">{{ $t('settings.action.mode.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.action.mode.desc') }}</span>
         </div>
         <div class="radio-group">
           <label class="radio-opt">
             <input type="radio" v-model="actionOptions.mode" value="action" />
-            <span>行动导向</span>
+            <span>{{ $t('settings.action.mode.action') }}</span>
           </label>
           <label class="radio-opt">
             <input type="radio" v-model="actionOptions.mode" value="story" />
-            <span>剧情导向</span>
+            <span>{{ $t('settings.action.mode.story') }}</span>
           </label>
         </div>
       </div>
@@ -1456,17 +1478,17 @@ onBeforeUnmount(() => {
       <Transition name="fade-row">
         <div v-if="actionOptions.mode === 'action'" class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">行动节奏</span>
-            <span class="setting-desc">快速推进 vs. 慢速体验</span>
+            <span class="setting-label">{{ $t('settings.action.pace.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.action.pace.desc') }}</span>
           </div>
           <div class="radio-group">
             <label class="radio-opt">
               <input type="radio" v-model="actionOptions.pace" value="fast" />
-              <span>快速</span>
+              <span>{{ $t('settings.action.pace.fast') }}</span>
             </label>
             <label class="radio-opt">
               <input type="radio" v-model="actionOptions.pace" value="slow" />
-              <span>慢速</span>
+              <span>{{ $t('settings.action.pace.slow') }}</span>
             </label>
           </div>
         </div>
@@ -1474,13 +1496,13 @@ onBeforeUnmount(() => {
 
       <div class="setting-row setting-row--column">
         <div class="setting-info">
-          <span class="setting-label">自定义选项 Prompt</span>
-          <span class="setting-desc">引导 AI 生成特定风格的行动选项（可留空）</span>
+          <span class="setting-label">{{ $t('settings.action.customPrompt.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.action.customPrompt.desc') }}</span>
         </div>
         <textarea
           v-model="actionOptions.customPrompt"
           class="setting-textarea"
-          placeholder="例如：每个选项应包含潜在风险提示…"
+          :placeholder="$t('settings.action.customPrompt.placeholder')"
           rows="3"
           maxlength="500"
         />
@@ -1490,12 +1512,12 @@ onBeforeUnmount(() => {
 
     <!-- ─── B.2.2 世界心跳高级设置 ─── -->
     <section v-if="isLoaded" v-show="visibleCategoryIds.has('settings-heartbeat')" id="settings-heartbeat" class="settings-section">
-      <h3 class="section-title">世界心跳</h3>
+      <h3 class="section-title">{{ $t('settings.heartbeat.sectionTitle') }}</h3>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">历史保留条数</span>
-          <span class="setting-desc">心跳历史最多保留多少条（5–100）</span>
+          <span class="setting-label">{{ $t('settings.heartbeat.historyLimit.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.heartbeat.historyLimit.desc') }}</span>
         </div>
         <div class="number-control">
           <input
@@ -1503,14 +1525,14 @@ onBeforeUnmount(() => {
             :value="heartbeatHistoryLimit"
             @change="setHeartbeatHistoryLimit(Number(($event.target as HTMLInputElement).value))"
           />
-          <span class="number-unit">条</span>
+          <span class="number-unit">{{ $t('settings.heartbeat.historyLimit.unit') }}</span>
         </div>
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">遗忘回合数</span>
-          <span class="setting-desc">超过 N 回合未更新的 NPC 不参与心跳（0 = 不遗忘）</span>
+          <span class="setting-label">{{ $t('settings.heartbeat.forgetRounds.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.heartbeat.forgetRounds.desc') }}</span>
         </div>
         <div class="number-control">
           <input
@@ -1518,19 +1540,19 @@ onBeforeUnmount(() => {
             :value="heartbeatForgetRounds"
             @change="setHeartbeatForgetRounds(Number(($event.target as HTMLInputElement).value))"
           />
-          <span class="number-unit">回合</span>
+          <span class="number-unit">{{ $t('settings.heartbeat.forgetRounds.unit') }}</span>
         </div>
       </div>
     </section>
 
     <!-- ─── B.2.3 NPC 设置 ─── -->
     <section v-if="isLoaded" v-show="visibleCategoryIds.has('settings-npc')" id="settings-npc" class="settings-section">
-      <h3 class="section-title">NPC 设置</h3>
+      <h3 class="section-title">{{ $t('settings.npc.sectionTitle') }}</h3>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">NPC 降级阈值</span>
-          <span class="setting-desc">重点 NPC 超过 N 回合未活跃降为普通 NPC</span>
+          <span class="setting-label">{{ $t('settings.npc.demotionThreshold.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.npc.demotionThreshold.desc') }}</span>
         </div>
         <div class="number-control">
           <input
@@ -1538,14 +1560,14 @@ onBeforeUnmount(() => {
             :value="npcDemotionThreshold"
             @change="setNpcDemotion(Number(($event.target as HTMLInputElement).value))"
           />
-          <span class="number-unit">回合</span>
+          <span class="number-unit">{{ $t('settings.npc.demotionThreshold.unit') }}</span>
         </div>
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">重点 NPC 生成范围</span>
-          <span class="setting-desc">到达新地点时生成的重点 NPC 数量（min ≤ max，范围 0–10）</span>
+          <span class="setting-label">{{ $t('settings.npc.generationRange.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.npc.generationRange.desc') }}</span>
         </div>
         <div class="range-pair">
           <input
@@ -1565,12 +1587,12 @@ onBeforeUnmount(() => {
 
     <!-- ─── Plot Direction Settings (Sprint Plot-1 P6) ─── -->
     <section v-if="isLoaded" v-show="visibleCategoryIds.has('settings-plot')" id="settings-plot" class="settings-section">
-      <h3 class="section-title">剧情导向</h3>
+      <h3 class="section-title">{{ $t('settings.plot.sectionTitle') }}</h3>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">启用剧情导向</span>
-          <span class="setting-desc">开启后，活跃弧线的 directive 会注入 AI prompt</span>
+          <span class="setting-label">{{ $t('settings.plot.enabled.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.plot.enabled.desc') }}</span>
         </div>
         <button
           :class="['toggle-switch', { 'toggle-switch--on': plotSettings.enabled }]"
@@ -1583,8 +1605,8 @@ onBeforeUnmount(() => {
       <template v-if="plotSettings.enabled">
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">关键节点确认</span>
-            <span class="setting-desc">critical 节点推进前需玩家确认</span>
+            <span class="setting-label">{{ $t('settings.plot.criticalConfirm.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.plot.criticalConfirm.desc') }}</span>
           </div>
           <button
             :class="['toggle-switch', { 'toggle-switch--on': plotSettings.criticalConfirmGate }]"
@@ -1596,8 +1618,8 @@ onBeforeUnmount(() => {
 
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">置信度阈值</span>
-            <span class="setting-desc">AI 评估 confidence 需达到此值才算通过 (0-1)</span>
+            <span class="setting-label">{{ $t('settings.plot.confidenceThreshold.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.plot.confidenceThreshold.desc') }}</span>
           </div>
           <input
             type="number"
@@ -1610,8 +1632,8 @@ onBeforeUnmount(() => {
 
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">引导最高层级</span>
-            <span class="setting-desc">opportunity 引导最多升级到哪一层 (1-3)</span>
+            <span class="setting-label">{{ $t('settings.plot.opportunityMaxTier.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.plot.opportunityMaxTier.desc') }}</span>
           </div>
           <input
             type="number"
@@ -1624,8 +1646,8 @@ onBeforeUnmount(() => {
 
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">主面板显示度量值</span>
-            <span class="setting-desc">在主游戏面板顶部显示 gauge 进度条</span>
+            <span class="setting-label">{{ $t('settings.plot.showGauges.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.plot.showGauges.desc') }}</span>
           </div>
           <button
             :class="['toggle-switch', { 'toggle-switch--on': plotSettings.showGaugesInMainPanel }]"
@@ -1637,8 +1659,8 @@ onBeforeUnmount(() => {
 
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">评估日志</span>
-            <span class="setting-desc">在 PlotPanel 底部显示评估日志</span>
+            <span class="setting-label">{{ $t('settings.plot.showEvalLog.label') }}</span>
+            <span class="setting-desc">{{ $t('settings.plot.showEvalLog.desc') }}</span>
           </div>
           <button
             :class="['toggle-switch', { 'toggle-switch--on': plotSettings.showEvalLog }]"
@@ -1652,13 +1674,13 @@ onBeforeUnmount(() => {
 
     <!-- ─── B.2.4 高级设置 ─── -->
     <section id="settings-advanced" v-show="visibleCategoryIds.has('settings-advanced')" class="settings-section">
-      <h3 class="section-title">高级设置</h3>
+      <h3 class="section-title">{{ $t('settings.advanced.sectionTitle') }}</h3>
 
       <!-- Debug mode -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">Debug 模式</span>
-          <span class="setting-desc">显示 Prompt 组装面板入口，启用详细日志</span>
+          <span class="setting-label">{{ $t('settings.advanced.debugMode.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.advanced.debugMode.desc') }}</span>
         </div>
         <button
           :class="['toggle-switch', { 'toggle-switch--on': debugSettings.debugMode }]"
@@ -1672,11 +1694,11 @@ onBeforeUnmount(() => {
         <div v-if="debugSettings.debugMode" class="debug-sub">
           <label class="check-opt">
             <input type="checkbox" v-model="debugSettings.consoleDebug" />
-            <span>Console 详细日志</span>
+            <span>{{ $t('settings.advanced.consoleDebug.label') }}</span>
           </label>
           <label class="check-opt">
             <input type="checkbox" v-model="debugSettings.aiLogging" />
-            <span>AI API 完整记录（含 prompt/response）</span>
+            <span>{{ $t('settings.advanced.aiLogging.label') }}</span>
           </label>
         </div>
       </Transition>
@@ -1684,43 +1706,43 @@ onBeforeUnmount(() => {
       <!-- Text replace rules -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">文本替换规则</span>
-          <span class="setting-desc">{{ textReplaceRules.length }} 条规则，在叙事文本渲染前应用</span>
+          <span class="setting-label">{{ $t('settings.advanced.textReplace.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.advanced.textReplace.desc', { count: textReplaceRules.length }) }}</span>
         </div>
-        <button class="btn-sm" @click="showReplaceModal = true">编辑规则</button>
+        <button class="btn-sm" @click="showReplaceModal = true">{{ $t('settings.advanced.textReplace.editRules') }}</button>
       </div>
 
       <!-- Import / Export settings -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">导入 / 导出设置</span>
-          <span class="setting-desc">将当前所有设置项保存为 JSON 文件</span>
+          <span class="setting-label">{{ $t('settings.advanced.importExport.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.advanced.importExport.desc') }}</span>
         </div>
         <div style="display:flex; gap:6px;">
-          <button class="btn-sm" @click="exportSettings">导出</button>
-          <button class="btn-sm" @click="openImportSettings">导入</button>
+          <button class="btn-sm" @click="exportSettings">{{ $t('settings.advanced.importExport.export') }}</button>
+          <button class="btn-sm" @click="openImportSettings">{{ $t('settings.advanced.importExport.import') }}</button>
         </div>
       </div>
 
       <!-- Clear cache -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">清除缓存</span>
-          <span class="setting-desc">清除 aga_* 临时数据（不含 API 配置）</span>
+          <span class="setting-label">{{ $t('settings.advanced.clearCache.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.advanced.clearCache.desc') }}</span>
         </div>
-        <button class="btn-sm btn-sm--danger" @click="showClearCacheConfirm = true">清除</button>
+        <button class="btn-sm btn-sm--danger" @click="showClearCacheConfirm = true">{{ $t('settings.advanced.clearCache.btn') }}</button>
       </div>
     </section>
 
     <!-- ─── 6.1 界面缩放 + 文本速度 ─── -->
     <section id="settings-scale" v-show="visibleCategoryIds.has('settings-scale')" class="settings-section">
-      <h3 class="section-title">界面缩放</h3>
+      <h3 class="section-title">{{ $t('settings.scale.sectionTitle') }}</h3>
 
       <!-- UI Scale -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">UI 缩放 ({{ uiScale }}%)</span>
-          <span class="setting-desc">调整整体界面大小，范围 80–120%</span>
+          <span class="setting-label">{{ $t('settings.scale.uiScale.label', { value: uiScale }) }}</span>
+          <span class="setting-desc">{{ $t('settings.scale.uiScale.desc') }}</span>
         </div>
         <div class="scale-control">
           <button class="adj-btn" @click="uiScale = Math.max(80, uiScale - 5)">−</button>
@@ -1731,18 +1753,18 @@ onBeforeUnmount(() => {
             step="5"
             v-model.number="uiScale"
             class="scale-slider"
-            aria-label="UI 缩放"
+            :aria-label="$t('settings.scale.uiScale.ariaLabel')"
           />
           <button class="adj-btn" @click="uiScale = Math.min(120, uiScale + 5)">+</button>
-          <button class="btn-sm" @click="uiScale = 100">重置</button>
+          <button class="btn-sm" @click="uiScale = 100">{{ $t('settings.scale.uiScale.reset') }}</button>
         </div>
       </div>
 
       <!-- Text speed -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">文本速度</span>
-          <span class="setting-desc">流式叙事的回放速度倍率</span>
+          <span class="setting-label">{{ $t('settings.scale.textSpeed.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.scale.textSpeed.desc') }}</span>
         </div>
         <div class="radio-group">
           <label
@@ -1759,51 +1781,51 @@ onBeforeUnmount(() => {
 
     <!-- ─── 6.1 数据管理 ─── -->
     <section id="settings-data" v-show="visibleCategoryIds.has('settings-data')" class="settings-section">
-      <h3 class="section-title">数据管理</h3>
+      <h3 class="section-title">{{ $t('settings.data.sectionTitle') }}</h3>
 
       <!-- Export all saves -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">导出所有存档</span>
-          <span class="setting-desc">将所有角色档案和存档槽下载为 JSON 文件</span>
+          <span class="setting-label">{{ $t('settings.data.exportAllSaves.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.data.exportAllSaves.desc') }}</span>
         </div>
         <button class="btn-sm" :disabled="isExportingAllSaves" @click="exportAllSaves">
-          {{ isExportingAllSaves ? '导出中…' : '导出存档' }}
+          {{ isExportingAllSaves ? $t('settings.data.exportAllSaves.btnBusy') : $t('settings.data.exportAllSaves.btn') }}
         </button>
       </div>
 
       <!-- Import saves -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">导入存档</span>
-          <span class="setting-desc">从 JSON 文件恢复之前导出的存档数据</span>
+          <span class="setting-label">{{ $t('settings.data.importSaves.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.data.importSaves.desc') }}</span>
         </div>
-        <button class="btn-sm" @click="openImportSaves">选择文件</button>
+        <button class="btn-sm" @click="openImportSaves">{{ $t('settings.data.importSaves.btn') }}</button>
       </div>
 
       <!-- Clear all data -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">清除所有数据</span>
-          <span class="setting-desc" style="color: var(--color-danger, #ef4444);">不可恢复，将删除所有存档和配置</span>
+          <span class="setting-label">{{ $t('settings.data.clearAll.label') }}</span>
+          <span class="setting-desc" style="color: var(--color-danger, #ef4444);">{{ $t('settings.data.clearAll.desc') }}</span>
         </div>
         <button class="btn-sm btn-sm--danger" @click="showClearAllConfirm = true; clearAllStep = 1">
-          清除所有数据
+          {{ $t('settings.data.clearAll.btn') }}
         </button>
       </div>
     </section>
 
     <!-- ─── 记忆系统阈值（2026-04-11 四层记忆） ─── -->
     <section id="settings-memory" v-show="visibleCategoryIds.has('settings-memory')" class="settings-section">
-      <h3 class="section-title">记忆系统阈值</h3>
+      <h3 class="section-title">{{ $t('settings.memory.sectionTitle') }}</h3>
       <p class="section-subtitle" style="color: var(--color-text-muted, #888); font-size: 12px; margin: -4px 0 10px;">
-        调整短期/中期/长期记忆的容量与触发点。默认值已针对大多数游戏调优，仅在你对记忆系统有深入理解时修改。
+        {{ $t('settings.memory.sectionDesc') }}
       </p>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">短期记忆容量</span>
-          <span class="setting-desc">保留的最近回合数（超出后最旧的一条晋升为中期）。默认 5</span>
+          <span class="setting-label">{{ $t('settings.memory.shortTermLimit.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.memory.shortTermLimit.desc') }}</span>
         </div>
         <input
           type="number"
@@ -1812,14 +1834,14 @@ onBeforeUnmount(() => {
           step="1"
           v-model.number="memorySettings.shortTermLimit"
           class="num-input"
-          aria-label="短期记忆容量"
+          :aria-label="$t('settings.memory.shortTermLimit.label')"
         />
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">中期精炼阈值</span>
-          <span class="setting-desc">中期记忆超过此数时触发「就地精炼」（去重合并）。默认 25</span>
+          <span class="setting-label">{{ $t('settings.memory.midTermRefineThreshold.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.memory.midTermRefineThreshold.desc') }}</span>
         </div>
         <input
           type="number"
@@ -1828,14 +1850,14 @@ onBeforeUnmount(() => {
           step="1"
           v-model.number="memorySettings.midTermRefineThreshold"
           class="num-input"
-          aria-label="中期精炼阈值"
+          :aria-label="$t('settings.memory.midTermRefineThreshold.label')"
         />
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">长期总结阈值</span>
-          <span class="setting-desc">中期记忆超过此数时触发「世界观演化」为长期条目。默认 50</span>
+          <span class="setting-label">{{ $t('settings.memory.longTermSummaryThreshold.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.memory.longTermSummaryThreshold.desc') }}</span>
         </div>
         <input
           type="number"
@@ -1844,14 +1866,14 @@ onBeforeUnmount(() => {
           step="1"
           v-model.number="memorySettings.longTermSummaryThreshold"
           class="num-input"
-          aria-label="长期总结阈值"
+          :aria-label="$t('settings.memory.longTermSummaryThreshold.label')"
         />
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">总结消耗条数</span>
-          <span class="setting-desc">每次世界观演化一次消耗的中期条目数。默认 50（= 阈值）</span>
+          <span class="setting-label">{{ $t('settings.memory.longTermSummarizeCount.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.memory.longTermSummarizeCount.desc') }}</span>
         </div>
         <input
           type="number"
@@ -1860,14 +1882,14 @@ onBeforeUnmount(() => {
           step="1"
           v-model.number="memorySettings.longTermSummarizeCount"
           class="num-input"
-          aria-label="总结消耗条数"
+          :aria-label="$t('settings.memory.longTermSummarizeCount.label')"
         />
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">演化后保留中期</span>
-          <span class="setting-desc">世界观演化后保留多少条最新中期（0 = 全部清空）。默认 0</span>
+          <span class="setting-label">{{ $t('settings.memory.midTermKeep.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.memory.midTermKeep.desc') }}</span>
         </div>
         <input
           type="number"
@@ -1876,14 +1898,14 @@ onBeforeUnmount(() => {
           step="1"
           v-model.number="memorySettings.midTermKeep"
           class="num-input"
-          aria-label="演化后保留中期"
+          :aria-label="$t('settings.memory.midTermKeep.label')"
         />
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">长期记忆容量</span>
-          <span class="setting-desc">超过此数时触发「二级精炼」（最旧条目压缩为主题存档）。默认 30</span>
+          <span class="setting-label">{{ $t('settings.memory.longTermCap.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.memory.longTermCap.desc') }}</span>
         </div>
         <input
           type="number"
@@ -1892,27 +1914,25 @@ onBeforeUnmount(() => {
           step="1"
           v-model.number="memorySettings.longTermCap"
           class="num-input"
-          aria-label="长期记忆容量"
+          :aria-label="$t('settings.memory.longTermCap.label')"
         />
       </div>
 
       <!-- 2026-04-14 新增：短期记忆注入方式 + few-shot 对数 -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">短期记忆注入方式</span>
+          <span class="setting-label">{{ $t('settings.memory.injectionStyle.label') }}</span>
           <span class="setting-desc">
-            决定主回合 prompt 如何包含最近历史。
-            <strong>单块注入</strong>：短期记忆合并成一条 assistant 消息（API 总消息固定 3 条，最省 token）。
-            <strong>Few-shot 轮次</strong>：保留最近 N 对 user↔assistant 对话（每回合约 3+2N 条消息，更利于 AI 保持输出格式）。
+            {{ $t('settings.memory.injectionStyle.desc') }}
           </span>
         </div>
         <select
           v-model="memorySettings.shortTermInjectionStyle"
           class="select-input"
-          aria-label="短期记忆注入方式"
+          :aria-label="$t('settings.memory.injectionStyle.label')"
         >
-          <option value="few_shot_pairs">Few-shot 轮次（推荐）</option>
-          <option value="single_assistant_block">单块注入（极省 token）</option>
+          <option value="few_shot_pairs">{{ $t('settings.memory.injectionStyle.fewShot') }}</option>
+          <option value="single_assistant_block">{{ $t('settings.memory.injectionStyle.singleBlock') }}</option>
         </select>
       </div>
 
@@ -1921,10 +1941,9 @@ onBeforeUnmount(() => {
         class="setting-row"
       >
         <div class="setting-info">
-          <span class="setting-label">Few-shot 对数</span>
+          <span class="setting-label">{{ $t('settings.memory.fewShotPairs.label') }}</span>
           <span class="setting-desc">
-            保留最近几对（user, assistant）真实对话作为格式示范。默认 3；
-            超过 5 容易显著推高 token 成本。
+            {{ $t('settings.memory.fewShotPairs.desc') }}
           </span>
         </div>
         <input
@@ -1934,16 +1953,16 @@ onBeforeUnmount(() => {
           step="1"
           v-model.number="memorySettings.fewShotPairs"
           class="num-input"
-          aria-label="Few-shot 对数"
+          :aria-label="$t('settings.memory.fewShotPairs.label')"
         />
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">恢复默认</span>
-          <span class="setting-desc">将以上所有阈值恢复为引擎默认值</span>
+          <span class="setting-label">{{ $t('settings.memory.resetDefaults.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.memory.resetDefaults.desc') }}</span>
         </div>
-        <button class="btn-sm" @click="memorySettings = { ...defaultMemorySettings }">恢复默认</button>
+        <button class="btn-sm" @click="memorySettings = { ...defaultMemorySettings }">{{ $t('settings.memory.resetDefaults.label') }}</button>
       </div>
     </section>
 
@@ -1952,14 +1971,14 @@ onBeforeUnmount(() => {
 
     <!-- ─── About ─── -->
     <section class="settings-section settings-section--about">
-      <h3 class="section-title">关于</h3>
+      <h3 class="section-title">{{ $t('settings.about.sectionTitle') }}</h3>
       <div class="about-info">
         <div class="about-row">
-          <span class="about-label">版本</span>
+          <span class="about-label">{{ $t('settings.about.version') }}</span>
           <span class="about-value">0.1.0</span>
         </div>
         <div class="about-row">
-          <span class="about-label">引擎</span>
+          <span class="about-label">{{ $t('settings.about.engine') }}</span>
           <span class="about-value">AutoGameAgent</span>
         </div>
       </div>
@@ -1970,22 +1989,22 @@ onBeforeUnmount(() => {
   </div>
 
   <!-- Text replace rules modal -->
-  <Modal v-model="showReplaceModal" title="文本替换规则" width="600px">
+  <Modal v-model="showReplaceModal" :title="$t('settings.textReplace.modalTitle')" width="600px">
     <div class="rules-header">
-      <span class="rules-count">{{ textReplaceRules.length }} 条规则</span>
-      <button class="btn-sm" @click="openNewRule">+ 新增规则</button>
+      <span class="rules-count">{{ $t('settings.textReplace.count', { count: textReplaceRules.length }) }}</span>
+      <button class="btn-sm" @click="openNewRule">{{ $t('settings.textReplace.addRule') }}</button>
     </div>
     <div v-if="textReplaceRules.length" class="rules-list">
       <div v-for="rule in textReplaceRules" :key="rule.id" class="rule-row">
         <button
           :class="['rule-toggle', { 'rule-toggle--on': rule.enabled }]"
           @click="toggleRule(rule.id)"
-          :title="rule.enabled ? '已启用' : '已禁用'"
+          :title="rule.enabled ? $t('settings.textReplace.enabled') : $t('settings.textReplace.disabled')"
         >{{ rule.enabled ? '●' : '○' }}</button>
         <div class="rule-info">
           <code class="rule-pattern">{{ rule.pattern }}</code>
           <span class="rule-arrow">→</span>
-          <span class="rule-replacement">{{ rule.replacement || '(空)' }}</span>
+          <span class="rule-replacement">{{ rule.replacement || $t('settings.textReplace.emptyReplacement') }}</span>
         </div>
         <span :class="['rule-mode', `rule-mode--${rule.mode}`]">{{ rule.mode }}</span>
         <div class="rule-flags">
@@ -1996,68 +2015,68 @@ onBeforeUnmount(() => {
         <button class="btn-icon-sm btn-icon-sm--danger" @click="deleteRule(rule.id)" title="删除">🗑️</button>
       </div>
     </div>
-    <p v-else class="rules-empty">暂无规则。点击「新增规则」添加。</p>
+    <p v-else class="rules-empty">{{ $t('settings.textReplace.empty') }}</p>
   </Modal>
 
   <!-- Rule editor modal -->
-  <Modal v-model="showRuleEditor" :title="editingRule ? '编辑规则' : '新增规则'" width="480px">
+  <Modal v-model="showRuleEditor" :title="editingRule ? $t('settings.textReplace.editTitle') : $t('settings.textReplace.newTitle')" width="480px">
     <div class="form-field">
-      <label class="form-label">匹配模式 <span class="req">*</span></label>
-      <input v-model="ruleForm.pattern" class="form-input" placeholder="输入文本或正则表达式" maxlength="500" />
+      <label class="form-label">{{ $t('settings.textReplace.patternLabel') }} <span class="req">*</span></label>
+      <input v-model="ruleForm.pattern" class="form-input" :placeholder="$t('settings.textReplace.patternPlaceholder')" maxlength="500" />
     </div>
     <div class="form-field">
-      <label class="form-label">替换内容</label>
-      <input v-model="ruleForm.replacement" class="form-input" placeholder="替换为（留空则删除匹配内容）" maxlength="1500" />
+      <label class="form-label">{{ $t('settings.textReplace.replacementLabel') }}</label>
+      <input v-model="ruleForm.replacement" class="form-input" :placeholder="$t('settings.textReplace.replacementPlaceholder')" maxlength="1500" />
     </div>
     <div class="form-row">
-      <label class="form-label">匹配模式</label>
+      <label class="form-label">{{ $t('settings.textReplace.modeLabel') }}</label>
       <div class="radio-group">
-        <label class="radio-opt"><input type="radio" v-model="ruleForm.mode" value="text" /> 文本</label>
-        <label class="radio-opt"><input type="radio" v-model="ruleForm.mode" value="regex" /> 正则</label>
+        <label class="radio-opt"><input type="radio" v-model="ruleForm.mode" value="text" /> {{ $t('settings.textReplace.modeText') }}</label>
+        <label class="radio-opt"><input type="radio" v-model="ruleForm.mode" value="regex" /> {{ $t('settings.textReplace.modeRegex') }}</label>
       </div>
     </div>
     <div class="form-checks">
-      <label class="check-opt"><input type="checkbox" v-model="ruleForm.ignoreCase" /> 忽略大小写</label>
-      <label class="check-opt"><input type="checkbox" v-model="ruleForm.global" /> 全局替换</label>
+      <label class="check-opt"><input type="checkbox" v-model="ruleForm.ignoreCase" /> {{ $t('settings.textReplace.ignoreCase') }}</label>
+      <label class="check-opt"><input type="checkbox" v-model="ruleForm.global" /> {{ $t('settings.textReplace.global') }}</label>
     </div>
     <p v-if="ruleFormError" class="form-error">{{ ruleFormError }}</p>
     <template #footer>
-      <button class="btn-modal btn-modal--secondary" @click="showRuleEditor = false">取消</button>
-      <button class="btn-modal btn-modal--primary" @click="submitRuleForm">{{ editingRule ? '保存' : '添加' }}</button>
+      <button class="btn-modal btn-modal--secondary" @click="showRuleEditor = false">{{ $t('settings.textReplace.cancelBtn') }}</button>
+      <button class="btn-modal btn-modal--primary" @click="submitRuleForm">{{ editingRule ? $t('settings.textReplace.saveBtn') : $t('settings.textReplace.addBtn') }}</button>
     </template>
   </Modal>
 
   <!-- Clear cache confirm -->
-  <Modal v-model="showClearCacheConfirm" title="确认清除缓存" width="360px">
-    <p class="confirm-text">将清除所有 aga_* 前缀的临时缓存数据（不包含 API 配置和备份数据）。</p>
+  <Modal v-model="showClearCacheConfirm" :title="$t('settings.advanced.clearCache.confirmTitle')" width="360px">
+    <p class="confirm-text">{{ $t('settings.advanced.clearCache.confirmText') }}</p>
     <template #footer>
-      <button class="btn-modal btn-modal--secondary" @click="showClearCacheConfirm = false">取消</button>
-      <button class="btn-modal btn-modal--danger" @click="clearCache">确认清除</button>
+      <button class="btn-modal btn-modal--secondary" @click="showClearCacheConfirm = false">{{ $t('settings.advanced.clearCache.confirmCancel') }}</button>
+      <button class="btn-modal btn-modal--danger" @click="clearCache">{{ $t('settings.advanced.clearCache.confirmOk') }}</button>
     </template>
   </Modal>
 
   <!-- Clear ALL data confirm (2-step) -->
-  <Modal v-model="showClearAllConfirm" title="⚠️ 清除所有数据" width="400px">
+  <Modal v-model="showClearAllConfirm" :title="'⚠️ ' + $t('settings.data.clearAll.modalTitle')" width="400px">
     <template v-if="clearAllStep === 1">
-      <p class="confirm-text danger-text">此操作将永久删除：</p>
+      <p class="confirm-text danger-text">{{ $t('settings.data.clearAll.step1Text') }}</p>
       <ul class="danger-list">
-        <li>所有角色档案和存档</li>
-        <li>所有 localStorage 配置</li>
-        <li>Engram 向量索引</li>
+        <li>{{ $t('settings.data.clearAll.step1List1') }}</li>
+        <li>{{ $t('settings.data.clearAll.step1List2') }}</li>
+        <li>{{ $t('settings.data.clearAll.step1List3') }}</li>
       </ul>
-      <p class="confirm-text">此操作<strong>不可撤销</strong>。确定要继续吗？</p>
+      <p class="confirm-text">{{ $t('settings.data.clearAll.step1Confirm') }}</p>
     </template>
     <template v-else>
-      <p class="confirm-text danger-text">最后确认：</p>
-      <p class="confirm-text">请再次点击「确认清除所有数据」以执行。</p>
+      <p class="confirm-text danger-text">{{ $t('settings.data.clearAll.step2Text') }}</p>
+      <p class="confirm-text">{{ $t('settings.data.clearAll.step2Hint') }}</p>
     </template>
     <template #footer>
-      <button class="btn-modal btn-modal--secondary" @click="showClearAllConfirm = false">取消</button>
+      <button class="btn-modal btn-modal--secondary" @click="showClearAllConfirm = false">{{ $t('settings.data.clearAll.step1Cancel') }}</button>
       <button v-if="clearAllStep === 1" class="btn-modal btn-modal--danger" @click="clearAllStep = 2">
-        继续
+        {{ $t('settings.data.clearAll.step1Continue') }}
       </button>
       <button v-else class="btn-modal btn-modal--danger" @click="clearAllData">
-        确认清除所有数据
+        {{ $t('settings.data.clearAll.step2Confirm') }}
       </button>
     </template>
   </Modal>

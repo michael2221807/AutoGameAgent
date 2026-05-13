@@ -1,0 +1,26 @@
+{
+  "modal.base.ariaClose": "Close",
+
+  "modal.confirm.ariaDialog": "Confirm",
+  "modal.confirm.defaultCancel": "Cancel",
+  "modal.confirm.defaultConfirm": "Confirm",
+
+  "modal.npcChat.title": "Chat with {name}",
+  "modal.npcChat.ariaClose": "Close",
+  "modal.npcChat.empty": "No messages yet — type something to start",
+  "modal.npcChat.ariaDismissError": "Dismiss error",
+  "modal.npcChat.placeholder": "Say something to {name}… (Enter to send, Shift+Enter for newline)",
+  "modal.npcChat.buttonRollback": "Rollback",
+  "modal.npcChat.buttonSending": "Sending…",
+  "modal.npcChat.buttonSend": "Send",
+  "modal.npcChat.npcDeleted": "NPC \"{name}\" no longer exists, closing chat",
+  "modal.npcChat.pipelineNotReady": "NPC chat pipeline not ready",
+  "modal.npcChat.aiCallFailed": "AI call failed",
+  "modal.npcChat.rollbackSuccess": "Previous message withdrawn",
+  "modal.npcChat.rollbackFailed": "Rollback failed",
+  "modal.npcChat.timestamp.yesterday": "Yesterday",
+
+  "modal.npcMemory.sectionSummaries": "Summaries",
+  "modal.npcMemory.sectionRecent": "Recent",
+  "modal.npcMemory.empty": "This relationship has no memories yet"
+}

@@ -205,6 +205,7 @@ export class FieldRepairPipeline {
         console.error('[FieldRepair] Combined step failed:', err);
         eventBus.emit('ui:toast', {
           type: 'warning',
+          i18nKey: 'engine.toast.fieldRepairFailed',
           message: '字段补齐/记忆维护失败（不影响本回合）',
           duration: 3000,
         });

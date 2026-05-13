@@ -8,10 +8,13 @@
  * 已选条目右上角显示勾选标记。
  */
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { CreationStep } from '@/engine/types';
 import PresetDetailPanel from './PresetDetailPanel.vue';
 import CustomPresetModal from './CustomPresetModal.vue';
 import AIPresetGenModal from './AIPresetGenModal.vue';
+
+const { t } = useI18n();
 
 /** 预设条目的最小类型契约 */
 interface PresetEntry {
@@ -76,7 +79,7 @@ function handleCustomSubmit(fields: Record<string, unknown>): void {
 function handleRemove(preset: PresetEntry, ev: Event): void {
   ev.stopPropagation();
   if (preset.source !== 'user' || typeof preset.id !== 'string') return;
-  if (!window.confirm(`确认删除自定义 "${getDisplayName(preset)}"？此操作不可撤销。`)) return;
+  if (!window.confirm(t('creation.selectMany.confirmDelete', { name: getDisplayName(preset) }))) return;
   emit('customRemove', preset.id);
 }
 
@@ -180,7 +183,7 @@ function toggle(preset: PresetEntry): void {
 
 /** 显示名称 */
 function getDisplayName(preset: PresetEntry): string {
-  return preset.name ?? preset.label ?? preset.id ?? '未命名';
+  return preset.name ?? preset.label ?? preset.id ?? t('creation.selectMany.unnamed');
 }
 
 /** 当前悬停的预设条目（用于右侧详情面板） */
@@ -192,7 +195,7 @@ const hoveredPreset = ref<PresetEntry | null>(null);
     <div class="step-header">
       <h3 class="step-title">{{ step.label }}</h3>
       <span v-if="step.costField" class="budget-badge">
-        剩余: <strong>{{ remaining }}</strong> / {{ budget }}
+        {{ $t('creation.selectMany.budgetBadge', { remaining, total: budget }) }}
       </span>
     </div>
 
@@ -206,7 +209,7 @@ const hoveredPreset = ref<PresetEntry | null>(null);
           class="custom-add-btn"
           @click="openAddModal"
         >
-          + 自定义{{ step.label }}
+          {{ $t('creation.selectMany.addCustom', { label: step.label }) }}
         </button>
 
         <button
@@ -229,31 +232,31 @@ const hoveredPreset = ref<PresetEntry | null>(null);
           <div class="preset-card-header">
             <span class="preset-name">{{ getDisplayName(preset) }}</span>
             <div v-if="preset.source === 'user'" class="user-badge-row">
-              <span class="user-badge" title="用户自定义条目">自定义</span>
+              <span class="user-badge" :title="$t('creation.selectMany.userCustomTooltip')">{{ $t('creation.selectMany.customizeStep', { label: '' }) }}</span>
               <button
                 type="button"
                 class="user-action user-action--edit"
-                title="编辑"
+                :title="$t('common.actions.edit')"
                 @click="handleEdit(preset, $event)"
               >✏</button>
               <button
                 type="button"
                 class="user-action user-action--del"
-                title="删除"
+                :title="$t('common.actions.delete')"
                 @click="handleRemove(preset, $event)"
               >🗑</button>
             </div>
           </div>
           <span v-if="preset.description" class="preset-desc">{{ preset.description }}</span>
           <span v-if="getCost(preset) !== null" class="preset-cost">
-            花费: {{ getCost(preset) }}
+            {{ $t('creation.selectMany.cost', { value: getCost(preset) }) }}
           </span>
         </button>
 
         <!-- AI 生成按钮 —— 仅 step 配置 customSchema + aiGeneration.enabled 时显示 -->
         <div v-if="aiEnabled && hasCustomSchema" class="ai-section">
           <button class="btn-ai" type="button" @click="openAIGenModal">
-            ✦ AI 生成自定义选项
+            {{ $t('creation.selectMany.aiGenButton') }}
           </button>
         </div>
       </div>
@@ -273,10 +276,10 @@ const hoveredPreset = ref<PresetEntry | null>(null);
       v-model="customModalOpen"
       :title="
         editingId
-          ? `编辑自定义${step.label}`
+          ? t('creation.selectMany.editCustom', { label: step.label })
           : aiSourceFlag
-          ? `审阅 AI 推演的${step.label}`
-          : `自定义${step.label}`
+          ? t('creation.selectMany.reviewAIGenerated', { label: step.label })
+          : t('creation.selectMany.customizeStep', { label: step.label })
       "
       :schema="step.customSchema"
       :initial-data="editingInitial"

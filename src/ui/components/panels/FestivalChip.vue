@@ -36,13 +36,13 @@ function open(): void {
     <button
       type="button"
       class="festival-chip"
-      :title="`节日：${normalized.名称}，点击查看详情`"
-      :aria-label="`节日 ${normalized.名称}`"
+      :title="$t('mainGame.env.festival.titleTemplate', { name: normalized.名称 })"
+      :aria-label="`${$t('mainGame.env.festival.label')} ${normalized.名称}`"
       aria-haspopup="dialog"
       :aria-expanded="popoverOpen"
       @click="open"
     >
-      <span class="festival-chip__label">节日</span>
+      <span class="festival-chip__label">{{ $t('mainGame.env.festival.label') }}</span>
       <span class="festival-chip__value">{{ normalized.名称 }}</span>
     </button>
 

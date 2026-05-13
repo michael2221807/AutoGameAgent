@@ -69,7 +69,7 @@ export interface PipelineContext {
    * 进度通知回调 — PipelineRunner 在每个阶段开始时调用
    * UI 层可据此显示 "正在组装上下文..." 等状态文本
    */
-  onProgress?: (msg: string) => void;
+  onProgress?: (msg: string | { i18nKey: string; i18nParams?: Record<string, unknown>; message: string }) => void;
   /**
    * 取消信号 — 由 UI 层的 AbortController 控制
    * PipelineRunner 在每个阶段执行前检查，AIService 内部也监听此信号

@@ -75,7 +75,7 @@ export class AICallStage implements PipelineStage {
     // between calls). This is what users see as "how long did this round take".
     const aiCallStartedAt = performance.now();
     // ── 第1步：正文（流式，让用户看到逐字输出） ──
-    ctx.onProgress?.('[AICall:分步第1步]');
+    ctx.onProgress?.({ i18nKey: 'engine.progress.aiCallStep1', message: '[AICall:分步第1步]' });
     const rawStep1 = await this.aiService.generate({
       messages: ctx.messages,
       stream: !!ctx.onStreamChunk,
@@ -94,7 +94,7 @@ export class AICallStage implements PipelineStage {
     );
 
     // ── 第2步：指令 + 选项 + 记忆（非流式，结果不显示给用户） ──
-    ctx.onProgress?.('[AICall:分步第2步]');
+    ctx.onProgress?.({ i18nKey: 'engine.progress.aiCallStep2', message: '[AICall:分步第2步]' });
     //
     // CR-R12 修复（2026-04-11）：第2步消息必须以 user 结尾（Claude 原生 API 严格要求）。
     // 旧版本直接把 step1 响应作为最后一条 assistant，Claude 会把它当 prefill 继续生成

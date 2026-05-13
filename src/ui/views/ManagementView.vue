@@ -34,6 +34,7 @@
  */
 import { ref, inject, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { ProfileManager } from '@/engine/persistence/profile-manager';
 import type { SaveManager } from '@/engine/persistence/save-manager';
 import type { BackupService } from '@/engine/persistence/backup-service';
@@ -45,8 +46,11 @@ import type { AIService } from '@/engine/ai/ai-service';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import { useActionQueueStore } from '@/engine/stores/engine-action-queue';
+import { useLocale } from '@/ui/composables/useLocale';
 
 const router = useRouter();
+const { t } = useI18n();
+const { formatDateTime: localeFormatDateTime } = useLocale();
 const engineState = useEngineStateStore();
 
 const profileManager = inject<ProfileManager>('profileManager');
@@ -162,11 +166,11 @@ async function confirmDelete(): Promise<void> {
       engineState.clearGame();
     }
 
-    showSuccess(`已删除角色「${profile?.characterName ?? profileId}」`);
+    showSuccess(t('management.messages.characterDeleted', { name: profile?.characterName ?? profileId }));
     refreshProfiles();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    errorMessage.value = `删除失败: ${msg}`;
+    errorMessage.value = t('management.errors.deleteFailed', { error: msg });
     console.error('[ManagementView] Delete failed:', err);
   } finally {
     pendingDeleteId.value = null;
@@ -188,7 +192,7 @@ async function loadSlot(profile: ProfileMeta, slot: SaveSlotMeta): Promise<void>
   try {
     const stateTree = await saveManager.loadGame(profile.profileId, slot.slotId);
     if (!stateTree) {
-      errorMessage.value = '存档数据不存在或已损坏';
+      errorMessage.value = t('management.errors.saveCorrupted');
       return;
     }
 
@@ -197,7 +201,7 @@ async function loadSlot(profile: ProfileMeta, slot: SaveSlotMeta): Promise<void>
     router.push('/game');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    errorMessage.value = `加载失败: ${msg}`;
+    errorMessage.value = t('management.errors.loadFailed', { error: msg });
     console.error('[ManagementView] Load slot failed:', err);
   } finally {
     isLoading.value = false;
@@ -219,7 +223,7 @@ async function exportSlot(profile: ProfileMeta, slot: SaveSlotMeta): Promise<voi
   try {
     const data = await saveManager.loadGame(profile.profileId, slot.slotId);
     if (!data) {
-      errorMessage.value = '无法导出：存档数据不存在';
+      errorMessage.value = t('management.errors.exportNoData');
       return;
     }
 
@@ -248,10 +252,10 @@ async function exportSlot(profile: ProfileMeta, slot: SaveSlotMeta): Promise<voi
     anchor.click();
 
     URL.revokeObjectURL(url);
-    showSuccess('存档已导出');
+    showSuccess(t('management.messages.saveExported'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    errorMessage.value = `导出失败: ${msg}`;
+    errorMessage.value = t('management.errors.exportFailed', { error: msg });
     console.error('[ManagementView] Export failed:', err);
   } finally {
     isLoading.value = false;
@@ -299,7 +303,7 @@ async function handleImportFile(file: File): Promise<void> {
     const payload = JSON.parse(text) as unknown;
 
     if (!isValidImportPayload(payload)) {
-      errorMessage.value = '无效的存档文件格式';
+      errorMessage.value = t('management.errors.invalidFileFormat');
       return;
     }
 
@@ -331,11 +335,11 @@ async function handleImportFile(file: File): Promise<void> {
       slotMeta,
     );
 
-    showSuccess(`已导入角色「${profileMeta.characterName}」`);
+    showSuccess(t('management.messages.characterImported', { name: profileMeta.characterName }));
     refreshProfiles();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    errorMessage.value = `导入失败: ${msg}`;
+    errorMessage.value = t('management.errors.importFailed', { error: msg });
     console.error('[ManagementView] Import failed:', err);
   } finally {
     isLoading.value = false;
@@ -372,13 +376,8 @@ function isValidImportPayload(data: unknown): data is ImportPayload {
 // ─── Helpers ──────────────────────────────────────────────────
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '从未保存';
-  return new Date(iso).toLocaleString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  if (!iso) return t('common.time.neverSaved');
+  return localeFormatDateTime(iso);
 }
 
 function showSuccess(msg: string): void {
@@ -439,10 +438,10 @@ async function exportFullBackup(): Promise<void> {
     anchor.download = `AGA_full_backup_${Date.now()}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    showSuccess('全量备份已下载');
+    showSuccess(t('management.messages.fullBackupExported'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    errorMessage.value = `全量导出失败: ${msg}`;
+    errorMessage.value = t('management.errors.fullExportFailed', { error: msg });
     console.error('[ManagementView] Full backup export failed:', err);
   } finally {
     isLoading.value = false;
@@ -455,7 +454,7 @@ async function exportFullBackup(): Promise<void> {
 async function importFullBackup(): Promise<void> {
   if (!backupService || isLoading.value) return;
   const ok = window.confirm(
-    '将从备份文件恢复所有档案、存档、向量与设置。建议先导出当前全量备份以防丢失数据。是否继续？',
+    t('management.dialogs.importFullBackupConfirm'),
   );
   if (!ok) return;
 
@@ -472,10 +471,10 @@ async function importFullBackup(): Promise<void> {
       syncEngineAfterBackupImport();
       refreshProfiles();
       engineState.clearGame();
-      showSuccess('全量备份已导入');
+      showSuccess(t('management.messages.fullBackupImported'));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      errorMessage.value = `全量导入失败: ${msg}`;
+      errorMessage.value = t('management.errors.fullImportFailed', { error: msg });
       console.error('[ManagementView] Full backup import failed:', err);
     } finally {
       isLoading.value = false;
@@ -501,31 +500,31 @@ function triggerImportRawStateTree(): void {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
       if (!looksLikeStateTreeRoot(parsed)) {
-        errorMessage.value = '不是有效的状态树根（需包含 元数据 或 角色 等顶层键）';
+        errorMessage.value = t('management.errors.invalidStateTree');
         return;
       }
       const adapted = adaptDemoSave(parsed as Record<string, unknown>) as GameStateTree;
       const list = profileManager.listProfiles();
       if (list.length === 0) {
-        errorMessage.value = '请先创建至少一个角色';
+        errorMessage.value = t('management.errors.noProfilesForImport');
         return;
       }
       const target = list[0];
       const slotId = `demo_${Date.now()}`;
       await saveManager.saveGame(target.profileId, slotId, adapted, {
         slotId,
-        slotName: 'Demo 导入',
+        slotName: t('management.slots.demoImport'),
         lastSavedAt: new Date().toISOString(),
         packId: target.packId,
         packVersion: '',
         characterName:
           (adapted as { 角色?: { 基础信息?: { 姓名?: string } } })?.角色?.基础信息?.姓名,
       });
-      showSuccess(`已导入到「${target.characterName}」新槽位`);
+      showSuccess(t('management.messages.importedToSlot', { name: target.characterName }));
       refreshProfiles();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      errorMessage.value = `导入失败: ${msg}`;
+      errorMessage.value = t('management.errors.rawImportFailed', { error: msg });
       console.error('[ManagementView] Raw state import failed:', err);
     } finally {
       isLoading.value = false;
@@ -539,25 +538,25 @@ function triggerImportRawStateTree(): void {
   <div class="management-view">
     <!-- Header -->
     <header class="mgmt-header">
-      <button class="btn-back" @click="goHome" aria-label="返回首页">
+      <button class="btn-back" @click="goHome" :aria-label="$t('management.buttons.home')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="15 18 9 12 15 6" />
         </svg>
       </button>
-      <h1 class="mgmt-title">存档管理</h1>
+      <h1 class="mgmt-title">{{ $t('management.title') }}</h1>
       <div class="header-actions">
         <label style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:var(--color-text-secondary);">
           <input type="checkbox" v-model="mgmtIncludeRefAssets" style="accent-color:var(--color-sage-400)" />
-          含参考素材
+          {{ $t('management.options.includeRefAssets') }}
         </label>
         <button
           class="btn btn-small btn-outline"
           type="button"
-          title="导出全部档案、存档、向量、配置与 aga_* 设置"
+          :title="$t('management.buttons.exportFullTitle')"
           @click="exportFullBackup"
           :disabled="isLoading || !backupService"
         >
-          全量导出
+          {{ $t('management.buttons.exportFull') }}
         </button>
         <button
           class="btn btn-small btn-outline"
@@ -565,22 +564,22 @@ function triggerImportRawStateTree(): void {
           @click="importFullBackup"
           :disabled="isLoading || !backupService"
         >
-          全量导入
+          {{ $t('management.buttons.importFull') }}
         </button>
         <button class="btn btn-small btn-outline" @click="triggerImport" :disabled="isLoading">
-          导入存档
+          {{ $t('management.buttons.importSave') }}
         </button>
         <button
           class="btn btn-small btn-outline"
           type="button"
-          title="根级 JSON（含 元数据/角色），写入第一个角色的新槽位"
+          :title="$t('management.buttons.importDemoTreeTitle')"
           @click="triggerImportRawStateTree"
           :disabled="isLoading"
         >
-          导入 Demo 树
+          {{ $t('management.buttons.importDemoTree') }}
         </button>
         <button class="btn btn-small btn-primary" @click="goToCreation" :disabled="isLoading">
-          新建角色
+          {{ $t('management.buttons.newCharacter') }}
         </button>
       </div>
     </header>
@@ -620,11 +619,11 @@ function triggerImportRawStateTree(): void {
           <div class="profile-info">
             <span class="profile-name">{{ profile.characterName }}</span>
             <span class="profile-sub">
-              {{ profile.packId }} · 创建于 {{ formatDate(profile.createdAt) }}
+              {{ $t('management.profileCard.packCreated', { packId: profile.packId, date: formatDate(profile.createdAt) }) }}
             </span>
           </div>
           <div class="profile-slot-count">
-            {{ getSlotsArray(profile).length }} 个存档
+            {{ $t('management.profileCard.saveCount', { count: getSlotsArray(profile).length }) }}
           </div>
           <svg
             class="expand-icon"
@@ -658,20 +657,20 @@ function triggerImportRawStateTree(): void {
                   @click.stop="loadSlot(profile, slot)"
                   :disabled="isLoading"
                 >
-                  加载
+                  {{ $t('management.slots.load') }}
                 </button>
                 <button
                   class="btn btn-tiny btn-outline"
                   @click.stop="exportSlot(profile, slot)"
                   :disabled="isLoading"
                 >
-                  导出
+                  {{ $t('management.slots.export') }}
                 </button>
               </div>
             </div>
 
             <div v-if="getSlotsArray(profile).length === 0" class="slots-empty">
-              暂无存档
+              {{ $t('management.slots.empty') }}
             </div>
 
             <!-- Profile-level actions -->
@@ -681,7 +680,7 @@ function triggerImportRawStateTree(): void {
                 @click.stop="requestDelete(profile.profileId)"
                 :disabled="isLoading"
               >
-                删除角色
+                {{ $t('management.buttons.deleteCharacter') }}
               </button>
             </div>
           </div>
@@ -691,8 +690,8 @@ function triggerImportRawStateTree(): void {
 
     <!-- Empty state -->
     <div v-else class="empty-state">
-      <p class="empty-text">还没有角色数据</p>
-      <button class="btn btn-primary" @click="goToCreation">创建第一个角色</button>
+      <p class="empty-text">{{ $t('management.empty.noProfiles') }}</p>
+      <button class="btn btn-primary" @click="goToCreation">{{ $t('management.buttons.createFirst') }}</button>
     </div>
 
     <!--
@@ -707,18 +706,17 @@ function triggerImportRawStateTree(): void {
           @click.self="cancelDelete"
           role="dialog"
           aria-modal="true"
-          :aria-label="`确认删除角色 ${pendingDeleteProfile.characterName}`"
+          :aria-label="$t('management.modals.deleteAriaLabel', { name: pendingDeleteProfile.characterName })"
         >
           <div class="modal-card">
-            <h3 class="modal-title">确认删除</h3>
+            <h3 class="modal-title">{{ $t('management.modals.deleteTitle') }}</h3>
             <p class="modal-body">
-              确定要删除角色「<strong>{{ pendingDeleteProfile.characterName }}</strong>」
-              及其所有存档吗？此操作不可恢复。
+              {{ $t('management.modals.deleteMessage', { name: pendingDeleteProfile.characterName }) }}
             </p>
             <div class="modal-actions">
-              <button class="btn btn-secondary" @click="cancelDelete">取消</button>
+              <button class="btn btn-secondary" @click="cancelDelete">{{ $t('management.modals.cancel') }}</button>
               <button class="btn btn-danger" @click="confirmDelete" :disabled="isLoading">
-                确认删除
+                {{ $t('management.modals.confirmDelete') }}
               </button>
             </div>
           </div>

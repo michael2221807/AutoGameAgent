@@ -9,9 +9,12 @@
  * - 导出当前快照 JSON
  */
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePromptDebugStore } from '@/engine/stores/engine-prompt';
 import { eventBus } from '@/engine/core/event-bus';
 import Modal from '@/ui/components/common/Modal.vue';
+
+const { t } = useI18n();
 
 const debugStore = usePromptDebugStore();
 
@@ -142,7 +145,7 @@ const showClearConfirm = ref(false);
 function clearAll(): void {
   debugStore.clearSnapshots();
   showClearConfirm.value = false;
-  eventBus.emit('ui:toast', { type: 'info', message: '已清除所有快照', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('promptAssembly.toast.snapshotsCleared'), duration: 1500 });
 }
 
 // ─── Export current snapshot ──────────────────────────────────
@@ -162,7 +165,7 @@ function exportSnapshot(): void {
 function copyToClipboard(): void {
   const data = JSON.stringify(messages.value, null, 2);
   navigator.clipboard.writeText(data).then(() => {
-    eventBus.emit('ui:toast', { type: 'success', message: '已复制 JSON', duration: 1200 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('promptAssembly.toast.jsonCopied'), duration: 1200 });
   }).catch(() => {});
 }
 
@@ -204,114 +207,117 @@ interface SourceDisplay {
   tooltip: string;
 }
 
+/** Map builder piece IDs to i18n keys */
+const BUILDER_I18N_MAP: Record<string, string> = {
+  ai_role: 'promptAssembly.builder.aiRole', world_prompt: 'promptAssembly.builder.worldPrompt',
+  world_map: 'promptAssembly.builder.worldMap', npc_away: 'promptAssembly.builder.npcAway',
+  other_prompts: 'promptAssembly.builder.otherPrompts', write_style: 'promptAssembly.builder.writeStyle',
+  write_emotion_guard: 'promptAssembly.builder.writeEmotionGuard', write_no_control: 'promptAssembly.builder.writeNoControl',
+  perspective_prompt: 'promptAssembly.builder.perspectivePrompt', length_prompt: 'promptAssembly.builder.lengthPrompt',
+  memory_long: 'promptAssembly.builder.memoryLong', memory_mid: 'promptAssembly.builder.memoryMid',
+  memory_implicit: 'promptAssembly.builder.memoryImplicit', memory_engram: 'promptAssembly.builder.memoryEngram',
+  story_plan: 'promptAssembly.builder.storyPlan', npc_present: 'promptAssembly.builder.npcPresent',
+  heroine_plan: 'promptAssembly.builder.heroinePlan', state_world: 'promptAssembly.builder.stateWorld',
+  state_environment: 'promptAssembly.builder.stateEnvironment', state_role: 'promptAssembly.builder.stateRole',
+  state_tasks: 'promptAssembly.builder.stateTasks', state_agreements: 'promptAssembly.builder.stateAgreements',
+  narrative_constraints: 'promptAssembly.builder.narrativeConstraints', extra_prompt: 'promptAssembly.builder.extraPrompt',
+  format_prompt: 'promptAssembly.builder.formatPrompt', cot_core: 'promptAssembly.builder.cotCore',
+  cot_judge: 'promptAssembly.builder.cotJudge', player_input: 'promptAssembly.builder.playerInput',
+  start_task: 'promptAssembly.builder.startTask', cot_masquerade: 'promptAssembly.builder.cotMasquerade',
+  bodyPolish_system: 'promptAssembly.builder.bodyPolishSystem', bodyPolish_user: 'promptAssembly.builder.bodyPolishUser',
+};
+
 function parseSourceTag(tag: string | undefined): SourceDisplay {
   if (!tag) {
-    return { label: '—', color: 'var(--color-text-secondary, #8888a0)', tooltip: '旧快照不含来源信息' };
+    return { label: '—', color: 'var(--color-text-secondary, #8888a0)', tooltip: t('promptAssembly.source.noInfo') };
   }
   if (tag.startsWith('module:')) {
     const id = tag.slice('module:'.length);
     return {
       label: id,
-      color: '#f59e0b', // amber — system prompt module
-      tooltip: `Prompt 模块：${id}（prompt flow 的模板）`,
+      color: '#f59e0b',
+      tooltip: t('promptAssembly.source.promptModule', { id }),
     };
   }
   if (tag.startsWith('builder:')) {
     const pieceId = tag.slice('builder:'.length);
-    const PIECE_LABELS: Record<string, string> = {
-      ai_role: 'AI角色声明', world_prompt: '世界观', world_map: '地图建筑',
-      npc_away: '不在场角色', other_prompts: '叙事规则', write_style: '写作文风',
-      write_emotion_guard: '情绪约束', write_no_control: 'NoControl',
-      perspective_prompt: '叙事人称', length_prompt: '字数要求',
-      memory_long: '长期记忆', memory_mid: '中期记忆', memory_implicit: '隐式记忆',
-      memory_engram: 'Engram · 事实/实体/事件', story_plan: '剧情安排', npc_present: '在场角色',
-      heroine_plan: '剧情规划', state_world: '世界状态', state_environment: '环境',
-      state_role: '角色数据', state_tasks: '任务', state_agreements: '约定',
-      narrative_constraints: '叙事约束+风格', extra_prompt: '额外要求',
-      format_prompt: '输出格式', cot_core: 'COT协议', cot_judge: 'COT判定',
-      player_input: '用户输入', start_task: '开始任务', cot_masquerade: 'COT伪装',
-      // Phase 4 (2026-04-19): body polish stage source tags
-      bodyPolish_system: '文章优化·系统提示', bodyPolish_user: '文章优化·待润色正文',
-    };
+    const i18nKey = BUILDER_I18N_MAP[pieceId];
+    const label = i18nKey ? t(i18nKey) : pieceId;
     return {
-      label: PIECE_LABELS[pieceId] ?? pieceId,
-      color: '#8b5cf6', // violet — new builder context piece
-      tooltip: `上下文片段：${PIECE_LABELS[pieceId] ?? pieceId}（SystemPromptBuilder）`,
+      label,
+      color: '#8b5cf6',
+      tooltip: t('promptAssembly.source.contextPiece', { label }),
     };
   }
   if (tag === 'short_term_memory') {
     return {
-      label: '即时剧情回顾',
-      color: '#06b6d4', // cyan
-      tooltip: '短期记忆独立注入（assistant message）',
+      label: t('promptAssembly.source.shortTermMemory'),
+      color: '#06b6d4',
+      tooltip: t('promptAssembly.source.shortTermMemoryTooltip'),
     };
   }
   if (tag === 'history:user') {
     return {
-      label: 'Narrative · User',
-      color: '#6366f1', // indigo
-      tooltip: '来自叙事历史 (narrativeHistory) 的玩家输入 —— 由 B2 按 fewShotPairs 截取',
+      label: t('promptAssembly.source.historyUser'),
+      color: '#6366f1',
+      tooltip: t('promptAssembly.source.historyUserTooltip'),
     };
   }
   if (tag === 'history:assistant') {
     return {
-      label: 'Narrative · AI',
-      color: '#22c55e', // green
-      tooltip: '来自叙事历史 (narrativeHistory) 的 AI 回复 —— 由 B2 按 fewShotPairs 截取',
+      label: t('promptAssembly.source.historyAssistant'),
+      color: '#22c55e',
+      tooltip: t('promptAssembly.source.historyAssistantTooltip'),
     };
   }
   if (tag === 'current_input') {
     return {
-      label: 'Current Input',
-      color: '#ec4899', // pink — highlights the focal action
-      tooltip: '本回合玩家输入（含 narratorEnforcement 前缀）',
+      label: t('promptAssembly.source.currentInput'),
+      color: '#ec4899',
+      tooltip: t('promptAssembly.source.currentInputTooltip'),
     };
   }
   if (tag === 'placeholder') {
     return {
-      label: 'Placeholder',
+      label: t('promptAssembly.source.placeholder'),
       color: '#64748b',
-      tooltip: 'Gemini API 要求非空 contents 时的安全占位',
+      tooltip: t('promptAssembly.source.placeholderTooltip'),
     };
   }
-  // split-gen step2 extras — added in ai-call.ts after step1 returns.
-  // These three tags only appear in `splitGenMainRoundStep2` / `openingSceneStep2`
-  // snapshots and represent the messages that **context-assembly couldn't yet
-  // produce** at flow-assembly time (they depend on step1's raw response).
   if (tag === 'step1_thinking_context') {
     return {
-      label: 'Step1 Thinking',
-      color: '#a855f7', // purple — reasoning
-      tooltip: 'Step1 的 CoT thinking 作为系统上下文注入 step2（仅 cotInjectStep2=true 时出现）',
+      label: t('promptAssembly.source.step1Thinking'),
+      color: '#a855f7',
+      tooltip: t('promptAssembly.source.step1ThinkingTooltip'),
     };
   }
   if (tag === 'step1_response') {
     return {
-      label: 'Step1 Response',
-      color: '#14b8a6', // teal — step1 output
-      tooltip: 'Step1 的原始 AI 输出作为 assistant 消息注入 step2 上下文',
+      label: t('promptAssembly.source.step1Response'),
+      color: '#14b8a6',
+      tooltip: t('promptAssembly.source.step1ResponseTooltip'),
     };
   }
   if (tag === 'step2_followup') {
     return {
-      label: 'Step2 Followup',
-      color: '#f97316', // orange — focal instruction
-      tooltip: 'Step2 的 user 指令（"请基于叙事输出结构化数据..."）',
+      label: t('promptAssembly.source.step2Followup'),
+      color: '#f97316',
+      tooltip: t('promptAssembly.source.step2FollowupTooltip'),
     };
   }
-  // Image tokenizer per-message tags — surface in `image:*` flow snapshots so
-  // the user can tell which message is the NAI preset vs the task context vs
-  // the AI-role kickoff prompt.
   if (tag.startsWith('tokenizer:')) {
     const sub = tag.slice('tokenizer:'.length);
-    const LABELS: Record<string, { label: string; tooltip: string }> = {
-      preset: { label: 'Preset', tooltip: '转化器预设（画师串 / 画风 / NAI 参数注入，来自 transformer-presets）' },
-      task_context: { label: 'Task Context', tooltip: '本次 tokenizer 调用的任务级系统指令（构图/画风/锚点模式注入）' },
-      task_data: { label: 'Task Data', tooltip: '本次 tokenizer 调用的输入数据（NPC JSON / 场景上下文 / 私密部位描述）' },
-      start_task: { label: 'Start Task', tooltip: '触发用户消息："开始任务"' },
+    const TOKEN_I18N: Record<string, { labelKey: string; tooltipKey: string }> = {
+      preset: { labelKey: 'promptAssembly.source.tokenizerPreset', tooltipKey: 'promptAssembly.source.tokenizerPresetTooltip' },
+      task_context: { labelKey: 'promptAssembly.source.tokenizerTaskContext', tooltipKey: 'promptAssembly.source.tokenizerTaskContextTooltip' },
+      task_data: { labelKey: 'promptAssembly.source.tokenizerTaskData', tooltipKey: 'promptAssembly.source.tokenizerTaskDataTooltip' },
+      start_task: { labelKey: 'promptAssembly.source.tokenizerStartTask', tooltipKey: 'promptAssembly.source.tokenizerStartTaskTooltip' },
     };
-    const entry = LABELS[sub] ?? { label: sub, tooltip: `tokenizer:${sub}` };
-    return { label: entry.label, color: '#84cc16', tooltip: entry.tooltip }; // lime — image pipeline
+    const entry = TOKEN_I18N[sub];
+    if (entry) {
+      return { label: t(entry.labelKey), color: '#84cc16', tooltip: t(entry.tooltipKey) };
+    }
+    return { label: sub, color: '#84cc16', tooltip: `tokenizer:${sub}` };
   }
   return { label: tag, color: 'var(--color-text-secondary, #8888a0)', tooltip: tag };
 }
@@ -355,15 +361,28 @@ interface MemoryHeaderRule {
   color: string;
 }
 
+/** i18n key mapping for memory segment labels */
+const MEMORY_I18N_MAP: Record<MemorySegment['kind'], string> = {
+  long_term: 'promptAssembly.memory.longTerm',
+  mid_term: 'promptAssembly.memory.midTerm',
+  implicit_mid_term: 'promptAssembly.memory.implicitMidTerm',
+  short_term: 'promptAssembly.memory.shortTerm',
+  engram_events: 'promptAssembly.memory.engramEvents',
+  engram_entities: 'promptAssembly.memory.engramEntities',
+  engram_relations: 'promptAssembly.memory.engramRelations',
+  engram_rules: 'promptAssembly.memory.engramRules',
+  none: '',
+};
+
 const MEMORY_HEADER_RULES: MemoryHeaderRule[] = [
-  { pattern: /^###\s*长期记忆/, kind: 'long_term', label: '长期记忆', color: '#8b5cf6' },
-  { pattern: /^###\s*中期记忆/, kind: 'mid_term', label: '中期记忆', color: '#0ea5e9' },
-  { pattern: /^###\s*隐式记忆/, kind: 'implicit_mid_term', label: '隐式中期', color: '#06b6d4' },
-  { pattern: /^###\s*短期记忆/, kind: 'short_term', label: '短期记忆', color: '#22c55e' },
-  { pattern: /^####\s*相关事件记忆/, kind: 'engram_events', label: 'Engram · 事件', color: '#f97316' },
-  { pattern: /^####\s*相关角色\/实体/, kind: 'engram_entities', label: 'Engram · 实体', color: '#d946ef' },
-  { pattern: /^####\s*关系网络/, kind: 'engram_relations', label: 'Engram · 关系', color: '#ec4899' },
-  { pattern: /^####\s*相关规则/, kind: 'engram_rules', label: 'Engram · 规则', color: '#eab308' },
+  { pattern: /^###\s*长期记忆/, kind: 'long_term', label: '', color: '#8b5cf6' },
+  { pattern: /^###\s*中期记忆/, kind: 'mid_term', label: '', color: '#0ea5e9' },
+  { pattern: /^###\s*隐式记忆/, kind: 'implicit_mid_term', label: '', color: '#06b6d4' },
+  { pattern: /^###\s*短期记忆/, kind: 'short_term', label: '', color: '#22c55e' },
+  { pattern: /^####\s*相关事件记忆/, kind: 'engram_events', label: '', color: '#f97316' },
+  { pattern: /^####\s*相关角色\/实体/, kind: 'engram_entities', label: '', color: '#d946ef' },
+  { pattern: /^####\s*关系网络/, kind: 'engram_relations', label: '', color: '#ec4899' },
+  { pattern: /^####\s*相关规则/, kind: 'engram_rules', label: '', color: '#eab308' },
 ];
 
 /**
@@ -391,7 +410,7 @@ function detectMemorySegments(content: string): MemorySegment[] {
     const endLine = idx + 1 < headers.length ? headers[idx + 1].line - 1 : lines.length - 1;
     segments.push({
       kind: rule.kind,
-      label: rule.label,
+      label: MEMORY_I18N_MAP[rule.kind] ? t(MEMORY_I18N_MAP[rule.kind]) : rule.kind,
       color: rule.color,
       startLine: line,
       endLine,
@@ -411,10 +430,10 @@ function memorySegmentsFor(index: number): MemorySegment[] {
 <template>
   <div class="assembly-panel">
     <header class="panel-header">
-      <h2 class="panel-title">Prompt 组装调试</h2>
+      <h2 class="panel-title">{{ $t('promptAssembly.title') }}</h2>
       <div class="header-actions">
-        <button class="btn-sm" :disabled="!hasData" @click="exportSnapshot">导出快照</button>
-        <button class="btn-sm btn-sm--danger" :disabled="!hasData" @click="showClearConfirm = true">清除全部</button>
+        <button class="btn-sm" :disabled="!hasData" @click="exportSnapshot">{{ $t('promptAssembly.exportSnapshot') }}</button>
+        <button class="btn-sm btn-sm--danger" :disabled="!hasData" @click="showClearConfirm = true">{{ $t('promptAssembly.clearAll') }}</button>
       </div>
     </header>
 
@@ -438,16 +457,16 @@ function memorySegmentsFor(index: number): MemorySegment[] {
           <span class="summary-value summary-value--mono">{{ flowId || '—' }}</span>
         </div>
         <div class="summary-item">
-          <span class="summary-label">消息数</span>
+          <span class="summary-label">{{ $t('promptAssembly.info.messages') }}</span>
           <span class="summary-value summary-value--mono">{{ messages.length }}</span>
         </div>
         <div class="summary-item">
-          <span class="summary-label">预估 Tokens</span>
+          <span class="summary-label">{{ $t('promptAssembly.info.tokens') }}</span>
           <span class="summary-value summary-value--mono">~{{ totalTokens.toLocaleString() }}</span>
         </div>
         <div v-if="thinkingText" class="summary-item">
           <span class="summary-label">CoT</span>
-          <span class="summary-value summary-value--mono" style="color: var(--color-primary, #6366f1)">🧠 有推理</span>
+          <span class="summary-value summary-value--mono" style="color: var(--color-primary, #6366f1)">{{ $t('promptAssembly.info.hasCot') }}</span>
         </div>
       </div>
 
@@ -460,7 +479,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
 
       <!-- ─── Source breakdown (what pieces are in this request?) ─── -->
       <section v-if="sourceBreakdown.length > 0" class="source-breakdown">
-        <div class="source-breakdown-header">组成部件（共 {{ messages.length }} 条消息）</div>
+        <div class="source-breakdown-header">{{ $t('promptAssembly.source.breakdown', { count: messages.length }) }}</div>
         <div class="source-breakdown-list">
           <span
             v-for="row in sourceBreakdown"
@@ -478,7 +497,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
       <!-- ─── Per-snapshot CoT (thinking) ─── -->
       <section v-if="thinkingText" class="snapshot-cot">
         <button class="snapshot-cot-header" @click="cotOpen = !cotOpen">
-          <span class="snapshot-cot-title">🧠 本次调用的 AI 推理 (CoT)</span>
+          <span class="snapshot-cot-title">{{ $t('promptAssembly.cot.title') }}</span>
           <span class="snapshot-cot-flow-chip">{{ flowId }}</span>
           <span class="snapshot-cot-chevron">{{ cotOpen ? '▾' : '▸' }}</span>
         </button>
@@ -488,7 +507,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
       <!-- ─── Raw response (debug-only, hidden by default) ─── -->
       <section v-if="rawResponseText" class="snapshot-raw">
         <button class="snapshot-raw-header" @click="rawOpen = !rawOpen">
-          <span class="snapshot-raw-title">📝 原始 AI 输出（debug）</span>
+          <span class="snapshot-raw-title">{{ $t('promptAssembly.raw.title') }}</span>
           <span class="snapshot-cot-chevron">{{ rawOpen ? '▾' : '▸' }}</span>
         </button>
         <pre v-if="rawOpen" class="snapshot-raw-content">{{ rawResponseText }}</pre>
@@ -496,26 +515,26 @@ function memorySegmentsFor(index: number): MemorySegment[] {
 
       <!-- ─── Toolbar ─── -->
       <div class="toolbar">
-        <button class="btn-sm" @click="expandAll">全部展开</button>
-        <button class="btn-sm" @click="collapseAll">全部折叠</button>
+        <button class="btn-sm" @click="expandAll">{{ $t('promptAssembly.expandAll') }}</button>
+        <button class="btn-sm" @click="collapseAll">{{ $t('promptAssembly.collapseAll') }}</button>
         <button class="btn-sm" @click="showVariables = !showVariables">
-          {{ showVariables ? '隐藏变量' : '显示变量' }}
+          {{ showVariables ? $t('promptAssembly.hideVariables') : $t('promptAssembly.showVariables') }}
         </button>
         <div style="flex: 1" />
-        <button class="btn-sm" @click="copyToClipboard">复制 JSON</button>
+        <button class="btn-sm" @click="copyToClipboard">{{ $t('promptAssembly.copyJson') }}</button>
       </div>
 
       <!-- ─── Template variables ─── -->
       <Transition name="vars-expand">
         <div v-if="showVariables" class="variables-section">
-          <h3 class="section-title">模板变量</h3>
+          <h3 class="section-title">{{ $t('promptAssembly.templateVariables') }}</h3>
           <div v-if="variableEntries.length" class="var-list">
             <div v-for="v in variableEntries" :key="v.key" class="var-row">
               <span class="var-key">{{ v.key }}</span>
               <span class="var-value">{{ v.value }}</span>
             </div>
           </div>
-          <p v-else class="empty-hint">无模板变量</p>
+          <p v-else class="empty-hint">{{ $t('promptAssembly.noTemplateVariables') }}</p>
         </div>
       </Transition>
 
@@ -550,7 +569,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
                   :key="seg.kind + seg.startLine"
                   class="memory-seg-chip"
                   :style="{ color: seg.color, borderColor: seg.color + '55', background: seg.color + '10' }"
-                  :title="`${seg.label}（行 ${seg.startLine + 1}-${seg.endLine + 1}）`"
+                  :title="`${seg.label} (${$t('promptAssembly.memory.lineRange', { start: seg.startLine + 1, end: seg.endLine + 1 })})`"
                 >{{ seg.label }}</span>
               </template>
               <span class="message-tokens">~{{ perMessageTokens[idx] }} tokens</span>
@@ -579,7 +598,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
                 >
                   <span class="memory-seg-legend-dot" :style="{ background: seg.color }" />
                   <span class="memory-seg-legend-label" :style="{ color: seg.color }">{{ seg.label }}</span>
-                  <span class="memory-seg-legend-range">行 {{ seg.startLine + 1 }} – {{ seg.endLine + 1 }}</span>
+                  <span class="memory-seg-legend-range">{{ $t('promptAssembly.memory.lineRange', { start: seg.startLine + 1, end: seg.endLine + 1 }) }}</span>
                 </div>
               </div>
               <pre class="message-text">{{ msg.content }}</pre>
@@ -591,18 +610,18 @@ function memorySegmentsFor(index: number): MemorySegment[] {
 
     <div v-else class="empty-state">
       <div class="empty-icon">📋</div>
-      <p class="empty-text">尚无 Prompt 组装数据</p>
-      <p class="empty-hint">运行一次 AI 回合后，组装结果将显示在此处</p>
+      <p class="empty-text">{{ $t('promptAssembly.noData') }}</p>
+      <p class="empty-hint">{{ $t('promptAssembly.noDataHint') }}</p>
     </div>
 
     <!-- ─── Clear confirm modal ─── -->
-    <Modal v-model="showClearConfirm" title="清除全部快照" width="360px">
+    <Modal v-model="showClearConfirm" :title="$t('promptAssembly.clear.title')" width="360px">
       <p style="margin: 0; color: var(--color-text, #e0e0e6);">
-        确定要清除全部 <strong>{{ snapshots.length }}</strong> 个快照吗？此操作不可撤销。
+        {{ $t('promptAssembly.clear.text', { count: snapshots.length }) }}
       </p>
       <template #footer>
-        <button class="btn-sm" @click="showClearConfirm = false">取消</button>
-        <button class="btn-sm btn-sm--danger" @click="clearAll">确认清除</button>
+        <button class="btn-sm" @click="showClearConfirm = false">{{ $t('promptAssembly.clear.cancel') }}</button>
+        <button class="btn-sm btn-sm--danger" @click="clearAll">{{ $t('promptAssembly.clear.confirm') }}</button>
       </template>
     </Modal>
   </div>

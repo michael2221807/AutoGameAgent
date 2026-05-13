@@ -21,8 +21,8 @@ const display = computed(() => normalizeWeather(props.weather));
 </script>
 
 <template>
-  <span class="weather-badge" :title="`当前天气：${display}`">
-    <span class="weather-badge__label">天气</span>
+  <span class="weather-badge" :title="`${$t('mainGame.env.weather.titlePrefix')}${display}`">
+    <span class="weather-badge__label">{{ $t('mainGame.env.weather.label') }}</span>
     <span class="weather-badge__value">{{ display }}</span>
   </span>
 </template>

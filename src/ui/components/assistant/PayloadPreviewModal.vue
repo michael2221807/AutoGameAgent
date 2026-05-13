@@ -17,8 +17,11 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md §6.3 + Phase 5b。
  */
 import { ref, computed, watch, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import JsonEditor from '@/ui/components/editing/JsonEditor.vue';
+
+const { t } = useI18n();
 import type {
   AssistantMessage,
   PayloadDraft,
@@ -222,14 +225,14 @@ function statusColor(status: ValidatedPatch['status']): string {
 }
 
 function statusLabel(status: ValidatedPatch['status']): string {
-  return status === 'error' ? '✗ 错误' : status === 'warn' ? '⚠ 警告' : '✓ 通过';
+  return status === 'error' ? t('assistant.payloadPreview.statusError') : status === 'warn' ? t('assistant.payloadPreview.statusWarn') : t('assistant.payloadPreview.statusOk');
 }
 </script>
 
 <template>
   <Modal
     :model-value="modelValue"
-    title="📦 注入包预览"
+    :title="t('assistant.payloadPreview.title')"
     width="1200px"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
@@ -237,7 +240,7 @@ function statusLabel(status: ValidatedPatch['status']): string {
       <div class="three-col">
         <!-- LEFT: AI 原文 -->
         <section class="col col-left">
-          <h3 class="col-title">AI 原文</h3>
+          <h3 class="col-title">{{ t('assistant.payloadPreview.aiRawText') }}</h3>
           <div class="raw-text">{{ aiRawText }}</div>
         </section>
 
@@ -275,30 +278,30 @@ function statusLabel(status: ValidatedPatch['status']): string {
         <!-- RIGHT: diff -->
         <section class="col col-right">
           <h3 class="col-title">
-            Diff 预览
-            <button v-if="selectedPatch" class="edit-btn" @click="startEditPatch">✏ 编辑</button>
+            {{ t('assistant.payloadPreview.diffPreview') }}
+            <button v-if="selectedPatch" class="edit-btn" @click="startEditPatch">{{ t('assistant.payloadPreview.editBtn') }}</button>
           </h3>
-          <div v-if="!selectedPatch" class="diff-empty">点击中栏的 patch 查看 diff</div>
+          <div v-if="!selectedPatch" class="diff-empty">{{ t('assistant.payloadPreview.diffEmpty') }}</div>
           <template v-else>
             <div v-if="!isEditingJson" class="diff-content">
               <div class="diff-section">
-                <div class="diff-label">当前值（before）</div>
+                <div class="diff-label">{{ t('assistant.payloadPreview.beforeLabel') }}</div>
                 <pre class="diff-pre before">{{ diffPreview?.before }}</pre>
               </div>
               <div class="diff-section">
-                <div class="diff-label">注入后（after）</div>
+                <div class="diff-label">{{ t('assistant.payloadPreview.afterLabel') }}</div>
                 <pre class="diff-pre after">{{ diffPreview?.after }}</pre>
               </div>
             </div>
             <div v-else class="json-edit">
               <div class="edit-hint">
-                直接编辑此 patch 的 JSON。失焦后会重新校验。
+                {{ t('assistant.payloadPreview.editHint') }}
               </div>
               <JsonEditor v-model="editJsonText" />
               <div v-if="editJsonError" class="edit-error">{{ editJsonError }}</div>
               <div class="edit-actions">
-                <button class="btn btn--secondary" @click="cancelEditPatch">取消</button>
-                <button class="btn btn--primary" @click="saveEditedPatch">保存并校验</button>
+                <button class="btn btn--secondary" @click="cancelEditPatch">{{ t('assistant.payloadPreview.cancel') }}</button>
+                <button class="btn btn--primary" @click="saveEditedPatch">{{ t('assistant.payloadPreview.saveAndValidate') }}</button>
               </div>
             </div>
           </template>
@@ -306,29 +309,29 @@ function statusLabel(status: ValidatedPatch['status']): string {
       </div>
 
       <div v-if="errorCount > 0" class="bottom-warn">
-        ⚠ 存在 {{ errorCount }} 个 error 级 patch —— 注入按钮已禁用。请编辑修复或丢弃整个注入包。
+        {{ t('assistant.payloadPreview.bottomWarn', { count: errorCount }) }}
       </div>
     </div>
 
     <template #footer>
-      <button class="btn btn--danger" @click="discard">丢弃</button>
+      <button class="btn btn--danger" @click="discard">{{ t('assistant.payloadPreview.discardBtn') }}</button>
       <button class="btn btn--primary" :disabled="!canInject" @click="tryInject">
-        {{ canInject ? '✓ 全部注入' : '存在错误，无法注入' }}
+        {{ canInject ? t('assistant.payloadPreview.injectAllBtn') : t('assistant.payloadPreview.cannotInject') }}
       </button>
     </template>
 
     <!-- 二次确认子 modal -->
     <Modal
       :model-value="showInjectConfirm"
-      title="确认注入"
+      :title="t('assistant.payloadPreview.confirmTitle')"
       width="450px"
       @update:model-value="(v: boolean) => { if (!v) showInjectConfirm = false; }"
     >
-      <p>此操作会将 <strong>{{ workingPatches.length }} 个 patch</strong> 应用到游戏数据。</p>
-      <p class="confirm-hint">注入前会自动创建快照，可在事后点 [↶ 撤销] 回退。</p>
+      <p>{{ t('assistant.payloadPreview.confirmBody', { count: workingPatches.length }) }}</p>
+      <p class="confirm-hint">{{ t('assistant.payloadPreview.confirmHint') }}</p>
       <template #footer>
-        <button class="btn btn--secondary" @click="showInjectConfirm = false">取消</button>
-        <button class="btn btn--primary" @click="doInject">确认注入</button>
+        <button class="btn btn--secondary" @click="showInjectConfirm = false">{{ t('assistant.payloadPreview.cancel') }}</button>
+        <button class="btn btn--primary" @click="doInject">{{ t('assistant.payloadPreview.confirmBtn') }}</button>
       </template>
     </Modal>
   </Modal>

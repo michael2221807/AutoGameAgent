@@ -12,10 +12,13 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md §6.2 + Phase 5b。
  */
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import StateTreeBrowser from './StateTreeBrowser.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import type { AttachmentSpec } from '@/engine/services/assistant/types';
+
+const { t } = useI18n();
 
 const props = withDefaults(defineProps<{
   modelValue: boolean;
@@ -55,7 +58,7 @@ function setAsTarget(path: string): void {
   if (targetPath.value && targetPath.value !== path) {
     eventBus.emit('ui:toast', {
       type: 'info',
-      message: `「${targetPath.value.split('.').pop()}」已降级为只读参考`,
+      message: t('assistant.picker.demotedToast', { name: targetPath.value.split('.').pop() }),
       duration: 2000,
     });
   }
@@ -90,7 +93,7 @@ const hasTarget = computed(() => targetPath.value !== null);
 <template>
   <Modal
     :model-value="modelValue"
-    title="选择附件"
+    :title="t('assistant.picker.title')"
     width="900px"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
@@ -98,10 +101,10 @@ const hasTarget = computed(() => targetPath.value !== null);
       <div class="picker-header">
         <label class="filter-toggle">
           <input v-model="showOnlyEditable" type="checkbox" />
-          <span>仅显示可编辑路径（推荐）</span>
+          <span>{{ t('assistant.picker.editableOnly') }}</span>
         </label>
         <p class="hint">
-          点击展开节点 · 勾选 checkbox 添加到附件 · 添加后可在底部指定为「目标」（AI 修改对象）
+          {{ t('assistant.picker.hint') }}
         </p>
       </div>
 
@@ -116,12 +119,12 @@ const hasTarget = computed(() => targetPath.value !== null);
 
       <div class="picked-list">
         <div class="picked-header">
-          <strong>已选 {{ selectedCount }} 项</strong>
-          <span v-if="hasTarget" class="target-hint">✏ 含 1 个目标</span>
-          <span v-else class="target-hint warn">未指定目标 → 仅作为参考</span>
+          <strong>{{ t('assistant.picker.selectedCount', { count: selectedCount }) }}</strong>
+          <span v-if="hasTarget" class="target-hint">{{ t('assistant.picker.hasTarget') }}</span>
+          <span v-else class="target-hint warn">{{ t('assistant.picker.noTarget') }}</span>
         </div>
         <div v-if="selectedCount === 0" class="picked-empty">
-          未选择任何路径
+          {{ t('assistant.picker.emptySelection') }}
         </div>
         <div
           v-for="path in selectedPaths"
@@ -134,20 +137,20 @@ const hasTarget = computed(() => targetPath.value !== null);
             <button
               class="scope-btn"
               :class="{ active: targetPath === path }"
-              :title="targetPath === path ? '取消目标标记' : '标记为修改目标（AI 会输出 patch）'"
+              :title="targetPath === path ? t('assistant.picker.isTarget') : t('assistant.picker.setAsTarget')"
               @click="setAsTarget(path)"
             >
-              {{ targetPath === path ? '✓ 目标' : '设为目标' }}
+              {{ targetPath === path ? t('assistant.picker.isTarget') : t('assistant.picker.setAsTarget') }}
             </button>
-            <button class="remove-btn" title="移除" @click="removeFromSelection(path)">×</button>
+            <button class="remove-btn" @click="removeFromSelection(path)">×</button>
           </div>
         </div>
       </div>
     </div>
 
     <template #footer>
-      <button class="btn btn--secondary" @click="close">取消</button>
-      <button class="btn btn--primary" @click="confirm">确认 ({{ selectedCount }})</button>
+      <button class="btn btn--secondary" @click="close">{{ t('assistant.picker.cancel') }}</button>
+      <button class="btn btn--primary" @click="confirm">{{ t('assistant.picker.confirm', { count: selectedCount }) }}</button>
     </template>
   </Modal>
 </template>

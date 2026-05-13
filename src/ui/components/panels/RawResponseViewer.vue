@@ -12,6 +12,7 @@
  * Data source: narrativeHistory[i]._rawResponse + ._rawResponseStep2 (Phase 1).
  */
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 
 interface Props {
@@ -30,6 +31,8 @@ const props = withDefaults(defineProps<Props>(), {
 defineEmits<{
   'update:modelValue': [value: boolean];
 }>();
+
+const { t } = useI18n();
 
 const isSplitGen = computed(() => !!props.step2 && props.step2.length > 0);
 type Tab = 'step1' | 'step2';
@@ -51,8 +54,8 @@ const displayText = computed(() => {
 
 function title(): string {
   return props.roundNumber > 0
-    ? `原始响应 · 第 ${props.roundNumber} 回合`
-    : '原始响应';
+    ? t('mainGame.rawViewer.title', { n: props.roundNumber })
+    : t('mainGame.rawViewer.titleGeneric');
 }
 </script>
 
@@ -72,7 +75,7 @@ function title(): string {
         :aria-selected="activeTab === 'step1'"
         @click="activeTab = 'step1'"
       >
-        Step 1 · 叙事
+        {{ $t('mainGame.rawViewer.tabStep1') }}
       </button>
       <button
         class="raw-viewer__tab"
@@ -81,7 +84,7 @@ function title(): string {
         :aria-selected="activeTab === 'step2'"
         @click="activeTab = 'step2'"
       >
-        Step 2 · 结构化
+        {{ $t('mainGame.rawViewer.tabStep2') }}
       </button>
     </div>
 
@@ -89,11 +92,11 @@ function title(): string {
       class="raw-viewer__body"
       readonly
       :value="displayText"
-      aria-label="原始 AI 响应文本（只读）"
+      :aria-label="$t('mainGame.rawViewer.textareaLabel')"
     />
 
     <p v-if="!displayText || displayText.length === 0" class="raw-viewer__empty">
-      （该回合未记录原始文本）
+      {{ $t('mainGame.rawViewer.empty') }}
     </p>
   </Modal>
 </template>

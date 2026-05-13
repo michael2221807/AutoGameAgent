@@ -197,6 +197,8 @@ export class CommandExecutor {
     console.warn(msg);
     eventBus.emit('ui:toast', {
       type: 'warning',
+      i18nKey: 'engine.toast.unknownPathRoot',
+      i18nParams: { root },
       message: `AI 写入未知路径根段 "${root}" — 详见控制台`,
       duration: 3000,
     });

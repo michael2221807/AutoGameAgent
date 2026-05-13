@@ -54,7 +54,7 @@ export class PipelineRunner {
         throw new Error('Pipeline aborted');
       }
 
-      ctx.onProgress?.(`[${stage.name}]`);
+      ctx.onProgress?.({ i18nKey: 'engine.progress.stage', i18nParams: { name: stage.name }, message: `[${stage.name}]` });
 
       try {
         ctx = await stage.execute(ctx);

@@ -6,6 +6,7 @@
  * Supports: keyboard nav (↑↓ + Enter + Escape), click-outside close, ARIA.
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 export interface SelectOption {
   label: string;
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void;
 }>();
 
+const { t } = useI18n();
 const isOpen = ref(false);
 const highlightIdx = ref(-1);
 const triggerRef = ref<HTMLElement | null>(null);
@@ -31,7 +33,7 @@ const listRef = ref<HTMLElement | null>(null);
 
 const selectedLabel = computed(() => {
   const opt = props.options.find((o) => o.value === props.modelValue);
-  return opt?.label ?? props.placeholder ?? '选择...';
+  return opt?.label ?? props.placeholder ?? t('common.actions.select');
 });
 
 function toggle() {

@@ -7,6 +7,7 @@
  * Full ImageManagerModal (7-tab system) will be built on top of this foundation.
  */
 import { ref, computed, inject, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import type { ImageService } from '@/engine/image/image-service';
 import type { ImageBackendType, ImageTask, ArtistPreset, ImageAsset } from '@/engine/image/types';
@@ -36,8 +37,9 @@ import type { AIService } from '@/engine/ai/ai-service';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import { getDefaultPresets, getDefaultModelBundles } from '@/engine/image/transformer-presets';
 import { SCENE_PORTRAIT_SIZE_OPTIONS, SCENE_LANDSCAPE_SIZE_OPTIONS, sizeOptionsToSelectOptions } from '@/engine/image/image-size-options';
-import type { TransformerPromptPreset, ModelTransformerBundle } from '@/engine/image/transformer-presets';
+import type { TransformerPromptPreset, ModelTransformerBundle, TransformerDefaultsData } from '@/engine/image/transformer-presets';
 
+const { t } = useI18n();
 const imageService = inject<ImageService>('imageService');
 const aiService = inject<AIService | undefined>('aiService', undefined);
 const apiStore = useAPIManagementStore();
@@ -68,16 +70,16 @@ watch(imageConfigRoot, () => {
 onUnmounted(() => { if (saveDebounceTimer) clearTimeout(saveDebounceTimer); });
 
 // Tab state
-const tabs: TabItem[] = [
-  { key: 'manual', label: '手动生成' },
-  { key: 'gallery', label: '图库' },
-  { key: 'scene', label: '场景壁纸' },
-  { key: 'queue', label: '队列' },
-  { key: 'history', label: '历史' },
-  { key: 'presets', label: '预设' },
-  { key: 'rules', label: '规则' },
-  { key: 'settings', label: '设置' },
-];
+const tabs = computed<TabItem[]>(() => [
+  { key: 'manual', label: t('image.tab.manual') },
+  { key: 'gallery', label: t('image.tab.gallery') },
+  { key: 'scene', label: t('image.tab.scene') },
+  { key: 'queue', label: t('image.tab.queue') },
+  { key: 'history', label: t('image.tab.history') },
+  { key: 'presets', label: t('image.tab.presets') },
+  { key: 'rules', label: t('image.tab.rules') },
+  { key: 'settings', label: t('image.tab.settings') },
+]);
 const activeTab = ref('manual');
 
 // Manual generation state
@@ -122,7 +124,7 @@ watch(npcReferenceEnabled, (v) => { if (v) npcReferenceDenoise.value = refConfig
 function validateUploadSize(file: File): boolean {
   if (file.size > refConfigMaxUploadBytes.value) {
     const limitMB = (refConfigMaxUploadBytes.value / 1048576).toFixed(0);
-    eventBus.emit('ui:toast', { type: 'error', message: `文件大小 ${(file.size / 1048576).toFixed(1)}MB 超过上限 ${limitMB}MB`, duration: 3000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.manual.fileOversize', { actual: (file.size / 1048576).toFixed(1), limit: limitMB }), duration: 3000 });
     return false;
   }
   return true;
@@ -234,12 +236,12 @@ const npcOptions = computed<SelectOption[]>(() => {
   }));
 });
 
-const compositionOptions = [
-  { label: '头像', subtitle: '1:1 特写', value: 'portrait' as const },
-  { label: '半身像', subtitle: '3:4 半身', value: 'half-body' as const },
-  { label: '立绘', subtitle: '全身立绘', value: 'full-length' as const },
-  { label: '自定义', subtitle: '构图描述', value: 'custom' as const },
-];
+const compositionOptions = computed(() => [
+  { label: t('image.manual.composition.portrait'), subtitle: t('image.manual.composition.portraitSubtitle'), value: 'portrait' as const },
+  { label: t('image.manual.composition.halfBody'), subtitle: t('image.manual.composition.halfBodySubtitle'), value: 'half-body' as const },
+  { label: t('image.manual.composition.fullLength'), subtitle: t('image.manual.composition.fullLengthSubtitle'), value: 'full-length' as const },
+  { label: t('image.manual.composition.custom'), subtitle: t('image.manual.composition.customSubtitle'), value: 'custom' as const },
+]);
 const isCustomComposition = computed(() => composition.value === 'custom');
 
 const SIZE_BASES: Record<'1:1' | '3:4' | '9:16' | '16:9', { w: number; h: number }> = {
@@ -249,14 +251,14 @@ const SIZE_BASES: Record<'1:1' | '3:4' | '9:16' | '16:9', { w: number; h: number
   '16:9': { w: 1024, h: 576 },
 };
 
-const sizePresetOptions = [
-  { label: '无要求', value: 'none' as const },
+const sizePresetOptions = computed(() => [
+  { label: t('image.manual.sizePreset.none'), value: 'none' as const },
   { label: '1:1', value: '1:1' as const },
   { label: '3:4', value: '3:4' as const },
   { label: '9:16', value: '9:16' as const },
   { label: '16:9', value: '16:9' as const },
-  { label: '自定义', value: 'custom' as const },
-];
+  { label: t('image.manual.sizePreset.custom'), value: 'custom' as const },
+]);
 
 // Auto-update width/height when preset or scale changes
 const presetSize = computed(() => {
@@ -284,21 +286,21 @@ watch(composition, (newVal) => {
 });
 
 const currentSizeDisplay = computed(() => {
-  if (!isCustomComposition.value) return '无要求';
-  if (sizePreset.value === 'none') return '无要求';
+  if (!isCustomComposition.value) return t('image.manual.sizePreset.none');
+  if (sizePreset.value === 'none') return t('image.manual.sizePreset.none');
   const w = manualWidth.value.trim();
   const h = manualHeight.value.trim();
-  if (!w || !h || !/^\d+$/.test(w) || !/^\d+$/.test(h)) return '未填写';
+  if (!w || !h || !/^\d+$/.test(w) || !/^\d+$/.test(h)) return t('image.manual.sizeNotFilled');
   return `${w}x${h}`;
 });
 
-const styleOptions = [
-  { label: '无要求', value: 'none' as const },
-  { label: '通用', value: 'generic' as const },
-  { label: '二次元', value: 'anime' as const },
-  { label: '写实', value: 'realistic' as const },
-  { label: '国风', value: 'chinese' as const },
-];
+const styleOptions = computed(() => [
+  { label: t('image.manual.artStyle.none'), value: 'none' as const },
+  { label: t('image.manual.artStyle.generic'), value: 'generic' as const },
+  { label: t('image.manual.artStyle.anime'), value: 'anime' as const },
+  { label: t('image.manual.artStyle.realistic'), value: 'realistic' as const },
+  { label: t('image.manual.artStyle.chinese'), value: 'chinese' as const },
+]);
 
 const ALL_IMAGE_BACKENDS: SelectOption[] = [
   { label: 'NovelAI', value: 'novelai' },
@@ -338,7 +340,7 @@ const configuredBackends = computed<Set<string>>(() => {
 
 const backendOptions = computed<SelectOption[]>(() => {
   const available = configuredBackends.value;
-  if (available.size === 0) return [{ label: '请先在 API 管理中添加图像 API', value: '' }];
+  if (available.size === 0) return [{ label: t('image.backend.placeholder'), value: '' }];
   return ALL_IMAGE_BACKENDS.filter((o) => available.has(o.value));
 });
 
@@ -385,7 +387,7 @@ function modelCellText(img: { model?: string; backend?: string }): string {
   if (model && backend) return `${backend} · ${model}`;
   if (model) return model;
   if (backend) return backend;
-  return '未记录';
+  return t('image.manual.modelNotRecorded');
 }
 
 function apiConfigLabel(img: { apiConfigName?: string }): string {
@@ -400,7 +402,7 @@ const selectedNpcData = computed(() => {
 
 // PNG preset options for manual tab
 const pngPresetOptions = computed<SelectOption[]>(() => [
-  { label: '不启用', value: '' },
+  { label: t('image.manual.anchor.none'), value: '' },
   ...artistPresets.value
     .filter((p) => p.scope === 'npc' && (p.id.startsWith('png_') || p.id.startsWith('img_')))
     .map((p) => ({ label: p.name, value: p.id })),
@@ -435,7 +437,11 @@ const selectedNpcLastResult = computed(() => {
 
 const taskStatusLabel = (status: string) => {
   const labels: Record<string, string> = {
-    pending: '排队中', tokenizing: '词组转换中', generating: '生成图片中', complete: '已完成', failed: '失败',
+    pending: t('image.queue.status.pending'),
+    tokenizing: t('image.queue.status.tokenizing'),
+    generating: t('image.queue.status.generating'),
+    complete: t('image.queue.status.complete'),
+    failed: t('image.queue.status.failed'),
   };
   return labels[status] ?? status;
 };
@@ -450,11 +456,11 @@ const taskStatusVariant = (status: string) => {
 /** Click handler for generate button — validates, then either direct submit (bg) or open confirm (fg) */
 function handleGenerate() {
   if (!selectedNpc.value) {
-    errorMsg.value = '请先选择需要手动生图的角色。';
+    errorMsg.value = t('image.manual.errorSelectNpc');
     return;
   }
   if (isCustomComposition.value && !customComposition.value.trim()) {
-    errorMsg.value = '请先填写自定义构图描述。';
+    errorMsg.value = t('image.manual.errorCustomComposition');
     return;
   }
   errorMsg.value = '';
@@ -475,7 +481,7 @@ function cancelConfirm() {
 function cancelSubmitting() {
   if (manualFlowStage.value !== 'submitting') return;
   manualFlowStage.value = 'idle';
-  manualStatusText.value = '已取消当前提交弹层等待；后台任务仍可能继续执行，可在队列中查看状态。';
+  manualStatusText.value = t('image.manual.cancelStatus');
 }
 
 async function submitGenerate() {
@@ -488,15 +494,21 @@ async function submitGenerate() {
   // Foreground mode: show overlay with progress tracking
   if (backgroundMode.value) {
     manualFlowStage.value = 'idle';
-    manualStatusText.value = '任务正在转入后台处理，可直接返回主界面。';
+    manualStatusText.value = t('image.manual.backgroundStatus');
   } else {
     manualFlowStage.value = 'submitting';
-    manualStatusText.value = '正在提交任务并写入真实队列状态...';
+    manualStatusText.value = t('image.manual.submittingStatus');
   }
 
   try {
     const npc = selectedNpcData.value;
-    const artStyleMap: Record<string, string> = { none: '无要求', generic: '通用', anime: '二次元', realistic: '写实', chinese: '国风' };
+    const artStyleMap: Record<string, string> = {
+      none: t('image.manual.artStyle.none'),
+      generic: t('image.manual.artStyle.generic'),
+      anime: t('image.manual.artStyle.anime'),
+      realistic: t('image.manual.artStyle.realistic'),
+      chinese: t('image.manual.artStyle.chinese'),
+    };
     const anchor = selectedNpcAnchor.value;
     const styleInjection = buildPromptStyleInjection(artistPresets.value, [
       selectedArtistPreset.value,
@@ -552,7 +564,7 @@ async function submitGenerate() {
         if (avatarId) reference = { id: `ref_npc_${Date.now()}`, role: 'source', source: 'asset', assetId: avatarId, denoiseStrength: npcReferenceDenoise.value };
       }
       if (!reference) {
-        eventBus.emit('ui:toast', { type: 'warning', message: '参考重绘已开启但未选择有效参考图，将以普通文生图模式生成', duration: 3000 });
+        eventBus.emit('ui:toast', { type: 'warning', message: t('image.manual.refWarning'), duration: 3000 });
       }
       if (reference && backend.value === 'novelai') {
         reference.providerMeta = { noise: npcReferenceNoise.value };
@@ -571,7 +583,7 @@ async function submitGenerate() {
       backend: backend.value,
       composition: composition.value,
       customComposition: customComposition.value || undefined,
-      artStyle: artStyleMap[artStyle.value] ?? '通用',
+      artStyle: artStyleMap[artStyle.value] ?? t('image.manual.artStyle.generic'),
       extraPrompt: extraPrompt.value || undefined,
       anchorPositive: anchor?.positive || undefined,
       anchorNegative: anchor?.negative || undefined,
@@ -584,17 +596,17 @@ async function submitGenerate() {
     });
     lastTask.value = task;
     if (task.status === 'failed') {
-      errorMsg.value = task.error ?? '生成失败';
+      errorMsg.value = task.error ?? t('image.manual.generateFailed');
       if (!backgroundMode.value) manualFlowStage.value = 'confirm';
     } else if (backgroundMode.value) {
       // Background: update inline status, no overlay
-      manualStatusText.value = '后台任务已提交，可关闭当前页面。';
+      manualStatusText.value = t('image.manual.submitDoneStatus');
     } else {
       // Foreground: auto-close overlay after 450ms (MRJH behavior)
-      manualStatusText.value = '任务已提交。';
+      manualStatusText.value = t('image.manual.taskSubmitted');
       setTimeout(() => {
         manualFlowStage.value = 'idle';
-        manualStatusText.value = '任务已完成，已自动关闭提交层。';
+        manualStatusText.value = t('image.manual.taskCompleteAutoClose');
       }, 450);
     }
   } catch (err) {
@@ -617,7 +629,7 @@ function clearNpcQueueCompleted() {
   for (const t of queue.getAll().filter((t) => t.subjectType !== 'scene' && (t.status === 'complete' || t.status === 'failed'))) {
     queue.remove(t.id);
   }
-  eventBus.emit('ui:toast', { type: 'info', message: '已清空已完成 NPC 任务', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.queue.clearCompleted'), duration: 1500 });
 }
 
 function clearNpcQueueAll() {
@@ -626,7 +638,7 @@ function clearNpcQueueAll() {
   for (const t of queue.getAll().filter((t) => t.subjectType !== 'scene')) {
     queue.remove(t.id);
   }
-  eventBus.emit('ui:toast', { type: 'info', message: '已清空全部 NPC 任务', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.queue.clearAll'), duration: 1500 });
 }
 
 function openManualGenerateForRetry(characterName: string) {
@@ -661,9 +673,9 @@ async function retryTask(task: ImageTask) {
         backend: task.backend ?? 'novelai',
       });
     }
-    eventBus.emit('ui:toast', { type: 'info', message: '任务已重新提交', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'info', message: t('image.queue.resubmitted'), duration: 1500 });
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `重试失败：${(err as Error).message}`, duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.retryFailed', { error: (err as Error).message }), duration: 2000 });
   }
 }
 
@@ -679,27 +691,27 @@ async function saveToLocal(assetId: string) {
     a.download = `aga-image-${assetId}.png`;
     a.click();
     URL.revokeObjectURL(url);
-    eventBus.emit('ui:toast', { type: 'success', message: '已保存到本地', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('image.history.savedLocal'), duration: 1500 });
   } catch {
-    eventBus.emit('ui:toast', { type: 'error', message: '保存失败', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.history.saveFailed'), duration: 2000 });
   }
 }
 
 // Secret-part UI rows. Keys are engine-native `SecretPartType` values; the
 // service auto-resolves `特征描述` from the NPC's `私密信息.身体部位` array by
 // `部位名称` (breast→胸部, vagina→小穴, anus→屁穴).
-const secretParts = [
-  { key: 'breast', label: '胸部' },
-  { key: 'vagina', label: '小穴' },
-  { key: 'anus',   label: '屁穴' },
-] as const;
+const secretParts = computed(() => [
+  { key: 'breast' as const, label: t('image.secret.bodyPart.breast') },
+  { key: 'vagina' as const, label: t('image.secret.bodyPart.vagina') },
+  { key: 'anus' as const,   label: t('image.secret.bodyPart.anus') },
+]);
 
 async function generateSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
   if (!imageService || !selectedNpc.value) return;
-  const part = secretParts.find((p) => p.key === partKey);
+  const part = secretParts.value.find((p) => p.key === partKey);
   if (!part) return;
   secretBusy.value = partKey;
-  secretStatusText.value = `${part.label}特写已提交，正在加入图片队列。`;
+  secretStatusText.value = t('image.secret.submitted');
   try {
     const styleInjection = buildPromptStyleInjection(artistPresets.value, [
       secretArtistPreset.value,
@@ -720,12 +732,12 @@ async function generateSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
     // preview panel picks up the latest image instead of staying blank.
     lastTask.value = task;
     if (task.status === 'failed') {
-      secretStatusText.value = `${part.label}特写生成失败：${task.error ?? '未知错误'}`;
+      secretStatusText.value = t('image.secret.failGenerate', { part: part.label, error: task.error ?? t('common.fallback.unknownError') });
     } else {
-      secretStatusText.value = `${part.label}特写已完成，可在图库/历史查看。`;
+      secretStatusText.value = t('image.secret.allComplete');
     }
   } catch (err) {
-    secretStatusText.value = `${part.label}特写提交后出现失败：${(err as Error).message}`;
+    secretStatusText.value = t('image.secret.failGenerate', { part: part.label, error: (err as Error).message });
   } finally {
     secretBusy.value = '';
   }
@@ -734,7 +746,7 @@ async function generateSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
 async function generateAllSecretParts() {
   if (!imageService || !selectedNpc.value) return;
   secretBusy.value = 'all';
-  secretStatusText.value = '三处特写已提交，正在加入图片队列。';
+  secretStatusText.value = t('image.secret.submitted');
   try {
     let lastCompleted: ImageTask | null = null;
     const styleInjection = buildPromptStyleInjection(artistPresets.value, [
@@ -743,7 +755,7 @@ async function generateAllSecretParts() {
     ]);
     const secretPngObj2 = secretPngPreset.value ? artistPresets.value.find((p) => p.id === secretPngPreset.value) : undefined;
     const secretStyleApplicability2 = secretPngObj2 ? resolveStyleParams(secretPngObj2, backend.value) : null;
-    for (const part of secretParts) {
+    for (const part of secretParts.value) {
       const task = await imageService.generateSecretPartImage({
         characterName: selectedNpc.value,
         part: part.key,
@@ -756,9 +768,9 @@ async function generateAllSecretParts() {
       if (task.status === 'complete') lastCompleted = task;
     }
     if (lastCompleted) lastTask.value = lastCompleted;
-    secretStatusText.value = '三处特写已完成，可在图库/历史查看。';
+    secretStatusText.value = t('image.secret.allComplete');
   } catch {
-    secretStatusText.value = '部分特写提交失败，请查看队列。';
+    secretStatusText.value = t('image.secret.partialFail');
   } finally {
     secretBusy.value = '';
   }
@@ -768,18 +780,18 @@ async function generateSecretPartWithReference(partKey: 'breast' | 'vagina' | 'a
   if (!imageService || !selectedNpc.value) return;
   const prevAssetId = getSecretPartAssetId(partKey);
   if (!prevAssetId) {
-    eventBus.emit('ui:toast', { type: 'error', message: '没有上一张结果可作为参考', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.secret.noPreviousRef'), duration: 2000 });
     return;
   }
   const entry = await imageService.getAssetCache().retrieve(prevAssetId);
   if (!entry) {
-    eventBus.emit('ui:toast', { type: 'error', message: '上一张结果缓存缺失', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.secret.cacheRefMissing'), duration: 2000 });
     return;
   }
-  const part = secretParts.find((p) => p.key === partKey);
+  const part = secretParts.value.find((p) => p.key === partKey);
   if (!part) return;
   secretBusy.value = partKey;
-  secretStatusText.value = `${part.label}参考重绘已提交…`;
+  secretStatusText.value = t('image.secret.submitted');
   try {
     const styleInjection = buildPromptStyleInjection(artistPresets.value, [secretArtistPreset.value, secretPngPreset.value]);
     const secretRef: import('@/engine/image/types').ImageReferenceInput = {
@@ -797,10 +809,10 @@ async function generateSecretPartWithReference(partKey: 'breast' | 'vagina' | 'a
     });
     lastTask.value = task;
     secretStatusText.value = task.status === 'failed'
-      ? `${part.label}参考重绘失败：${task.error ?? '未知错误'}`
-      : `${part.label}参考重绘完成。`;
+      ? t('image.secret.refRepaintFail', { part: part.label, error: task.error ?? t('common.fallback.unknownError') })
+      : t('image.secret.allComplete');
   } catch (err) {
-    secretStatusText.value = `${part.label}参考重绘失败：${(err as Error).message}`;
+    secretStatusText.value = t('image.secret.refRepaintFail', { part: part.label, error: (err as Error).message });
   } finally {
     secretBusy.value = '';
   }
@@ -847,7 +859,7 @@ const regenBusy = ref(false);
 
 function openRegenerateModal(payload: RegenPayload) {
   if (!payload.positivePrompt || !payload.positivePrompt.trim()) {
-    eventBus.emit('ui:toast', { type: 'error', message: '该记录未保存提示词，无法同款生成', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.regenerate.noPrompt'), duration: 2000 });
     return;
   }
   regenPayload.value = payload;
@@ -877,13 +889,13 @@ async function confirmRegenerate(opts: { backend: ImageBackendType; positiveProm
       reference: opts.reference,
     });
     if (task.status === 'failed') {
-      eventBus.emit('ui:toast', { type: 'error', message: `同款生成失败：${task.error ?? '未知错误'}`, duration: 2500 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('image.regenerate.failed', { error: task.error ?? t('common.fallback.unknownError') }), duration: 2500 });
     } else {
-      eventBus.emit('ui:toast', { type: 'success', message: '同款任务已提交，可在队列/历史查看', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('image.regenerate.submitted'), duration: 2000 });
       regenPayload.value = null;
     }
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `同款生成失败：${(err as Error).message}`, duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.regenerate.failed', { error: (err as Error).message }), duration: 2500 });
   } finally {
     regenBusy.value = false;
   }
@@ -896,23 +908,34 @@ function buildRegenSubtitle(parts: Array<string | null | undefined>): string {
 
 function compositionLabel(comp?: string): string {
   if (!comp) return '';
-  const map: Record<string, string> = { portrait: '头像', 'half-body': '半身', 'full-length': '立绘', scene: '场景', secret_part: '私密特写', custom: '自定义' };
+  const map: Record<string, string> = {
+    portrait: t('image.history.compositionLabel.portrait'),
+    'half-body': t('image.history.compositionLabel.halfBody'),
+    'full-length': t('image.history.compositionLabel.fullLength'),
+    scene: t('image.history.compositionLabel.scene'),
+    secret_part: t('image.history.compositionLabel.secretPart'),
+    custom: t('image.history.compositionLabel.custom'),
+  };
   return map[comp] ?? comp;
 }
 
 function partLabel(part?: string): string {
   if (!part) return '';
-  const map: Record<string, string> = { breast: '胸部', vagina: '小穴', anus: '屁穴' };
+  const map: Record<string, string> = {
+    breast: t('image.secret.partLabel.breast'),
+    vagina: t('image.secret.partLabel.vagina'),
+    anus: t('image.secret.partLabel.anus'),
+  };
   return map[part] ?? part;
 }
 
 function openRegenerateFromTask(task: ImageTask, asReference = false) {
   const isSecret = task.subjectType === 'secret_part';
   const subjectLabel = task.subjectType === 'scene'
-    ? '场景'
-    : (task.targetCharacter ?? '角色');
+    ? t('image.history.subjectScene')
+    : (task.targetCharacter ?? t('image.lora.scope.character'));
   const subtitle = buildRegenSubtitle([
-    task.subjectType === 'character' ? '角色任务' : task.subjectType === 'scene' ? '场景任务' : '私密特写',
+    task.subjectType === 'character' ? t('image.queue.subjectCharacter') : task.subjectType === 'scene' ? t('image.queue.subjectScene') : t('image.queue.subjectSecret'),
     `${task.width} × ${task.height}`,
     task.backend,
   ]);
@@ -943,9 +966,9 @@ function openRegenerateFromGalleryImage(npcName: string, img: GalleryImage, asRe
   const bk = img.backend ?? backend.value;
   openRegenerateModal({
     subjectType: isSecret ? 'secret_part' : 'character',
-    subjectLabel: npcName === '__player__' ? '主角' : npcName,
+    subjectLabel: npcName === '__player__' ? t('image.queue.subjectPlayer') : npcName,
     subtitle: buildRegenSubtitle([
-      isSecret ? `私密特写 · ${partLabel(part)}` : compositionLabel(comp),
+      isSecret ? t('image.preset.secretSubtitle', { part: partLabel(part) }) : compositionLabel(comp),
       `${width} × ${height}`,
       bk,
     ]),
@@ -974,9 +997,9 @@ function openRegenerateFromHistoryEntry(entry: { type: 'scene' | 'character'; na
   const bk = entry.backend ?? backend.value;
   openRegenerateModal({
     subjectType: isScene ? 'scene' : (isSecret ? 'secret_part' : 'character'),
-    subjectLabel: isScene ? '场景' : entry.name,
+    subjectLabel: isScene ? t('image.history.subjectScene') : entry.name,
     subtitle: buildRegenSubtitle([
-      isScene ? '场景壁纸' : (isSecret ? `私密特写 · ${partLabel(entry.part)}` : compositionLabel(entry.composition)),
+      isScene ? t('image.history.sceneBg') : (isSecret ? `${t('image.history.compositionLabel.secretPart')} · ${partLabel(entry.part)}` : compositionLabel(entry.composition)),
       `${width} × ${height}`,
       bk,
     ]),
@@ -1022,7 +1045,7 @@ async function analyzeImageFromCard(assetId: string) {
   if (!imageService) return;
   try {
     const entry = await imageService.getAssetCache().retrieve(assetId);
-    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法提炼', duration: 2000 }); return; }
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.cacheMissingAnalyze'), duration: 2000 }); return; }
     activeTab.value = 'presets';
     understandingFile.value = new File([entry.blob], `asset_${assetId}`, { type: entry.metadata.mimeType });
     understandingCoverDataUrl.value = null;
@@ -1040,7 +1063,7 @@ async function analyzeImageFromCard(assetId: string) {
       URL.revokeObjectURL(objUrl);
     } catch { /* cover optional */ }
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `提炼画风失败: ${(err as Error).message}`, duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.analyzeStyleFailed', { error: (err as Error).message }), duration: 2500 });
   }
 }
 
@@ -1048,7 +1071,7 @@ async function saveAsReferenceMaterial(assetId: string, source: 'gallery' | 'sce
   if (!imageService) return;
   try {
     const entry = await imageService.getAssetCache().retrieve(assetId);
-    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法保存为参考素材', duration: 2000 }); return; }
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.cacheMissingSaveRef'), duration: 2000 }); return; }
     const refAssetId = `ref_copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const refAsset: ImageAsset = {
       id: refAssetId, taskId: '', storageKey: refAssetId,
@@ -1067,9 +1090,9 @@ async function saveAsReferenceMaterial(assetId: string, source: 'gallery' | 'sce
       source,
       createdAt: Date.now(),
     });
-    eventBus.emit('ui:toast', { type: 'success', message: '已保存为参考素材（独立副本）', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.savedAsReference'), duration: 2000 });
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `保存参考素材失败: ${(err as Error).message}`, duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.saveReferenceFailed', { error: (err as Error).message }), duration: 2500 });
   }
 }
 
@@ -1080,9 +1103,9 @@ function openRegenerateFromSceneRecord(record: Record<string, unknown>, asRefere
   const bk = (rawBackend as ImageBackendType) || backend.value;
   openRegenerateModal({
     subjectType: 'scene',
-    subjectLabel: '场景',
+    subjectLabel: t('image.history.subjectScene'),
     subtitle: buildRegenSubtitle([
-      '场景壁纸',
+      t('image.history.sceneBg'),
       `${width} × ${height}`,
       bk,
     ]),
@@ -1251,7 +1274,7 @@ const sceneNpcList = computed<SceneNpcEntry[]>(() => {
   const entries: SceneNpcEntry[] = [];
 
   // Player character (always first, always "present")
-  const pName = scenePlayerName.value || '主角';
+  const pName = scenePlayerName.value || t('image.scene.playerFallback');
   entries.push({
     name: pName,
     isPresent: true,
@@ -1360,7 +1383,7 @@ function saveSceneArchiveLimit() {
   const n = parseInt(sceneArchiveLimitDraft.value, 10);
   if (!isNaN(n) && n >= 1 && n <= 100) {
     setValue('系统.扩展.image.config.sceneHistoryLimit', n);
-    eventBus.emit('ui:toast', { type: 'success', message: `场景历史上限已设为 ${n}`, duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.sceneHistoryLimitSet', { n }), duration: 1500 });
   }
 }
 
@@ -1368,13 +1391,13 @@ function saveSceneArchiveLimit() {
 function applySceneWallpaper(imageId: string) {
   if (!imageService) return;
   imageService.state.setSceneWallpaper(imageId);
-  eventBus.emit('ui:toast', { type: 'success', message: '已设为场景壁纸', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.setSceneWallpaper'), duration: 1500 });
 }
 
 function clearSceneWallpaper() {
   if (!imageService) return;
   imageService.state.clearSceneWallpaper();
-  eventBus.emit('ui:toast', { type: 'info', message: '场景壁纸已清除', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.clearedSceneWallpaper'), duration: 1500 });
 }
 
 function isCurrentSceneWallpaper(imageId: string): boolean {
@@ -1393,7 +1416,7 @@ function clearSceneHistory() {
   if (imageService) {
     setValue('系统.扩展.image.sceneArchive', { '生图历史': [], '当前壁纸图片ID': '' });
   }
-  eventBus.emit('ui:toast', { type: 'info', message: '场景历史已清空', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.clearedSceneHistory'), duration: 1500 });
 }
 
 function clearSceneQueueCompleted() {
@@ -1402,7 +1425,7 @@ function clearSceneQueueCompleted() {
   for (const t of queue.getAll().filter((t) => t.subjectType === 'scene' && (t.status === 'complete' || t.status === 'failed'))) {
     queue.remove(t.id);
   }
-  eventBus.emit('ui:toast', { type: 'info', message: '已清空已完成场景任务', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.clearedSceneQueueCompleted'), duration: 1500 });
 }
 
 function clearSceneQueueAll() {
@@ -1411,7 +1434,7 @@ function clearSceneQueueAll() {
   for (const t of queue.getAll().filter((t) => t.subjectType === 'scene')) {
     queue.remove(t.id);
   }
-  eventBus.emit('ui:toast', { type: 'info', message: '已清空全部场景任务', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.clearedSceneQueueAll'), duration: 1500 });
 }
 
 function deleteSceneImage(imageId: string) {
@@ -1422,14 +1445,14 @@ function deleteSceneImage(imageId: string) {
     : [];
   const cleared = String(archive['当前壁纸图片ID'] ?? '') === imageId ? '' : archive['当前壁纸图片ID'];
   setValue('系统.扩展.image.sceneArchive', { ...archive, '生图历史': history, '当前壁纸图片ID': cleared });
-  eventBus.emit('ui:toast', { type: 'info', message: '场景图片已删除', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.deletedSceneImage'), duration: 1500 });
 }
 
 async function generateScene() {
   if (!imageService || sceneGenerating.value) return;
   sceneGenerating.value = true;
   sceneError.value = '';
-  sceneStatusText.value = backgroundMode.value ? '任务正在转入后台处理…' : '正在生成场景图…';
+  sceneStatusText.value = backgroundMode.value ? t('image.scene.statusBackground') : t('image.scene.statusGenerating');
   try {
     // Parse resolution string to width/height
     const resParts = sceneResolution.value.match(/^(\d+)\s*[x×]\s*(\d+)$/i);
@@ -1455,7 +1478,7 @@ async function generateScene() {
         if (wallId) sceneRef = { id: generateReferenceId(), role: 'source', source: 'asset', assetId: wallId, denoiseStrength: sceneReferenceDenoise.value };
       }
       if (!sceneRef) {
-        eventBus.emit('ui:toast', { type: 'warning', message: '参考构图已开启但未选择有效参考图，将以普通文生图模式生成', duration: 3000 });
+        eventBus.emit('ui:toast', { type: 'warning', message: t('image.toast.sceneRefWarning'), duration: 3000 });
       }
       if (sceneRef && backend.value === 'novelai') {
         sceneRef.providerMeta = { noise: sceneReferenceNoise.value };
@@ -1507,10 +1530,10 @@ async function generateScene() {
       roleAnchors: filteredRoleAnchors.length > 0 ? filteredRoleAnchors : undefined,
     });
     if (task.status === 'failed') {
-      sceneError.value = task.error ?? '场景生成失败';
+      sceneError.value = task.error ?? t('image.toast.sceneGenerateFailed');
       sceneStatusText.value = '';
     } else {
-      sceneStatusText.value = backgroundMode.value ? '后台任务已提交。' : '场景图已生成。';
+      sceneStatusText.value = backgroundMode.value ? t('image.scene.statusSubmitted') : t('image.scene.statusGenerated');
     }
   } catch (err) {
     sceneError.value = (err as Error).message ?? String(err);
@@ -1544,7 +1567,7 @@ function validateCivitaiJson(field: 'additionalNetworksJson' | 'controlNetsJson'
   const raw = String(get(`系统.扩展.image.config.civitai.${field}`) ?? '').trim();
   if (!raw) { (errorRef === 'civitaiNetworksJsonError' ? civitaiNetworksJsonError : civitaiControlNetsJsonError).value = ''; return; }
   try { JSON.parse(raw); (errorRef === 'civitaiNetworksJsonError' ? civitaiNetworksJsonError : civitaiControlNetsJsonError).value = ''; }
-  catch (e) { (errorRef === 'civitaiNetworksJsonError' ? civitaiNetworksJsonError : civitaiControlNetsJsonError).value = `JSON 格式错误: ${(e as Error).message}`; }
+  catch (e) { (errorRef === 'civitaiNetworksJsonError' ? civitaiNetworksJsonError : civitaiControlNetsJsonError).value = t('image.civitai.jsonFormatError', { error: (e as Error).message }); }
 }
 
 const civitaiWhatifLoading = ref(false);
@@ -1554,7 +1577,7 @@ async function runCivitaiWhatif() {
   civitaiWhatifResult.value = '';
   try {
     const apiConfig = aiService?.getImageConfigForBackend('civitai');
-    if (!apiConfig) { civitaiWhatifResult.value = '未配置 Civitai 图像 API'; return; }
+    if (!apiConfig) { civitaiWhatifResult.value = t('image.civitai.notConfigured'); return; }
     const base = apiConfig.url.replace(/\/+$/, '');
     const body: Record<string, unknown> = { prompt: 'cost estimate', width: 1024, height: 1024, quantity: 1, batchSize: 1 };
     if (apiConfig.model) body.model = apiConfig.model;
@@ -1578,12 +1601,12 @@ async function runCivitaiWhatif() {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) { civitaiWhatifResult.value = `查询失败: HTTP ${res.status}`; return; }
+    if (!res.ok) { civitaiWhatifResult.value = t('image.civitai.queryFailedHttp', { status: res.status }); return; }
     const data = await res.json();
     const cost = data?.cost ?? data?.totalCost ?? data?.jobs?.[0]?.cost;
-    civitaiWhatifResult.value = cost != null ? `预计消耗 ${cost} Buzz` : `查询完成 — ${JSON.stringify(data).slice(0, 120)}`;
+    civitaiWhatifResult.value = cost != null ? t('image.civitai.estimatedCost', { cost }) : t('image.civitai.queryComplete', { data: JSON.stringify(data).slice(0, 120) });
   } catch (e) {
-    civitaiWhatifResult.value = `查询失败: ${(e as Error).message}`;
+    civitaiWhatifResult.value = t('image.civitai.queryFailed', { error: (e as Error).message });
   } finally {
     civitaiWhatifLoading.value = false;
   }
@@ -1591,13 +1614,13 @@ async function runCivitaiWhatif() {
 
 // History state
 const historyFilter = ref('all');
-const historyFilterOptions: SelectOption[] = [
-  { label: '全部', value: 'all' },
-  { label: '角色', value: 'character' },
-  { label: '场景', value: 'scene' },
-  { label: '成功', value: 'complete' },
-  { label: '失败', value: 'failed' },
-];
+const historyFilterOptions = computed<SelectOption[]>(() => [
+  { label: t('common.actions.all'), value: 'all' },
+  { label: t('image.lora.scope.character'), value: 'character' },
+  { label: t('image.lora.scope.scene'), value: 'scene' },
+  { label: t('image.queue.status.complete'), value: 'complete' },
+  { label: t('image.queue.status.failed'), value: 'failed' },
+]);
 // Preset management state
 const presetScope = ref<'npc' | 'scene'>('npc');
 const selectedPresetId = ref('');
@@ -1638,7 +1661,7 @@ const selectedPresetParamPreview = computed(() => {
 });
 
 function createPreset() {
-  const name = newPresetName.value.trim() || `预设 ${Date.now()}`;
+  const name = newPresetName.value.trim() || t('image.preset.defaultName', { id: Date.now() });
   const preset: ArtistPreset = {
     id: `preset_${Date.now()}`,
     name,
@@ -1674,7 +1697,7 @@ function deletePreset() {
 function exportArtistPresets() {
   const data = artistPresets.value.filter((p) => p.scope === presetScope.value);
   if (data.length === 0) {
-    eventBus.emit('ui:toast', { type: 'info', message: '当前范围没有预设可导出', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.noPresetsToExport'), duration: 1500 });
     return;
   }
   const json = JSON.stringify(data, null, 2);
@@ -1685,7 +1708,7 @@ function exportArtistPresets() {
   a.download = `artist-presets-${presetScope.value}-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  eventBus.emit('ui:toast', { type: 'success', message: `已导出 ${data.length} 个预设`, duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.presetsExported', { n: data.length }), duration: 1500 });
 }
 
 function importArtistPresets(event: Event) {
@@ -1706,14 +1729,14 @@ function importArtistPresets(event: Event) {
           scope: p.scope === 'scene' ? 'scene' : 'npc',
         }));
       if (items.length === 0) {
-        eventBus.emit('ui:toast', { type: 'error', message: '未找到有效预设数据', duration: 2000 });
+        eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.noValidPresetData'), duration: 2000 });
         return;
       }
       const list = [...artistPresets.value, ...items];
       setValue('系统.扩展.image.artistPresets', list);
-      eventBus.emit('ui:toast', { type: 'success', message: `已导入 ${items.length} 个预设`, duration: 1500 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.presetsImported', { n: items.length }), duration: 1500 });
     } catch {
-      eventBus.emit('ui:toast', { type: 'error', message: '导入失败：无效的 JSON 文件', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.importFailedInvalidJson'), duration: 2000 });
     }
     input.value = '';
   };
@@ -1776,7 +1799,7 @@ async function runUnderstanding() {
     understandingResult.value = result;
     understandingEditDraft.value = result.positiveDraft;
     if (understandingTask.value === 'both' && !result.caption && result.tags?.length) {
-      eventBus.emit('ui:toast', { type: 'warning', message: 'Civitai Caption 服务暂时不可用，已返回标签结果', duration: 4000 });
+      eventBus.emit('ui:toast', { type: 'warning', message: t('image.toast.civitaiCaptionUnavailable'), duration: 4000 });
     }
   } catch (err) {
     understandingError.value = (err as Error).message;
@@ -1789,7 +1812,7 @@ function saveUnderstandingAsPreset(scope: 'npc' | 'scene') {
   if (!understandingResult.value) return;
   const preset: ArtistPreset = {
     id: `img_${Date.now()}`,
-    name: understandingFile.value?.name?.replace(/\.\w+$/, '') ?? '提炼预设',
+    name: understandingFile.value?.name?.replace(/\.\w+$/, '') ?? t('image.preset.defaultUnderstandingName'),
     scope,
     artistString: '',
     positive: understandingEditDraft.value || understandingResult.value.positiveDraft,
@@ -1807,7 +1830,7 @@ function saveUnderstandingAsPreset(scope: 'npc' | 'scene') {
   selectedPresetId.value = preset.id;
   understandingMode.value = false;
   loadPresetIntoEditor();
-  eventBus.emit('ui:toast', { type: 'success', message: `已保存为${scope === 'npc' ? 'NPC' : '场景'}画风预设`, duration: 2000 });
+  eventBus.emit('ui:toast', { type: 'success', message: scope === 'npc' ? t('image.toast.savedAsStylePresetNpc') : t('image.toast.savedAsStylePresetScene'), duration: 2000 });
 }
 
 function importImageForUnderstanding(event: Event) {
@@ -1858,7 +1881,7 @@ async function deleteReferenceEntry(id: string) {
     const { [entry.assetId]: _, ...rest } = refLibThumbnails.value;
     refLibThumbnails.value = rest;
   }
-  eventBus.emit('ui:toast', { type: 'info', message: '已删除参考素材及图片', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.deletedReference'), duration: 1500 });
 }
 
 async function importPng(event: Event) {
@@ -1867,14 +1890,14 @@ async function importPng(event: Event) {
   if (!file) return;
 
   pngImporting.value = true;
-  pngImportStatus.value = `正在解析：${file.name}`;
+  pngImportStatus.value = t('image.png.parsing', { name: file.name });
 
   try {
     const { extractPngMetadata } = await import('@/engine/image/png-metadata');
     const metadata = await extractPngMetadata(file);
 
     if (!metadata.positive && !metadata.rawText) {
-      pngImportStatus.value = '未找到 PNG 元数据 — 可尝试图片提炼';
+      pngImportStatus.value = t('image.png.noMetadata');
       pngImporting.value = false;
       void openUnderstandingForFile(file);
       return;
@@ -1931,9 +1954,9 @@ async function importPng(event: Event) {
     setValue('系统.扩展.image.artistPresets', list);
     selectedPresetId.value = preset.id;
     loadPresetIntoEditor();
-    pngImportStatus.value = `已导入：${preset.name}`;
+    pngImportStatus.value = t('image.png.imported', { name: preset.name });
   } catch (err) {
-    pngImportStatus.value = `解析失败：${(err as Error).message}`;
+    pngImportStatus.value = t('image.png.parseFailed', { error: (err as Error).message });
   } finally {
     pngImporting.value = false;
     input.value = '';
@@ -2009,12 +2032,12 @@ function selectAnchor(id: string) {
 async function extractAnchor() {
   if (!editAnchorNpc.value || !aiService) {
     anchorExtractStage.value = 'error';
-    anchorExtractMessage.value = !aiService ? 'AI 服务未就绪' : '请先选择 NPC';
+    anchorExtractMessage.value = !aiService ? t('image.toast.anchorAiNotReady') : t('image.toast.anchorSelectNpcFirst');
     return;
   }
   anchorExtracting.value = true;
   anchorExtractStage.value = 'extracting';
-  anchorExtractMessage.value = `正在为 ${editAnchorNpc.value} 提取锚点…`;
+  anchorExtractMessage.value = t('image.toast.anchorExtracting', { name: editAnchorNpc.value });
   try {
     const npc = (relationships.value as Array<Record<string, unknown>>)?.find(
       (n) => n['名称'] === editAnchorNpc.value
@@ -2042,7 +2065,7 @@ async function extractAnchor() {
 
     const anchor: CharacterAnchor = {
       id: `anchor_${Date.now()}`,
-      name: `${editAnchorNpc.value} 锚点`,
+      name: t('image.anchor.defaultName', { name: editAnchorNpc.value }),
       npcName: editAnchorNpc.value,
       enabled: true,
       defaultAppend: true,
@@ -2050,16 +2073,16 @@ async function extractAnchor() {
       positive: result.positivePrompt,
       negative: result.negativePrompt,
       structuredFeatures: result.structuredFeatures,
-      source: 'AI提取',
+      source: t('image.anchor.sourceAI'),
     };
     const list = [...characterAnchors.value.filter((a) => a.npcName !== editAnchorNpc.value), anchor];
     setValue('系统.扩展.image.characterAnchors', list);
     selectAnchor(anchor.id);
     anchorExtractStage.value = 'done';
-    anchorExtractMessage.value = `锚点已提取：${anchor.name}`;
+    anchorExtractMessage.value = t('image.toast.anchorExtracted', { name: anchor.name });
   } catch (err) {
     anchorExtractStage.value = 'error';
-    anchorExtractMessage.value = `提取失败：${(err as Error).message}`;
+    anchorExtractMessage.value = t('image.toast.anchorExtractFailed', { error: (err as Error).message });
   } finally {
     anchorExtracting.value = false;
   }
@@ -2073,7 +2096,7 @@ function saveAnchor() {
       : a
   );
   setValue('系统.扩展.image.characterAnchors', list);
-  eventBus.emit('ui:toast', { type: 'success', message: '锚点已保存', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.anchorSaved'), duration: 1500 });
 }
 
 function deleteAnchor() {
@@ -2122,7 +2145,7 @@ function loadTransformerIntoEditor() {
 }
 
 function createTransformerPreset() {
-  const name = newTransformerName.value.trim() || `转化器 ${Date.now()}`;
+  const name = newTransformerName.value.trim() || t('image.transformer.defaultName', { id: Date.now() });
   const preset: TransformerPreset = {
     id: `tf_${Date.now()}`,
     name,
@@ -2144,7 +2167,7 @@ function saveTransformerPreset() {
       : p
   );
   setValue('系统.扩展.image.transformerPresets', list);
-  eventBus.emit('ui:toast', { type: 'success', message: '转化器预设已保存', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.transformerPresetSaved'), duration: 1500 });
 }
 
 function deleteTransformerPreset() {
@@ -2188,7 +2211,7 @@ const activeModelRuleset = computed(() =>
 );
 
 const modelRulesetOptions = computed<SelectOption[]>(() =>
-  modelRulesets.value.map((r) => ({ label: `${r.name}${r.enabled ? ' (启用中)' : ''}`, value: r.id }))
+  modelRulesets.value.map((r) => ({ label: `${r.name}${r.enabled ? t('image.rules.enabledSuffix') : ''}`, value: r.id }))
 );
 
 // Auto-select the enabled model ruleset when rulesets are seeded
@@ -2211,7 +2234,7 @@ function selectModelRuleset(id: string) {
 function createModelRuleset() {
   const ruleset: ModelRuleset = {
     id: `mrs_${Date.now()}`,
-    name: `规则集 ${modelRulesets.value.length + 1}`,
+    name: t('image.rules.rulesetDefaultName', { n: modelRulesets.value.length + 1 }),
     enabled: false,
     compatMode: false,
     baseModelRule: '',
@@ -2234,7 +2257,7 @@ function saveModelRuleset() {
       : r
   );
   setValue('系统.扩展.image.modelRulesets', list);
-  eventBus.emit('ui:toast', { type: 'success', message: '模型规则集已保存', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.modelRulesetSaved'), duration: 1500 });
 }
 
 function deleteModelRuleset() {
@@ -2262,7 +2285,7 @@ function toggleModelRulesetCompat(value: boolean) {
 function exportModelRulesets() {
   const data = modelRulesets.value;
   if (data.length === 0) {
-    eventBus.emit('ui:toast', { type: 'info', message: '暂无模型规则集可导出', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.noModelRulesetsToExport'), duration: 1500 });
     return;
   }
   const json = JSON.stringify(data, null, 2);
@@ -2273,7 +2296,7 @@ function exportModelRulesets() {
   a.download = `model-rulesets-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  eventBus.emit('ui:toast', { type: 'success', message: `已导出 ${data.length} 个模型规则集`, duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.modelRulesetsExported', { n: data.length }), duration: 1500 });
 }
 
 function importModelRulesets(event: Event) {
@@ -2292,13 +2315,13 @@ function importModelRulesets(event: Event) {
         enabled: false,
       }));
       if (items.length === 0) {
-        eventBus.emit('ui:toast', { type: 'error', message: '未找到有效规则集数据', duration: 2000 });
+        eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.noValidRulesetData'), duration: 2000 });
         return;
       }
       setValue('系统.扩展.image.modelRulesets', [...modelRulesets.value, ...items]);
-      eventBus.emit('ui:toast', { type: 'success', message: `已导入 ${items.length} 个模型规则集`, duration: 1500 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.modelRulesetsImported', { n: items.length }), duration: 1500 });
     } catch {
-      eventBus.emit('ui:toast', { type: 'error', message: '导入失败：无效的 JSON 文件', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.importFailedInvalidJson'), duration: 2000 });
     }
     input.value = '';
   };
@@ -2358,7 +2381,7 @@ const editOutputFormat = ref('');
 const editRuleTransformerId = ref('');
 
 const activeRuleOptions = computed<SelectOption[]>(() => [
-  { label: '不使用', value: '' },
+  { label: t('image.presets.notUsed'), value: '' },
   ...scopedRuleTemplates.value.map((r) => ({ label: r.name, value: r.id })),
 ]);
 
@@ -2367,11 +2390,11 @@ const editRuleOptions = computed<SelectOption[]>(() =>
 );
 
 const npcTransformerOptions = computed<SelectOption[]>(() => [
-  { label: '不使用', value: '' },
+  { label: t('image.presets.notUsed'), value: '' },
   ...transformerPresets.value.filter((p) => p.scope === 'npc').map((p) => ({ label: p.name, value: p.id })),
 ]);
 const sceneTransformerOptions = computed<SelectOption[]>(() => [
-  { label: '不使用', value: '' },
+  { label: t('image.presets.notUsed'), value: '' },
   ...transformerPresets.value.filter((p) => p.scope === 'scene').map((p) => ({ label: p.name, value: p.id })),
 ]);
 
@@ -2406,7 +2429,7 @@ watch([scopedRuleTemplates, ruleScope], ([templates]) => {
 function createRuleTemplate() {
   const rule: RuleTemplate = {
     id: `rule_${Date.now()}`,
-    name: `${ruleScope.value === 'npc' ? 'NPC' : ruleScope.value === 'scene' ? '场景' : '判定'}规则 ${scopedRuleTemplates.value.length + 1}`,
+    name: (ruleScope.value === 'npc' ? t('image.rules.npcRuleName', { n: scopedRuleTemplates.value.length + 1 }) : ruleScope.value === 'scene' ? t('image.rules.sceneRuleName', { n: scopedRuleTemplates.value.length + 1 }) : t('image.rules.judgeRuleName', { n: scopedRuleTemplates.value.length + 1 })),
     scope: ruleScope.value,
     baseRule: '', anchorRule: '', noAnchorFallback: '', outputFormat: '',
     transformerPresetId: '',
@@ -2425,7 +2448,7 @@ function saveRuleTemplate() {
       : r
   );
   setValue('系统.扩展.image.ruleTemplates', list);
-  eventBus.emit('ui:toast', { type: 'success', message: '规则已保存', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.ruleSaved'), duration: 1500 });
 }
 
 function deleteRuleTemplate() {
@@ -2446,7 +2469,7 @@ function saveActiveRules() {
     activeSceneRule: activeSceneRuleId.value,
     activeJudgeRule: activeJudgeRuleId.value,
   });
-  eventBus.emit('ui:toast', { type: 'success', message: '生效规则已更新', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.activeRulesUpdated'), duration: 1500 });
 }
 
 // Rules import/export
@@ -2464,7 +2487,7 @@ function exportRules() {
   a.download = `image-rules-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  eventBus.emit('ui:toast', { type: 'success', message: '规则已导出', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.rulesExported'), duration: 1500 });
 }
 
 function importRules(event: Event) {
@@ -2484,9 +2507,9 @@ function importRules(event: Event) {
       if (data.rules && typeof data.rules === 'object') {
         setValue('系统.扩展.image.rules', data.rules);
       }
-      eventBus.emit('ui:toast', { type: 'success', message: '规则已导入', duration: 1500 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.rulesImported'), duration: 1500 });
     } catch {
-      eventBus.emit('ui:toast', { type: 'error', message: '导入失败：无效的 JSON 文件', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('image.toast.importFailedInvalidJson'), duration: 2000 });
     }
     input.value = '';
   };
@@ -2562,7 +2585,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       type: 'character',
       timestamp: Number(record.createdAt ?? 0),
       id: String(record.id ?? ''),
-      name: playerName.value ?? '主角',
+      name: playerName.value ?? t('image.scene.playerFallback'),
       status: String(record.status ?? 'complete'),
       positivePrompt: String(record.positivePrompt ?? ''),
       negativePrompt: String(record.negativePrompt ?? ''),
@@ -2585,7 +2608,7 @@ const combinedHistory = computed<CombinedHistoryEntry[]>(() => {
       type: 'scene',
       timestamp: Number(record.createdAt ?? record['生成时间'] ?? 0),
       id: String(record.id ?? ''),
-      name: '场景',
+      name: t('image.history.typeScene'),
       status: String(record.status ?? 'complete'),
       positivePrompt: String(record.positivePrompt ?? record['最终正向提示词'] ?? ''),
       negativePrompt: String(record.negativePrompt ?? record['最终负向提示词'] ?? ''),
@@ -2621,7 +2644,7 @@ function clearAllNpcHistory() {
     const name = String(npc['名称'] ?? '');
     if (name) imageService.clearNpcHistory(name);
   }
-  eventBus.emit('ui:toast', { type: 'info', message: '已清空全部 NPC 历史', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.clearedAllNpcHistory'), duration: 1500 });
 }
 
 function clearAllSceneHistory() {
@@ -2664,17 +2687,44 @@ onMounted(() => {
     selectedNpc.value = npcQuery;
   }
 
-  // Seed default model rulesets + rule templates from engine defaults if state tree is empty
-  const existingRulesets = get('系统.扩展.image.modelRulesets');
+  // Seed or update model rulesets + rule templates with locale-aware prompt text.
+  // When pack provides transformer defaults (locale-specific), always update the
+  // built-in presets' prompt fields to match the current locale. User-created
+  // presets (IDs not in the default set) are preserved untouched.
+  const packDefaults: TransformerDefaultsData | undefined = imageService?.getTransformerDefaults();
+  const localeDefRulesets = getDefaultModelBundles(packDefaults).map(engineBundleToModelRuleset);
+  const localeDefTemplates = getDefaultPresets(packDefaults).map(enginePresetToRuleTemplate);
+  const defaultRulesetIds = new Set(localeDefRulesets.map(r => r.id));
+  const defaultTemplateIds = new Set(localeDefTemplates.map(r => r.id));
+
+  const existingRulesets = get('系统.扩展.image.modelRulesets') as ModelRuleset[] | undefined;
   if (!Array.isArray(existingRulesets) || existingRulesets.length === 0) {
-    const defaults = getDefaultModelBundles().map(engineBundleToModelRuleset);
-    setValue('系统.扩展.image.modelRulesets', defaults);
+    setValue('系统.扩展.image.modelRulesets', localeDefRulesets);
+  } else if (packDefaults) {
+    const localeMap = new Map(localeDefRulesets.map(r => [r.id, r]));
+    const updated = existingRulesets.map(r => {
+      const localeVer = localeMap.get(r.id);
+      if (localeVer && defaultRulesetIds.has(r.id)) {
+        return { ...r, name: localeVer.name, baseModelRule: localeVer.baseModelRule, anchorModeModelRule: localeVer.anchorModeModelRule };
+      }
+      return r;
+    });
+    setValue('系统.扩展.image.modelRulesets', updated);
   }
 
-  const existingTemplates = get('系统.扩展.image.ruleTemplates');
+  const existingTemplates = get('系统.扩展.image.ruleTemplates') as RuleTemplate[] | undefined;
   if (!Array.isArray(existingTemplates) || existingTemplates.length === 0) {
-    const defaults = getDefaultPresets().map(enginePresetToRuleTemplate);
-    setValue('系统.扩展.image.ruleTemplates', defaults);
+    setValue('系统.扩展.image.ruleTemplates', localeDefTemplates);
+  } else if (packDefaults) {
+    const localeMap = new Map(localeDefTemplates.map(r => [r.id, r]));
+    const updated = existingTemplates.map(r => {
+      const localeVer = localeMap.get(r.id);
+      if (localeVer && defaultTemplateIds.has(r.id)) {
+        return { ...r, name: localeVer.name, baseRule: localeVer.baseRule, anchorRule: localeVer.anchorRule, noAnchorFallback: localeVer.noAnchorFallback, outputFormat: localeVer.outputFormat };
+      }
+      return r;
+    });
+    setValue('系统.扩展.image.ruleTemplates', updated);
   }
 });
 
@@ -2751,7 +2801,7 @@ const galleryImages = computed(() => {
 const galleryNpcData = computed(() => {
   if (!galleryNpc.value) return null;
   if (galleryNpc.value === PLAYER_ID) {
-    return { '名称': playerName.value ?? '主角', '性别': '', '是否主要角色': true, '图片档案': playerArchiveRaw.value } as Record<string, unknown>;
+    return { '名称': playerName.value ?? t('image.scene.playerFallback'), '性别': '', '是否主要角色': true, '图片档案': playerArchiveRaw.value } as Record<string, unknown>;
   }
   if (!Array.isArray(relationships.value)) return null;
   return relationships.value.find((n) => n['名称'] === galleryNpc.value) ?? null;
@@ -2813,13 +2863,13 @@ function clearBackground() {
 function setPersistentWallpaper(assetId: string) {
   if (!imageService) return;
   imageService.state.setPersistentWallpaper(assetId);
-  eventBus.emit('ui:toast', { type: 'success', message: '已设为常驻壁纸', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.toast.setPersistentWallpaper'), duration: 1500 });
 }
 
 function clearPersistentWallpaper() {
   if (!imageService) return;
   imageService.state.clearPersistentWallpaper();
-  eventBus.emit('ui:toast', { type: 'info', message: '常驻壁纸已清除', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.clearedPersistentWallpaper'), duration: 1500 });
 }
 
 const persistentWallpaperRaw = useValue<string>('系统.扩展.image.persistentWallpaper');
@@ -2867,20 +2917,20 @@ function deleteNpcHistoryEntry(npcName: string, imageId: string) {
 function clearNpcImages() {
   if (!galleryNpc.value || !imageService) return;
   imageService.clearNpcHistory(galleryNpc.value);
-  eventBus.emit('ui:toast', { type: 'info', message: `${galleryNpc.value} 的图片记录已清空`, duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('image.toast.clearedNpcImages', { name: galleryNpc.value }), duration: 1500 });
 }
 </script>
 
 <template>
   <div class="image-panel">
     <header class="panel-header">
-      <h2 class="panel-title">图像工作台</h2>
+      <h2 class="panel-title">{{ $t('image.title') }}</h2>
     </header>
 
     <div v-if="!enabled" class="panel-notice">
-      <p>图像生成功能未启用。请在<strong>设置</strong>面板底部开启「图像生成」。</p>
+      <p>{{ $t('image.panel.notEnabled') }}</p>
       <p style="margin-top:8px;font-size:var(--font-size-xs);color:var(--color-text-muted)">
-        开启后请在 <strong>API</strong> 面板添加一个「图像生成」类别的 API 配置。
+        {{ $t('image.panel.notEnabledHint') }}
       </p>
     </div>
 
@@ -2889,15 +2939,15 @@ function clearNpcImages() {
 
       <!-- Stats bar -->
       <div class="stats-bar">
-        <div class="stat-card"><span class="stat-value">{{ totalImages }}</span><span class="stat-label">影像总数</span></div>
-        <div class="stat-card stat-card--success"><span class="stat-value">{{ successCount }}</span><span class="stat-label">成功</span></div>
-        <div class="stat-card stat-card--danger"><span class="stat-value">{{ failedCount }}</span><span class="stat-label">失败</span></div>
-        <div class="stat-card stat-card--info"><span class="stat-value">{{ pendingCount }}</span><span class="stat-label">进行中</span></div>
+        <div class="stat-card"><span class="stat-value">{{ totalImages }}</span><span class="stat-label">{{ $t('image.panel.statsTotal') }}</span></div>
+        <div class="stat-card stat-card--success"><span class="stat-value">{{ successCount }}</span><span class="stat-label">{{ $t('image.panel.statsSuccess') }}</span></div>
+        <div class="stat-card stat-card--danger"><span class="stat-value">{{ failedCount }}</span><span class="stat-label">{{ $t('image.panel.statsFailed') }}</span></div>
+        <div class="stat-card stat-card--info"><span class="stat-value">{{ pendingCount }}</span><span class="stat-label">{{ $t('image.panel.statsPending') }}</span></div>
         <div v-if="successCount + failedCount > 0" class="stat-card stat-card--bar">
           <AgaProgressBar
             :value="successCount"
             :max="successCount + failedCount"
-            label="成功率"
+            :label="$t('image.panel.statsSuccessRate')"
             :show-value="true"
             variant="success"
           />
@@ -2910,7 +2960,7 @@ function clearNpcImages() {
           <span :class="['status-dot', activeBackendStatus.configured ? 'status-dot--ok' : 'status-dot--off']" />
           <span class="backend-status-label">{{ activeBackendStatus.label }}</span>
           <span v-if="activeBackendStatus.model" class="backend-status-model">{{ activeBackendStatus.model }}</span>
-          <span v-if="!activeBackendStatus.configured" class="backend-status-warn">未配置 — 请在 API 管理 → 功能分配中分配</span>
+          <span v-if="!activeBackendStatus.configured" class="backend-status-warn">{{ $t('image.panel.backendNotConfigured') }}</span>
         </div>
         <CivitaiLoraShelf
           v-if="backend === 'civitai'"
@@ -2922,8 +2972,8 @@ function clearNpcImages() {
           <!-- Left: NPC info + form -->
           <div class="gen-form-col">
             <div class="form-section">
-              <label class="form-label">选择角色</label>
-              <AgaSelect :options="npcOptions" v-model="selectedNpc" placeholder="选择一个 NPC…" />
+              <label class="form-label">{{ $t('image.manual.selectLabel') }}</label>
+              <AgaSelect :options="npcOptions" v-model="selectedNpc" :placeholder="$t('image.manual.selectPlaceholder')" />
             </div>
 
             <!-- NPC summary card -->
@@ -2931,8 +2981,8 @@ function clearNpcImages() {
               <div class="npc-summary-name">{{ selectedNpcData['名称'] }}</div>
               <div class="npc-summary-meta">
                 <span v-if="selectedNpcData['性别']">{{ selectedNpcData['性别'] }}</span>
-                <span v-if="selectedNpcData['年龄']">{{ selectedNpcData['年龄'] }}岁</span>
-                <span v-if="selectedNpcData['是否主要角色']" class="badge-major">主要角色</span>
+                <span v-if="selectedNpcData['年龄']">{{ $t('image.npcMeta.ageSuffix', { age: selectedNpcData['年龄'] }) }}</span>
+                <span v-if="selectedNpcData['是否主要角色']" class="badge-major">{{ $t('image.manual.majorRole') }}</span>
               </div>
               <p v-if="selectedNpcData['描述']" class="npc-summary-desc">{{ String(selectedNpcData['描述']).slice(0, 120) }}</p>
             </div>
@@ -2943,13 +2993,13 @@ function clearNpcImages() {
               selectedNpcAnchor?.enabled ? 'anchor-banner--active' :
               selectedNpcAnchor ? 'anchor-banner--inactive' : 'anchor-banner--none'
             ]">
-              <template v-if="selectedNpcAnchor?.enabled">该角色锚点已启用，手动生图会自动附加：{{ selectedNpcAnchor.name }}</template>
-              <template v-else-if="selectedNpcAnchor">该角色锚点已停用</template>
-              <template v-else>该角色未绑定角色锚点，手动生图将只使用常规提示词。</template>
+              <template v-if="selectedNpcAnchor?.enabled">{{ $t('image.manual.anchorActive', { name: selectedNpcAnchor.name }) }}</template>
+              <template v-else-if="selectedNpcAnchor">{{ $t('image.manual.anchorInactive') }}</template>
+              <template v-else>{{ $t('image.manual.anchorNone') }}</template>
             </div>
 
             <div class="form-section">
-              <label class="form-label">构图预设</label>
+              <label class="form-label">{{ $t('image.manual.compositionPreset') }}</label>
               <div class="btn-grid btn-grid--4">
                 <button
                   v-for="opt in compositionOptions"
@@ -2963,18 +3013,18 @@ function clearNpcImages() {
                 </button>
               </div>
               <div v-if="isCustomComposition" class="form-section" style="margin-top: 8px;">
-                <div class="form-hint">自定义构图说明</div>
+                <div class="form-hint">{{ $t('image.manual.customCompositionHint') }}</div>
                 <input
                   v-model="customComposition"
                   type="text"
                   class="form-input"
-                  placeholder="例如：45度侧脸半身、古风战斗姿势、低机位仰拍"
+                  :placeholder="$t('image.manual.customCompositionPlaceholder')"
                 />
               </div>
             </div>
 
             <div class="form-section">
-              <label class="form-label">画风选择</label>
+              <label class="form-label">{{ $t('image.manual.artStyleLabel') }}</label>
               <div class="btn-grid btn-grid--5">
                 <button
                   v-for="opt in styleOptions"
@@ -2989,7 +3039,7 @@ function clearNpcImages() {
             </div>
 
             <div class="form-section">
-              <label class="form-label">分辨率 / 比例</label>
+              <label class="form-label">{{ $t('image.manual.sizeLabel') }}</label>
               <div class="btn-grid btn-grid--6">
                 <button
                   v-for="opt in sizePresetOptions"
@@ -3005,7 +3055,7 @@ function clearNpcImages() {
 
               <!-- 1x/2x 倍率 toggle (only for preset ratios, not 'none' or 'custom') -->
               <div v-if="isCustomComposition && sizePreset !== 'custom' && sizePreset !== 'none'" class="scale-toggle">
-                <span class="form-hint">倍率</span>
+                <span class="form-hint">{{ $t('image.manual.scaleLabel') }}</span>
                 <button
                   v-for="s in (['1x', '2x'] as const)"
                   :key="s"
@@ -3018,7 +3068,7 @@ function clearNpcImages() {
               <!-- Width / Height inputs -->
               <div class="size-inputs">
                 <div class="size-input-group">
-                  <div class="form-hint">宽 (px)</div>
+                  <div class="form-hint">{{ $t('image.manual.widthLabel') }}</div>
                   <input
                     v-model="manualWidth"
                     type="text"
@@ -3029,7 +3079,7 @@ function clearNpcImages() {
                   />
                 </div>
                 <div class="size-input-group">
-                  <div class="form-hint">高 (px)</div>
+                  <div class="form-hint">{{ $t('image.manual.heightLabel') }}</div>
                   <input
                     v-model="manualHeight"
                     type="text"
@@ -3041,80 +3091,80 @@ function clearNpcImages() {
                 </div>
               </div>
 
-              <div class="form-hint">当前尺寸：{{ currentSizeDisplay }}</div>
-              <div v-if="!isCustomComposition" class="form-hint">内置构图已包含推荐尺寸，选择自定义构图后可启用。</div>
+              <div class="form-hint">{{ $t('image.manual.currentSize', { size: currentSizeDisplay }) }}</div>
+              <div v-if="!isCustomComposition" class="form-hint">{{ $t('image.manual.sizeAutoHint') }}</div>
             </div>
 
             <div class="form-section">
-              <label class="form-label">画师串预设</label>
+              <label class="form-label">{{ $t('image.manual.artistPreset') }}</label>
               <AgaSelect
-                :options="[{ label: '未配置预设', value: '' }, ...npcArtistPresets.map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: $t('image.manual.noPreset'), value: '' }, ...npcArtistPresets.map(p => ({ label: p.name, value: p.id }))]"
                 v-model="selectedArtistPreset"
               />
               <div v-if="selectedArtistPreset && artistPresets.find(p => p.id === selectedArtistPreset)" class="preset-preview">
-                <span class="form-hint">{{ artistPresets.find(p => p.id === selectedArtistPreset)?.artistString?.slice(0, 80) || '(空)' }}</span>
+                <span class="form-hint">{{ artistPresets.find(p => p.id === selectedArtistPreset)?.artistString?.slice(0, 80) || $t('image.presets.empty') }}</span>
               </div>
             </div>
 
             <div class="form-section">
-              <label class="form-label">PNG 画风预设</label>
+              <label class="form-label">{{ $t('image.manual.pngPreset') }}</label>
               <AgaSelect
                 :options="pngPresetOptions"
                 v-model="selectedPngPreset"
               />
               <div v-if="selectedPngPreset && artistPresets.find(p => p.id === selectedPngPreset)" class="preset-preview">
-                <span class="form-hint">{{ artistPresets.find(p => p.id === selectedPngPreset)?.positive?.slice(0, 80) || '(空)' }}</span>
+                <span class="form-hint">{{ artistPresets.find(p => p.id === selectedPngPreset)?.positive?.slice(0, 80) || $t('image.presets.empty') }}</span>
               </div>
             </div>
 
             <div class="form-section">
-              <label class="form-label">额外要求</label>
-              <textarea v-model="extraPrompt" class="form-textarea" rows="2" placeholder="如：白衣飘飘、御剑横空、月下独立…" />
+              <label class="form-label">{{ $t('image.manual.extraPrompt') }}</label>
+              <textarea v-model="extraPrompt" class="form-textarea" rows="2" :placeholder="$t('image.manual.extraPromptPlaceholder')" />
             </div>
 
             <div class="form-section form-section--inline">
-              <label class="form-label">后台处理</label>
+              <label class="form-label">{{ $t('image.manual.backgroundMode') }}</label>
               <AgaToggle v-model="backgroundMode" />
             </div>
 
             <!-- Reference redraw (R9: single toggle) -->
             <div v-if="backendSupportsImg2Img" class="form-section">
               <div class="form-section form-section--inline">
-                <label class="form-label">参考重绘</label>
+                <label class="form-label">{{ $t('image.manual.referenceRedraw') }}</label>
                 <AgaToggle v-model="npcReferenceEnabled" />
               </div>
               <div v-if="npcReferenceEnabled" class="ref-controls">
-                <label class="form-label">参考图来源</label>
+                <label class="form-label">{{ $t('image.manual.refSource') }}</label>
                 <AgaSelect
                   :options="[
-                    { label: '上传图片', value: 'upload' },
-                    { label: '使用当前头像/立绘', value: 'avatar' },
+                    { label: $t('image.manual.refUpload'), value: 'upload' },
+                    { label: $t('image.manual.refAvatar'), value: 'avatar' },
                   ]"
                   v-model="npcReferenceSource"
                 />
                 <div v-if="npcReferenceSource === 'upload'" style="margin-top: var(--space-xs);">
                   <label class="ref-upload-btn">
-                    {{ npcReferenceFile ? npcReferenceFile.name : '选择图片…' }}
+                    {{ npcReferenceFile ? npcReferenceFile.name : $t('image.manual.refSelectFile') }}
                     <input type="file" accept="image/*" style="display:none" @change="onNpcReferenceFileChange" />
                   </label>
                 </div>
-                <label class="form-label" style="margin-top: var(--space-xs);">重绘幅度</label>
+                <label class="form-label" style="margin-top: var(--space-xs);">{{ $t('image.manual.refDenoiseLabel') }}</label>
                 <div style="display:flex;align-items:center;gap:8px;">
                   <input type="range" min="0.1" max="1" step="0.05" v-model.number="npcReferenceDenoise" style="flex:1" />
                   <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ npcReferenceDenoise.toFixed(2) }}</span>
                 </div>
-                <div class="ref-marks"><span>0.25 近似原图</span><span>0.55 保留构图</span><span>0.80 大幅重绘</span></div>
+                <div class="ref-marks"><span>{{ $t('image.regenerate.markNear') }}</span><span>{{ $t('image.regenerate.markKeep') }}</span><span>{{ $t('image.regenerate.markHeavy') }}</span></div>
                 <div v-if="backend === 'novelai'" style="margin-top:6px;">
-                  <label class="form-label">Noise（增加细节变化）</label>
+                  <label class="form-label">{{ $t('image.manual.refNoiseLabel') }}</label>
                   <div style="display:flex;align-items:center;gap:8px;">
                     <input type="range" min="0" max="1" step="0.05" v-model.number="npcReferenceNoise" style="flex:1" />
                     <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ npcReferenceNoise.toFixed(2) }}</span>
                   </div>
                 </div>
-                <p class="form-hint" style="margin-top:4px;">参考重绘会把源图发送给当前生成后端。</p>
+                <p class="form-hint" style="margin-top:4px;">{{ $t('image.manual.refNote') }}</p>
               </div>
             </div>
-            <p v-else class="form-hint" style="margin-top:0;">当前后端不支持参考重绘</p>
+            <p v-else class="form-hint" style="margin-top:0;">{{ $t('image.manual.refNotSupported') }}</p>
 
             <div class="form-actions">
               <AgaButton
@@ -3124,7 +3174,7 @@ function clearNpcImages() {
                 :disabled="!selectedNpc || manualFlowStage === 'submitting'"
                 @click="handleGenerate"
               >
-                {{ isGenerating ? '生成中…' : backgroundMode ? '加入队列' : `立即生成${compositionOptions.find(o => o.value === composition)?.label ?? ''}` }}
+                {{ isGenerating ? $t('image.manual.generating') : backgroundMode ? $t('image.manual.addToQueue') : $t('image.manual.generateNow', { comp: compositionOptions.find(o => o.value === composition)?.label ?? '' }) }}
               </AgaButton>
               <div v-if="manualStatusText && manualFlowStage === 'idle'" class="status-text">{{ manualStatusText }}</div>
             </div>
@@ -3137,7 +3187,7 @@ function clearNpcImages() {
                 </span>
                 <span class="task-status-time">{{ new Date(selectedNpcActiveTask.updatedAt).toLocaleTimeString() }}</span>
               </div>
-              <div class="task-status-progress">任务正在处理中…</div>
+              <div class="task-status-progress">{{ $t('image.manual.taskProcessing') }}</div>
             </div>
             <div v-else-if="selectedNpcLastResult" :class="['npc-task-status', `npc-task-status--${selectedNpcLastResult.status}`]">
               <div class="task-status-header">
@@ -3150,8 +3200,8 @@ function clearNpcImages() {
             </div>
 
             <div class="gen-nav-buttons">
-              <AgaButton variant="ghost" size="sm" @click="activeTab = 'queue'">查看队列</AgaButton>
-              <AgaButton variant="ghost" size="sm" @click="activeTab = 'gallery'">查看图库</AgaButton>
+              <AgaButton variant="ghost" size="sm" @click="activeTab = 'queue'">{{ $t('image.manual.viewQueue') }}</AgaButton>
+              <AgaButton variant="ghost" size="sm" @click="activeTab = 'gallery'">{{ $t('image.manual.viewGallery') }}</AgaButton>
             </div>
 
             <div v-if="errorMsg" class="gen-error">{{ errorMsg }}</div>
@@ -3169,21 +3219,21 @@ function clearNpcImages() {
               />
               <div class="secret-header-row">
                 <div>
-                  <h4 class="secret-title">私密部位特写</h4>
-                  <p class="secret-desc">为当前角色生成私密部位特写图片。</p>
+                  <h4 class="secret-title">{{ $t('image.manual.secretTitle') }}</h4>
+                  <p class="secret-desc">{{ $t('image.manual.secretDesc') }}</p>
                 </div>
                 <button
                   type="button"
                   class="secret-all-btn"
                   :disabled="!!secretBusy"
                   @click="generateAllSecretParts"
-                >{{ secretBusy === 'all' ? '生成中...' : '全部生成' }}</button>
+                >{{ secretBusy === 'all' ? $t('image.manual.secretGenerating') : $t('image.manual.secretGenerateAll') }}</button>
               </div>
 
               <!-- Independent config: style + resolution -->
               <div class="secret-config-grid">
                 <div class="form-section">
-                  <label class="form-label">画风选择</label>
+                  <label class="form-label">{{ $t('image.manual.artStyleLabel') }}</label>
                   <div class="btn-grid btn-grid--5">
                     <button v-for="opt in styleOptions" :key="opt.value" type="button"
                       :class="['grid-btn grid-btn--compact grid-btn--fuchsia', { 'grid-btn--fuchsia-active': secretStyle === opt.value }]"
@@ -3192,7 +3242,7 @@ function clearNpcImages() {
                   </div>
                 </div>
                 <div class="form-section">
-                  <label class="form-label">分辨率 / 比例</label>
+                  <label class="form-label">{{ $t('image.manual.sizeLabel') }}</label>
                   <div class="btn-grid btn-grid--6">
                     <button v-for="opt in sizePresetOptions" :key="opt.value" type="button"
                       :class="['grid-btn grid-btn--compact grid-btn--fuchsia', { 'grid-btn--fuchsia-active': secretSizePreset === opt.value }]"
@@ -3205,16 +3255,16 @@ function clearNpcImages() {
               <!-- Presets + extra -->
               <div class="secret-config-grid">
                 <div class="form-section">
-                  <label class="form-label">画师串预设</label>
-                  <AgaSelect :options="[{ label: '未配置预设', value: '' }, ...npcArtistPresets.map(p => ({ label: p.name, value: p.id }))]" v-model="secretArtistPreset" />
+                  <label class="form-label">{{ $t('image.manual.artistPreset') }}</label>
+                  <AgaSelect :options="[{ label: $t('image.manual.noPreset'), value: '' }, ...npcArtistPresets.map(p => ({ label: p.name, value: p.id }))]" v-model="secretArtistPreset" />
                 </div>
                 <div class="form-section">
-                  <label class="form-label">PNG 画风预设</label>
+                  <label class="form-label">{{ $t('image.manual.pngPreset') }}</label>
                   <AgaSelect :options="pngPresetOptions" v-model="secretPngPreset" />
                 </div>
                 <div class="form-section">
-                  <label class="form-label">额外要求</label>
-                  <textarea v-model="secretExtraPrompt" class="form-textarea form-textarea--fuchsia" rows="2" placeholder="如：近景柔光、细节清晰、细腻写实..." />
+                  <label class="form-label">{{ $t('image.manual.extraPrompt') }}</label>
+                  <textarea v-model="secretExtraPrompt" class="form-textarea form-textarea--fuchsia" rows="2" :placeholder="$t('image.manual.extraPromptPlaceholder')" />
                 </div>
               </div>
 
@@ -3227,14 +3277,14 @@ function clearNpcImages() {
                   <div class="secret-card-header">
                     <span class="secret-card-label">{{ part.label }}</span>
                     <button type="button" class="secret-card-btn" :disabled="!!secretBusy" @click="generateSecretPart(part.key)">
-                      {{ secretBusy === part.key ? '生成中...' : '生成' }}
+                      {{ secretBusy === part.key ? $t('image.manual.secretGenerating') : $t('image.manual.secretGenerate') }}
                     </button>
                     <button
                       v-if="getSecretPartAssetId(part.key) && backendSupportsImg2Img"
                       type="button" class="secret-card-btn" style="font-size:0.7rem;"
                       :disabled="!!secretBusy"
                       @click="generateSecretPartWithReference(part.key)"
-                    >参考重绘</button>
+                    >{{ $t('image.manual.secretRefRedraw') }}</button>
                   </div>
                   <div
                     class="secret-card-image"
@@ -3249,7 +3299,7 @@ function clearNpcImages() {
                         class="secret-card-img"
                       />
                     </template>
-                    <div v-else class="secret-card-placeholder">暂无图片</div>
+                    <div v-else class="secret-card-placeholder">{{ $t('image.manual.secretNoImage') }}</div>
                   </div>
                 </div>
               </div>
@@ -3263,8 +3313,8 @@ function clearNpcImages() {
         <div v-if="selectedNpcData" class="npc-preview-panel">
           <div class="npc-preview-image-col">
             <div class="npc-preview-header">
-              <span class="npc-preview-title">图片预览</span>
-              <button v-if="lastTask?.resultAssetId" type="button" class="npc-preview-link" @click="activeTab = 'gallery'">查看图库</button>
+              <span class="npc-preview-title">{{ $t('image.manual.previewTitle') }}</span>
+              <button v-if="lastTask?.resultAssetId" type="button" class="npc-preview-link" @click="activeTab = 'gallery'">{{ $t('image.manual.viewGallery') }}</button>
             </div>
             <div class="npc-preview-image-area">
               <div v-if="lastTask?.resultAssetId" class="npc-preview-image-wrap" @click="openViewer(lastTask.resultAssetId!)">
@@ -3274,13 +3324,13 @@ function clearNpcImages() {
               </div>
               <div v-else class="npc-preview-empty">
                 <div class="npc-preview-empty-icon">☯</div>
-                <div>暂无可预览图片</div>
+                <div>{{ $t('image.manual.previewEmpty') }}</div>
               </div>
             </div>
           </div>
           <div class="npc-preview-data-col">
             <div class="npc-preview-header">
-              <span class="npc-preview-title">角色资料</span>
+              <span class="npc-preview-title">{{ $t('image.manual.npcDataTitle') }}</span>
             </div>
             <div class="npc-preview-data">
               <!--
@@ -3293,37 +3343,37 @@ function clearNpcImages() {
                 当前保持基础信息 + 全文描述，预留结构。
               -->
               <div class="npc-preview-grid">
-                <div><div class="npc-meta-label">姓名</div><div class="npc-meta-value">{{ selectedNpcData['名称'] ?? '未知' }}</div></div>
-                <div><div class="npc-meta-label">性别</div><div class="npc-meta-value">{{ selectedNpcData['性别'] ?? '未知' }}</div></div>
-                <div v-if="selectedNpcData['年龄']"><div class="npc-meta-label">年龄</div><div class="npc-meta-value">{{ selectedNpcData['年龄'] }}岁</div></div>
-                <div v-if="selectedNpcData['与玩家关系']"><div class="npc-meta-label">与玩家关系</div><div class="npc-meta-value">{{ selectedNpcData['与玩家关系'] }}</div></div>
-                <div v-if="selectedNpcData['位置']"><div class="npc-meta-label">当前位置</div><div class="npc-meta-value">{{ selectedNpcData['位置'] }}</div></div>
-                <div v-if="selectedNpcData['类型']"><div class="npc-meta-label">角色类型</div><div class="npc-meta-value">{{ selectedNpcData['类型'] }}</div></div>
+                <div><div class="npc-meta-label">{{ $t('image.npcMeta.name') }}</div><div class="npc-meta-value">{{ selectedNpcData['名称'] ?? $t('image.npcMeta.unknown') }}</div></div>
+                <div><div class="npc-meta-label">{{ $t('image.npcMeta.gender') }}</div><div class="npc-meta-value">{{ selectedNpcData['性别'] ?? $t('image.npcMeta.unknown') }}</div></div>
+                <div v-if="selectedNpcData['年龄']"><div class="npc-meta-label">{{ $t('image.npcMeta.age') }}</div><div class="npc-meta-value">{{ $t('image.npcMeta.ageSuffix', { age: selectedNpcData['年龄'] }) }}</div></div>
+                <div v-if="selectedNpcData['与玩家关系']"><div class="npc-meta-label">{{ $t('image.npcMeta.relationship') }}</div><div class="npc-meta-value">{{ selectedNpcData['与玩家关系'] }}</div></div>
+                <div v-if="selectedNpcData['位置']"><div class="npc-meta-label">{{ $t('image.npcMeta.location') }}</div><div class="npc-meta-value">{{ selectedNpcData['位置'] }}</div></div>
+                <div v-if="selectedNpcData['类型']"><div class="npc-meta-label">{{ $t('image.npcMeta.roleType') }}</div><div class="npc-meta-value">{{ selectedNpcData['类型'] }}</div></div>
               </div>
               <div class="npc-preview-desc-section">
-                <div class="npc-meta-label">角色设定</div>
-                <div class="npc-preview-desc">{{ selectedNpcData['描述'] || selectedNpcData['外貌描述'] || '未找到角色资料' }}</div>
+                <div class="npc-meta-label">{{ $t('image.npcMeta.characterSetting') }}</div>
+                <div class="npc-preview-desc">{{ selectedNpcData['描述'] || selectedNpcData['外貌描述'] || $t('image.npcMeta.noData') }}</div>
               </div>
               <div v-if="selectedNpcData['外貌描述'] && selectedNpcData['描述']" class="npc-preview-desc-section">
-                <div class="npc-meta-label">外貌描述</div>
+                <div class="npc-meta-label">{{ $t('image.npcMeta.appearance') }}</div>
                 <div class="npc-preview-desc">{{ selectedNpcData['外貌描述'] }}</div>
               </div>
               <div v-if="selectedNpcData['身材描写']" class="npc-preview-desc-section">
-                <div class="npc-meta-label">身材描写</div>
+                <div class="npc-meta-label">{{ $t('image.npcMeta.body') }}</div>
                 <div class="npc-preview-desc">{{ selectedNpcData['身材描写'] }}</div>
               </div>
               <div v-if="selectedNpcData['衣着风格']" class="npc-preview-desc-section">
-                <div class="npc-meta-label">衣着风格</div>
+                <div class="npc-meta-label">{{ $t('image.npcMeta.outfit') }}</div>
                 <div class="npc-preview-desc">{{ selectedNpcData['衣着风格'] }}</div>
               </div>
               <div v-if="Array.isArray(selectedNpcData['性格特征']) && (selectedNpcData['性格特征'] as string[]).length" class="npc-preview-desc-section">
-                <div class="npc-meta-label">性格特征</div>
+                <div class="npc-meta-label">{{ $t('image.npcMeta.personality') }}</div>
                 <div class="npc-preview-traits">
                   <span v-for="trait in (selectedNpcData['性格特征'] as string[])" :key="trait" class="npc-preview-trait">{{ trait }}</span>
                 </div>
               </div>
               <div v-if="selectedNpcData['背景']" class="npc-preview-desc-section">
-                <div class="npc-meta-label">背景</div>
+                <div class="npc-meta-label">{{ $t('image.npcMeta.background') }}</div>
                 <div class="npc-preview-desc">{{ selectedNpcData['背景'] }}</div>
               </div>
             </div>
@@ -3342,12 +3392,12 @@ function clearNpcImages() {
               :class="['gallery-npc-btn', { 'gallery-npc-btn--active': galleryNpc === String(npc['名称']) }]"
               @click="galleryNpc = String(npc['名称'])"
             >
-              <span class="gallery-npc-name">{{ String(npc['名称']) === '__player__' ? (playerName ?? '主角') : npc['名称'] }}</span>
+              <span class="gallery-npc-name">{{ String(npc['名称']) === '__player__' ? (playerName ?? $t('image.scene.playerFallback')) : npc['名称'] }}</span>
               <span class="gallery-npc-count">{{ getArchiveHistory(npc).length }}</span>
             </button>
             <div v-if="npcsWithImages.length === 0" class="gallery-empty-list">
-              <p>还没有生成过图片</p>
-              <AgaButton variant="secondary" size="sm" @click="activeTab = 'manual'">去生成</AgaButton>
+              <p>{{ $t('image.gallery.noImages') }}</p>
+              <AgaButton variant="secondary" size="sm" @click="activeTab = 'manual'">{{ $t('image.gallery.goGenerate') }}</AgaButton>
             </div>
           </div>
 
@@ -3357,65 +3407,65 @@ function clearNpcImages() {
               <div class="gallery-header-left">
                 <h3>{{ galleryNpc }}</h3>
                 <div class="gallery-header-badges">
-                  <span class="gallery-info-badge">{{ galleryNpcData?.['性别'] || '未知性别' }}</span>
-                  <span class="gallery-info-badge">{{ galleryNpcData?.['是否主要角色'] ? '主要角色' : '普通角色' }}</span>
-                  <span class="gallery-info-badge gallery-info-badge--count">共 {{ galleryImages.length }} 张图片</span>
+                  <span class="gallery-info-badge">{{ galleryNpcData?.['性别'] || $t('image.gallery.unknownGender') }}</span>
+                  <span class="gallery-info-badge">{{ galleryNpcData?.['是否主要角色'] ? $t('image.gallery.majorRole') : $t('image.gallery.minorRole') }}</span>
+                  <span class="gallery-info-badge gallery-info-badge--count">{{ $t('image.gallery.imageCount', { n: galleryImages.length }) }}</span>
                 </div>
               </div>
               <div class="gallery-header-actions">
-                <AgaButton variant="ghost" size="sm" @click="selectedNpc = galleryNpc; activeTab = 'manual'">去生成图片</AgaButton>
-                <AgaButton v-if="galleryImages.length > 0" variant="danger" size="sm" @click="clearNpcImages()">清空记录</AgaButton>
+                <AgaButton variant="ghost" size="sm" @click="selectedNpc = galleryNpc; activeTab = 'manual'">{{ $t('image.gallery.goGenerateImages') }}</AgaButton>
+                <AgaButton v-if="galleryImages.length > 0" variant="danger" size="sm" @click="clearNpcImages()">{{ $t('image.gallery.clearRecords') }}</AgaButton>
               </div>
             </div>
 
             <div v-if="galleryImages.length > 0" class="gallery-grid">
               <div v-for="img in galleryImages" :key="img.id" class="gallery-card">
-                <div class="gallery-card-image" @click="openViewer(img.id)" style="cursor:pointer" title="点击查看大图">
+                <div class="gallery-card-image" @click="openViewer(img.id)" style="cursor:pointer" :title="$t('image.gallery.clickViewLarge')">
                   <ImageDisplay :asset-id="img.id" :fallback-letter="galleryNpc?.charAt(0) ?? '?'" size="lg" />
                   <!-- Overlay badges: status + usage (stacked, top-left) -->
                   <div class="gallery-overlay-badges">
                     <span :class="['gallery-status-badge', `gallery-status-badge--${img.status ?? 'complete'}`]">
-                      {{ img.status === 'failed' ? '失败' : img.status === 'generating' || img.status === 'tokenizing' ? '生成中' : img.status === 'pending' ? '排队中' : '成功' }}
+                      {{ img.status === 'failed' ? $t('image.queue.status.failed') : img.status === 'generating' || img.status === 'tokenizing' ? $t('image.queue.status.generating') : img.status === 'pending' ? $t('image.queue.status.pending') : $t('image.queue.status.complete') }}
                     </span>
-                    <span v-if="isCurrentAvatar(img.id)" class="gallery-usage-badge">已设头像</span>
-                    <span v-if="isCurrentPortrait(img.id)" class="gallery-usage-badge">已设立绘</span>
-                    <span v-if="isCurrentBackground(img.id)" class="gallery-usage-badge">已设背景</span>
-                    <span v-if="currentWallpaperId === img.id" class="gallery-usage-badge">常驻壁纸</span>
-                    <span v-if="img.providerMeta?.reference" class="gallery-usage-badge gallery-usage-badge--ref">参考图</span>
+                    <span v-if="isCurrentAvatar(img.id)" class="gallery-usage-badge">{{ $t('image.gallery.usageBadge.avatar') }}</span>
+                    <span v-if="isCurrentPortrait(img.id)" class="gallery-usage-badge">{{ $t('image.gallery.usageBadge.portrait') }}</span>
+                    <span v-if="isCurrentBackground(img.id)" class="gallery-usage-badge">{{ $t('image.gallery.usageBadge.background') }}</span>
+                    <span v-if="currentWallpaperId === img.id" class="gallery-usage-badge">{{ $t('image.gallery.usageBadge.wallpaper') }}</span>
+                    <span v-if="img.providerMeta?.reference" class="gallery-usage-badge gallery-usage-badge--ref">{{ $t('image.gallery.usageBadge.reference') }}</span>
                   </div>
                 </div>
                 <div class="gallery-card-meta">
                   <div class="gallery-meta-top">
-                    <span class="gallery-meta-comp">{{ img.composition || '角色' }}</span>
+                    <span class="gallery-meta-comp">{{ img.composition || $t('image.gallery.metaComp.character') }}</span>
                     <span class="gallery-meta-time">{{ new Date(img.createdAt).toLocaleString() }}</span>
                   </div>
                   <div class="gallery-meta-grid">
                     <div class="gallery-meta-cell gallery-meta-cell--wide" :title="modelCellText(img)">
-                      <div class="gallery-meta-label">使用模型</div>
+                      <div class="gallery-meta-label">{{ $t('image.gallery.metaLabel.model') }}</div>
                       <div class="gallery-meta-value">{{ modelCellText(img) }}</div>
                     </div>
                     <div v-if="apiConfigLabel(img)" class="gallery-meta-cell gallery-meta-cell--wide" :title="apiConfigLabel(img)">
-                      <div class="gallery-meta-label">API 配置</div>
+                      <div class="gallery-meta-label">{{ $t('image.gallery.metaLabel.apiConfig') }}</div>
                       <div class="gallery-meta-value">{{ apiConfigLabel(img) }}</div>
                     </div>
                   </div>
                   <div v-if="img.providerMeta?.reference" class="gallery-meta-grid" style="margin-top:4px;">
                     <div class="gallery-meta-cell">
-                      <div class="gallery-meta-label">参考模式</div>
+                      <div class="gallery-meta-label">{{ $t('image.gallery.metaLabel.refMode') }}</div>
                       <div class="gallery-meta-value">{{ img.providerMeta.reference.mode }}</div>
                     </div>
                     <div v-if="img.providerMeta.reference.denoiseStrength != null" class="gallery-meta-cell">
-                      <div class="gallery-meta-label">重绘幅度</div>
+                      <div class="gallery-meta-label">{{ $t('image.gallery.metaLabel.redrawStrength') }}</div>
                       <div class="gallery-meta-value">{{ img.providerMeta.reference.denoiseStrength }}</div>
                     </div>
                   </div>
                   <div v-if="img.positivePrompt || img.negativePrompt" class="gallery-card-prompts">
                     <details v-if="img.positivePrompt" class="prompt-details">
-                      <summary>最终正向提示词</summary>
+                      <summary>{{ $t('image.gallery.promptSummary.positive') }}</summary>
                       <pre class="prompt-text">{{ img.positivePrompt }}</pre>
                     </details>
                     <details v-if="img.negativePrompt" class="prompt-details">
-                      <summary>最终负面提示词</summary>
+                      <summary>{{ $t('image.gallery.promptSummary.negative') }}</summary>
                       <pre class="prompt-text">{{ img.negativePrompt }}</pre>
                     </details>
                   </div>
@@ -3432,32 +3482,32 @@ function clearNpcImages() {
                       v-if="canSelectAvatar(img) && !isCurrentAvatar(img.id)"
                       variant="secondary" size="sm"
                       @click="setAsAvatar(img.id)"
-                    >设为头像</AgaButton>
+                    >{{ $t('image.gallery.action.setAvatar') }}</AgaButton>
                     <AgaButton
                       v-if="isCurrentAvatar(img.id)"
                       variant="ghost" size="sm"
                       @click="clearAvatar()"
-                    >取消设置头像</AgaButton>
+                    >{{ $t('image.gallery.action.cancelAvatar') }}</AgaButton>
                     <AgaButton
                       v-if="canSelectPortrait(img) && !isCurrentPortrait(img.id)"
                       variant="secondary" size="sm"
                       @click="setAsPortrait(img.id)"
-                    >设为立绘</AgaButton>
+                    >{{ $t('image.gallery.action.setPortrait') }}</AgaButton>
                     <AgaButton
                       v-if="isCurrentPortrait(img.id)"
                       variant="ghost" size="sm"
                       @click="clearPortrait()"
-                    >取消设置立绘</AgaButton>
+                    >{{ $t('image.gallery.action.cancelPortrait') }}</AgaButton>
                     <AgaButton
                       v-if="canSelectBackground(img) && !isCurrentBackground(img.id)"
                       variant="secondary" size="sm"
                       @click="setAsBackground(img.id)"
-                    >设为背景</AgaButton>
+                    >{{ $t('image.gallery.action.setBackground') }}</AgaButton>
                     <AgaButton
                       v-if="isCurrentBackground(img.id)"
                       variant="ghost" size="sm"
                       @click="clearBackground()"
-                    >取消背景</AgaButton>
+                    >{{ $t('image.gallery.action.cancelBackground') }}</AgaButton>
                   </div>
                   <!-- Row 2: utility actions -->
                   <div class="gallery-actions-row">
@@ -3465,38 +3515,38 @@ function clearNpcImages() {
                       v-if="img.positivePrompt"
                       variant="secondary" size="sm"
                       @click="openRegenerateFromGalleryImage(galleryNpc, img)"
-                    >生成同款</AgaButton>
+                    >{{ $t('image.gallery.action.regenSame') }}</AgaButton>
                     <AgaButton
                       v-if="img.positivePrompt && backendSupportsImg2Img"
                       variant="secondary" size="sm"
                       @click="openRegenerateFromGalleryImage(galleryNpc, img, true)"
-                    >参考重绘</AgaButton>
-                    <AgaButton v-if="img.status !== 'failed'" variant="ghost" size="sm" @click="analyzeImageFromCard(img.id)">提炼画风</AgaButton>
-                    <AgaButton v-if="img.status !== 'failed'" variant="ghost" size="sm" @click="saveAsReferenceMaterial(img.id, 'gallery', galleryNpc)">保存为参考素材</AgaButton>
+                    >{{ $t('image.gallery.action.refRedraw') }}</AgaButton>
+                    <AgaButton v-if="img.status !== 'failed'" variant="ghost" size="sm" @click="analyzeImageFromCard(img.id)">{{ $t('image.gallery.action.analyzeStyle') }}</AgaButton>
+                    <AgaButton v-if="img.status !== 'failed'" variant="ghost" size="sm" @click="saveAsReferenceMaterial(img.id, 'gallery', galleryNpc)">{{ $t('image.gallery.action.saveAsRef') }}</AgaButton>
                     <AgaButton
                       v-if="img.status === 'complete' && !isPersistentWallpaper(img.id)"
                       variant="ghost" size="sm"
                       @click="setPersistentWallpaper(img.id)"
-                    >设为常驻壁纸</AgaButton>
+                    >{{ $t('image.gallery.action.setPersistentWallpaper') }}</AgaButton>
                     <AgaButton
                       v-if="img.status === 'complete' && isPersistentWallpaper(img.id)"
                       variant="ghost" size="sm"
                       @click="clearPersistentWallpaper()"
-                    >取消常驻壁纸</AgaButton>
-                    <AgaButton variant="ghost" size="sm" @click="saveToLocal(img.id)">保存到本地</AgaButton>
-                    <AgaButton variant="danger" size="sm" @click="requestDelete(img.id)">删除图片</AgaButton>
+                    >{{ $t('image.gallery.action.cancelPersistentWallpaper') }}</AgaButton>
+                    <AgaButton variant="ghost" size="sm" @click="saveToLocal(img.id)">{{ $t('image.gallery.action.saveLocal') }}</AgaButton>
+                    <AgaButton variant="danger" size="sm" @click="requestDelete(img.id)">{{ $t('image.gallery.action.deleteImage') }}</AgaButton>
                   </div>
                 </div>
               </div>
             </div>
 
             <div v-else-if="galleryNpc" class="tab-placeholder">
-              <p>{{ galleryNpc }} 还没有图片</p>
-              <AgaButton variant="secondary" size="sm" @click="selectedNpc = galleryNpc; activeTab = 'manual'">去生成</AgaButton>
+              <p>{{ $t('image.gallery.noImagesYet', { name: galleryNpc }) }}</p>
+              <AgaButton variant="secondary" size="sm" @click="selectedNpc = galleryNpc; activeTab = 'manual'">{{ $t('image.gallery.goGenerate') }}</AgaButton>
             </div>
 
             <div v-else class="tab-placeholder">
-              <p>← 选择一个角色查看图库</p>
+              <p>{{ $t('image.gallery.selectNpc') }}</p>
             </div>
           </div>
         </div>
@@ -3508,7 +3558,7 @@ function clearNpcImages() {
           <span :class="['status-dot', activeBackendStatus.configured ? 'status-dot--ok' : 'status-dot--off']" />
           <span class="backend-status-label">{{ activeBackendStatus.label }}</span>
           <span v-if="activeBackendStatus.model" class="backend-status-model">{{ activeBackendStatus.model }}</span>
-          <span v-if="!activeBackendStatus.configured" class="backend-status-warn">未配置</span>
+          <span v-if="!activeBackendStatus.configured" class="backend-status-warn">{{ $t('image.scene.notConfigured') }}</span>
         </div>
         <CivitaiLoraShelf
           v-if="backend === 'civitai'"
@@ -3521,43 +3571,43 @@ function clearNpcImages() {
           <div class="scene-left-col">
             <!-- Current wallpaper -->
             <div class="scene-section">
-              <h3 class="section-label">当前场景壁纸</h3>
-              <div v-if="currentSceneWallpaperId" class="wallpaper-card" @click="openViewer(currentSceneWallpaperId)" title="点击查看大图">
+              <h3 class="section-label">{{ $t('image.scene.currentWallpaper') }}</h3>
+              <div v-if="currentSceneWallpaperId" class="wallpaper-card" @click="openViewer(currentSceneWallpaperId)" :title="$t('image.gallery.clickViewLarge')">
                 <ImageDisplay :asset-id="currentSceneWallpaperId" fallback-letter="S" size="lg" />
-                <span class="wallpaper-badge">当前使用中</span>
+                <span class="wallpaper-badge">{{ $t('image.scene.currentlyUsed') }}</span>
               </div>
               <div v-else class="wallpaper-placeholder">
-                <p>暂无场景壁纸</p>
-                <p class="form-hint">当前尚未指定任何场景壁纸</p>
+                <p>{{ $t('image.scene.noWallpaper') }}</p>
+                <p class="form-hint">{{ $t('image.scene.noWallpaperHint') }}</p>
               </div>
             </div>
 
             <!-- Scene stats (MRJH: 6 stat cards) -->
             <div class="scene-section">
-              <h3 class="section-label">场景生成统计</h3>
+              <h3 class="section-label">{{ $t('image.scene.statsTitle') }}</h3>
               <div class="scene-stats-grid">
-                <div class="stat-card"><span class="stat-value">{{ sceneStats.total }}</span><span class="stat-label">图片总数</span></div>
-                <div class="stat-card stat-card--success"><span class="stat-value">{{ sceneStats.success }}</span><span class="stat-label">成功</span></div>
-                <div class="stat-card stat-card--danger"><span class="stat-value">{{ sceneStats.failed }}</span><span class="stat-label">失败</span></div>
-                <div class="stat-card stat-card--warning"><span class="stat-value">{{ sceneStats.pending }}</span><span class="stat-label">生成中</span></div>
-                <div class="stat-card stat-card--info"><span class="stat-value">{{ sceneStats.queueTotal }}</span><span class="stat-label">队列总数</span></div>
-                <div class="stat-card stat-card--info"><span class="stat-value">{{ sceneStats.queueRunning }}</span><span class="stat-label">运行中</span></div>
+                <div class="stat-card"><span class="stat-value">{{ sceneStats.total }}</span><span class="stat-label">{{ $t('image.scene.statsTotalImages') }}</span></div>
+                <div class="stat-card stat-card--success"><span class="stat-value">{{ sceneStats.success }}</span><span class="stat-label">{{ $t('image.scene.statsSuccess') }}</span></div>
+                <div class="stat-card stat-card--danger"><span class="stat-value">{{ sceneStats.failed }}</span><span class="stat-label">{{ $t('image.scene.statsFailed') }}</span></div>
+                <div class="stat-card stat-card--warning"><span class="stat-value">{{ sceneStats.pending }}</span><span class="stat-label">{{ $t('image.scene.statsGenerating') }}</span></div>
+                <div class="stat-card stat-card--info"><span class="stat-value">{{ sceneStats.queueTotal }}</span><span class="stat-label">{{ $t('image.scene.statsQueueTotal') }}</span></div>
+                <div class="stat-card stat-card--info"><span class="stat-value">{{ sceneStats.queueRunning }}</span><span class="stat-label">{{ $t('image.scene.statsQueueRunning') }}</span></div>
               </div>
             </div>
 
             <!-- Scene history limit -->
             <div class="scene-section">
-              <h3 class="section-label">场景历史数量限制</h3>
-              <p class="form-hint">当前 {{ sceneStats.total }} / {{ sceneArchiveLimit }}，超限时自动删除最旧场景图。</p>
+              <h3 class="section-label">{{ $t('image.scene.historyLimitTitle') }}</h3>
+              <p class="form-hint">{{ $t('image.scene.historyLimitHint', { current: sceneStats.total, limit: sceneArchiveLimit }) }}</p>
               <div class="scene-limit-row">
                 <input v-model="sceneArchiveLimitDraft" type="number" min="1" max="100" class="form-input scene-limit-input" />
-                <AgaButton variant="secondary" size="sm" @click="saveSceneArchiveLimit">应用上限</AgaButton>
+                <AgaButton variant="secondary" size="sm" @click="saveSceneArchiveLimit">{{ $t('image.scene.applyLimit') }}</AgaButton>
               </div>
             </div>
 
             <!-- Scene composition requirement -->
             <div class="scene-section">
-              <label class="form-label">场景构图要求</label>
+              <label class="form-label">{{ $t('image.scene.compositionLabel') }}</label>
               <div class="btn-grid btn-grid--2">
                 <button
                   v-for="mode in (['snapshot', 'landscape'] as const)"
@@ -3566,17 +3616,17 @@ function clearNpcImages() {
                   :class="['grid-btn grid-btn--compact', { 'grid-btn--active': sceneComposition === mode }]"
                   @click="sceneComposition = mode"
                 >
-                  <div class="grid-btn__label">{{ mode === 'snapshot' ? '故事快照' : '纯场景' }}</div>
+                  <div class="grid-btn__label">{{ mode === 'snapshot' ? $t('image.scene.modeSnapshot') : $t('image.scene.modeLandscape') }}</div>
                 </button>
               </div>
-              <p class="form-hint">选择场景画面是纯景观还是带人物互动的故事快照。</p>
+              <p class="form-hint">{{ $t('image.scene.compositionHint') }}</p>
             </div>
 
             <!-- Round/narrative selection -->
             <div class="scene-section">
-              <label class="form-label">正文来源</label>
-              <p class="form-hint">选择要传入场景转换器的回合正文，可多选。</p>
-              <div v-if="recentRounds.length === 0" class="form-hint" style="opacity:0.5">暂无回合记录</div>
+              <label class="form-label">{{ $t('image.scene.narrativeSource') }}</label>
+              <p class="form-hint">{{ $t('image.scene.narrativeSourceHint') }}</p>
+              <div v-if="recentRounds.length === 0" class="form-hint" style="opacity:0.5">{{ $t('image.scene.noRounds') }}</div>
               <div v-else class="round-selector">
                 <div
                   v-for="round in recentRounds"
@@ -3585,7 +3635,7 @@ function clearNpcImages() {
                   @click="toggleRound(round.originalIndex)"
                 >
                   <span class="round-selector__check">{{ selectedRoundKeys.has(round.originalIndex) ? '☑' : '☐' }}</span>
-                  <span class="round-selector__label">第 {{ round.roundNumber }} 回合</span>
+                  <span class="round-selector__label">{{ $t('image.scene.roundLabel', { n: round.roundNumber }) }}</span>
                   <span class="round-selector__preview">{{ round.preview }}</span>
                 </div>
               </div>
@@ -3594,14 +3644,14 @@ function clearNpcImages() {
             <!-- NPC selection -->
             <div class="scene-section">
               <div class="npc-selector__header">
-                <label class="form-label">参与角色</label>
+                <label class="form-label">{{ $t('image.scene.npcParticipants') }}</label>
                 <span class="npc-selector__actions">
-                  <button type="button" class="npc-selector__link" @click="selectAllNpcs">全选</button>
-                  <button type="button" class="npc-selector__link" @click="deselectAllNpcs">全不选</button>
+                  <button type="button" class="npc-selector__link" @click="selectAllNpcs">{{ $t('image.scene.selectAll') }}</button>
+                  <button type="button" class="npc-selector__link" @click="deselectAllNpcs">{{ $t('image.scene.deselectAll') }}</button>
                 </span>
               </div>
-              <p class="form-hint">选择要包含在场景中的角色（外貌/衣着等信息会传入转换器）。</p>
-              <div v-if="sceneNpcList.length === 0" class="form-hint" style="opacity:0.5">暂无角色</div>
+              <p class="form-hint">{{ $t('image.scene.npcParticipantsHint') }}</p>
+              <div v-if="sceneNpcList.length === 0" class="form-hint" style="opacity:0.5">{{ $t('image.scene.noCharacters') }}</div>
               <div v-else class="npc-selector">
                 <div
                   v-for="npc in sceneNpcList"
@@ -3611,15 +3661,15 @@ function clearNpcImages() {
                 >
                   <span class="npc-selector__check">{{ selectedNpcNames.has(npc.name) ? '☑' : '☐' }}</span>
                   <span class="npc-selector__name">{{ npc.name }}</span>
-                  <span v-if="npc.isPlayer" class="npc-selector__badge npc-selector__badge--player">主角</span>
-                  <span v-else-if="npc.isPresent" class="npc-selector__badge">在场</span>
+                  <span v-if="npc.isPlayer" class="npc-selector__badge npc-selector__badge--player">{{ $t('image.scene.playerBadge') }}</span>
+                  <span v-else-if="npc.isPresent" class="npc-selector__badge">{{ $t('image.scene.presentBadge') }}</span>
                 </div>
               </div>
             </div>
 
             <!-- Orientation -->
             <div class="scene-section">
-              <label class="form-label">画面方向</label>
+              <label class="form-label">{{ $t('image.scene.orientationLabel') }}</label>
               <div class="btn-grid btn-grid--2">
                 <button
                   v-for="ori in (['landscape', 'portrait'] as const)"
@@ -3628,88 +3678,88 @@ function clearNpcImages() {
                   :class="['grid-btn grid-btn--compact', { 'grid-btn--active': sceneOrientation === ori }]"
                   @click="sceneOrientation = ori"
                 >
-                  <div class="grid-btn__label">{{ ori === 'landscape' ? '横屏' : '竖屏' }}</div>
+                  <div class="grid-btn__label">{{ ori === 'landscape' ? $t('image.scene.orientationLandscape') : $t('image.scene.orientationPortrait') }}</div>
                 </button>
               </div>
             </div>
 
             <!-- Resolution -->
             <div class="scene-section">
-              <label class="form-label">分辨率 / 比例</label>
+              <label class="form-label">{{ $t('image.scene.resolutionLabel') }}</label>
               <AgaSelect
                 :options="sceneResolutionOptions"
                 v-model="sceneResolution"
               />
-              <input v-model="sceneResolution" type="text" class="form-input" style="margin-top:var(--space-2xs)" placeholder="自定义分辨率，如 1280x720" />
-              <p class="form-hint">当前分辨率：{{ sceneResolution || '未选择' }}</p>
+              <input v-model="sceneResolution" type="text" class="form-input" style="margin-top:var(--space-2xs)" :placeholder="$t('image.scene.customResPlaceholder')" />
+              <p class="form-hint">{{ $t('image.scene.currentResolution', { res: sceneResolution || $t('image.scene.notSelected') }) }}</p>
             </div>
 
             <!-- Extra requirements -->
             <div class="scene-section">
-              <label class="form-label">额外要求</label>
-              <textarea v-model="sceneExtraPrompt" class="form-textarea" rows="3" placeholder="如：夜雨江湖、远景俯瞰、人物剪影..." />
+              <label class="form-label">{{ $t('image.scene.extraRequirements') }}</label>
+              <textarea v-model="sceneExtraPrompt" class="form-textarea" rows="3" :placeholder="$t('image.scene.extraPlaceholder')" />
             </div>
 
             <!-- Artist preset -->
             <div class="scene-section">
-              <label class="form-label">场景画师串预设</label>
+              <label class="form-label">{{ $t('image.scene.artistPresetLabel') }}</label>
               <AgaSelect
-                :options="[{ label: sceneScopedPresets.length > 0 ? '不使用' : '未配置预设', value: '' }, ...sceneScopedPresets.map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: sceneScopedPresets.length > 0 ? $t('image.presets.notUsed') : $t('image.manual.noPreset'), value: '' }, ...sceneScopedPresets.map(p => ({ label: p.name, value: p.id }))]"
                 v-model="selectedScenePreset"
               />
             </div>
 
             <!-- PNG preset -->
             <div class="scene-section">
-              <label class="form-label">场景PNG画风预设</label>
+              <label class="form-label">{{ $t('image.scene.pngPresetLabel') }}</label>
               <AgaSelect
-                :options="[{ label: '不启用', value: '' }, ...scenePngPresets.map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: $t('image.manual.anchor.none'), value: '' }, ...scenePngPresets.map(p => ({ label: p.name, value: p.id }))]"
                 v-model="selectedScenePngPreset"
               />
             </div>
 
             <!-- Background mode toggle -->
             <div class="scene-section form-section--inline">
-              <label class="form-label">后台处理</label>
+              <label class="form-label">{{ $t('image.manual.backgroundMode') }}</label>
               <AgaToggle v-model="backgroundMode" />
-              <p class="form-hint">开启后，场景生成会直接进入后台队列。</p>
+              <p class="form-hint">{{ $t('image.scene.bgModeHint') }}</p>
             </div>
 
             <!-- Scene reference redraw -->
             <div v-if="backendSupportsImg2Img" class="scene-section">
               <div class="form-section form-section--inline">
-                <label class="form-label">参考构图</label>
+                <label class="form-label">{{ $t('image.scene.refComposition') }}</label>
                 <AgaToggle v-model="sceneReferenceEnabled" />
               </div>
               <div v-if="sceneReferenceEnabled" class="ref-controls">
-                <label class="form-label">参考图来源</label>
+                <label class="form-label">{{ $t('image.scene.refSource') }}</label>
                 <AgaSelect
                   :options="[
-                    { label: '上传图片', value: 'upload' },
-                    { label: '当前场景壁纸', value: 'wallpaper' },
+                    { label: $t('image.scene.refUpload'), value: 'upload' },
+                    { label: $t('image.scene.refWallpaper'), value: 'wallpaper' },
                   ]"
                   v-model="sceneReferenceSource"
                 />
                 <div v-if="sceneReferenceSource === 'upload'" style="margin-top:var(--space-xs);">
                   <label class="ref-upload-btn">
-                    {{ sceneReferenceFile ? sceneReferenceFile.name : '选择图片…' }}
+                    {{ sceneReferenceFile ? sceneReferenceFile.name : $t('image.scene.refSelectFile') }}
                     <input type="file" accept="image/*" style="display:none" @change="onSceneReferenceFileChange" />
                   </label>
                 </div>
-                <label class="form-label" style="margin-top:var(--space-xs);">重绘幅度</label>
+                <label class="form-label" style="margin-top:var(--space-xs);">{{ $t('image.scene.refDenoiseLabel') }}</label>
                 <div style="display:flex;align-items:center;gap:8px;">
                   <input type="range" min="0.1" max="1" step="0.05" v-model.number="sceneReferenceDenoise" style="flex:1" />
                   <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ sceneReferenceDenoise.toFixed(2) }}</span>
                 </div>
-                <div class="ref-marks"><span>0.25 保留画面</span><span>0.55 保留构图</span><span>0.80 大幅重绘</span></div>
+                <div class="ref-marks"><span>{{ $t('image.scene.refMarkNear') }}</span><span>{{ $t('image.scene.refMarkKeep') }}</span><span>{{ $t('image.scene.refMarkHeavy') }}</span></div>
                 <div v-if="backend === 'novelai'" style="margin-top:6px;">
-                  <label class="form-label">Noise（增加细节变化）</label>
+                  <label class="form-label">{{ $t('image.manual.refNoiseLabel') }}</label>
                   <div style="display:flex;align-items:center;gap:8px;">
                     <input type="range" min="0" max="1" step="0.05" v-model.number="sceneReferenceNoise" style="flex:1" />
                     <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ sceneReferenceNoise.toFixed(2) }}</span>
                   </div>
                 </div>
-                <p class="form-hint" style="margin-top:4px;">参考重绘会把源图发送给当前生成后端。</p>
+                <p class="form-hint" style="margin-top:4px;">{{ $t('image.manual.refNote') }}</p>
               </div>
             </div>
 
@@ -3719,9 +3769,9 @@ function clearNpcImages() {
             <!-- Generate + clear buttons -->
             <div class="scene-form-actions">
               <AgaButton variant="primary" :loading="sceneGenerating" @click="generateScene">
-                {{ sceneGenerating ? '生成中…' : '按当前正文生成' }}
+                {{ sceneGenerating ? $t('image.scene.generatingBtn') : $t('image.scene.generateByNarrative') }}
               </AgaButton>
-              <AgaButton variant="danger" size="sm" @click="clearSceneHistory">清空历史</AgaButton>
+              <AgaButton variant="danger" size="sm" @click="clearSceneHistory">{{ $t('image.scene.clearHistory') }}</AgaButton>
             </div>
 
             <div v-if="sceneError" class="gen-error">{{ sceneError }}</div>
@@ -3732,16 +3782,16 @@ function clearNpcImages() {
             <!-- Scene queue (max 30%) -->
             <div v-if="sceneQueueTasks.length > 0" class="scene-queue-section">
               <div class="scene-queue-header">
-                <h3 class="section-label">场景队列</h3>
+                <h3 class="section-label">{{ $t('image.scene.queueTitle') }}</h3>
                 <div class="scene-queue-actions">
-                  <AgaButton variant="ghost" size="sm" @click="clearSceneQueueCompleted">清空已完成</AgaButton>
-                  <AgaButton variant="danger" size="sm" @click="clearSceneQueueAll">清空全部</AgaButton>
+                  <AgaButton variant="ghost" size="sm" @click="clearSceneQueueCompleted">{{ $t('image.scene.clearCompleted') }}</AgaButton>
+                  <AgaButton variant="danger" size="sm" @click="clearSceneQueueAll">{{ $t('image.scene.clearAll') }}</AgaButton>
                 </div>
               </div>
               <div class="scene-queue-list">
                 <div v-for="task in sceneQueueTasks" :key="task.id" class="scene-queue-card">
                   <div class="scene-queue-card-top">
-                    <span class="scene-queue-summary">{{ task.positivePrompt?.slice(0, 40) || '场景生成' }}</span>
+                    <span class="scene-queue-summary">{{ task.positivePrompt?.slice(0, 40) || $t('image.scene.sceneFallback') }}</span>
                     <span :class="['task-badge', `task-badge--${task.status}`]">{{ taskStatusLabel(task.status) }}</span>
                   </div>
                   <div class="scene-queue-card-meta">{{ new Date(task.createdAt).toLocaleString() }}</div>
@@ -3752,8 +3802,8 @@ function clearNpcImages() {
             <!-- Scene history -->
             <div class="scene-history-section">
               <div class="scene-history-header">
-                <h3 class="section-label">场景历史</h3>
-                <span class="scene-history-count">{{ sceneArchiveHistory.length }} 条记录</span>
+                <h3 class="section-label">{{ $t('image.scene.historyTitle') }}</h3>
+                <span class="scene-history-count">{{ $t('image.scene.recordCount', { n: sceneArchiveHistory.length }) }}</span>
               </div>
               <div v-if="sceneArchiveHistory.length > 0" class="scene-history-grid">
                 <div
@@ -3761,13 +3811,13 @@ function clearNpcImages() {
                   :key="String(record.id ?? record.createdAt)"
                   class="scene-history-card"
                 >
-                  <div class="scene-history-card-image" @click="openViewer(String(record.id ?? ''))" style="cursor:pointer" title="点击查看大图">
+                  <div class="scene-history-card-image" @click="openViewer(String(record.id ?? ''))" style="cursor:pointer" :title="$t('image.gallery.clickViewLarge')">
                     <ImageDisplay :asset-id="String(record.id ?? '')" fallback-letter="S" size="lg" />
                     <div class="gallery-overlay-badges">
                       <span :class="['gallery-status-badge', `gallery-status-badge--${record.status ?? 'complete'}`]">
-                        {{ record.status === 'failed' ? '失败' : '成功' }}
+                        {{ record.status === 'failed' ? $t('image.scene.statusFailed') : $t('image.scene.statusSuccess') }}
                       </span>
-                      <span v-if="isCurrentSceneWallpaper(String(record.id ?? ''))" class="gallery-usage-badge">当前壁纸</span>
+                      <span v-if="isCurrentSceneWallpaper(String(record.id ?? ''))" class="gallery-usage-badge">{{ $t('image.scene.currentWallpaperBadge') }}</span>
                     </div>
                   </div>
                   <div class="scene-history-card-body">
@@ -3777,11 +3827,11 @@ function clearNpcImages() {
                     </div>
                     <!-- Expandable prompts -->
                     <details v-if="record.positivePrompt" class="prompt-details">
-                      <summary>最终正向提示词</summary>
+                      <summary>{{ $t('image.gallery.promptSummary.positive') }}</summary>
                       <pre class="prompt-text">{{ record.positivePrompt }}</pre>
                     </details>
                     <details v-if="record.negativePrompt" class="prompt-details">
-                      <summary>最终负面提示词</summary>
+                      <summary>{{ $t('image.gallery.promptSummary.negative') }}</summary>
                       <pre class="prompt-text">{{ record.negativePrompt }}</pre>
                     </details>
                     <!-- Action buttons -->
@@ -3790,43 +3840,43 @@ function clearNpcImages() {
                         v-if="record.positivePrompt"
                         variant="secondary" size="sm"
                         @click="openRegenerateFromSceneRecord(record as Record<string, unknown>)"
-                      >生成同款</AgaButton>
+                      >{{ $t('image.scene.action.regenSame') }}</AgaButton>
                       <AgaButton
                         v-if="record.positivePrompt && backendSupportsImg2Img"
                         variant="secondary" size="sm"
                         @click="openRegenerateFromSceneRecord(record as Record<string, unknown>, true)"
-                      >参考重绘</AgaButton>
-                      <AgaButton variant="ghost" size="sm" @click="analyzeImageFromCard(String(record.id ?? ''))">提炼画风</AgaButton>
-                      <AgaButton variant="ghost" size="sm" @click="saveAsReferenceMaterial(String(record.id ?? ''), 'scene')">保存为参考素材</AgaButton>
+                      >{{ $t('image.scene.action.refRedraw') }}</AgaButton>
+                      <AgaButton variant="ghost" size="sm" @click="analyzeImageFromCard(String(record.id ?? ''))">{{ $t('image.scene.action.analyzeStyle') }}</AgaButton>
+                      <AgaButton variant="ghost" size="sm" @click="saveAsReferenceMaterial(String(record.id ?? ''), 'scene')">{{ $t('image.scene.action.saveAsRef') }}</AgaButton>
                       <AgaButton
                         v-if="!isCurrentSceneWallpaper(String(record.id ?? ''))"
                         variant="secondary" size="sm"
                         @click="applySceneWallpaper(String(record.id ?? ''))"
-                      >设为壁纸</AgaButton>
+                      >{{ $t('image.scene.action.setWallpaper') }}</AgaButton>
                       <AgaButton
                         v-if="isCurrentSceneWallpaper(String(record.id ?? ''))"
                         variant="ghost" size="sm"
                         @click="clearSceneWallpaper()"
-                      >取消设置壁纸</AgaButton>
+                      >{{ $t('image.scene.action.cancelWallpaper') }}</AgaButton>
                       <AgaButton
                         v-if="!isPersistentWallpaper(String(record.id ?? ''))"
                         variant="ghost" size="sm"
                         @click="setPersistentWallpaper(String(record.id ?? ''))"
-                      >设为常驻壁纸</AgaButton>
+                      >{{ $t('image.scene.action.setPersistentWallpaper') }}</AgaButton>
                       <AgaButton
                         v-if="isPersistentWallpaper(String(record.id ?? ''))"
                         variant="ghost" size="sm"
                         @click="clearPersistentWallpaper()"
-                      >取消常驻壁纸</AgaButton>
-                      <AgaButton variant="ghost" size="sm" @click="saveToLocal(String(record.id ?? ''))">保存到本地</AgaButton>
-                      <AgaButton variant="danger" size="sm" @click="deleteSceneImage(String(record.id ?? ''))">删除图片</AgaButton>
+                      >{{ $t('image.scene.action.cancelPersistentWallpaper') }}</AgaButton>
+                      <AgaButton variant="ghost" size="sm" @click="saveToLocal(String(record.id ?? ''))">{{ $t('image.scene.action.saveLocal') }}</AgaButton>
+                      <AgaButton variant="danger" size="sm" @click="deleteSceneImage(String(record.id ?? ''))">{{ $t('image.scene.action.deleteImage') }}</AgaButton>
                     </div>
                   </div>
                 </div>
               </div>
               <div v-else class="tab-placeholder">
-                <p>暂无场景历史记录</p>
-                <p class="form-hint">请先生成场景图片。</p>
+                <p>{{ $t('image.scene.noHistory') }}</p>
+                <p class="form-hint">{{ $t('image.scene.noHistoryHint') }}</p>
               </div>
             </div>
           </div>
@@ -3837,58 +3887,58 @@ function clearNpcImages() {
       <div v-if="activeTab === 'queue'" class="tab-content">
         <div class="queue-header-v2">
           <div>
-            <h3 class="section-label">统一生成队列</h3>
-            <p class="form-hint">所有角色和场景的生成任务都会显示在这里。</p>
+            <h3 class="section-label">{{ $t('image.queue.unifiedTitle') }}</h3>
+            <p class="form-hint">{{ $t('image.queue.unifiedHint') }}</p>
           </div>
           <div class="queue-clear-buttons">
-            <AgaButton variant="ghost" size="sm" @click="clearNpcQueueCompleted">清空已完成 NPC 任务</AgaButton>
-            <AgaButton variant="danger" size="sm" @click="clearNpcQueueAll">清空全部 NPC 任务</AgaButton>
-            <AgaButton variant="ghost" size="sm" @click="clearSceneQueueCompleted">清空已完成场景任务</AgaButton>
-            <AgaButton variant="danger" size="sm" @click="clearSceneQueueAll">清空全部场景任务</AgaButton>
+            <AgaButton variant="ghost" size="sm" @click="clearNpcQueueCompleted">{{ $t('image.queue.clearCompletedBtn') }}</AgaButton>
+            <AgaButton variant="danger" size="sm" @click="clearNpcQueueAll">{{ $t('image.queue.clearAllBtn') }}</AgaButton>
+            <AgaButton variant="ghost" size="sm" @click="clearSceneQueueCompleted">{{ $t('image.queue.clearCompletedBtn') }}</AgaButton>
+            <AgaButton variant="danger" size="sm" @click="clearSceneQueueAll">{{ $t('image.queue.clearAllBtn') }}</AgaButton>
           </div>
         </div>
 
         <div v-if="recentTasks.length === 0" class="tab-placeholder">
-          <p>当前没有生成任务</p>
-          <p class="form-hint">新的角色或场景生成任务会显示在这里。</p>
+          <p>{{ $t('image.queue.noTasks') }}</p>
+          <p class="form-hint">{{ $t('image.queue.noTasksHint') }}</p>
         </div>
         <div v-else class="task-list-v2">
           <div v-for="task in recentTasks" :key="task.id" class="queue-card-v2">
             <!-- Type badge (top-right corner) -->
-            <span class="queue-type-corner">{{ task.subjectType === 'scene' ? '场景任务' : '角色任务' }}</span>
+            <span class="queue-type-corner">{{ task.subjectType === 'scene' ? $t('image.queue.subjectScene') : $t('image.queue.subjectCharacter') }}</span>
 
             <!-- Header: name + status -->
             <div class="queue-card-header">
               <div class="queue-card-title">
-                <div class="queue-card-name">{{ task.subjectType === 'scene' ? (task.positivePrompt?.slice(0, 30) || '场景生成') : (task.targetCharacter ?? '角色') }}</div>
+                <div class="queue-card-name">{{ task.subjectType === 'scene' ? (task.positivePrompt?.slice(0, 30) || $t('image.queue.subjectScene')) : (task.targetCharacter ?? $t('image.lora.scope.character')) }}</div>
                 <div class="queue-card-sub">
-                  <span v-if="task.subjectType !== 'scene'">{{ task.subjectType === 'character' ? '角色' : task.subjectType }}</span>
+                  <span v-if="task.subjectType !== 'scene'">{{ task.subjectType === 'character' ? $t('image.queue.subjectTypeCharacter') : task.subjectType }}</span>
                   <span>{{ new Date(task.createdAt).toLocaleString() }}</span>
                 </div>
               </div>
               <div class="queue-card-status-area">
                 <span :class="['task-badge', `task-badge--${task.status}`]">{{ taskStatusLabel(task.status) }}</span>
                 <span v-if="task.providerMeta?.civitai?.loras?.length" class="lora-badge">LoRA ×{{ task.providerMeta.civitai.loras.length }}</span>
-                <AgaButton variant="ghost" size="sm" @click="removeTask(task.id)">删除</AgaButton>
+                <AgaButton variant="ghost" size="sm" @click="removeTask(task.id)">{{ $t('image.queue.deleteBtn') }}</AgaButton>
               </div>
             </div>
 
             <!-- 4-card metadata grid -->
             <div class="queue-meta-grid">
               <div class="queue-meta-cell">
-                <div class="queue-meta-label">创建时间</div>
+                <div class="queue-meta-label">{{ $t('image.queue.createdAt') }}</div>
                 <div class="queue-meta-value">{{ new Date(task.createdAt).toLocaleString() }}</div>
               </div>
               <div class="queue-meta-cell">
-                <div class="queue-meta-label">最后更新</div>
+                <div class="queue-meta-label">{{ $t('image.queue.updatedAt') }}</div>
                 <div class="queue-meta-value">{{ new Date(task.updatedAt).toLocaleString() }}</div>
               </div>
               <div class="queue-meta-cell">
-                <div class="queue-meta-label">后端</div>
-                <div class="queue-meta-value">{{ task.backend || '未定' }}</div>
+                <div class="queue-meta-label">{{ $t('image.regenerate.backendLabel') }}</div>
+                <div class="queue-meta-value">{{ task.backend || $t('image.queue.backendUndecided') }}</div>
               </div>
               <div class="queue-meta-cell queue-meta-cell--progress">
-                <div class="queue-meta-label">任务进度 ({{ taskStatusLabel(task.status) }})</div>
+                <div class="queue-meta-label">{{ $t('image.queue.taskProgress', { status: taskStatusLabel(task.status) }) }}</div>
                 <div class="queue-meta-value">{{ task.error || taskStatusLabel(task.status) }}</div>
               </div>
             </div>
@@ -3898,11 +3948,11 @@ function clearNpcImages() {
                  sent to the backend and kick off a same-prompt regeneration. -->
             <div v-if="task.positivePrompt || task.negativePrompt" class="queue-card-prompts">
               <details v-if="task.positivePrompt" class="prompt-details">
-                <summary>最终正向提示词</summary>
+                <summary>{{ $t('image.gallery.promptSummary.positive') }}</summary>
                 <pre class="prompt-text">{{ task.positivePrompt }}</pre>
               </details>
               <details v-if="task.negativePrompt" class="prompt-details">
-                <summary>最终负面提示词</summary>
+                <summary>{{ $t('image.gallery.promptSummary.negative') }}</summary>
                 <pre class="prompt-text">{{ task.negativePrompt }}</pre>
               </details>
             </div>
@@ -3913,27 +3963,27 @@ function clearNpcImages() {
                 v-if="task.positivePrompt"
                 variant="secondary" size="sm"
                 @click="openRegenerateFromTask(task)"
-              >同提示词重新生成</AgaButton>
+              >{{ $t('image.queue.action.regenPrompt') }}</AgaButton>
               <AgaButton
                 v-if="task.status === 'complete' && task.resultAssetId && backendSupportsImg2Img"
                 variant="secondary" size="sm"
                 @click="openRegenerateFromTask(task, true)"
-              >参考重绘</AgaButton>
+              >{{ $t('image.queue.action.refRedraw') }}</AgaButton>
               <AgaButton
                 v-if="task.status === 'complete' && task.resultAssetId"
                 variant="ghost" size="sm"
                 @click="saveAsReferenceMaterial(task.resultAssetId, 'gallery')"
-              >保存为参考素材</AgaButton>
+              >{{ $t('image.queue.action.saveAsRef') }}</AgaButton>
               <AgaButton
                 v-if="task.status === 'failed' && task.subjectType !== 'scene' && task.targetCharacter"
                 variant="ghost" size="sm"
                 @click="openManualGenerateForRetry(task.targetCharacter!)"
-              >手动重试</AgaButton>
+              >{{ $t('image.queue.action.manualRetry') }}</AgaButton>
               <AgaButton
                 v-if="task.status === 'failed'"
                 variant="ghost" size="sm"
                 @click="retryTask(task)"
-              >重试任务</AgaButton>
+              >{{ $t('image.queue.action.retryTask') }}</AgaButton>
             </div>
           </div>
         </div>
@@ -3943,12 +3993,12 @@ function clearNpcImages() {
       <div v-if="activeTab === 'history'" class="tab-content">
         <div class="history-header-v2">
           <div>
-            <h3 class="section-label">全部生成历史</h3>
+            <h3 class="section-label">{{ $t('image.history.allTitle') }}</h3>
           </div>
           <div class="history-header-actions">
-            <AgaSelect :options="historyFilterOptions" v-model="historyFilter" placeholder="筛选" />
-            <AgaButton variant="danger" size="sm" @click="clearAllNpcHistory">清空 NPC 历史</AgaButton>
-            <AgaButton variant="danger" size="sm" @click="clearAllSceneHistory">清空场景历史</AgaButton>
+            <AgaSelect :options="historyFilterOptions" v-model="historyFilter" :placeholder="$t('image.history.filterPlaceholder')" />
+            <AgaButton variant="danger" size="sm" @click="clearAllNpcHistory">{{ $t('image.history.clearNpc') }}</AgaButton>
+            <AgaButton variant="danger" size="sm" @click="clearAllSceneHistory">{{ $t('image.history.clearScene') }}</AgaButton>
           </div>
         </div>
 
@@ -3960,7 +4010,7 @@ function clearNpcImages() {
               :class="entry.type === 'scene' ? 'history-card-image-v2--landscape' : ''"
               @click="openViewer(entry.assetId)"
               style="cursor:pointer"
-              title="点击查看大图"
+              :title="$t('image.gallery.clickViewLarge')"
             >
               <ImageDisplay
                 :asset-id="entry.assetId"
@@ -3969,9 +4019,9 @@ function clearNpcImages() {
               />
               <div class="gallery-overlay-badges">
                 <span :class="['gallery-status-badge', `gallery-status-badge--${entry.status}`]">
-                  {{ entry.status === 'complete' ? '成功' : entry.status === 'failed' ? '失败' : '处理中' }}
+                  {{ entry.status === 'complete' ? $t('image.history.statusComplete') : entry.status === 'failed' ? $t('image.history.statusFailed') : $t('image.history.statusProcessing') }}
                 </span>
-                <span class="history-type-badge-v2">{{ entry.type === 'scene' ? '场景' : '角色' }}</span>
+                <span class="history-type-badge-v2">{{ entry.type === 'scene' ? $t('image.history.typeScene') : $t('image.history.typeCharacter') }}</span>
               </div>
             </div>
 
@@ -3979,31 +4029,31 @@ function clearNpcImages() {
             <div class="history-card-body-v2">
               <div class="history-card-title-row">
                 <div>
-                  <div class="history-card-name-v2">{{ entry.type === 'scene' ? '场景' : entry.name }}</div>
+                  <div class="history-card-name-v2">{{ entry.type === 'scene' ? $t('image.history.typeScene') : entry.name }}</div>
                   <div class="history-card-sub-v2">
                     <span v-if="entry.composition" class="history-comp-badge">{{ entry.composition }}</span>
                     <span v-if="entry.providerMeta?.civitai?.loras?.length" class="lora-badge">LoRA ×{{ entry.providerMeta.civitai.loras.length }}</span>
-                    <span v-if="entry.providerMeta?.reference" class="lora-badge" style="color: var(--color-sage-400);">参考图</span>
+                    <span v-if="entry.providerMeta?.reference" class="lora-badge" style="color: var(--color-sage-400);">{{ $t('image.history.refBadge') }}</span>
                     <span>{{ new Date(entry.timestamp).toLocaleString() }}</span>
                   </div>
                 </div>
-                <AgaButton v-if="entry.type === 'character'" variant="danger" size="sm" @click="deleteNpcHistoryEntry(entry.name, entry.id)">删除图片</AgaButton>
-                <AgaButton v-else variant="danger" size="sm" @click="deleteSceneImage(entry.id)">删除图片</AgaButton>
+                <AgaButton v-if="entry.type === 'character'" variant="danger" size="sm" @click="deleteNpcHistoryEntry(entry.name, entry.id)">{{ $t('image.history.action.deleteImage') }}</AgaButton>
+                <AgaButton v-else variant="danger" size="sm" @click="deleteSceneImage(entry.id)">{{ $t('image.history.action.deleteImage') }}</AgaButton>
               </div>
 
               <!-- Metadata grid -->
               <div class="history-meta-grid-v2">
                 <div class="history-meta-cell-v2 history-meta-cell-v2--wide">
-                  <div class="history-meta-label-v2">使用模型</div>
+                  <div class="history-meta-label-v2">{{ $t('image.history.metaLabel.model') }}</div>
                   <div class="history-meta-value-v2">{{ modelCellText(entry) }}</div>
                 </div>
                 <div v-if="apiConfigLabel(entry)" class="history-meta-cell-v2 history-meta-cell-v2--wide">
-                  <div class="history-meta-label-v2">API 配置</div>
+                  <div class="history-meta-label-v2">{{ $t('image.history.metaLabel.apiConfig') }}</div>
                   <div class="history-meta-value-v2">{{ apiConfigLabel(entry) }}</div>
                 </div>
                 <div class="history-meta-cell-v2">
-                  <div class="history-meta-label-v2">画风偏好</div>
-                  <div class="history-meta-value-v2">{{ entry.artStyle || '无' }}</div>
+                  <div class="history-meta-label-v2">{{ $t('image.history.metaLabel.artPref') }}</div>
+                  <div class="history-meta-value-v2">{{ entry.artStyle || $t('image.history.metaLabel.none') }}</div>
                 </div>
                 <div v-if="entry.error" class="history-meta-cell-v2 history-meta-cell-v2--error" style="grid-column: span 2">
                   <div class="history-meta-value-v2">{{ entry.error }}</div>
@@ -4013,60 +4063,60 @@ function clearNpcImages() {
               <!-- Expandable prompt details -->
               <div class="history-details-v2">
                 <details v-if="entry.positivePrompt" class="prompt-details">
-                  <summary>最终正向提示词</summary>
+                  <summary>{{ $t('image.gallery.promptSummary.positive') }}</summary>
                   <pre class="prompt-text">{{ entry.positivePrompt }}</pre>
                 </details>
                 <details v-if="entry.negativePrompt" class="prompt-details">
-                  <summary>最终负面提示词</summary>
+                  <summary>{{ $t('image.gallery.promptSummary.negative') }}</summary>
                   <pre class="prompt-text">{{ entry.negativePrompt }}</pre>
                 </details>
               </div>
 
               <!-- Action buttons -->
               <div class="history-actions-v2">
-                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="openViewer(entry.assetId)">查看大图</AgaButton>
+                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="openViewer(entry.assetId)">{{ $t('image.history.action.viewLarge') }}</AgaButton>
                 <AgaButton
                   v-if="entry.positivePrompt"
                   variant="secondary" size="sm"
                   @click="openRegenerateFromHistoryEntry(entry)"
-                >生成同款</AgaButton>
+                >{{ $t('image.history.action.regenSame') }}</AgaButton>
                 <AgaButton
                   v-if="entry.positivePrompt && entry.assetId && backendSupportsImg2Img"
                   variant="secondary" size="sm"
                   @click="openRegenerateFromHistoryEntry(entry, true)"
-                >参考重绘</AgaButton>
-                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="analyzeImageFromCard(entry.assetId)">提炼画风</AgaButton>
-                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="saveAsReferenceMaterial(entry.assetId, entry.type === 'scene' ? 'scene' : 'gallery', entry.name)">保存为参考素材</AgaButton>
+                >{{ $t('image.history.action.refRedraw') }}</AgaButton>
+                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="analyzeImageFromCard(entry.assetId)">{{ $t('image.history.action.analyzeStyle') }}</AgaButton>
+                <AgaButton v-if="entry.assetId" variant="ghost" size="sm" @click="saveAsReferenceMaterial(entry.assetId, entry.type === 'scene' ? 'scene' : 'gallery', entry.name)">{{ $t('image.history.action.saveAsRef') }}</AgaButton>
                 <template v-if="entry.status === 'complete' && entry.assetId">
                   <AgaButton
                     v-if="entry.type === 'scene' && !isCurrentSceneWallpaper(entry.assetId)"
                     variant="ghost" size="sm"
                     @click="applySceneWallpaper(entry.assetId)"
-                  >设为壁纸</AgaButton>
+                  >{{ $t('image.history.action.setWallpaper') }}</AgaButton>
                   <AgaButton
                     v-if="entry.type === 'scene' && isCurrentSceneWallpaper(entry.assetId)"
                     variant="ghost" size="sm"
                     @click="clearSceneWallpaper()"
-                  >取消设置壁纸</AgaButton>
+                  >{{ $t('image.history.action.cancelWallpaper') }}</AgaButton>
                   <AgaButton
                     v-if="!isPersistentWallpaper(entry.assetId)"
                     variant="ghost" size="sm"
                     @click="setPersistentWallpaper(entry.assetId)"
-                  >设为常驻壁纸</AgaButton>
+                  >{{ $t('image.history.action.setPersistentWallpaper') }}</AgaButton>
                   <AgaButton
                     v-if="isPersistentWallpaper(entry.assetId)"
                     variant="ghost" size="sm"
                     @click="clearPersistentWallpaper()"
-                  >取消常驻壁纸</AgaButton>
-                  <AgaButton variant="ghost" size="sm" @click="saveToLocal(entry.assetId)">保存本地</AgaButton>
+                  >{{ $t('image.history.action.cancelPersistentWallpaper') }}</AgaButton>
+                  <AgaButton variant="ghost" size="sm" @click="saveToLocal(entry.assetId)">{{ $t('image.history.action.saveLocal') }}</AgaButton>
                 </template>
               </div>
             </div>
           </div>
         </div>
         <div v-else class="tab-placeholder">
-          <p>暂无历史记录</p>
-          <p class="form-hint">成功、失败与处理中记录都会在这里留档。</p>
+          <p>{{ $t('image.history.noRecords') }}</p>
+          <p class="form-hint">{{ $t('image.history.noRecordsHint') }}</p>
         </div>
       </div>
 
@@ -4074,38 +4124,38 @@ function clearNpcImages() {
       <div v-if="activeTab === 'presets'" class="tab-content">
         <!-- Auto preset bindings (MRJH §J Section 1 — 4 dropdowns in 2x2) -->
         <div class="preset-card">
-          <span class="preset-card-badge">自动预设</span>
-          <h3 class="section-label">自动画师串预设</h3>
-          <p class="form-hint">自动生图时默认附加的画师串和 PNG 预设</p>
+          <span class="preset-card-badge">{{ $t('image.presets.badgeAuto') }}</span>
+          <h3 class="section-label">{{ $t('image.presets.autoTitle') }}</h3>
+          <p class="form-hint">{{ $t('image.presets.autoHint') }}</p>
           <div class="bindings-grid">
             <div class="form-section">
-              <label class="form-label">NPC 画师串</label>
+              <label class="form-label">{{ $t('image.presets.npcArtist') }}</label>
               <AgaSelect
-                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'npc').map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: $t('image.presets.notUsed'), value: '' }, ...artistPresets.filter(p => p.scope === 'npc').map(p => ({ label: p.name, value: p.id }))]"
                 :model-value="String(get('系统.扩展.image.config.defaultNpcArtistPreset') ?? '')"
                 @update:model-value="setValue('系统.扩展.image.config.defaultNpcArtistPreset', $event)"
               />
             </div>
             <div class="form-section">
-              <label class="form-label">NPC PNG 预设</label>
+              <label class="form-label">{{ $t('image.presets.npcPng') }}</label>
               <AgaSelect
-                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'npc' && (p.id.startsWith('png_') || p.id.startsWith('img_'))).map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: $t('image.presets.notUsed'), value: '' }, ...artistPresets.filter(p => p.scope === 'npc' && (p.id.startsWith('png_') || p.id.startsWith('img_'))).map(p => ({ label: p.name, value: p.id }))]"
                 :model-value="String(get('系统.扩展.image.config.defaultNpcPngPreset') ?? '')"
                 @update:model-value="setValue('系统.扩展.image.config.defaultNpcPngPreset', $event)"
               />
             </div>
             <div class="form-section">
-              <label class="form-label">场景画师串</label>
+              <label class="form-label">{{ $t('image.presets.sceneArtist') }}</label>
               <AgaSelect
-                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'scene').map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: $t('image.presets.notUsed'), value: '' }, ...artistPresets.filter(p => p.scope === 'scene').map(p => ({ label: p.name, value: p.id }))]"
                 :model-value="String(get('系统.扩展.image.config.defaultSceneArtistPreset') ?? '')"
                 @update:model-value="setValue('系统.扩展.image.config.defaultSceneArtistPreset', $event)"
               />
             </div>
             <div class="form-section">
-              <label class="form-label">场景 PNG 预设</label>
+              <label class="form-label">{{ $t('image.presets.scenePng') }}</label>
               <AgaSelect
-                :options="[{ label: '不使用', value: '' }, ...artistPresets.filter(p => p.scope === 'scene' && (p.id.startsWith('png_') || p.id.startsWith('img_'))).map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: $t('image.presets.notUsed'), value: '' }, ...artistPresets.filter(p => p.scope === 'scene' && (p.id.startsWith('png_') || p.id.startsWith('img_'))).map(p => ({ label: p.name, value: p.id }))]"
                 :model-value="String(get('系统.扩展.image.config.defaultScenePngPreset') ?? '')"
                 @update:model-value="setValue('系统.扩展.image.config.defaultScenePngPreset', $event)"
               />
@@ -4115,13 +4165,13 @@ function clearNpcImages() {
 
         <!-- Section: Character Anchor Management (MRJH §J Sec 2) -->
         <div class="preset-card">
-          <span class="preset-card-badge">角色锚点</span>
-          <h3 class="section-label">角色锚定管理</h3>
-          <p class="form-hint">角色锚点严格跟随 NPC，每个角色只保留一个锚点。后续生图会直接附加锚点，词组转化器只生成镜头、动作、构图与环境。</p>
+          <span class="preset-card-badge">{{ $t('image.presets.badgeAnchor') }}</span>
+          <h3 class="section-label">{{ $t('image.presets.anchorTitle') }}</h3>
+          <p class="form-hint">{{ $t('image.presets.anchorHint') }}</p>
 
           <div class="anchor-layout">
             <div class="anchor-list-col">
-              <h4 class="form-label">锚点列表</h4>
+              <h4 class="form-label">{{ $t('image.presets.anchorList') }}</h4>
               <div class="anchor-list">
                 <button
                   v-for="a in characterAnchors"
@@ -4132,20 +4182,20 @@ function clearNpcImages() {
                   <span class="preset-item-name">{{ a.name }}</span>
                   <span class="form-hint">{{ a.npcName }}</span>
                   <span class="anchor-badges">
-                    <span :class="a.enabled ? 'anchor-badge--on' : 'anchor-badge--off'">{{ a.enabled ? '启用' : '停用' }}</span>
-                    <span v-if="a.sceneLink" class="anchor-badge--link">场景联动</span>
+                    <span :class="a.enabled ? 'anchor-badge--on' : 'anchor-badge--off'">{{ a.enabled ? $t('image.presets.anchorEnabled') : $t('image.presets.anchorDisabled') }}</span>
+                    <span v-if="a.sceneLink" class="anchor-badge--link">{{ $t('image.presets.anchorSceneLink') }}</span>
                   </span>
                   <span v-if="a.positive" class="preset-item-preview">{{ a.positive.slice(0, 60) }}</span>
                 </button>
               </div>
               <div v-if="characterAnchors.length === 0" class="transformer-empty">
-                <span class="form-hint">请选择一个 NPC，再直接 AI 提取该角色的唯一锚点。</span>
+                <span class="form-hint">{{ $t('image.presets.anchorEmptyHint') }}</span>
               </div>
             </div>
 
             <div class="anchor-editor-col">
               <div class="form-section">
-                <label class="form-label">绑定 NPC</label>
+                <label class="form-label">{{ $t('image.presets.anchorBindNpc') }}</label>
                 <AgaSelect
                   :options="npcOptions"
                   :model-value="editAnchorNpc"
@@ -4153,14 +4203,14 @@ function clearNpcImages() {
                 />
               </div>
               <div class="form-section">
-                <label class="form-label">提取附加要求</label>
-                <input v-model="anchorExtractRequirements" class="form-input" placeholder="例如：更重视脸部、发色、胸型和常驻衣着" />
+                <label class="form-label">{{ $t('image.presets.anchorExtraReq') }}</label>
+                <input v-model="anchorExtractRequirements" class="form-input" :placeholder="$t('image.presets.anchorExtraReqPlaceholder')" />
               </div>
 
               <div class="anchor-actions-row">
-                <AgaButton variant="secondary" size="sm" :loading="anchorExtracting" @click="extractAnchor">{{ anchorExtracting ? '提取中…' : 'AI 提取锚点' }}</AgaButton>
-                <AgaButton v-if="selectedAnchor" variant="primary" size="sm" @click="saveAnchor">保存锚点</AgaButton>
-                <AgaButton v-if="selectedAnchor" variant="danger" size="sm" @click="deleteAnchor">删除锚点</AgaButton>
+                <AgaButton variant="secondary" size="sm" :loading="anchorExtracting" @click="extractAnchor">{{ anchorExtracting ? $t('image.presets.anchorExtracting') : $t('image.presets.anchorExtractAI') }}</AgaButton>
+                <AgaButton v-if="selectedAnchor" variant="primary" size="sm" @click="saveAnchor">{{ $t('image.presets.anchorSave') }}</AgaButton>
+                <AgaButton v-if="selectedAnchor" variant="danger" size="sm" @click="deleteAnchor">{{ $t('image.presets.anchorDelete') }}</AgaButton>
               </div>
 
               <!-- Extract status message (MRJH: 3-state colored box) -->
@@ -4175,41 +4225,41 @@ function clearNpcImages() {
 
               <template v-if="selectedAnchor">
                 <div class="form-section">
-                  <label class="form-label">锚点名称</label>
+                  <label class="form-label">{{ $t('image.presets.anchorName') }}</label>
                   <input v-model="editAnchorName" class="form-input" />
                 </div>
 
                 <div class="anchor-toggles">
                   <div class="form-section form-section--inline">
-                    <label class="form-label">启用锚点</label>
+                    <label class="form-label">{{ $t('image.presets.anchorEnable') }}</label>
                     <AgaToggle :model-value="selectedAnchor.enabled" @update:model-value="toggleAnchorProp('enabled', $event)" />
                   </div>
-                  <span class="form-hint">关闭后不参与生图</span>
+                  <span class="form-hint">{{ $t('image.presets.anchorEnableOff') }}</span>
 
                   <div class="form-section form-section--inline">
-                    <label class="form-label">默认附加</label>
+                    <label class="form-label">{{ $t('image.presets.anchorDefaultAppend') }}</label>
                     <AgaToggle :model-value="selectedAnchor.defaultAppend" @update:model-value="toggleAnchorProp('defaultAppend', $event)" />
                   </div>
-                  <span class="form-hint">NPC 单图自动带入</span>
+                  <span class="form-hint">{{ $t('image.presets.anchorDefaultAppendHint') }}</span>
 
                   <div class="form-section form-section--inline">
-                    <label class="form-label">场景联动</label>
+                    <label class="form-label">{{ $t('image.presets.anchorSceneLinkLabel') }}</label>
                     <AgaToggle :model-value="selectedAnchor.sceneLink" @update:model-value="toggleAnchorProp('sceneLink', $event)" />
                   </div>
-                  <span class="form-hint">场景图自动注入</span>
+                  <span class="form-hint">{{ $t('image.presets.anchorSceneLinkHint') }}</span>
                 </div>
 
                 <div class="form-section">
-                  <label class="form-label">正面提示词</label>
-                  <textarea v-model="editAnchorPositive" class="form-textarea" rows="4" placeholder="角色外貌、服饰、特征的正面描述标签…" />
+                  <label class="form-label">{{ $t('image.presets.anchorPositivePrompt') }}</label>
+                  <textarea v-model="editAnchorPositive" class="form-textarea" rows="4" :placeholder="$t('image.presets.anchorPositivePlaceholder')" />
                 </div>
                 <div class="form-section">
-                  <label class="form-label">负面提示词</label>
-                  <textarea v-model="editAnchorNegative" class="form-textarea" rows="2" placeholder="需要避免的特征…" />
+                  <label class="form-label">{{ $t('image.presets.anchorNegativePrompt') }}</label>
+                  <textarea v-model="editAnchorNegative" class="form-textarea" rows="2" :placeholder="$t('image.presets.anchorNegativePlaceholder')" />
                 </div>
 
                 <div v-if="selectedAnchor.structuredFeatures && Object.keys(selectedAnchor.structuredFeatures).length > 0" class="form-section">
-                  <label class="form-label">结构化特征</label>
+                  <label class="form-label">{{ $t('image.presets.anchorStructuredFeatures') }}</label>
                   <div class="anchor-features">
                     <div v-for="(val, key) in selectedAnchor.structuredFeatures" :key="key" class="anchor-feature-row">
                       <span class="form-label">{{ key }}</span>
@@ -4219,14 +4269,14 @@ function clearNpcImages() {
                 </div>
 
                 <div v-if="selectedAnchor.source || selectedAnchor.model" class="anchor-status-card">
-                  <span v-if="selectedAnchor.source" class="form-hint">来源: {{ selectedAnchor.source }}</span>
-                  <span v-if="selectedAnchor.model" class="form-hint">模型: {{ selectedAnchor.model }}</span>
-                  <span class="form-hint">绑定角色: {{ selectedAnchor.npcName }}</span>
+                  <span v-if="selectedAnchor.source" class="form-hint">{{ $t('image.presets.anchorSource', { source: selectedAnchor.source }) }}</span>
+                  <span v-if="selectedAnchor.model" class="form-hint">{{ $t('image.presets.anchorModel', { model: selectedAnchor.model }) }}</span>
+                  <span class="form-hint">{{ $t('image.presets.anchorBoundTo', { name: selectedAnchor.npcName }) }}</span>
                 </div>
               </template>
 
               <div v-else-if="characterAnchors.length > 0" class="tab-placeholder" style="padding:var(--space-lg)">
-                <p>← 选择一个锚点来编辑</p>
+                <p>{{ $t('image.presets.anchorSelectEdit') }}</p>
               </div>
             </div>
           </div>
@@ -4234,24 +4284,24 @@ function clearNpcImages() {
 
         <!-- Section: 图片风格素材 (renamed from PNG画风预设 — R6) -->
         <div class="preset-card">
-          <span class="preset-card-badge">图片风格素材</span>
+          <span class="preset-card-badge">{{ $t('image.presets.badgeStyleAssets') }}</span>
           <div class="preset-card-header">
             <div>
-              <h3 class="section-label">PNG 元数据 · 图片提炼 · 画师串</h3>
-              <p class="form-hint">导入 PNG 解析元数据，或导入任意图片提炼画风。</p>
+              <h3 class="section-label">{{ $t('image.presets.styleAssetsTitle') }}</h3>
+              <p class="form-hint">{{ $t('image.presets.styleAssetsHint') }}</p>
             </div>
             <div class="preset-card-actions">
-              <AgaButton variant="ghost" size="sm" @click="exportArtistPresets">导出预设</AgaButton>
+              <AgaButton variant="ghost" size="sm" @click="exportArtistPresets">{{ $t('image.presets.exportPresets') }}</AgaButton>
               <label class="png-import-btn">
-                导入预设
+                {{ $t('image.presets.importPresets') }}
                 <input type="file" accept="application/json,.json" style="display:none" @change="importArtistPresets" />
               </label>
               <label class="png-import-btn">
-                导入 PNG
+                {{ $t('image.presets.importPng') }}
                 <input type="file" accept="image/png" style="display:none" @change="importPng" />
               </label>
               <label class="png-import-btn">
-                导入图片并提炼
+                {{ $t('image.presets.importImageAnalyze') }}
                 <input type="file" accept="image/png,image/jpeg,image/webp" style="display:none" @change="importImageForUnderstanding" />
               </label>
             </div>
@@ -4262,37 +4312,37 @@ function clearNpcImages() {
             <div class="understanding-header">
               <div class="understanding-preview">
                 <img v-if="understandingCoverDataUrl" :src="understandingCoverDataUrl" alt="preview" style="width:60px;height:42px;border-radius:4px;object-fit:cover" />
-                <span v-else class="form-hint">无预览</span>
+                <span v-else class="form-hint">{{ $t('image.presets.noPreview') }}</span>
               </div>
               <div>
-                <span class="form-label">{{ understandingFile?.name ?? '未知文件' }}</span>
+                <span class="form-label">{{ understandingFile?.name ?? $t('image.presets.unknownFile') }}</span>
                 <span class="form-hint">{{ understandingFile ? `${(understandingFile.size / 1024).toFixed(0)}KB` : '' }}</span>
               </div>
-              <AgaButton variant="ghost" size="sm" @click="understandingMode = false">关闭</AgaButton>
+              <AgaButton variant="ghost" size="sm" @click="understandingMode = false">{{ $t('image.presets.close') }}</AgaButton>
             </div>
 
             <div class="understanding-controls">
               <div class="form-section">
-                <label class="form-label">分析模式</label>
+                <label class="form-label">{{ $t('image.presets.analyzeMode') }}</label>
                 <AgaSelect
                   :options="[
-                    { label: '标签 (WD Tagging)', value: 'tags' },
-                    { label: '描述 (Captioning)', value: 'caption' },
-                    { label: '标签 + 描述', value: 'both' },
+                    { label: $t('image.presets.analyzeTags'), value: 'tags' },
+                    { label: $t('image.presets.analyzeCaption'), value: 'caption' },
+                    { label: $t('image.presets.analyzeBoth'), value: 'both' },
                   ]"
                   v-model="understandingTask"
                 />
               </div>
-              <p class="form-hint" style="color: var(--color-amber-400, #fbbf24);">图片提炼固定使用 Civitai API（无论生图后端），需要已配置的 Civitai API 密钥和 Buzz 余额。Mature 内容可能需要对应账号权限。</p>
+              <p class="form-hint" style="color: var(--color-amber-400, #fbbf24);">{{ $t('image.presets.analyzeCivitaiNote') }}</p>
               <AgaButton variant="primary" size="sm" :loading="understandingLoading" @click="runUnderstanding">
-                {{ understandingLoading ? '提炼中…' : '开始提炼' }}
+                {{ understandingLoading ? $t('image.presets.analyzing') : $t('image.presets.startAnalyze') }}
               </AgaButton>
               <span v-if="understandingError" class="form-hint" style="color: var(--color-error, #f87171);">{{ understandingError }}</span>
             </div>
 
             <div v-if="understandingResult" class="understanding-result">
               <div v-if="understandingResult.tags?.length" class="form-section">
-                <label class="form-label">标签 ({{ understandingResult.tags.length }})</label>
+                <label class="form-label">{{ $t('image.presets.tagsLabel', { n: understandingResult.tags.length }) }}</label>
                 <div class="understanding-tags">
                   <span v-for="tag in understandingResult.tags.slice(0, 30)" :key="tag.text" class="understanding-tag">
                     {{ tag.text }} <span v-if="tag.confidence" class="understanding-tag-conf">{{ (tag.confidence * 100).toFixed(0) }}%</span>
@@ -4300,16 +4350,16 @@ function clearNpcImages() {
                 </div>
               </div>
               <div v-if="understandingResult.caption" class="form-section">
-                <label class="form-label">描述</label>
+                <label class="form-label">{{ $t('image.presets.captionLabel') }}</label>
                 <p class="form-hint">{{ understandingResult.caption }}</p>
               </div>
               <div class="form-section">
-                <label class="form-label">生成的提示词（可编辑）</label>
+                <label class="form-label">{{ $t('image.presets.generatedPrompt') }}</label>
                 <textarea v-model="understandingEditDraft" class="form-textarea" rows="4" />
               </div>
               <div class="understanding-save-row">
-                <AgaButton variant="primary" size="sm" @click="saveUnderstandingAsPreset('npc')">保存为 NPC 画风</AgaButton>
-                <AgaButton variant="secondary" size="sm" @click="saveUnderstandingAsPreset('scene')">保存为场景画风</AgaButton>
+                <AgaButton variant="primary" size="sm" @click="saveUnderstandingAsPreset('npc')">{{ $t('image.presets.saveAsNpcStyle') }}</AgaButton>
+                <AgaButton variant="secondary" size="sm" @click="saveUnderstandingAsPreset('scene')">{{ $t('image.presets.saveAsSceneStyle') }}</AgaButton>
               </div>
             </div>
           </div>
@@ -4317,20 +4367,20 @@ function clearNpcImages() {
           <!-- Reference Library (P1-8) -->
           <div v-if="!understandingMode && referenceLibrary.length > 0" class="ref-lib-section">
             <div class="ref-lib-header">
-              <span class="form-label">参考素材库 ({{ referenceLibrary.length }})</span>
+              <span class="form-label">{{ $t('image.presets.refLibrary', { n: referenceLibrary.length }) }}</span>
             </div>
             <div class="ref-lib-list">
               <div v-for="entry in referenceLibrary" :key="entry.id" class="ref-lib-item">
                 <div class="ref-lib-thumb" @vue:mounted="loadRefLibThumbnail(entry.assetId)">
                   <img v-if="refLibThumbnails[entry.assetId]" :src="refLibThumbnails[entry.assetId]" alt="thumb" />
-                  <span v-else class="form-hint" style="font-size:0.6rem">{{ refLibThumbnails[entry.assetId] === '' ? '缺失' : '…' }}</span>
+                  <span v-else class="form-hint" style="font-size:0.6rem">{{ refLibThumbnails[entry.assetId] === '' ? $t('image.presets.refMissing') : '…' }}</span>
                 </div>
                 <div class="ref-lib-info">
                   <span class="ref-lib-name">{{ entry.name }}</span>
                   <span class="form-hint">{{ entry.source }} · {{ new Date(entry.createdAt).toLocaleDateString() }}</span>
                 </div>
                 <div class="ref-lib-actions">
-                  <button type="button" class="secret-card-btn" style="font-size:0.65rem;" @click="deleteReferenceEntry(entry.id)">删除</button>
+                  <button type="button" class="secret-card-btn" style="font-size:0.65rem;" @click="deleteReferenceEntry(entry.id)">{{ $t('image.presets.refDelete') }}</button>
                 </div>
               </div>
             </div>
@@ -4338,20 +4388,20 @@ function clearNpcImages() {
 
           <!-- Sub-group labels (A6) -->
           <div v-if="!understandingMode" class="preset-subgroups">
-            <span class="preset-subgroup-label">PNG 元数据</span>
+            <span class="preset-subgroup-label">{{ $t('image.presets.subgroupPngMeta') }}</span>
             <span class="preset-subgroup-sep">·</span>
-            <span class="preset-subgroup-label" :class="{ 'preset-subgroup-label--active': understandingMode }">图片提炼</span>
+            <span class="preset-subgroup-label" :class="{ 'preset-subgroup-label--active': understandingMode }">{{ $t('image.presets.subgroupImageAnalyze') }}</span>
             <span class="preset-subgroup-sep">·</span>
-            <span class="preset-subgroup-label">画师串</span>
+            <span class="preset-subgroup-label">{{ $t('image.presets.subgroupArtist') }}</span>
           </div>
 
           <div v-if="!understandingMode" class="presets-layout">
             <!-- PNG preset list with thumbnails (220px) -->
             <div class="png-preset-list-col">
-              <h4 class="form-label">预设列表</h4>
+              <h4 class="form-label">{{ $t('image.presets.presetList') }}</h4>
               <div class="png-preset-list">
                 <div v-if="pngPresets.length === 0" class="transformer-empty">
-                  <span class="form-hint">暂无 PNG 画风预设</span>
+                  <span class="form-hint">{{ $t('image.presets.noPngPresets') }}</span>
                 </div>
                 <button
                   v-for="p in pngPresets"
@@ -4362,11 +4412,11 @@ function clearNpcImages() {
                   <div class="png-preset-item-inner">
                     <div class="png-preset-thumb">
                       <img v-if="p.pngMeta?.coverDataUrl" :src="p.pngMeta.coverDataUrl" alt="cover" />
-                      <span v-else class="form-hint">无封面</span>
+                      <span v-else class="form-hint">{{ $t('image.presets.noCover') }}</span>
                     </div>
                     <div class="png-preset-info">
                       <span class="preset-item-name">{{ p.name }}</span>
-                      <span class="preset-item-preview">{{ p.positive?.slice(0, 40) || '未提炼画风' }}</span>
+                      <span class="preset-item-preview">{{ p.positive?.slice(0, 40) || $t('image.presets.notAnalyzed') }}</span>
                     </div>
                   </div>
                 </button>
@@ -4380,47 +4430,47 @@ function clearNpcImages() {
                 <div class="png-editor-header">
                   <div class="png-cover-area">
                     <img v-if="selectedPreset.pngMeta.coverDataUrl" :src="selectedPreset.pngMeta.coverDataUrl" class="png-cover-thumb" alt="cover" />
-                    <span v-else class="png-no-cover">未设置封面</span>
+                    <span v-else class="png-no-cover">{{ $t('image.presets.noCoverSet') }}</span>
                   </div>
                   <div class="png-source-info">
                     <div class="form-section">
-                      <label class="form-label">预设名称</label>
+                      <label class="form-label">{{ $t('image.presets.presetName') }}</label>
                       <input v-model="newPresetName" class="form-input" :placeholder="selectedPreset.name" />
                     </div>
                     <div class="png-source-meta">
-                      <span class="form-hint">来源: {{ selectedPreset.pngMeta.source ?? '未知' }}</span>
-                      <span v-if="selectedPreset.pngMeta.parsedParams?.model" class="form-hint">模型: {{ selectedPreset.pngMeta.parsedParams.model }}</span>
+                      <span class="form-hint">{{ $t('image.presets.source', { source: selectedPreset.pngMeta.source ?? $t('image.presets.sourceUnknown') }) }}</span>
+                      <span v-if="selectedPreset.pngMeta.parsedParams?.model" class="form-hint">{{ $t('image.presets.modelLabel', { model: selectedPreset.pngMeta.parsedParams.model }) }}</span>
                     </div>
                   </div>
                 </div>
 
                 <div class="form-section">
-                  <label class="form-label">画师串</label>
+                  <label class="form-label">{{ $t('image.presets.artistString') }}</label>
                   <textarea v-model="newPresetArtist" class="form-textarea" rows="3" />
                 </div>
                 <div class="form-section">
-                  <label class="form-label">正面提示词</label>
+                  <label class="form-label">{{ $t('image.presets.positivePrompt') }}</label>
                   <textarea v-model="newPresetPositive" class="form-textarea" rows="5" />
                 </div>
                 <div class="form-section">
-                  <label class="form-label">负面提示词</label>
+                  <label class="form-label">{{ $t('image.presets.negativePrompt') }}</label>
                   <textarea v-model="newPresetNegative" class="form-textarea" rows="3" />
                 </div>
 
                 <!-- Replicate params toggle -->
                 <div class="form-section form-section--inline">
-                  <label class="form-label">优先复刻原参数</label>
+                  <label class="form-label">{{ $t('image.presets.replicateParams') }}</label>
                   <AgaToggle
                     :model-value="selectedPreset.pngMeta.replicateParams === true"
                     @update:model-value="toggleReplicateParams($event)"
                   />
                 </div>
-                <span class="form-hint">开启后，解析出的步数、采样器、CFG 等参数一并下发到生图后端（分辨率与 Seed 自动剔除）。</span>
+                <span class="form-hint">{{ $t('image.presets.replicateParamsHint') }}</span>
 
                 <!-- Param applicability preview (R10) -->
                 <div v-if="selectedPreset.pngMeta.replicateParams && selectedPresetParamPreview" class="replicate-preview">
                   <div v-if="Object.keys(selectedPresetParamPreview.applied).length > 0" class="replicate-group">
-                    <span class="replicate-group-label replicate-group-label--ok">将应用</span>
+                    <span class="replicate-group-label replicate-group-label--ok">{{ $t('image.presets.willApply') }}</span>
                     <div class="replicate-chips">
                       <span v-for="(val, key) in selectedPresetParamPreview.applied" :key="key" class="replicate-chip replicate-chip--ok">
                         {{ key }}: {{ val }}
@@ -4428,7 +4478,7 @@ function clearNpcImages() {
                     </div>
                   </div>
                   <div v-if="selectedPresetParamPreview.notApplicable.length > 0" class="replicate-group">
-                    <span class="replicate-group-label replicate-group-label--na">无法应用</span>
+                    <span class="replicate-group-label replicate-group-label--na">{{ $t('image.presets.notApplicable') }}</span>
                     <div class="replicate-chips">
                       <span v-for="na in selectedPresetParamPreview.notApplicable" :key="na.key" class="replicate-chip replicate-chip--na" :title="na.reason">
                         {{ na.key }}: {{ na.value }} ({{ na.reason }})
@@ -4439,34 +4489,34 @@ function clearNpcImages() {
 
                 <!-- Expandable metadata -->
                 <details class="prompt-details">
-                  <summary>解析参数与元数据</summary>
+                  <summary>{{ $t('image.presets.parsedMetadata') }}</summary>
                   <div class="png-metadata-content">
                     <div v-if="selectedPreset.pngMeta.originalPrompt" class="png-meta-block">
-                      <span class="form-label">原始正面提示词</span>
+                      <span class="form-label">{{ $t('image.presets.originalPositive') }}</span>
                       <pre class="prompt-text">{{ selectedPreset.pngMeta.originalPrompt }}</pre>
                     </div>
                     <div v-if="selectedPreset.pngMeta.parsedParams && Object.keys(selectedPreset.pngMeta.parsedParams).length > 0" class="png-meta-block">
-                      <span class="form-label">解析参数</span>
+                      <span class="form-label">{{ $t('image.presets.parsedParams') }}</span>
                       <pre class="prompt-text">{{ JSON.stringify(selectedPreset.pngMeta.parsedParams, null, 2) }}</pre>
                     </div>
                     <div v-if="selectedPreset.pngMeta.rawText" class="png-meta-block">
-                      <span class="form-label">原始元数据</span>
+                      <span class="form-label">{{ $t('image.presets.rawMetadata') }}</span>
                       <pre class="prompt-text">{{ selectedPreset.pngMeta.rawText }}</pre>
                     </div>
                   </div>
                 </details>
 
                 <div class="presets-editor-actions">
-                  <AgaButton variant="primary" size="sm" @click="savePreset">保存修改</AgaButton>
-                  <AgaButton variant="danger" size="sm" @click="deletePreset">删除预设</AgaButton>
+                  <AgaButton variant="primary" size="sm" @click="savePreset">{{ $t('image.presets.saveChanges') }}</AgaButton>
+                  <AgaButton variant="danger" size="sm" @click="deletePreset">{{ $t('image.presets.deletePreset') }}</AgaButton>
                 </div>
               </template>
 
               <div v-else-if="selectedPreset && !selectedPreset.pngMeta" class="tab-placeholder">
-                <p>选中的预设不是 PNG 类型，请在画师串管理中编辑。</p>
+                <p>{{ $t('image.presets.notPngType') }}</p>
               </div>
               <div v-else class="tab-placeholder">
-                <p>尚未选择 PNG 画风预设。请导入 PNG 或从列表选择预设。</p>
+                <p>{{ $t('image.presets.noPngSelected') }}</p>
               </div>
             </div>
           </div>
@@ -4474,7 +4524,7 @@ function clearNpcImages() {
           <!-- PNG import inputs at bottom -->
           <div class="png-import-footer">
             <div class="png-import-status">
-              <span v-if="pngImporting" class="png-status png-status--loading">{{ pngImportStatus || '正在解析 PNG…' }}</span>
+              <span v-if="pngImporting" class="png-status png-status--loading">{{ pngImportStatus || $t('image.presets.parsingPng') }}</span>
               <span v-else-if="pngImportStatus" class="png-status">{{ pngImportStatus }}</span>
             </div>
           </div>
@@ -4482,14 +4532,14 @@ function clearNpcImages() {
 
         <!-- Section: 画师串预设管理 (MRJH: separate section) -->
         <div class="preset-card">
-          <span class="preset-card-badge">画师串管理</span>
+          <span class="preset-card-badge">{{ $t('image.presets.badgeArtistMgmt') }}</span>
           <div class="preset-card-header">
-            <h3 class="section-label">画师串预设管理</h3>
+            <h3 class="section-label">{{ $t('image.presets.artistMgmtTitle') }}</h3>
             <div class="preset-card-actions">
-              <AgaButton variant="secondary" size="sm" @click="createPreset">新增预设</AgaButton>
-              <AgaButton variant="ghost" size="sm" @click="exportArtistPresets">导出预设</AgaButton>
+              <AgaButton variant="secondary" size="sm" @click="createPreset">{{ $t('image.presets.newPreset') }}</AgaButton>
+              <AgaButton variant="ghost" size="sm" @click="exportArtistPresets">{{ $t('image.presets.exportPresets') }}</AgaButton>
               <label class="png-import-btn">
-                导入预设
+                {{ $t('image.presets.importPresets') }}
                 <input type="file" accept="application/json,.json" style="display:none" @change="importArtistPresets" />
               </label>
             </div>
@@ -4497,16 +4547,16 @@ function clearNpcImages() {
 
           <div class="artist-preset-controls">
             <div class="form-section">
-              <label class="form-label">适用范围</label>
+              <label class="form-label">{{ $t('image.presets.scopeLabel') }}</label>
               <div class="presets-scope-toggle">
                 <AgaButton :variant="presetScope === 'npc' ? 'primary' : 'secondary'" size="sm" @click="presetScope = 'npc'">NPC</AgaButton>
-                <AgaButton :variant="presetScope === 'scene' ? 'primary' : 'secondary'" size="sm" @click="presetScope = 'scene'">场景</AgaButton>
+                <AgaButton :variant="presetScope === 'scene' ? 'primary' : 'secondary'" size="sm" @click="presetScope = 'scene'">{{ $t('image.presets.scopeScene') }}</AgaButton>
               </div>
             </div>
             <div class="form-section">
-              <label class="form-label">当前编辑</label>
+              <label class="form-label">{{ $t('image.presets.currentEdit') }}</label>
               <AgaSelect
-                :options="[{ label: '未选择预设', value: '' }, ...artistOnlyPresets.map(p => ({ label: p.name, value: p.id }))]"
+                :options="[{ label: $t('image.presets.noPresetSelected'), value: '' }, ...artistOnlyPresets.map(p => ({ label: p.name, value: p.id }))]"
                 :model-value="selectedPresetId"
                 @update:model-value="selectedPresetId = $event; loadPresetIntoEditor()"
               />
@@ -4516,43 +4566,43 @@ function clearNpcImages() {
           <template v-if="selectedPreset && !selectedPreset.pngMeta">
             <div class="artist-preset-editor">
               <div class="form-section">
-                <label class="form-label">预设名称</label>
+                <label class="form-label">{{ $t('image.presets.presetName') }}</label>
                 <input v-model="newPresetName" class="form-input" />
               </div>
               <div class="form-section">
-                <label class="form-label">画师串</label>
-                <textarea v-model="newPresetArtist" class="form-textarea" rows="3" placeholder="画师名、风格标签" />
+                <label class="form-label">{{ $t('image.presets.artistString') }}</label>
+                <textarea v-model="newPresetArtist" class="form-textarea" rows="3" :placeholder="$t('image.presets.artistPlaceholder')" />
               </div>
               <div class="form-section">
-                <label class="form-label">正面提示词</label>
-                <textarea v-model="newPresetPositive" class="form-textarea" rows="5" placeholder="质量标签、风格描述" />
+                <label class="form-label">{{ $t('image.presets.positivePrompt') }}</label>
+                <textarea v-model="newPresetPositive" class="form-textarea" rows="5" :placeholder="$t('image.presets.positivePlaceholder')" />
               </div>
               <div class="form-section">
-                <label class="form-label">负面提示词</label>
-                <textarea v-model="newPresetNegative" class="form-textarea" rows="3" placeholder="需要排除的内容" />
+                <label class="form-label">{{ $t('image.presets.negativePrompt') }}</label>
+                <textarea v-model="newPresetNegative" class="form-textarea" rows="3" :placeholder="$t('image.presets.negativePlaceholder')" />
               </div>
               <div class="presets-editor-actions">
-                <AgaButton variant="primary" size="sm" @click="savePreset">保存修改</AgaButton>
-                <AgaButton variant="danger" size="sm" @click="deletePreset">删除预设</AgaButton>
+                <AgaButton variant="primary" size="sm" @click="savePreset">{{ $t('image.presets.saveChanges') }}</AgaButton>
+                <AgaButton variant="danger" size="sm" @click="deletePreset">{{ $t('image.presets.deletePreset') }}</AgaButton>
               </div>
             </div>
           </template>
           <div v-else class="tab-placeholder">
-            <p>请先选择或新增预设。</p>
+            <p>{{ $t('image.presets.selectOrCreate') }}</p>
           </div>
         </div>
         <!-- Section C: 词组转化器预设 CRUD -->
         <div class="preset-card">
-          <span class="preset-card-badge">词组转化器</span>
-          <h3 class="section-label">词组转化器预设</h3>
-          <p class="form-hint">管理 tokenizer AI 的系统提示词，影响如何将中文描述转化为英文图像标签</p>
+          <span class="preset-card-badge">{{ $t('image.presets.badgeTransformer') }}</span>
+          <h3 class="section-label">{{ $t('image.presets.transformerTitle') }}</h3>
+          <p class="form-hint">{{ $t('image.presets.transformerHint') }}</p>
 
           <div class="transformer-crud-layout">
             <div class="transformer-sidebar">
               <div class="transformer-scope-toggle">
                 <AgaButton :variant="transformerScope === 'npc' ? 'primary' : 'secondary'" size="sm" @click="transformerScope = 'npc'">NPC</AgaButton>
-                <AgaButton :variant="transformerScope === 'scene' ? 'primary' : 'secondary'" size="sm" @click="transformerScope = 'scene'">场景</AgaButton>
-                <AgaButton :variant="transformerScope === 'secret' ? 'primary' : 'secondary'" size="sm" @click="transformerScope = 'secret'">秘密</AgaButton>
+                <AgaButton :variant="transformerScope === 'scene' ? 'primary' : 'secondary'" size="sm" @click="transformerScope = 'scene'">{{ $t('image.presets.transformerScopeScene') }}</AgaButton>
+                <AgaButton :variant="transformerScope === 'secret' ? 'primary' : 'secondary'" size="sm" @click="transformerScope = 'secret'">{{ $t('image.presets.transformerScopeSecret') }}</AgaButton>
               </div>
 
               <div class="transformer-list">
@@ -4566,13 +4616,13 @@ function clearNpcImages() {
                   <span v-if="t.prompt" class="preset-item-preview">{{ t.prompt.slice(0, 40) }}</span>
                 </button>
                 <div v-if="scopedTransformers.length === 0" class="transformer-empty">
-                  <span class="form-hint">暂无{{ transformerScope === 'npc' ? 'NPC' : transformerScope === 'scene' ? '场景' : '秘密' }}转化器预设</span>
+                  <span class="form-hint">{{ $t('image.presets.noTransformerPresets', { scope: transformerScope === 'npc' ? 'NPC' : transformerScope === 'scene' ? $t('image.presets.transformerScopeScene') : $t('image.presets.transformerScopeSecret') }) }}</span>
                 </div>
               </div>
 
               <div class="presets-actions">
-                <input v-model="newTransformerName" class="form-input" placeholder="新预设名称" style="font-size:12px" />
-                <AgaButton variant="secondary" size="sm" @click="createTransformerPreset">+ 新增</AgaButton>
+                <input v-model="newTransformerName" class="form-input" :placeholder="$t('image.presets.newPresetNamePlaceholder')" style="font-size:12px" />
+                <AgaButton variant="secondary" size="sm" @click="createTransformerPreset">{{ $t('image.presets.addNew') }}</AgaButton>
               </div>
             </div>
 
@@ -4581,28 +4631,28 @@ function clearNpcImages() {
                 <h4 class="section-label">{{ selectedTransformer.name }}</h4>
 
                 <div class="form-section">
-                  <label class="form-label">转化器提示词</label>
-                  <span class="form-hint">定义 AI 如何将{{ transformerScope === 'npc' ? '角色描述' : transformerScope === 'scene' ? '场景描述' : '秘密部位描述' }}转化为图像标签</span>
+                  <label class="form-label">{{ $t('image.presets.transformerPromptLabel') }}</label>
+                  <span class="form-hint">{{ $t('image.presets.transformerPromptHint', { scope: transformerScope === 'npc' ? $t('image.presets.transformerScopeNpcDesc') : transformerScope === 'scene' ? $t('image.presets.transformerScopeSceneDesc') : $t('image.presets.transformerScopeSecretDesc') }) }}</span>
                   <textarea
                     v-model="editTransformerPrompt"
                     class="form-textarea"
                     rows="8"
                     :placeholder="transformerScope === 'npc'
-                      ? '如：将以下角色信息转化为 NovelAI 格式标签，注重外貌、服饰、表情…'
+                      ? $t('image.presets.transformerNpcPlaceholder')
                       : transformerScope === 'scene'
-                        ? '如：将场景描述转化为背景/中景/前景分层标签…'
-                        : '如：将秘密部位描述转化为特写构图标签…'"
+                        ? $t('image.presets.transformerScenePlaceholder')
+                        : $t('image.presets.transformerSecretPlaceholder')"
                   />
                 </div>
 
                 <div class="presets-editor-actions">
-                  <AgaButton variant="primary" size="sm" @click="saveTransformerPreset">保存修改</AgaButton>
-                  <AgaButton variant="danger" size="sm" @click="deleteTransformerPreset">删除预设</AgaButton>
+                  <AgaButton variant="primary" size="sm" @click="saveTransformerPreset">{{ $t('image.presets.saveChanges') }}</AgaButton>
+                  <AgaButton variant="danger" size="sm" @click="deleteTransformerPreset">{{ $t('image.presets.deletePreset') }}</AgaButton>
                 </div>
               </template>
 
               <div v-else class="tab-placeholder" style="padding:var(--space-xl)">
-                <p>← 选择或新增一个转化器预设来编辑</p>
+                <p>{{ $t('image.presets.selectOrCreateTransformer') }}</p>
               </div>
             </div>
           </div>
@@ -4614,34 +4664,34 @@ function clearNpcImages() {
         <div class="rules-layout">
           <div class="rules-header">
             <div>
-              <h3 class="section-label">提示词规则中心</h3>
+              <h3 class="section-label">{{ $t('image.rules.centerTitle') }}</h3>
             </div>
             <div class="rules-header-actions">
-              <AgaButton variant="ghost" size="sm" @click="exportRules">导出全部</AgaButton>
+              <AgaButton variant="ghost" size="sm" @click="exportRules">{{ $t('image.rules.exportAll') }}</AgaButton>
               <label class="png-import-btn">
-                导入全部
+                {{ $t('image.rules.importAll') }}
                 <input type="file" accept="application/json,.json" style="display:none" @change="importRules" />
               </label>
-              <AgaButton variant="primary" size="sm" @click="saveActiveRules">保存生效配置</AgaButton>
+              <AgaButton variant="primary" size="sm" @click="saveActiveRules">{{ $t('image.rules.saveActive') }}</AgaButton>
             </div>
           </div>
 
           <!-- Sub-section 1: Model Rulesets (collapsible) -->
           <div class="model-ruleset-section" :class="{ 'model-ruleset-section--expanded': modelRulesetExpanded }">
             <button class="model-ruleset-toggle" @click="modelRulesetExpanded = !modelRulesetExpanded">
-              <span class="section-label">模型规则集</span>
-              <span class="form-hint" style="flex:1">选择当前启用的模型规则，并编辑基础模式与锚定模式规则。</span>
+              <span class="section-label">{{ $t('image.rules.modelRulesetTitle') }}</span>
+              <span class="form-hint" style="flex:1">{{ $t('image.rules.modelRulesetHint') }}</span>
               <span v-if="activeModelRuleset" class="model-ruleset-active-name">{{ activeModelRuleset.name }}</span>
-              <span class="model-ruleset-expand-text">{{ modelRulesetExpanded ? '收起' : '展开' }}</span>
+              <span class="model-ruleset-expand-text">{{ modelRulesetExpanded ? $t('image.rules.collapse') : $t('image.rules.expand') }}</span>
             </button>
 
             <div v-if="modelRulesetExpanded" class="model-ruleset-body">
               <div class="model-ruleset-actions">
-                <AgaButton variant="secondary" size="sm" @click="createModelRuleset">新增规则集</AgaButton>
-                <AgaButton v-if="editingModelRuleset" variant="danger" size="sm" @click="deleteModelRuleset">删除当前</AgaButton>
-                <AgaButton variant="ghost" size="sm" @click="exportModelRulesets">导出</AgaButton>
+                <AgaButton variant="secondary" size="sm" @click="createModelRuleset">{{ $t('image.rules.newRuleset') }}</AgaButton>
+                <AgaButton v-if="editingModelRuleset" variant="danger" size="sm" @click="deleteModelRuleset">{{ $t('image.rules.deleteCurrent') }}</AgaButton>
+                <AgaButton variant="ghost" size="sm" @click="exportModelRulesets">{{ $t('image.rules.export') }}</AgaButton>
                 <label class="png-import-btn">
-                  导入
+                  {{ $t('image.rules.import') }}
                   <input type="file" accept="application/json,.json" style="display:none" @change="importModelRulesets" />
                 </label>
               </div>
@@ -4649,55 +4699,55 @@ function clearNpcImages() {
               <div class="model-ruleset-two-col">
                 <div class="model-ruleset-left">
                   <div class="form-section">
-                    <label class="form-label">当前编辑</label>
+                    <label class="form-label">{{ $t('image.rules.currentEditLabel') }}</label>
                     <AgaSelect
                       v-if="modelRulesetOptions.length > 0"
                       :options="modelRulesetOptions"
                       :model-value="editingModelRulesetId"
                       @update:model-value="selectModelRuleset($event)"
                     />
-                    <span v-else class="form-hint">暂无规则集，请新增</span>
+                    <span v-else class="form-hint">{{ $t('image.rules.noRulesets') }}</span>
                   </div>
 
                   <template v-if="editingModelRuleset">
                     <div class="form-section form-section--inline">
-                      <label class="form-label">启用当前规则集</label>
+                      <label class="form-label">{{ $t('image.rules.enableRuleset') }}</label>
                       <AgaToggle
                         :model-value="editingModelRuleset.enabled"
                         @update:model-value="toggleModelRulesetEnabled($event)"
                       />
                     </div>
-                    <span class="form-hint">锚定模式开启后，会直接改用锚定模式模型规则。</span>
+                    <span class="form-hint">{{ $t('image.rules.enableRulesetHint') }}</span>
 
                     <div class="form-section form-section--inline">
-                      <label class="form-label">兼容模式</label>
+                      <label class="form-label">{{ $t('image.rules.compatMode') }}</label>
                       <AgaToggle
                         :model-value="editingModelRuleset.compatMode"
                         @update:model-value="toggleModelRulesetCompat($event)"
                       />
                     </div>
-                    <span class="form-hint">开启后，画师串与 PNG 画风正面词会先发给 AI 提炼，再写入最终提示词。</span>
+                    <span class="form-hint">{{ $t('image.rules.compatModeHint') }}</span>
                   </template>
                 </div>
 
                 <div class="model-ruleset-right">
                   <template v-if="editingModelRuleset">
                     <div class="form-section">
-                      <label class="form-label">规则集名称</label>
-                      <input v-model="editModelRulesetName" class="form-input" placeholder="如：NovelAI V4 专用" />
+                      <label class="form-label">{{ $t('image.rules.rulesetName') }}</label>
+                      <input v-model="editModelRulesetName" class="form-input" :placeholder="$t('image.rules.rulesetNamePlaceholder')" />
                     </div>
                     <div class="form-section">
-                      <label class="form-label">基础模型规则</label>
-                      <textarea v-model="editModelRulesetBase" class="form-textarea" rows="5" placeholder="模型基础规则（如：Output must be in NovelAI tag format, comma-separated…）" />
+                      <label class="form-label">{{ $t('image.rules.baseModelRule') }}</label>
+                      <textarea v-model="editModelRulesetBase" class="form-textarea" rows="5" :placeholder="$t('image.rules.baseModelRulePlaceholder')" />
                     </div>
                     <div class="form-section">
-                      <label class="form-label">锚定模式模型规则</label>
-                      <textarea v-model="editModelRulesetAnchor" class="form-textarea" rows="5" placeholder="锚定模式规则（如：The character anchor is provided. Only generate pose, lighting, and composition…）" />
+                      <label class="form-label">{{ $t('image.rules.anchorModelRule') }}</label>
+                      <textarea v-model="editModelRulesetAnchor" class="form-textarea" rows="5" :placeholder="$t('image.rules.anchorModelRulePlaceholder')" />
                     </div>
-                    <AgaButton variant="primary" size="sm" @click="saveModelRuleset">保存规则集</AgaButton>
+                    <AgaButton variant="primary" size="sm" @click="saveModelRuleset">{{ $t('image.rules.saveRuleset') }}</AgaButton>
                   </template>
                   <div v-else class="tab-placeholder" style="padding:var(--space-lg)">
-                    <p>← 选择或新增一个模型规则集来编辑</p>
+                    <p>{{ $t('image.rules.selectOrCreateRuleset') }}</p>
                   </div>
                 </div>
               </div>
@@ -4708,26 +4758,26 @@ function clearNpcImages() {
           <div class="rules-template-section">
             <div class="rules-template-header">
               <div>
-                <h4 class="section-label">规则模板</h4>
-                <p class="form-hint">按模块切换编辑 NPC、场景和场景判定规则。</p>
+                <h4 class="section-label">{{ $t('image.rules.templateTitle') }}</h4>
+                <p class="form-hint">{{ $t('image.rules.templateHint') }}</p>
               </div>
               <div class="rules-scope-tabs">
-                <AgaButton :variant="ruleScope === 'npc' ? 'primary' : 'ghost'" size="sm" @click="ruleScope = 'npc'; editingRuleId = ''">NPC 转化规则</AgaButton>
-                <AgaButton :variant="ruleScope === 'scene' ? 'primary' : 'ghost'" size="sm" @click="ruleScope = 'scene'; editingRuleId = ''">场景转化规则</AgaButton>
-                <AgaButton :variant="ruleScope === 'judge' ? 'primary' : 'ghost'" size="sm" @click="ruleScope = 'judge'; editingRuleId = ''">场景判定规则</AgaButton>
+                <AgaButton :variant="ruleScope === 'npc' ? 'primary' : 'ghost'" size="sm" @click="ruleScope = 'npc'; editingRuleId = ''">{{ $t('image.rules.npcTransformRule') }}</AgaButton>
+                <AgaButton :variant="ruleScope === 'scene' ? 'primary' : 'ghost'" size="sm" @click="ruleScope = 'scene'; editingRuleId = ''">{{ $t('image.rules.sceneTransformRule') }}</AgaButton>
+                <AgaButton :variant="ruleScope === 'judge' ? 'primary' : 'ghost'" size="sm" @click="ruleScope = 'judge'; editingRuleId = ''">{{ $t('image.rules.judgeTransformRule') }}</AgaButton>
               </div>
             </div>
 
             <!-- Scope description (MRJH: per-tab hint) -->
             <p class="form-hint" style="margin-bottom:var(--space-sm)">
-              {{ ruleScope === 'npc' ? '角色图使用基础规则；锚定开启后改用专属锚定规则。' :
-                 ruleScope === 'scene' ? '场景图使用空间与构图规则；角色锚定存在时改用场景锚定规则。' :
-                 '用于判断当前文本应生成风景场景还是场景快照。' }}
+              {{ ruleScope === 'npc' ? $t('image.rules.npcScopeHint') :
+                 ruleScope === 'scene' ? $t('image.rules.sceneScopeHint') :
+                 $t('image.rules.judgeScopeHint') }}
             </p>
 
           <!-- Enable toggle -->
           <div class="form-section form-section--inline">
-            <label class="form-label">启用{{ ruleScope === 'npc' ? 'NPC' : ruleScope === 'scene' ? '场景' : '判定' }}转化规则</label>
+            <label class="form-label">{{ $t('image.rules.enableScopeRule', { scope: ruleScope === 'npc' ? 'NPC' : ruleScope === 'scene' ? $t('image.history.typeScene') : $t('image.rules.judgeRule') }) }}</label>
             <AgaToggle
               :model-value="get(`系统.扩展.image.rules.${ruleScope}Enabled`) !== false"
               @update:model-value="setValue(`系统.扩展.image.rules.${ruleScope}Enabled`, $event)"
@@ -4738,9 +4788,9 @@ function clearNpcImages() {
           <div class="rules-two-col">
             <div class="rules-left-col">
               <div class="form-section">
-                <label class="form-label">当前生效</label>
-                <span v-if="activeModelRuleset" class="form-hint" style="color:var(--color-warning)">已被模型规则集「{{ activeModelRuleset.name }}」覆盖</span>
-                <span v-else class="form-hint">选择该范围下生效的规则模板</span>
+                <label class="form-label">{{ $t('image.rules.activeLabel') }}</label>
+                <span v-if="activeModelRuleset" class="form-hint" style="color:var(--color-warning)">{{ $t('image.rules.overriddenByRuleset', { name: activeModelRuleset.name }) }}</span>
+                <span v-else class="form-hint">{{ $t('image.rules.selectActiveHint') }}</span>
                 <AgaSelect
                   :options="activeRuleOptions"
                   :model-value="currentActiveRuleId"
@@ -4750,31 +4800,31 @@ function clearNpcImages() {
               </div>
 
               <div class="form-section">
-                <label class="form-label">当前编辑</label>
+                <label class="form-label">{{ $t('image.rules.currentEditRule') }}</label>
                 <AgaSelect
                   v-if="editRuleOptions.length > 0"
                   :options="editRuleOptions"
                   :model-value="editingRuleId"
                   @update:model-value="selectEditRule($event)"
                 />
-                <span v-else class="form-hint">暂无规则，请先新增</span>
+                <span v-else class="form-hint">{{ $t('image.rules.noRulesHint') }}</span>
               </div>
 
               <div class="rules-crud-buttons">
-                <AgaButton variant="secondary" size="sm" @click="createRuleTemplate">新增规则</AgaButton>
-                <AgaButton v-if="editingRule" variant="danger" size="sm" @click="deleteRuleTemplate">删除当前</AgaButton>
+                <AgaButton variant="secondary" size="sm" @click="createRuleTemplate">{{ $t('image.rules.newRule') }}</AgaButton>
+                <AgaButton v-if="editingRule" variant="danger" size="sm" @click="deleteRuleTemplate">{{ $t('image.rules.deleteCurrentRule') }}</AgaButton>
               </div>
             </div>
 
             <div class="rules-right-col">
               <template v-if="editingRule">
                 <div class="form-section">
-                  <label class="form-label">规则名称</label>
-                  <input v-model="editRuleName" class="form-input" placeholder="规则模板名称" />
+                  <label class="form-label">{{ $t('image.rules.ruleName') }}</label>
+                  <input v-model="editRuleName" class="form-input" :placeholder="$t('image.rules.ruleNamePlaceholder')" />
                 </div>
 
                 <div class="form-section">
-                  <label class="form-label">关联转化器预设</label>
+                  <label class="form-label">{{ $t('image.rules.linkedTransformer') }}</label>
                   <AgaSelect
                     :options="currentTransformerOptions"
                     :model-value="editRuleTransformerId"
@@ -4785,43 +4835,43 @@ function clearNpcImages() {
                 <!-- NPC/Scene: 4 textareas -->
                 <template v-if="ruleScope !== 'judge'">
                   <div class="form-section">
-                    <label class="form-label">基础转化规则</label>
-                    <span class="form-hint">{{ ruleScope === 'npc' ? '定义如何将 NPC 描述转化为图像 prompt' : '定义如何将场景描述转化为图像 prompt' }}</span>
-                    <textarea v-model="editBaseRule" class="form-textarea" rows="8" :placeholder="ruleScope === 'npc' ? 'NPC 基础转化规则模板…' : '场景基础转化规则模板…'" />
+                    <label class="form-label">{{ $t('image.rules.baseTransformRule') }}</label>
+                    <span class="form-hint">{{ ruleScope === 'npc' ? $t('image.rules.baseTransformNpcHint') : $t('image.rules.baseTransformSceneHint') }}</span>
+                    <textarea v-model="editBaseRule" class="form-textarea" rows="8" :placeholder="ruleScope === 'npc' ? $t('image.rules.baseTransformNpcPlaceholder') : $t('image.rules.baseTransformScenePlaceholder')" />
                   </div>
                   <div class="form-section">
-                    <label class="form-label">{{ ruleScope === 'npc' ? '锚定模式专属规则' : '场景锚定专属规则' }}</label>
-                    <span class="form-hint">当{{ ruleScope === 'npc' ? '角色' : '场景' }}锚点已启用时使用此规则</span>
-                    <textarea v-model="editAnchorRule" class="form-textarea" rows="6" placeholder="锚定模式转化规则…" />
+                    <label class="form-label">{{ ruleScope === 'npc' ? $t('image.rules.anchorModeRule') : $t('image.rules.sceneAnchorModeRule') }}</label>
+                    <span class="form-hint">{{ $t('image.rules.anchorModeHint', { scope: ruleScope === 'npc' ? $t('image.history.typeCharacter') : $t('image.history.typeScene') }) }}</span>
+                    <textarea v-model="editAnchorRule" class="form-textarea" rows="6" :placeholder="$t('image.rules.anchorModePlaceholder')" />
                   </div>
                   <div class="form-section">
-                    <label class="form-label">无锚点回退规则</label>
-                    <span class="form-hint">当无锚点时的转化规则</span>
-                    <textarea v-model="editNoAnchorFallback" class="form-textarea" rows="4" placeholder="无锚点回退规则…" />
+                    <label class="form-label">{{ $t('image.rules.noAnchorFallback') }}</label>
+                    <span class="form-hint">{{ $t('image.rules.noAnchorFallbackHint') }}</span>
+                    <textarea v-model="editNoAnchorFallback" class="form-textarea" rows="4" :placeholder="$t('image.rules.noAnchorFallbackPlaceholder')" />
                   </div>
                   <div class="form-section">
-                    <label class="form-label">输出格式规则</label>
-                    <span class="form-hint">约束 AI 的输出格式（标签格式、分隔符等）</span>
-                    <textarea v-model="editOutputFormat" class="form-textarea" rows="4" placeholder="输出格式规则…" />
+                    <label class="form-label">{{ $t('image.rules.outputFormat') }}</label>
+                    <span class="form-hint">{{ $t('image.rules.outputFormatHint') }}</span>
+                    <textarea v-model="editOutputFormat" class="form-textarea" rows="4" :placeholder="$t('image.rules.outputFormatPlaceholder')" />
                   </div>
                 </template>
 
                 <!-- Judge: 1 textarea -->
                 <template v-else>
                   <div class="form-section">
-                    <label class="form-label">判定规则</label>
-                    <span class="form-hint">定义如何判断当前场景应生成"故事快照"（含人物）还是"纯风景"</span>
-                    <textarea v-model="editBaseRule" class="form-textarea" rows="10" placeholder="场景判定规则…" />
+                    <label class="form-label">{{ $t('image.rules.judgeRule') }}</label>
+                    <span class="form-hint">{{ $t('image.rules.judgeRuleHint') }}</span>
+                    <textarea v-model="editBaseRule" class="form-textarea" rows="10" :placeholder="$t('image.rules.judgeRulePlaceholder')" />
                   </div>
                 </template>
 
                 <div class="presets-editor-actions">
-                  <AgaButton variant="primary" size="sm" @click="saveRuleTemplate">保存规则</AgaButton>
+                  <AgaButton variant="primary" size="sm" @click="saveRuleTemplate">{{ $t('image.rules.saveRule') }}</AgaButton>
                 </div>
               </template>
 
               <div v-else class="tab-placeholder" style="padding:var(--space-xl)">
-                <p>← 选择或新增一条规则来编辑</p>
+                <p>{{ $t('image.rules.selectOrCreateRule') }}</p>
               </div>
             </div>
           </div>
@@ -4834,9 +4884,9 @@ function clearNpcImages() {
 
         <!-- §7.1 Basic -->
         <div class="preset-card">
-          <span class="preset-card-badge">基础</span>
+          <span class="preset-card-badge">{{ $t('image.settings.badgeBasic') }}</span>
           <div class="settings-row">
-            <div><span class="form-label">文生图总开关</span></div>
+            <div><span class="form-label">{{ $t('image.settings.masterSwitch') }}</span></div>
             <AgaToggle
               :model-value="enabled"
               @update:model-value="setValue('系统.扩展.image.enabled', $event)"
@@ -4844,8 +4894,8 @@ function clearNpcImages() {
           </div>
           <div class="settings-row">
             <div>
-              <span class="form-label">后端类型</span>
-              <span class="form-hint">新建生图任务时的默认图像 API 后端</span>
+              <span class="form-label">{{ $t('image.settings.backendType') }}</span>
+              <span class="form-hint">{{ $t('image.settings.backendTypeHint') }}</span>
             </div>
             <AgaSelect
               :options="backendOptions"
@@ -4855,8 +4905,8 @@ function clearNpcImages() {
           </div>
           <div class="settings-row">
             <div>
-              <span class="form-label">NPC 生图使用词组转化器</span>
-              <span class="form-hint">将中文角色描述通过 AI 转化为英文图像标签。NovelAI 后端要求必须开启。</span>
+              <span class="form-label">{{ $t('image.settings.useTransformer') }}</span>
+              <span class="form-hint">{{ $t('image.settings.useTransformerHint') }}</span>
             </div>
             <AgaToggle
               :model-value="isNovelAIBackend || get('系统.扩展.image.config.useTransformer') !== false"
@@ -4868,9 +4918,9 @@ function clearNpcImages() {
 
         <!-- §7.2 Backend settings (conditional per backend) -->
         <div v-if="isNovelAIBackend" class="preset-card">
-          <span class="preset-card-badge">NovelAI 设置</span>
+          <span class="preset-card-badge">{{ $t('image.settings.badgeNovelai') }}</span>
           <div class="settings-row">
-            <div><span class="form-label">NovelAI 自定义参数</span></div>
+            <div><span class="form-label">{{ $t('image.settings.novelaiCustomParams') }}</span></div>
             <AgaToggle
               :model-value="get('系统.扩展.image.config.novelai.customParams') === true"
               @update:model-value="setValue('系统.扩展.image.config.novelai.customParams', $event)"
@@ -4878,7 +4928,7 @@ function clearNpcImages() {
           </div>
           <div class="settings-grid-3">
             <div class="form-section">
-              <label class="form-label">采样方法</label>
+              <label class="form-label">{{ $t('image.settings.sampler') }}</label>
               <AgaSelect
                 :options="[
                   { label: 'Euler Ancestral', value: 'k_euler_ancestral' },
@@ -4893,7 +4943,7 @@ function clearNpcImages() {
               />
             </div>
             <div class="form-section">
-              <label class="form-label">噪点表</label>
+              <label class="form-label">{{ $t('image.settings.noiseSchedule') }}</label>
               <AgaSelect
                 :options="[
                   { label: 'Karras', value: 'karras' },
@@ -4906,7 +4956,7 @@ function clearNpcImages() {
               />
             </div>
             <div class="form-section">
-              <label class="form-label">步数</label>
+              <label class="form-label">{{ $t('image.settings.steps') }}</label>
               <input
                 type="number" min="1" max="50" class="form-input"
                 :value="get('系统.扩展.image.config.novelai.steps') ?? 28"
@@ -4924,14 +4974,14 @@ function clearNpcImages() {
               />
             </div>
             <div class="form-section settings-row-inline">
-              <label class="form-label">启用 SMEA</label>
+              <label class="form-label">{{ $t('image.settings.enableSmea') }}</label>
               <AgaToggle
                 :model-value="get('系统.扩展.image.config.novelai.smea') === true"
                 @update:model-value="setValue('系统.扩展.image.config.novelai.smea', $event)"
               />
             </div>
             <div class="form-section">
-              <label class="form-label">固定 Seed</label>
+              <label class="form-label">{{ $t('image.settings.fixedSeed') }}</label>
               <input
                 type="number" min="0" class="form-input"
                 :value="get('系统.扩展.image.config.novelai.seed') ?? 0"
@@ -4940,10 +4990,10 @@ function clearNpcImages() {
             </div>
           </div>
           <div class="form-section">
-            <label class="form-label">默认负面提示词</label>
+            <label class="form-label">{{ $t('image.settings.defaultNegative') }}</label>
             <textarea
               class="form-textarea" rows="4"
-              placeholder="例如：lowres, bad anatomy, text, watermark"
+              :placeholder="$t('image.settings.defaultNegativePlaceholder')"
               :value="get('系统.扩展.image.config.novelai.negativeDefault') ?? ''"
               @input="setValue('系统.扩展.image.config.novelai.negativeDefault', ($event.target as HTMLTextAreaElement).value)"
             />
@@ -4951,28 +5001,27 @@ function clearNpcImages() {
         </div>
 
         <div v-if="settingsBackend === 'comfyui'" class="preset-card">
-          <span class="preset-card-badge">ComfyUI 设置</span>
+          <span class="preset-card-badge">{{ $t('image.settings.badgeComfyui') }}</span>
           <div class="form-section">
-            <label class="form-label">ComfyUI Workflow JSON</label>
+            <label class="form-label">{{ $t('image.settings.comfyuiWorkflow') }}</label>
             <textarea
               class="form-textarea" rows="12"
-              placeholder="粘贴从 ComfyUI 导出的 API workflow JSON。可用占位符：__PROMPT__、__NEGATIVE_PROMPT__、__WIDTH__、__HEIGHT__"
+              :placeholder="$t('image.settings.comfyuiWorkflowPlaceholder')"
               :value="get('系统.扩展.image.config.comfyui.workflowJson') ?? ''"
               @input="setValue('系统.扩展.image.config.comfyui.workflowJson', ($event.target as HTMLTextAreaElement).value)"
             />
-            <p class="form-hint">支持占位符：__PROMPT__、{<!-- -->{prompt}}、__NEGATIVE_PROMPT__、{<!-- -->{negative_prompt}}、__WIDTH__、__HEIGHT__、__STEPS__、__CFG__、__SEED__</p>
+            <p class="form-hint">{{ $t('image.settings.comfyuiWorkflowHint') }}</p>
           </div>
         </div>
 
         <!-- Civitai settings (tiered: basic + advanced) -->
         <div v-if="settingsBackend === 'civitai'" class="preset-card">
-          <span class="preset-card-badge">Civitai 设置</span>
+          <span class="preset-card-badge">{{ $t('image.settings.badgeCivitai') }}</span>
           <div class="settings-row">
             <div>
-              <span class="form-label">允许 Civitai Mature 内容</span>
+              <span class="form-label">{{ $t('image.settings.allowMature') }}</span>
               <p class="form-hint">
-                向 Civitai 发送 allowMatureContent=true。需要账号已开启成人内容并有 Buzz 余额。
-                此选项独立于 AGA 故事系统的 NSFW 模式。如需无限制本地生成，请使用 ComfyUI 或 SD-WebUI。
+                {{ $t('image.settings.allowMatureHint') }}
               </p>
             </div>
             <AgaToggle
@@ -4982,7 +5031,7 @@ function clearNpcImages() {
           </div>
           <div class="settings-grid-3">
             <div class="form-section">
-              <label class="form-label">采样器</label>
+              <label class="form-label">{{ $t('image.settings.civitaiSampler') }}</label>
               <AgaSelect
                 :options="civitaiSchedulerOptions"
                 :model-value="String(get('系统.扩展.image.config.civitai.scheduler') ?? 'EulerA')"
@@ -4990,7 +5039,7 @@ function clearNpcImages() {
               />
             </div>
             <div class="form-section">
-              <label class="form-label">步数</label>
+              <label class="form-label">{{ $t('image.settings.steps') }}</label>
               <input
                 type="number" min="1" max="100" class="form-input"
                 :value="get('系统.扩展.image.config.civitai.steps') ?? 25"
@@ -5008,7 +5057,7 @@ function clearNpcImages() {
           </div>
           <div class="settings-grid-3">
             <div class="form-section">
-              <label class="form-label">Seed (-1 = 随机)</label>
+              <label class="form-label">{{ $t('image.settings.seedRandom') }}</label>
               <input
                 type="number" min="-1" max="4294967295" class="form-input"
                 :value="get('系统.扩展.image.config.civitai.seed') ?? -1"
@@ -5026,7 +5075,7 @@ function clearNpcImages() {
           />
 
           <details class="form-advanced">
-            <summary>高级参数</summary>
+            <summary>{{ $t('image.settings.advancedParams') }}</summary>
             <div class="settings-grid-3">
               <div class="form-section">
                 <label class="form-label">Clip Skip</label>
@@ -5037,7 +5086,7 @@ function clearNpcImages() {
                 />
               </div>
               <div class="form-section">
-                <label class="form-label">输出格式</label>
+                <label class="form-label">{{ $t('image.settings.outputFormat') }}</label>
                 <AgaSelect
                   :options="civitaiOutputFormatOptions"
                   :model-value="String(get('系统.扩展.image.config.civitai.outputFormat') ?? 'png')"
@@ -5046,7 +5095,7 @@ function clearNpcImages() {
               </div>
             </div>
             <div class="form-section">
-              <label class="form-label">附加网络 JSON（非 LoRA / 高级）</label>
+              <label class="form-label">{{ $t('image.settings.additionalNetworks') }}</label>
               <textarea
                 class="form-textarea" rows="3"
                 :class="{ 'form-textarea--error': civitaiNetworksJsonError }"
@@ -5073,11 +5122,11 @@ function clearNpcImages() {
 
           <div class="settings-row" style="margin-top: 8px;">
             <div>
-              <span class="form-label">预估 Buzz 消耗</span>
-              <span class="form-hint">以当前参数向 Civitai 查询费用，不实际生成图片</span>
+              <span class="form-label">{{ $t('image.settings.buzzEstimate') }}</span>
+              <span class="form-hint">{{ $t('image.settings.buzzEstimateHint') }}</span>
             </div>
             <button class="btn-secondary btn-sm" :disabled="civitaiWhatifLoading" @click="runCivitaiWhatif">
-              {{ civitaiWhatifLoading ? '查询中…' : '预估费用' }}
+              {{ civitaiWhatifLoading ? $t('image.settings.buzzQuerying') : $t('image.settings.buzzQuery') }}
             </button>
           </div>
           <p v-if="civitaiWhatifResult" class="form-hint" style="margin-top: 4px;">{{ civitaiWhatifResult }}</p>
@@ -5085,11 +5134,11 @@ function clearNpcImages() {
 
         <!-- §7.2.5 Reference / Understanding settings (always visible) -->
         <div class="preset-card">
-          <span class="preset-card-badge">参考图与图片提炼</span>
+          <span class="preset-card-badge">{{ $t('image.settings.badgeReference') }}</span>
           <div class="settings-row">
             <div>
-              <span class="form-label">默认重绘幅度</span>
-              <span class="form-hint">参考重绘时的初始强度，0 = 近似原图，1 = 大幅重绘</span>
+              <span class="form-label">{{ $t('image.settings.defaultDenoise') }}</span>
+              <span class="form-hint">{{ $t('image.settings.defaultDenoiseHint') }}</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;min-width:140px">
               <input
@@ -5102,7 +5151,7 @@ function clearNpcImages() {
           </div>
           <div class="settings-row">
             <div>
-              <span class="form-label">上传图片大小上限</span>
+              <span class="form-label">{{ $t('image.settings.uploadSizeLimit') }}</span>
             </div>
             <AgaSelect
               :options="[
@@ -5116,8 +5165,8 @@ function clearNpcImages() {
           </div>
           <div class="settings-row">
             <div>
-              <span class="form-label">保存上传的参考图</span>
-              <span class="form-hint">关闭后参考图仅在当前会话有效</span>
+              <span class="form-label">{{ $t('image.settings.persistRef') }}</span>
+              <span class="form-hint">{{ $t('image.settings.persistRefHint') }}</span>
             </div>
             <AgaToggle
               :model-value="get('系统.扩展.image.config.reference.persistUploadedReferences') !== false"
@@ -5126,10 +5175,10 @@ function clearNpcImages() {
           </div>
 
           <details class="form-advanced">
-            <summary>Civitai 图片提炼参数</summary>
+            <summary>{{ $t('image.settings.civitaiAnalyzeParams') }}</summary>
             <div class="settings-grid-3">
               <div class="form-section">
-                <label class="form-label">WD Tag 阈值</label>
+                <label class="form-label">{{ $t('image.settings.wdThreshold') }}</label>
                 <input
                   type="number" min="0.1" max="0.9" step="0.05" class="form-input"
                   :value="get('系统.扩展.image.config.reference.civitai.wdThreshold') ?? 0.35"
@@ -5137,7 +5186,7 @@ function clearNpcImages() {
                 />
               </div>
               <div class="form-section">
-                <label class="form-label">Caption 温度</label>
+                <label class="form-label">{{ $t('image.settings.captionTemp') }}</label>
                 <input
                   type="number" min="0" max="1" step="0.1" class="form-input"
                   :value="get('系统.扩展.image.config.reference.civitai.captionTemperature') ?? 0.2"
@@ -5145,7 +5194,7 @@ function clearNpcImages() {
                 />
               </div>
               <div class="form-section">
-                <label class="form-label">Caption 最大 Token</label>
+                <label class="form-label">{{ $t('image.settings.captionMaxToken') }}</label>
                 <input
                   type="number" min="20" max="500" class="form-input"
                   :value="get('系统.扩展.image.config.reference.civitai.captionMaxNewTokens') ?? 160"
@@ -5157,22 +5206,22 @@ function clearNpcImages() {
 
           <div class="settings-row" style="margin-top: 4px;">
             <div>
-              <span class="form-label">NovelAI 参考重绘</span>
-              <span class="form-hint">需先通过接口验证后才能启用</span>
+              <span class="form-label">{{ $t('image.settings.novelaiRefRedraw') }}</span>
+              <span class="form-hint">{{ $t('image.settings.novelaiRefHint') }}</span>
             </div>
             <span class="preset-card-badge" style="font-size: 0.7rem;">
-              {{ get('系统.扩展.image.config.reference.novelai.validationStatus') === 'validated' ? '已验证' : '未验证' }}
+              {{ get('系统.扩展.image.config.reference.novelai.validationStatus') === 'validated' ? $t('image.settings.validated') : $t('image.settings.notValidated') }}
             </span>
           </div>
         </div>
 
         <!-- §7.3 Transformer section -->
         <div class="preset-card">
-          <span class="preset-card-badge">转化器</span>
+          <span class="preset-card-badge">{{ $t('image.settings.badgeTransformer') }}</span>
           <div class="settings-row">
             <div>
-              <span class="form-label">独立转化器模型</span>
-              <span class="form-hint">为词组转化器使用独立的 API 接口和模型</span>
+              <span class="form-label">{{ $t('image.settings.independentTransformer') }}</span>
+              <span class="form-hint">{{ $t('image.settings.independentTransformerHint') }}</span>
             </div>
             <AgaToggle
               :model-value="settingsTransformerIndependent"
@@ -5182,26 +5231,26 @@ function clearNpcImages() {
           <template v-if="settingsTransformerIndependent">
             <div class="settings-grid-2">
               <div class="form-section">
-                <label class="form-label">转化器接口地址</label>
+                <label class="form-label">{{ $t('image.settings.transformerEndpoint') }}</label>
                 <input
-                  type="text" class="form-input" placeholder="留空则沿用主剧情接口"
+                  type="text" class="form-input" :placeholder="$t('image.settings.transformerEndpointPlaceholder')"
                   :value="get('系统.扩展.image.config.transformer.endpoint') ?? ''"
                   @input="setValue('系统.扩展.image.config.transformer.endpoint', ($event.target as HTMLInputElement).value)"
                 />
               </div>
               <div class="form-section">
-                <label class="form-label">转化器 API Key</label>
+                <label class="form-label">{{ $t('image.settings.transformerApiKey') }}</label>
                 <input
-                  type="password" class="form-input" placeholder="留空则沿用主剧情 API Key"
+                  type="password" class="form-input" :placeholder="$t('image.settings.transformerApiKeyPlaceholder')"
                   :value="get('系统.扩展.image.config.transformer.apiKey') ?? ''"
                   @input="setValue('系统.扩展.image.config.transformer.apiKey', ($event.target as HTMLInputElement).value)"
                 />
               </div>
             </div>
             <div class="form-section">
-              <label class="form-label">转化器模型名称</label>
+              <label class="form-label">{{ $t('image.settings.transformerModel') }}</label>
               <input
-                type="text" class="form-input" placeholder="例如：gpt-4o-mini / gemini-2.5-flash"
+                type="text" class="form-input" :placeholder="$t('image.settings.transformerModelPlaceholder')"
                 :value="get('系统.扩展.image.config.transformer.model') ?? ''"
                 @input="setValue('系统.扩展.image.config.transformer.model', ($event.target as HTMLInputElement).value)"
               />
@@ -5209,8 +5258,8 @@ function clearNpcImages() {
           </template>
           <div class="settings-row">
             <div>
-              <span class="form-label">香闺秘档特写强制裸体语义</span>
-              <span class="form-hint">关闭后不再额外强塞 nude/naked/unclothed，仅按原始描述和转化器生成。</span>
+              <span class="form-label">{{ $t('image.settings.forceNude') }}</span>
+              <span class="form-hint">{{ $t('image.settings.forceNudeHint') }}</span>
             </div>
             <AgaToggle
               :model-value="get('系统.扩展.image.config.forceNudeSemantics') !== false"
@@ -5221,11 +5270,11 @@ function clearNpcImages() {
 
         <!-- §7.4 Automation section -->
         <div class="preset-card">
-          <span class="preset-card-badge">自动任务</span>
+          <span class="preset-card-badge">{{ $t('image.settings.badgeAuto') }}</span>
 
           <!-- Scene generation mode -->
           <div class="settings-row">
-            <div><span class="form-label">场景生图模式</span></div>
+            <div><span class="form-label">{{ $t('image.settings.autoScene') }}</span></div>
             <AgaToggle
               :model-value="get('系统.扩展.image.config.autoSceneOnRound') === true"
               @update:model-value="setValue('系统.扩展.image.config.autoSceneOnRound', $event)"
@@ -5235,24 +5284,24 @@ function clearNpcImages() {
           <!-- Scene defaults -->
           <div class="settings-grid-2">
             <div class="form-section">
-              <label class="form-label">自动场景构图要求</label>
+              <label class="form-label">{{ $t('image.settings.autoSceneComposition') }}</label>
               <AgaSelect
-                :options="[{ label: '纯场景', value: 'landscape' }, { label: '故事快照', value: 'snapshot' }]"
+                :options="[{ label: $t('image.scene.modeLandscape'), value: 'landscape' }, { label: $t('image.scene.modeSnapshot'), value: 'snapshot' }]"
                 :model-value="String(get('系统.扩展.image.config.auto.sceneComposition') ?? 'landscape')"
                 @update:model-value="setValue('系统.扩展.image.config.auto.sceneComposition', $event)"
               />
             </div>
             <div class="form-section">
-              <label class="form-label">自动场景画面方向</label>
+              <label class="form-label">{{ $t('image.settings.autoSceneOrientation') }}</label>
               <AgaSelect
-                :options="[{ label: '横屏', value: 'landscape' }, { label: '竖屏', value: 'portrait' }]"
+                :options="[{ label: $t('image.scene.orientationLandscape'), value: 'landscape' }, { label: $t('image.scene.orientationPortrait'), value: 'portrait' }]"
                 :model-value="String(get('系统.扩展.image.config.auto.sceneOrientation') ?? 'landscape')"
                 @update:model-value="setValue('系统.扩展.image.config.auto.sceneOrientation', $event)"
               />
             </div>
           </div>
           <div class="form-section">
-            <label class="form-label">自动场景分辨率</label>
+            <label class="form-label">{{ $t('image.settings.autoSceneResolution') }}</label>
             <AgaSelect
               :options="sizeOptionsToSelectOptions((get('系统.扩展.image.config.auto.sceneOrientation') ?? 'landscape') === 'landscape' ? SCENE_LANDSCAPE_SIZE_OPTIONS : SCENE_PORTRAIT_SIZE_OPTIONS)"
               :model-value="String(get('系统.扩展.image.config.auto.sceneResolution') ?? '1024x576')"
@@ -5262,7 +5311,7 @@ function clearNpcImages() {
 
           <!-- NPC auto generation -->
           <div class="settings-row" style="margin-top:var(--space-md)">
-            <div><span class="form-label">NPC 自动生图</span></div>
+            <div><span class="form-label">{{ $t('image.settings.autoNpc') }}</span></div>
             <AgaToggle
               :model-value="get('系统.扩展.image.config.autoPortraitForMajorNpcs') === true"
               @update:model-value="setValue('系统.扩展.image.config.autoPortraitForMajorNpcs', $event)"
@@ -5270,25 +5319,25 @@ function clearNpcImages() {
           </div>
           <div class="settings-grid-3">
             <div class="form-section">
-              <label class="form-label">性别筛选</label>
+              <label class="form-label">{{ $t('image.settings.genderFilter') }}</label>
               <AgaSelect
-                :options="[{ label: '全部', value: 'all' }, { label: '男', value: 'male' }, { label: '女', value: 'female' }]"
+                :options="[{ label: $t('image.settings.genderAll'), value: 'all' }, { label: $t('image.settings.genderMale'), value: 'male' }, { label: $t('image.settings.genderFemale'), value: 'female' }]"
                 :model-value="String(get('系统.扩展.image.config.auto.genderFilter') ?? 'all')"
                 @update:model-value="setValue('系统.扩展.image.config.auto.genderFilter', $event)"
               />
             </div>
             <div class="form-section">
-              <label class="form-label">重要性筛选</label>
+              <label class="form-label">{{ $t('image.settings.importanceFilter') }}</label>
               <AgaSelect
-                :options="[{ label: '全部 NPC', value: 'all' }, { label: '只生成重要 NPC', value: 'major' }]"
+                :options="[{ label: $t('image.settings.importanceAll'), value: 'all' }, { label: $t('image.settings.importanceMajor'), value: 'major' }]"
                 :model-value="String(get('系统.扩展.image.config.auto.importanceFilter') ?? 'all')"
                 @update:model-value="setValue('系统.扩展.image.config.auto.importanceFilter', $event)"
               />
             </div>
             <div class="form-section">
-              <label class="form-label">NPC 默认画风</label>
+              <label class="form-label">{{ $t('image.settings.npcDefaultStyle') }}</label>
               <AgaSelect
-                :options="[{ label: '通用', value: 'generic' }, { label: '二次元', value: 'anime' }, { label: '写实', value: 'realistic' }, { label: '国风', value: 'chinese' }]"
+                :options="[{ label: $t('image.manual.artStyle.generic'), value: 'generic' }, { label: $t('image.manual.artStyle.anime'), value: 'anime' }, { label: $t('image.manual.artStyle.realistic'), value: 'realistic' }, { label: $t('image.manual.artStyle.chinese'), value: 'chinese' }]"
                 :model-value="String(get('系统.扩展.image.config.auto.npcStyle') ?? 'generic')"
                 @update:model-value="setValue('系统.扩展.image.config.auto.npcStyle', $event)"
               />
@@ -5312,19 +5361,19 @@ function clearNpcImages() {
             <div>
               <div class="confirm-title">
                 {{ manualFlowStage === 'submitting'
-                  ? (backgroundMode ? '任务已提交（后台处理）' : '正在提交任务')
-                  : '确认生成图片' }}
+                  ? (backgroundMode ? $t('image.confirm.titleSubmitted') : $t('image.confirm.titleSubmitting'))
+                  : $t('image.confirm.titleConfirm') }}
               </div>
               <div class="confirm-subtitle">
                 {{ manualFlowStage === 'submitting'
-                  ? (backgroundMode ? '任务已进入后台队列，可直接关闭当前提示。' : '系统正在提交任务，请稍候...')
-                  : '请确认角色与生成参数无误后提交。' }}
+                  ? (backgroundMode ? $t('image.confirm.subtitleSubmitted') : $t('image.confirm.subtitleSubmitting'))
+                  : $t('image.confirm.subtitleConfirm') }}
               </div>
             </div>
             <button
               v-if="manualFlowStage !== 'submitting'"
               class="confirm-close"
-              aria-label="关闭"
+              :aria-label="$t('image.confirm.close')"
               @click="cancelConfirm"
             >×</button>
           </header>
@@ -5341,17 +5390,17 @@ function clearNpcImages() {
                   class="confirm-character-avatar__img"
                 />
               </div>
-              <div class="confirm-character-name">{{ selectedNpcData['名称'] ?? '未知' }}</div>
+              <div class="confirm-character-name">{{ selectedNpcData['名称'] ?? $t('image.confirm.unknown') }}</div>
               <div class="confirm-character-meta">
                 <span v-if="selectedNpcData['性别']">{{ selectedNpcData['性别'] }}</span>
-                <span v-if="selectedNpcData['年龄']">· {{ selectedNpcData['年龄'] }}岁</span>
+                <span v-if="selectedNpcData['年龄']">· {{ $t('image.npcMeta.ageSuffix', { age: selectedNpcData['年龄'] }) }}</span>
                 <span v-if="selectedNpcData['类型']">· {{ selectedNpcData['类型'] }}</span>
               </div>
               <div v-if="selectedNpcAnchor" class="confirm-character-anchor">
                 <span
                   :class="['confirm-anchor-dot', selectedNpcAnchor.enabled ? 'confirm-anchor-dot--on' : 'confirm-anchor-dot--off']"
                 />
-                锚点{{ selectedNpcAnchor.enabled ? '已启用' : '已停用' }}
+                {{ selectedNpcAnchor.enabled ? $t('image.confirm.anchorEnabled') : $t('image.confirm.anchorDisabled') }}
                 <span v-if="selectedNpcAnchor.name" class="confirm-anchor-name">: {{ selectedNpcAnchor.name }}</span>
               </div>
               <p v-if="selectedNpcData['描述']" class="confirm-character-desc">
@@ -5362,22 +5411,22 @@ function clearNpcImages() {
             <!-- ═══ Right: generation parameters ═══ -->
             <div class="confirm-params-panel">
               <section class="confirm-section">
-                <h4 class="confirm-section-title">生成参数</h4>
+                <h4 class="confirm-section-title">{{ $t('image.confirm.paramsTitle') }}</h4>
                 <dl class="confirm-dl">
                   <div class="confirm-dl-row">
-                    <dt>构图</dt>
+                    <dt>{{ $t('image.confirm.composition') }}</dt>
                     <dd>{{ compositionOptions.find(o => o.value === composition)?.label ?? composition }}</dd>
                   </div>
                   <div class="confirm-dl-row">
-                    <dt>画风</dt>
+                    <dt>{{ $t('image.confirm.artStyle') }}</dt>
                     <dd>{{ styleOptions.find(o => o.value === artStyle)?.label ?? artStyle }}</dd>
                   </div>
                   <div class="confirm-dl-row">
-                    <dt>后端</dt>
+                    <dt>{{ $t('image.confirm.backend') }}</dt>
                     <dd>{{ backendLabel(backend) }}</dd>
                   </div>
                   <div class="confirm-dl-row">
-                    <dt>尺寸</dt>
+                    <dt>{{ $t('image.confirm.size') }}</dt>
                     <dd>{{ currentSizeDisplay }}</dd>
                   </div>
                 </dl>
@@ -5387,33 +5436,33 @@ function clearNpcImages() {
                 v-if="extraPrompt?.trim() || selectedNpcData?.['外貌描述'] || selectedNpcData?.['身材描写'] || selectedNpcData?.['衣着风格']"
                 class="confirm-section"
               >
-                <h4 class="confirm-section-title">视觉资料注入</h4>
+                <h4 class="confirm-section-title">{{ $t('image.confirm.visualDataTitle') }}</h4>
                 <div
                   v-if="selectedNpcData?.['外貌描述']"
                   class="confirm-kv"
                 >
-                  <div class="confirm-kv-key">外貌描述</div>
+                  <div class="confirm-kv-key">{{ $t('image.npcMeta.appearance') }}</div>
                   <div class="confirm-kv-value">{{ String(selectedNpcData['外貌描述']).slice(0, 180) }}</div>
                 </div>
                 <div
                   v-if="selectedNpcData?.['身材描写']"
                   class="confirm-kv"
                 >
-                  <div class="confirm-kv-key">身材描写</div>
+                  <div class="confirm-kv-key">{{ $t('image.npcMeta.body') }}</div>
                   <div class="confirm-kv-value">{{ String(selectedNpcData['身材描写']).slice(0, 120) }}</div>
                 </div>
                 <div
                   v-if="selectedNpcData?.['衣着风格']"
                   class="confirm-kv"
                 >
-                  <div class="confirm-kv-key">衣着风格</div>
+                  <div class="confirm-kv-key">{{ $t('image.npcMeta.outfit') }}</div>
                   <div class="confirm-kv-value">{{ String(selectedNpcData['衣着风格']).slice(0, 120) }}</div>
                 </div>
                 <div
                   v-if="extraPrompt?.trim()"
                   class="confirm-kv"
                 >
-                  <div class="confirm-kv-key">额外要求</div>
+                  <div class="confirm-kv-key">{{ $t('image.manual.extraPrompt') }}</div>
                   <div class="confirm-kv-value">{{ extraPrompt }}</div>
                 </div>
               </section>
@@ -5425,7 +5474,7 @@ function clearNpcImages() {
                   <span v-if="selectedNpcActiveTask" :class="['task-status-badge', `task-status-badge--${taskStatusVariant(selectedNpcActiveTask.status)}`]">
                     {{ taskStatusLabel(selectedNpcActiveTask.status) }}
                   </span>
-                  <span>{{ manualStatusText || '正在提交任务或等待状态更新...' }}</span>
+                  <span>{{ manualStatusText || $t('image.confirm.waitingStatus') }}</span>
                 </div>
               </div>
             </div>
@@ -5434,13 +5483,13 @@ function clearNpcImages() {
           <footer class="confirm-footer">
             <!-- confirm 状态：操作按钮 -->
             <template v-if="manualFlowStage !== 'submitting'">
-              <button class="btn-secondary" @click="cancelConfirm">返回修改</button>
-              <button class="btn-primary" :disabled="isGenerating" @click="submitGenerate">确认生成</button>
+              <button class="btn-secondary" @click="cancelConfirm">{{ $t('image.confirm.goBack') }}</button>
+              <button class="btn-primary" :disabled="isGenerating" @click="submitGenerate">{{ $t('image.confirm.confirmGenerate') }}</button>
             </template>
             <!-- submitting 状态：取消按钮 -->
             <template v-else>
               <button class="btn-secondary" @click="cancelSubmitting">
-                {{ backgroundMode ? '关闭提示' : '取消等待' }}
+                {{ backgroundMode ? $t('image.confirm.closeHint') : $t('image.confirm.cancelWait') }}
               </button>
             </template>
           </footer>
@@ -5454,10 +5503,10 @@ function clearNpcImages() {
     <!-- Delete confirmation -->
     <AgaConfirmModal
       v-if="showDeleteConfirm"
-      title="确认删除"
-      message="确定要删除这张图片吗？此操作不可撤销。"
+      :title="$t('image.delete.confirmTitle')"
+      :message="$t('image.delete.confirmMessage')"
       variant="danger"
-      confirm-label="删除"
+      :confirm-label="$t('image.delete.confirmLabel')"
       @confirm="confirmDelete"
       @cancel="showDeleteConfirm = false"
     />

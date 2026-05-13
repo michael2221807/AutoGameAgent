@@ -30,7 +30,13 @@ export type EngineEventName =
 /** Payload for 'ui:toast' events */
 export interface ToastPayload {
   type: 'info' | 'success' | 'warning' | 'error';
-  message: string;
+  message?: string;
+  /** i18n key — Toast.vue will resolve via $t(). Engine code can emit this instead of a raw message. */
+  i18nKey?: string;
+  /** Interpolation params for the i18n key */
+  i18nParams?: Record<string, unknown>;
+  /** Deduplication id — toasts with the same id replace previous ones */
+  id?: string;
   /** Auto-dismiss duration in ms. Defaults to 4000. Set 0 to disable auto-dismiss. */
   duration?: number;
 }

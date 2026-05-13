@@ -18,6 +18,7 @@
  */
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 
 export interface NpcBrief {
@@ -54,6 +55,7 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const { t } = useI18n();
 const npcMap = computed(() => {
   const map = new Map<string, NpcBrief>();
   if (props.npcData) {
@@ -110,7 +112,7 @@ function parseJudgement(raw: string): JudgementData {
   const parts = normalized.split(',').map((p) => p.trim());
   const [typeStr, resultStr] = (parts[0] ?? '').split(':').map((s) => s.trim());
   const data: JudgementData = {
-    type: typeStr ?? '判定',
+    type: typeStr ?? t('common.formatted.judgement.defaultType'),
     result: resultStr ?? '',
     details: [],
   };
@@ -354,27 +356,27 @@ const parsedParts = computed<TextPart[]>(() => {
         <!-- Stats row -->
         <span class="jc-stats">
           <span v-if="part.judgement.finalValue" class="jc-stat">
-            <span class="jc-stat-label">判定值</span>
+            <span class="jc-stat-label">{{ $t('common.formatted.judgement.finalValue') }}</span>
             <span class="jc-stat-value">{{ part.judgement.finalValue }}</span>
           </span>
           <span v-if="part.judgement.difficulty" class="jc-stat">
-            <span class="jc-stat-label">难度</span>
+            <span class="jc-stat-label">{{ $t('common.formatted.judgement.difficulty') }}</span>
             <span class="jc-stat-value">{{ part.judgement.difficulty }}</span>
           </span>
           <span v-if="part.judgement.base" class="jc-stat">
-            <span class="jc-stat-label">基础</span>
+            <span class="jc-stat-label">{{ $t('common.formatted.judgement.base') }}</span>
             <span class="jc-stat-value">{{ part.judgement.base }}</span>
           </span>
           <span v-if="part.judgement.lucky" class="jc-stat" :class="{ 'jc-stat--positive': part.judgement.lucky.startsWith('+'), 'jc-stat--negative': part.judgement.lucky.startsWith('-') }">
-            <span class="jc-stat-label">幸运</span>
+            <span class="jc-stat-label">{{ $t('common.formatted.judgement.lucky') }}</span>
             <span class="jc-stat-value">{{ part.judgement.lucky }}</span>
           </span>
           <span v-if="part.judgement.environment && part.judgement.environment !== '0'" class="jc-stat">
-            <span class="jc-stat-label">环境</span>
+            <span class="jc-stat-label">{{ $t('common.formatted.judgement.environment') }}</span>
             <span class="jc-stat-value">{{ part.judgement.environment }}</span>
           </span>
           <span v-if="part.judgement.status && part.judgement.status !== '0'" class="jc-stat">
-            <span class="jc-stat-label">状态</span>
+            <span class="jc-stat-label">{{ $t('common.formatted.judgement.status') }}</span>
             <span class="jc-stat-value">{{ part.judgement.status }}</span>
           </span>
           <span v-for="(d, di) in part.judgement.details" :key="di" class="jc-stat jc-stat--detail">

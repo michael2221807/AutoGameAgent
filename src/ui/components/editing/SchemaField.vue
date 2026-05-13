@@ -13,6 +13,9 @@
  * 当值与 defaultValue 不同时显示 "已修改" 指示器和重置按钮。
  */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 /** Schema 属性的运行时类型契约 */
 interface FieldSchemaDef {
@@ -162,15 +165,15 @@ function onChildReset(childPath: string): void {
     <div class="field-header">
       <label class="field-label">
         {{ label }}
-        <span v-if="isModified" class="modified-dot" title="已修改" />
+        <span v-if="isModified" class="modified-dot" :title="t('schemaField.modified')" />
       </label>
       <button
         v-if="isModified"
         class="reset-btn"
-        title="重置为默认值"
+        :title="t('schemaField.resetDefault')"
         @click="onResetClick"
       >
-        重置
+        {{ t('schemaField.resetBtn') }}
       </button>
     </div>
 
@@ -206,7 +209,7 @@ function onChildReset(childPath: string): void {
       <span class="toggle-track">
         <span class="toggle-thumb" />
       </span>
-      <span class="toggle-label">{{ value ? '启用' : '禁用' }}</span>
+      <span class="toggle-label">{{ value ? t('schemaField.toggleEnabled') : t('schemaField.toggleDisabled') }}</span>
     </button>
 
     <!-- Enum (select) -->
@@ -238,9 +241,9 @@ function onChildReset(childPath: string): void {
           :value="typeof item === 'string' ? item : JSON.stringify(item)"
           @input="updateArrayItem(idx, ($event.target as HTMLInputElement).value)"
         />
-        <button class="array-remove-btn" title="移除" @click="removeArrayItem(idx)">✕</button>
+        <button class="array-remove-btn" :title="t('schemaField.removeItem')" @click="removeArrayItem(idx)">✕</button>
       </div>
-      <button class="array-add-btn" @click="addArrayItem">+ 添加项</button>
+      <button class="array-add-btn" @click="addArrayItem">{{ t('schemaField.addItem') }}</button>
     </div>
 
     <!-- Object — 递归渲染 -->

@@ -53,6 +53,8 @@ export interface AssistantServiceDeps {
   conversationStore?: ConversationStore;
   /** 用户设置 —— 决定 maxHistoryTurns 等行为 */
   settings?: AssistantSettings;
+  /** Current UI locale — forwarded to AttachmentBuilder for display label translation */
+  locale?: string;
 }
 
 /**
@@ -80,6 +82,7 @@ export class AssistantService {
   // @ts-expect-error — 当前未直接使用，但保留 DI 入口
   private commandExecutor: CommandExecutor;
   private gamePack: GamePack | null;
+  private locale: string | undefined;
   private conversationStore: ConversationStore;
   private settings: AssistantSettings;
   private payloadApplier: PayloadApplier;
@@ -117,6 +120,7 @@ export class AssistantService {
     this.stateManager = deps.stateManager;
     this.commandExecutor = deps.commandExecutor;
     this.gamePack = deps.gamePack;
+    this.locale = deps.locale;
     this.conversationStore = deps.conversationStore ?? new InMemoryConversationStore();
     this.settings = deps.settings ?? { ...DEFAULT_ASSISTANT_SETTINGS };
     this.payloadApplier = new PayloadApplier({
@@ -126,6 +130,7 @@ export class AssistantService {
     this.attachmentBuilder = new AttachmentBuilder({
       stateManager: deps.stateManager,
       gamePack: deps.gamePack,
+      locale: deps.locale,
     });
     this.payloadValidator = new PayloadValidator({
       stateManager: deps.stateManager,
@@ -183,6 +188,7 @@ export class AssistantService {
     this.attachmentBuilder = new AttachmentBuilder({
       stateManager: this.stateManager,
       gamePack: pack,
+      locale: this.locale,
     });
     this.payloadValidator = new PayloadValidator({
       stateManager: this.stateManager,

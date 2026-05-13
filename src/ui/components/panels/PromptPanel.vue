@@ -13,7 +13,10 @@
  * - 权重持久化到 localStorage
  */
 import { ref, computed, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
+
+const { t } = useI18n();
 import { eventBus } from '@/engine/core/event-bus';
 import type { GamePack } from '@/engine/types/game-pack';
 import { useGameState } from '@/ui/composables/useGameState';
@@ -132,22 +135,17 @@ interface PromptEntry {
   type: 'world_lore' | 'system_rule' | 'command_rule' | 'output_rule';
 }
 
-const SCOPE_OPTIONS = [
-  { value: 'main', label: '主回合' },
-  { value: 'opening', label: '开局' },
-  { value: 'all', label: '全部' },
-  { value: 'world_evolution', label: '世界演化' },
-  { value: 'story_plan', label: '剧情规划' },
-  { value: 'heroine_plan', label: '女主规划' },
-  { value: 'recall', label: '回忆' },
-] as const;
+const SCOPE_OPTION_KEYS = ['main', 'opening', 'all', 'world_evolution', 'story_plan', 'heroine_plan', 'recall'] as const;
+const scopeOptions = computed(() => SCOPE_OPTION_KEYS.map((value) => ({
+  value,
+  label: t(`prompt.scope.${({ main: 'main', opening: 'opening', all: 'all', world_evolution: 'worldEvolution', story_plan: 'storyPlan', heroine_plan: 'heroinePlan', recall: 'recall' } as const)[value]}`),
+})));
 
-const TYPE_OPTIONS = [
-  { value: 'system_rule', label: '系统规则' },
-  { value: 'world_lore', label: '世界设定' },
-  { value: 'command_rule', label: '指令规则' },
-  { value: 'output_rule', label: '输出规则' },
-] as const;
+const TYPE_OPTION_KEYS = ['system_rule', 'world_lore', 'command_rule', 'output_rule'] as const;
+const typeOptions = computed(() => TYPE_OPTION_KEYS.map((value) => ({
+  value,
+  label: t(`prompt.type.${({ system_rule: 'systemRule', world_lore: 'worldLore', command_rule: 'commandRule', output_rule: 'outputRule' } as const)[value]}`),
+})));
 
 function storageKey(id: string): string {
   const packId = pack?.manifest.id ?? 'unknown';
@@ -188,82 +186,67 @@ function saveMeta(id: string, meta: { scope: string[]; injectionMode: string; ke
   localStorage.setItem(metaKey(id), JSON.stringify(meta));
 }
 
-/** Prompt ID → Chinese display name (from BUILTIN_SLOTS + manual mapping) */
-const PROMPT_DISPLAY_NAMES: Record<string, string> = {
-  // Core
-  narratorFrame: '叙事者身份框架',
-  narratorEnforcement: '执行强化提醒',
-  core: '核心规则·输出格式',
-  mainRound: '主回合生成指令',
-  // Opening
-  opening: '开局场景',
-  // Memory
-  memorySummary: '记忆总结',
-  midTermRefine: '中期记忆精炼',
-  longTermCompact: '长期记忆压缩',
-  // Split gen
-  splitGenStep1: '分步生成 Step1（叙事）',
-  splitGenStep2: '分步生成 Step2（指令）',
-  splitGenContext: '分步生成上下文',
-  // World
-  worldGen: '世界生成',
-  worldHeartbeat: '世界心跳',
-  // Action
-  actionOptions: '行动选项（行动导向）',
-  actionOptionsStory: '行动选项（剧情导向）',
-  // History
-  historyFraming: '历史对话说明',
-  assistantInjectionContract: '助手注入协议',
-  // Privacy
-  privacyRepair: '私密信息修复',
-  // NPC
-  npcChat: 'NPC 私聊',
-  npcMemorySummary: 'NPC 记忆总结',
-  presencePartition: 'NPC 在场分区',
-  // CoT
-  'cot-preamble': 'COT 思维链协议',
-  'cot-masquerade': 'COT 伪装历史消息',
-  'cot-judge': 'COT 判定协议',
-  'cot-opening': 'COT 开局思考',
-  'cot-no-thinking-guard': 'COT 禁止思考标签',
-  // Writing
-  perspectiveFirst: '写作·第一人称',
-  perspectiveSecond: '写作·第二人称',
-  perspectiveThird: '写作·第三人称',
-  writeStyle: '写作·文风指导',
-  emotionGuard: '写作·避免极端情绪',
-  noControl: '写作·禁止操控玩家 (NoControl)',
-  narrativeConstraints: '写作·叙事总约束',
-  wordCountReq: '写作·字数要求',
-  // Body polish
-  bodyPolish: '文章优化（润色）',
-  // Story Styles
-  storyStyleGeneral: '风格·一般（写实纪实）',
-  storyStyleHarem: '风格·后宫',
-  storyStylePureLove: '风格·纯爱',
-  storyStyleCultivation: '风格·修炼',
-  storyStyleShura: '风格·修罗场',
-  storyStyleNtlHarem: '风格·NTL后宫',
-  // Image
-  imageCharacterTokenizer: '生图·角色词组转化器',
-  imageSceneTokenizer: '生图·场景词组转化器',
-  imageSceneJudge: '生图·场景类型判定',
-  imageSecretPartTokenizer: '生图·私密部位转化器',
-  imageAnchorExtractor: '生图·角色锚点提取',
-  imageStyleRefinement: '生图·PNG 画风提炼',
-  // Plot Direction
-  plotDirective: '剧情引导·叙事方向注入',
-  plotEvaluationStep2: '剧情引导·节点完成评估',
-  plotDecompose: '剧情引导·大纲 AI 拆解',
+/** Prompt ID → i18n key mapping for display names */
+const PROMPT_DISPLAY_KEY_MAP: Record<string, string> = {
+  narratorFrame: 'prompt.display.narratorFrame',
+  narratorEnforcement: 'prompt.display.narratorEnforcement',
+  core: 'prompt.display.core',
+  mainRound: 'prompt.display.mainRound',
+  opening: 'prompt.display.opening',
+  memorySummary: 'prompt.display.memorySummary',
+  midTermRefine: 'prompt.display.midTermRefine',
+  longTermCompact: 'prompt.display.longTermCompact',
+  splitGenStep1: 'prompt.display.splitGenStep1',
+  splitGenStep2: 'prompt.display.splitGenStep2',
+  splitGenContext: 'prompt.display.splitGenContext',
+  worldGen: 'prompt.display.worldGen',
+  worldHeartbeat: 'prompt.display.worldHeartbeat',
+  actionOptions: 'prompt.display.actionOptions',
+  actionOptionsStory: 'prompt.display.actionOptionsStory',
+  historyFraming: 'prompt.display.historyFraming',
+  assistantInjectionContract: 'prompt.display.assistantInjectionContract',
+  privacyRepair: 'prompt.display.privacyRepair',
+  npcChat: 'prompt.display.npcChat',
+  npcMemorySummary: 'prompt.display.npcMemorySummary',
+  presencePartition: 'prompt.display.presencePartition',
+  'cot-preamble': 'prompt.display.cotPreamble',
+  'cot-masquerade': 'prompt.display.cotMasquerade',
+  'cot-judge': 'prompt.display.cotJudge',
+  'cot-opening': 'prompt.display.cotOpening',
+  'cot-no-thinking-guard': 'prompt.display.cotNoThinkingGuard',
+  perspectiveFirst: 'prompt.display.perspectiveFirst',
+  perspectiveSecond: 'prompt.display.perspectiveSecond',
+  perspectiveThird: 'prompt.display.perspectiveThird',
+  writeStyle: 'prompt.display.writeStyle',
+  emotionGuard: 'prompt.display.emotionGuard',
+  noControl: 'prompt.display.noControl',
+  narrativeConstraints: 'prompt.display.narrativeConstraints',
+  wordCountReq: 'prompt.display.wordCountReq',
+  bodyPolish: 'prompt.display.bodyPolish',
+  storyStyleGeneral: 'prompt.display.storyStyleGeneral',
+  storyStyleHarem: 'prompt.display.storyStyleHarem',
+  storyStylePureLove: 'prompt.display.storyStylePureLove',
+  storyStyleCultivation: 'prompt.display.storyStyleCultivation',
+  storyStyleShura: 'prompt.display.storyStyleShura',
+  storyStyleNtlHarem: 'prompt.display.storyStyleNtlHarem',
+  imageCharacterTokenizer: 'prompt.display.imageCharacterTokenizer',
+  imageSceneTokenizer: 'prompt.display.imageSceneTokenizer',
+  imageSceneJudge: 'prompt.display.imageSceneJudge',
+  imageSecretPartTokenizer: 'prompt.display.imageSecretPartTokenizer',
+  imageAnchorExtractor: 'prompt.display.imageAnchorExtractor',
+  imageStyleRefinement: 'prompt.display.imageStyleRefinement',
+  plotDirective: 'prompt.display.plotDirective',
+  plotEvaluationStep2: 'prompt.display.plotEvaluationStep2',
+  plotDecompose: 'prompt.display.plotDecompose',
 };
 
-/** Prompt ID → category (Chinese) */
-function inferCategory(id: string): string {
+/** Prompt ID → category key (stable internal key, NOT translated) */
+function inferCategoryKey(id: string): string {
   // Check builtin slots first — find which slot references this promptId
   for (const slot of Object.values(BUILTIN_SLOTS)) {
     if (slot.defaultPromptId === id) return slot.category;
   }
-  // Fallback pattern matching
+  // Fallback pattern matching — returns the same Chinese key used by BUILTIN_SLOTS.category
   if (id.startsWith('core') || id === 'narratorFrame' || id === 'narratorEnforcement') return '常驻';
   if (id.startsWith('main') || id.includes('Round') || id.includes('round')) return '主剧情';
   if (id.startsWith('open') || id.includes('Opening') || id.includes('opening')) return '开局';
@@ -281,48 +264,75 @@ function inferCategory(id: string): string {
   return '其他';
 }
 
+/** Map internal category key to i18n display name */
+const CATEGORY_I18N_MAP: Record<string, string> = {
+  '常驻': 'prompt.category.resident',
+  '主剧情': 'prompt.category.mainStory',
+  '剧情导向': 'prompt.category.plotDirection',
+  'COT': 'prompt.category.cot',
+  '写作': 'prompt.category.writing',
+  '剧情风格': 'prompt.category.storyStyle',
+  '开局': 'prompt.category.opening',
+  '记忆': 'prompt.category.memory',
+  'NPC': 'prompt.category.npc',
+  '世界': 'prompt.category.world',
+  '分步生成': 'prompt.category.splitGen',
+  '行动选项': 'prompt.category.actionOptions',
+  '生图': 'prompt.category.imageGen',
+  '文章优化': 'prompt.category.bodyPolish',
+  'NSFW': 'prompt.category.nsfw',
+  '其他': 'prompt.category.other',
+};
+
+function categoryDisplayName(key: string): string {
+  const i18nKey = CATEGORY_I18N_MAP[key];
+  return i18nKey ? t(i18nKey) : key;
+}
+
 function getDisplayName(id: string): string {
-  return PROMPT_DISPLAY_NAMES[id] ?? id;
+  const i18nKey = PROMPT_DISPLAY_KEY_MAP[id];
+  return i18nKey ? t(i18nKey) : id;
 }
 
 // ─── Pluggable radio-group options ──────────────────────────
 // Style options are data-driven: built-in + any pack prompt whose ID starts with 'storyStyle'
 interface RadioOption { value: string; label: string; desc: string }
 
-const BUILTIN_STYLE_OPTIONS: RadioOption[] = [
-  { value: 'general', label: '一般（写实纪实）', desc: '写实低夸张，按事实推进' },
-  { value: 'harem', label: '后宫', desc: '多角色关系经营，独立人格' },
-  { value: 'pureLove', label: '纯爱', desc: '一对一主线，长期陪伴双向奔赴' },
-  { value: 'cultivation', label: '修炼', desc: '境界体系闭环，突破代价' },
-  { value: 'shura', label: '修罗场', desc: '多方施压高张力，动态博弈' },
-  { value: 'ntlHarem', label: 'NTL后宫', desc: '主纯爱辅NTL，苦主单向受挫' },
-];
+const BUILTIN_STYLE_KEYS = ['general', 'harem', 'pureLove', 'cultivation', 'shura', 'ntlHarem'] as const;
+
+const builtinStyleOptions = computed<RadioOption[]>(() =>
+  BUILTIN_STYLE_KEYS.map((key) => ({
+    value: key,
+    label: t(`prompt.storyStyle.${key}`),
+    desc: t(`prompt.storyStyle.${key}Desc`),
+  })),
+);
 
 const storyStyleOptions = computed<RadioOption[]>(() => {
-  const builtinValues = new Set(BUILTIN_STYLE_OPTIONS.map((o) => o.value));
+  const builtinValues = new Set(BUILTIN_STYLE_KEYS as readonly string[]);
   const extra: RadioOption[] = [];
   // Discover additional style prompts from pack (any ID starting with 'storyStyle' not in builtins)
   if (pack) {
     for (const id of Object.keys(pack.prompts)) {
       if (id.startsWith('storyStyle') && !builtinValues.has(id.replace('storyStyle', '').replace(/^./, (c) => c.toLowerCase()))) {
-        const displayName = PROMPT_DISPLAY_NAMES[id] ?? id;
+        const displayName = getDisplayName(id);
         const value = id.replace('storyStyle', '');
         // Only add if not already a builtin
         if (!builtinValues.has(value) && !builtinValues.has(value.charAt(0).toLowerCase() + value.slice(1))) {
-          extra.push({ value: id, label: displayName, desc: '自定义风格' });
+          extra.push({ value: id, label: displayName, desc: t('prompt.storyStyle.customDesc') });
         }
       }
     }
   }
-  return [...BUILTIN_STYLE_OPTIONS, ...extra];
+  return [...builtinStyleOptions.value, ...extra];
 });
 
 // Perspective options (also pluggable)
-const BUILTIN_PERSPECTIVE_OPTIONS: RadioOption[] = [
-  { value: '第一人称', label: '第一人称（我）', desc: '叙述者使用"我"' },
-  { value: '第二人称', label: '第二人称（你）', desc: '默认。叙述者使用"你"' },
-  { value: '第三人称', label: '第三人称（他/她/姓名）', desc: '叙述者使用角色名或代词' },
-];
+const perspectiveOptions = computed<RadioOption[]>(() => [
+  { value: '第一人称', label: t('prompt.perspective.first'), desc: t('prompt.perspective.firstDesc') },
+  { value: '第二人称', label: t('prompt.perspective.second'), desc: t('prompt.perspective.secondDesc') },
+  { value: '第三人称', label: t('prompt.perspective.third'), desc: t('prompt.perspective.thirdDesc') },
+]);
 
 /**
  * Determine if a prompt is active based on radio-group settings.
@@ -376,7 +386,7 @@ const promptEntries = computed<PromptEntry[]>(() => {
     const meta = loadMeta(id);
     entries.push({
       id,
-      category: inferCategory(id),
+      category: inferCategoryKey(id),
       content,
       defaultContent,
       enabled,
@@ -472,7 +482,7 @@ function toggleEnabled(entry: PromptEntry): void {
   promptRegistry?.setEnabled(entry.id, newVal);
   eventBus.emit('ui:toast', {
     type: newVal ? 'success' : 'warning',
-    message: `${entry.id} 已${newVal ? '启用' : '禁用'}`,
+    message: newVal ? t('prompt.toast.enabled', { id: entry.id }) : t('prompt.toast.disabled', { id: entry.id }),
     duration: 1200,
   });
 }
@@ -522,7 +532,7 @@ function savePrompt(): void {
   });
   promptRegistry?.setUserContent(id, editContent.value);
   showModal.value = false;
-  eventBus.emit('ui:toast', { type: 'success', message: 'Prompt 已保存', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('prompt.toast.saved'), duration: 1500 });
 }
 
 function resetPrompt(): void {
@@ -540,7 +550,7 @@ function resetPrompt(): void {
   editKeywordsText.value = '';
   editType.value = 'system_rule';
   showModal.value = false;
-  eventBus.emit('ui:toast', { type: 'info', message: 'Prompt 已重置为默认', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('prompt.toast.reset'), duration: 1500 });
 }
 
 function toggleScope(val: string): void {
@@ -562,7 +572,7 @@ function exportSingle(entry: PromptEntry, event: Event): void {
 function exportAll(): void {
   const modified = promptEntries.value.filter((p) => p.modified || !p.enabled || p.weight !== 5);
   if (!modified.length) {
-    eventBus.emit('ui:toast', { type: 'info', message: '无已修改的 Prompt，无需导出', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'info', message: t('prompt.toast.noModified'), duration: 2000 });
     return;
   }
   const data = {
@@ -571,7 +581,7 @@ function exportAll(): void {
     exportedAt: new Date().toISOString(),
   };
   downloadJson(data, `prompts-export-${Date.now()}.json`);
-  eventBus.emit('ui:toast', { type: 'success', message: `已导出 ${modified.length} 条已修改 Prompt`, duration: 2000 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('prompt.toast.exportCount', { count: modified.length }), duration: 2000 });
 }
 
 // ─── Import prompts ───────────────────────────────────────────
@@ -585,7 +595,7 @@ function importPrompts(): void {
     if (!file) return;
     try {
       const raw = JSON.parse(await file.text()) as { prompts?: Array<{ id: string; content?: string; weight?: number; enabled?: boolean }> };
-      if (!Array.isArray(raw.prompts)) throw new Error('无效格式：缺少 prompts 数组');
+      if (!Array.isArray(raw.prompts)) throw new Error(t('prompt.toast.importInvalidFormat'));
       let count = 0;
       for (const item of raw.prompts) {
         if (!item.id) continue;
@@ -600,9 +610,9 @@ function importPrompts(): void {
         }
         count++;
       }
-      eventBus.emit('ui:toast', { type: 'success', message: `已导入 ${count} 条 Prompt 覆盖`, duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('prompt.toast.importCount', { count }), duration: 2000 });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '解析失败';
+      const msg = err instanceof Error ? err.message : t('prompt.toast.importError');
       eventBus.emit('ui:toast', { type: 'error', message: msg, duration: 3000 });
     }
   };
@@ -630,21 +640,21 @@ function previewContent(content: string, maxLen = 100): string {
   <div class="prompt-panel">
     <template v-if="pack">
       <header class="panel-header">
-        <h2 class="panel-title">提示词与世界书管理</h2>
+        <h2 class="panel-title">{{ $t('prompt.title') }}</h2>
         <div class="panel-tabs">
-          <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'prompts' }]" @click="activeTab = 'prompts'">内置提示词</button>
-          <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'settings' }]" @click="activeTab = 'settings'">游戏设定</button>
-          <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'heroine' }]" @click="activeTab = 'heroine'">剧情规划</button>
+          <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'prompts' }]" @click="activeTab = 'prompts'">{{ $t('prompt.tab.prompts') }}</button>
+          <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'settings' }]" @click="activeTab = 'settings'">{{ $t('prompt.tab.settings') }}</button>
+          <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'heroine' }]" @click="activeTab = 'heroine'">{{ $t('prompt.tab.heroine') }}</button>
         </div>
       </header>
 
       <!-- ═══ Tab: 游戏设定 ═══ -->
       <div v-if="activeTab === 'settings'" class="settings-tab">
         <div class="settings-group">
-          <h3 class="settings-group-title">叙事人称（互斥选择）</h3>
-          <p class="settings-desc">控制 AI 如何称呼玩家角色。同一时间只有一种人称生效。</p>
+          <h3 class="settings-group-title">{{ $t('prompt.settings.perspectiveTitle') }}</h3>
+          <p class="settings-desc">{{ $t('prompt.settings.perspectiveDesc') }}</p>
           <div class="style-radio-group">
-            <label v-for="opt in BUILTIN_PERSPECTIVE_OPTIONS" :key="opt.value" :class="['style-radio-item', { 'style-radio-item--active': promptSettings.perspective === opt.value }]">
+            <label v-for="opt in perspectiveOptions" :key="opt.value" :class="['style-radio-item', { 'style-radio-item--active': promptSettings.perspective === opt.value }]">
               <input type="radio" name="perspective" :value="opt.value" :checked="promptSettings.perspective === opt.value" @change="updatePromptSetting('perspective', opt.value as PromptSettings['perspective'])" />
               <div class="style-radio-info">
                 <span class="style-radio-label">{{ opt.label }}</span>
@@ -655,8 +665,8 @@ function previewContent(content: string, maxLen = 100): string {
         </div>
 
         <div class="settings-group">
-          <h3 class="settings-group-title">字数要求</h3>
-          <p class="settings-desc">每回合 AI 叙事正文的最低字数</p>
+          <h3 class="settings-group-title">{{ $t('prompt.settings.wordCountTitle') }}</h3>
+          <p class="settings-desc">{{ $t('prompt.settings.wordCountDesc') }}</p>
           <input type="number" class="settings-input" min="200" max="3000" step="50"
             :value="promptSettings.wordCountRequirement"
             @change="updatePromptSetting('wordCountRequirement', Number(($event.target as HTMLInputElement).value))"
@@ -664,8 +674,8 @@ function previewContent(content: string, maxLen = 100): string {
         </div>
 
         <div class="settings-group">
-          <h3 class="settings-group-title">剧情风格（互斥选择）</h3>
-          <p class="settings-desc">选择一种风格后，对应的叙事偏好提示词会替换当前风格位。同一时间只有一个风格生效。</p>
+          <h3 class="settings-group-title">{{ $t('prompt.settings.storyStyleTitle') }}</h3>
+          <p class="settings-desc">{{ $t('prompt.settings.storyStyleDesc') }}</p>
           <div class="style-radio-group">
             <label v-for="opt in storyStyleOptions" :key="opt.value" :class="['style-radio-item', { 'style-radio-item--active': promptSettings.storyStyle === opt.value }]">
               <input type="radio" name="storyStyle" :value="opt.value" :checked="promptSettings.storyStyle === opt.value" @change="updatePromptSetting('storyStyle', opt.value as PromptSettings['storyStyle'])" />
@@ -678,119 +688,119 @@ function previewContent(content: string, maxLen = 100): string {
         </div>
 
         <div class="settings-group">
-          <h3 class="settings-group-title">角色边界</h3>
+          <h3 class="settings-group-title">{{ $t('prompt.settings.roleBoundaryTitle') }}</h3>
           <div class="settings-row">
             <label class="settings-label">
               <input type="checkbox" :checked="promptSettings.enableNoControl" @change="updatePromptSetting('enableNoControl', ($event.target as HTMLInputElement).checked)" />
-              启用 NoControl（禁止 AI 操控玩家）
+              {{ $t('prompt.settings.enableNoControl') }}
             </label>
           </div>
         </div>
 
         <div class="settings-group">
-          <h3 class="settings-group-title">行动选项</h3>
+          <h3 class="settings-group-title">{{ $t('prompt.settings.actionOptionsTitle') }}</h3>
           <div class="settings-row">
             <label class="settings-label">
               <input type="checkbox" :checked="promptSettings.enableActionOptions" @change="updatePromptSetting('enableActionOptions', ($event.target as HTMLInputElement).checked)" />
-              启用行动选项生成
+              {{ $t('prompt.settings.enableActionOptions') }}
             </label>
           </div>
           <div v-if="promptSettings.enableActionOptions" class="settings-row">
             <select class="settings-select" :value="promptSettings.actionOptionsMode" @change="updatePromptSetting('actionOptionsMode', ($event.target as HTMLSelectElement).value as 'action' | 'story')">
-              <option value="action">行动导向</option>
-              <option value="story">剧情导向</option>
+              <option value="action">{{ $t('prompt.settings.actionModeAction') }}</option>
+              <option value="story">{{ $t('prompt.settings.actionModeStory') }}</option>
             </select>
             <select class="settings-select" :value="promptSettings.actionPace" @change="updatePromptSetting('actionPace', ($event.target as HTMLSelectElement).value as 'fast' | 'slow')">
-              <option value="fast">快节奏</option>
-              <option value="slow">慢节奏</option>
+              <option value="fast">{{ $t('prompt.settings.actionPaceFast') }}</option>
+              <option value="slow">{{ $t('prompt.settings.actionPaceSlow') }}</option>
             </select>
           </div>
         </div>
 
         <div class="settings-group">
-          <h3 class="settings-group-title">额外系统提示词</h3>
-          <p class="settings-desc">自定义附加到系统提示词末尾的内容</p>
+          <h3 class="settings-group-title">{{ $t('prompt.settings.customPromptTitle') }}</h3>
+          <p class="settings-desc">{{ $t('prompt.settings.customPromptDesc') }}</p>
           <textarea class="settings-textarea" rows="4"
             :value="promptSettings.customSystemPrompt"
             @input="updatePromptSetting('customSystemPrompt', ($event.target as HTMLTextAreaElement).value)"
-            placeholder="输入额外的系统提示词（可选）…"
+            :placeholder="$t('prompt.settings.customPromptPlaceholder')"
           />
         </div>
       </div>
 
       <!-- ═══ Tab: 剧情规划 ═══ -->
       <div v-if="activeTab === 'heroine'" class="heroine-tab">
-        <p class="settings-desc">管理女主/男主剧情规划。添加的条目会作为上下文注入到 AI 的每回合推理中，指导剧情推进方向。</p>
+        <p class="settings-desc">{{ $t('prompt.heroine.desc') }}</p>
 
         <!-- Heroine Entries -->
         <div class="settings-group">
-          <h3 class="settings-group-title">角色条目 ({{ heroinePlan.heroineEntries.length }})</h3>
+          <h3 class="settings-group-title">{{ $t('prompt.heroine.entriesTitle', { count: heroinePlan.heroineEntries.length }) }}</h3>
 
           <div v-for="entry in heroinePlan.heroineEntries" :key="entry.name" class="heroine-card">
             <div class="heroine-card-header">
               <span class="heroine-card-name">{{ entry.name }}</span>
               <span class="heroine-card-type">{{ entry.type }}</span>
               <span class="heroine-card-stage">{{ entry.currentStage }}</span>
-              <button class="btn btn--ghost btn--sm" style="margin-left:auto;color:var(--color-danger,#ef4444)" @click="removeHeroineEntry(entry.name)">删除</button>
+              <button class="btn btn--ghost btn--sm" style="margin-left:auto;color:var(--color-danger,#ef4444)" @click="removeHeroineEntry(entry.name)">{{ $t('prompt.heroine.delete') }}</button>
             </div>
             <div class="heroine-card-meta">
-              关系: {{ entry.currentRelationStatus }}
+              {{ $t('prompt.heroine.relation') }}: {{ entry.currentRelationStatus }}
             </div>
           </div>
 
-          <div v-if="heroinePlan.heroineEntries.length === 0" class="heroine-empty">暂无角色条目</div>
+          <div v-if="heroinePlan.heroineEntries.length === 0" class="heroine-empty">{{ $t('prompt.heroine.noEntries') }}</div>
 
           <div class="heroine-add-form">
-            <input v-model="heroineEditName" class="settings-input" placeholder="角色名" style="flex:1" />
+            <input v-model="heroineEditName" class="settings-input" :placeholder="$t('prompt.heroine.namePlaceholder')" style="flex:1" />
             <select v-model="heroineEditType" class="settings-select" style="width:120px">
-              <option value="主线女主">主线女主</option>
-              <option value="支线女主">支线女主</option>
-              <option value="隐藏女主">隐藏女主</option>
-              <option value="主线男主">主线男主</option>
-              <option value="支线角色">支线角色</option>
+              <option value="主线女主">{{ $t('prompt.heroine.typeMainHeroine') }}</option>
+              <option value="支线女主">{{ $t('prompt.heroine.typeSubHeroine') }}</option>
+              <option value="隐藏女主">{{ $t('prompt.heroine.typeHiddenHeroine') }}</option>
+              <option value="主线男主">{{ $t('prompt.heroine.typeMainHero') }}</option>
+              <option value="支线角色">{{ $t('prompt.heroine.typeSupportRole') }}</option>
             </select>
-            <input v-model="heroineEditRelation" class="settings-input" placeholder="关系状态" style="width:100px" />
-            <input v-model="heroineEditStage" class="settings-input" placeholder="当前阶段" style="width:100px" />
-            <button class="btn btn--primary btn--sm" @click="addHeroineEntry">添加</button>
+            <input v-model="heroineEditRelation" class="settings-input" :placeholder="$t('prompt.heroine.relationPlaceholder')" style="width:100px" />
+            <input v-model="heroineEditStage" class="settings-input" :placeholder="$t('prompt.heroine.stagePlaceholder')" style="width:100px" />
+            <button class="btn btn--primary btn--sm" @click="addHeroineEntry">{{ $t('prompt.heroine.add') }}</button>
           </div>
         </div>
 
         <!-- Interaction Events -->
         <div class="settings-group">
-          <h3 class="settings-group-title">互动事件 ({{ heroinePlan.interactionEvents.length }})</h3>
+          <h3 class="settings-group-title">{{ $t('prompt.heroine.eventsTitle', { count: heroinePlan.interactionEvents.length }) }}</h3>
 
           <div v-for="(evt, idx) in heroinePlan.interactionEvents" :key="idx" class="heroine-card">
             <div class="heroine-card-header">
               <span class="heroine-card-name">[{{ evt.heroineName }}] {{ evt.eventName }}</span>
               <span :class="['heroine-status', `heroine-status--${evt.status === '待触发' ? 'pending' : evt.status === '已完成' ? 'done' : 'active'}`]">{{ evt.status }}</span>
-              <button class="btn btn--ghost btn--sm" style="margin-left:auto;color:var(--color-danger,#ef4444)" @click="removeHeroineEvent(idx)">删除</button>
+              <button class="btn btn--ghost btn--sm" style="margin-left:auto;color:var(--color-danger,#ef4444)" @click="removeHeroineEvent(idx)">{{ $t('prompt.heroine.delete') }}</button>
             </div>
             <div v-if="evt.eventDescription" class="heroine-card-meta">{{ evt.eventDescription }}</div>
           </div>
 
-          <div v-if="heroinePlan.interactionEvents.length === 0" class="heroine-empty">暂无互动事件</div>
+          <div v-if="heroinePlan.interactionEvents.length === 0" class="heroine-empty">{{ $t('prompt.heroine.noEvents') }}</div>
 
           <div class="heroine-add-form">
             <select v-model="heroineEventTarget" class="settings-select" style="width:120px">
-              <option value="" disabled>选择角色</option>
+              <option value="" disabled>{{ $t('prompt.heroine.selectCharacter') }}</option>
               <option v-for="h in heroinePlan.heroineEntries" :key="h.name" :value="h.name">{{ h.name }}</option>
             </select>
-            <input v-model="heroineEventName" class="settings-input" placeholder="事件名" style="flex:1" />
-            <input v-model="heroineEventDesc" class="settings-input" placeholder="事件说明" style="flex:2" />
-            <button class="btn btn--primary btn--sm" @click="addHeroineEvent">添加</button>
+            <input v-model="heroineEventName" class="settings-input" :placeholder="$t('prompt.heroine.eventNamePlaceholder')" style="flex:1" />
+            <input v-model="heroineEventDesc" class="settings-input" :placeholder="$t('prompt.heroine.eventDescPlaceholder')" style="flex:2" />
+            <button class="btn btn--primary btn--sm" @click="addHeroineEvent">{{ $t('prompt.heroine.add') }}</button>
           </div>
         </div>
 
         <!-- Stage Progression (read-only summary for now) -->
         <div class="settings-group">
-          <h3 class="settings-group-title">阶段推进 ({{ heroinePlan.stageProgression.length }})</h3>
+          <h3 class="settings-group-title">{{ $t('prompt.heroine.stageTitle', { count: heroinePlan.stageProgression.length }) }}</h3>
           <div v-for="(stage, idx) in heroinePlan.stageProgression" :key="idx" class="heroine-card">
             <div class="heroine-card-header">
               <span class="heroine-card-name">{{ stage.stageName }}</span>
             </div>
-            <div class="heroine-card-meta">目标: {{ stage.stageGoals.join('、') || '无' }}</div>
+            <div class="heroine-card-meta">{{ $t('prompt.heroine.stageGoals') }}: {{ stage.stageGoals.join('、') || $t('prompt.heroine.stageGoalsNone') }}</div>
           </div>
-          <div v-if="heroinePlan.stageProgression.length === 0" class="heroine-empty">暂无阶段规划（可通过 AI 指令自动生成）</div>
+          <div v-if="heroinePlan.stageProgression.length === 0" class="heroine-empty">{{ $t('prompt.heroine.noStages') }}</div>
         </div>
       </div>
 
@@ -798,10 +808,10 @@ function previewContent(content: string, maxLen = 100): string {
       <template v-if="activeTab === 'prompts'">
       <div class="prompts-header-actions">
         <div class="header-actions">
-          <button class="btn btn--ghost btn--sm" @click="expandAll" title="展开全部">展开</button>
-          <button class="btn btn--ghost btn--sm" @click="collapseAll" title="折叠全部">折叠</button>
-          <button class="btn btn--ghost btn--sm" @click="importPrompts" title="导入 Prompt JSON">导入</button>
-          <button class="btn btn--primary btn--sm" @click="exportAll" title="导出已修改的 Prompt">导出</button>
+          <button class="btn btn--ghost btn--sm" @click="expandAll" :title="$t('prompt.actions.expand')">{{ $t('prompt.actions.expand') }}</button>
+          <button class="btn btn--ghost btn--sm" @click="collapseAll" :title="$t('prompt.actions.collapse')">{{ $t('prompt.actions.collapse') }}</button>
+          <button class="btn btn--ghost btn--sm" @click="importPrompts" :title="$t('prompt.actions.import')">{{ $t('prompt.actions.import') }}</button>
+          <button class="btn btn--primary btn--sm" @click="exportAll" :title="$t('prompt.actions.export')">{{ $t('prompt.actions.export') }}</button>
         </div>
       </div>
 
@@ -811,14 +821,14 @@ function previewContent(content: string, maxLen = 100): string {
           v-model="searchQuery"
           type="text"
           class="search-field"
-          placeholder="搜索 prompt ID 或内容…"
-          aria-label="搜索 Prompt"
+          :placeholder="$t('prompt.search.placeholder')"
+          :aria-label="$t('prompt.search.ariaLabel')"
         />
-        <select v-model="filterMode" class="filter-select" aria-label="过滤方式">
-          <option value="all">全部</option>
-          <option value="enabled">已启用</option>
-          <option value="disabled">已禁用</option>
-          <option value="modified">已修改</option>
+        <select v-model="filterMode" class="filter-select" :aria-label="$t('prompt.filter.ariaLabel')">
+          <option value="all">{{ $t('prompt.filter.all') }}</option>
+          <option value="enabled">{{ $t('prompt.filter.enabled') }}</option>
+          <option value="disabled">{{ $t('prompt.filter.disabled') }}</option>
+          <option value="modified">{{ $t('prompt.filter.modified') }}</option>
         </select>
       </div>
 
@@ -844,7 +854,7 @@ function previewContent(content: string, maxLen = 100): string {
             >
               <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
             </svg>
-            <span class="category-name">{{ group.name }}</span>
+            <span class="category-name">{{ categoryDisplayName(group.name) }}</span>
             <span class="category-count">{{ group.entries.length }}</span>
           </button>
 
@@ -859,11 +869,11 @@ function previewContent(content: string, maxLen = 100): string {
                 <div class="prompt-header">
                   <div class="prompt-title-area" @click="openPrompt(entry)">
                     <span class="prompt-id" :title="entry.id">{{ getDisplayName(entry.id) }}</span>
-                    <span v-if="entry.modified" class="modified-badge">已修改</span>
+                    <span v-if="entry.modified" class="modified-badge">{{ $t('prompt.entry.modifiedBadge') }}</span>
                   </div>
                   <div class="prompt-controls">
                     <!-- Weight input -->
-                    <div class="weight-control" title="优先级权重 1–10">
+                    <div class="weight-control" :title="$t('prompt.entry.weightTitle')">
                       <span class="weight-label" :style="{ color: weightColor(entry.weight) }">W</span>
                       <input
                         type="number"
@@ -874,11 +884,11 @@ function previewContent(content: string, maxLen = 100): string {
                         :style="{ color: weightColor(entry.weight) }"
                         @change="setWeight(entry, Number(($event.target as HTMLInputElement).value))"
                         @click.stop
-                        aria-label="权重"
+                        :aria-label="$t('prompt.entry.weightAriaLabel')"
                       />
                     </div>
                     <!-- Export single -->
-                    <button class="icon-btn" title="导出此 Prompt" @click="exportSingle(entry, $event)">
+                    <button class="icon-btn" :title="$t('prompt.entry.exportTitle')" @click="exportSingle(entry, $event)">
                       <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12">
                         <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
                       </svg>
@@ -887,7 +897,7 @@ function previewContent(content: string, maxLen = 100): string {
                     <button
                       :class="['enable-toggle', { 'enable-toggle--on': entry.enabled }]"
                       @click.stop="toggleEnabled(entry)"
-                      :title="entry.enabled ? '点击禁用' : '点击启用'"
+                      :title="entry.enabled ? $t('prompt.entry.enableTitle') : $t('prompt.entry.disableTitle')"
                     >
                       {{ entry.enabled ? 'ON' : 'OFF' }}
                     </button>
@@ -903,36 +913,36 @@ function previewContent(content: string, maxLen = 100): string {
       </div>
 
       <div v-else class="empty-state">
-        <p>没有匹配的 Prompt</p>
+        <p>{{ $t('prompt.empty.noMatch') }}</p>
       </div>
       </template><!-- end activeTab === 'prompts' -->
     </template><!-- end v-if="pack" -->
 
     <div v-else class="empty-state">
-      <p>未加载 GamePack — 无 Prompt 数据</p>
+      <p>{{ $t('prompt.empty.noPack') }}</p>
     </div>
 
     <!-- ─── Edit Modal ─── -->
-    <Modal v-model="showModal" :title="editingPrompt ? `编辑: ${getDisplayName(editingPrompt.id)}` : ''" width="720px">
+    <Modal v-model="showModal" :title="editingPrompt ? $t('prompt.modal.editPrefix', { name: getDisplayName(editingPrompt.id) }) : ''" width="720px">
       <!-- 高级字段区域 -->
       <div class="meta-fields">
         <div class="meta-row">
-          <label class="meta-label">类型</label>
+          <label class="meta-label">{{ $t('prompt.modal.type') }}</label>
           <select v-model="editType" class="meta-select">
-            <option v-for="opt in TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
 
-          <label class="meta-label">注入模式</label>
+          <label class="meta-label">{{ $t('prompt.modal.injectionMode') }}</label>
           <select v-model="editInjectionMode" class="meta-select">
-            <option value="always">始终注入</option>
-            <option value="match_any">关键词匹配</option>
+            <option value="always">{{ $t('prompt.modal.injectionAlways') }}</option>
+            <option value="match_any">{{ $t('prompt.modal.injectionKeyword') }}</option>
           </select>
         </div>
 
         <div class="meta-row">
-          <label class="meta-label">适用范围</label>
+          <label class="meta-label">{{ $t('prompt.modal.scope') }}</label>
           <div class="scope-checks">
-            <label v-for="opt in SCOPE_OPTIONS" :key="opt.value" class="scope-check">
+            <label v-for="opt in scopeOptions" :key="opt.value" class="scope-check">
               <input type="checkbox" :checked="editScope.includes(opt.value)" @change="toggleScope(opt.value)" />
               {{ opt.label }}
             </label>
@@ -940,8 +950,8 @@ function previewContent(content: string, maxLen = 100): string {
         </div>
 
         <div v-if="editInjectionMode === 'match_any'" class="meta-row">
-          <label class="meta-label">关键词</label>
-          <input v-model="editKeywordsText" class="meta-input" placeholder="逗号分隔，如：天剑门, 李明阳, 苍穹峰" />
+          <label class="meta-label">{{ $t('prompt.modal.keywords') }}</label>
+          <input v-model="editKeywordsText" class="meta-input" :placeholder="$t('prompt.modal.keywordsPlaceholder')" />
         </div>
       </div>
 
@@ -952,7 +962,7 @@ function previewContent(content: string, maxLen = 100): string {
           class="prompt-editor"
           rows="18"
           spellcheck="false"
-          aria-label="Prompt 内容编辑器"
+          :aria-label="$t('prompt.modal.editorAriaLabel')"
         />
       </div>
       <template #footer>
@@ -961,11 +971,11 @@ function previewContent(content: string, maxLen = 100): string {
           class="btn-warning"
           @click="resetPrompt"
         >
-          重置为默认
+          {{ $t('prompt.modal.resetDefault') }}
         </button>
         <div style="flex: 1" />
-        <button class="btn-secondary" @click="showModal = false">取消</button>
-        <button class="btn-primary" @click="savePrompt">保存修改</button>
+        <button class="btn-secondary" @click="showModal = false">{{ $t('prompt.modal.cancel') }}</button>
+        <button class="btn-primary" @click="savePrompt">{{ $t('prompt.modal.save') }}</button>
       </template>
     </Modal>
   </div>

@@ -12,7 +12,9 @@
  * - 完整备份导出 / 恢复（BackupService）
  */
 import { ref, watch, onUnmounted, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
+import { useLocale } from '@/ui/composables/useLocale';
 import Modal from '@/ui/components/common/Modal.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import type { SaveSlotMeta } from '@/engine/types/persistence';
@@ -25,6 +27,8 @@ import type { BackupService } from '@/engine/persistence/backup-service';
 import type { CustomPresetStore } from '@/engine/persistence/custom-preset-store';
 import { loadEngramConfig } from '@/engine/memory/engram/engram-config';
 
+const { t } = useI18n();
+const { formatDateTime } = useLocale();
 const { isLoaded, activePackId, activeProfileId, activeSlotId, store } = useGameState();
 
 const profileManager = inject<ProfileManager>('profileManager');
@@ -90,7 +94,7 @@ async function performSave(slotId: string): Promise<void> {
   pendingSaveSlotId.value = '';
 
   eventBus.emit('engine:save-complete', { profileId: pid, slotId });
-  eventBus.emit('ui:toast', { type: 'success', message: '保存成功', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('save.toast.saveSuccess'), duration: 1500 });
 }
 
 function confirmSave(): void {
@@ -106,15 +110,15 @@ async function loadSlot(slotId: string): Promise<void> {
   try {
     const data = await saveManager.loadGame(pid, slotId);
     if (!data) {
-      eventBus.emit('ui:toast', { type: 'error', message: '此存档为空', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('save.toast.loadEmpty'), duration: 2000 });
       return;
     }
     await profileManager.setActiveProfile(pid, slotId);
     store.loadGame(data as GameStateTree, packId, pid, slotId);
-    eventBus.emit('ui:toast', { type: 'success', message: '读取成功', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('save.toast.loadSuccess'), duration: 1500 });
   } catch (err) {
     console.error('[SavePanel] loadSlot failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '读取存档失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.toast.loadFailed'), duration: 2500 });
   }
 }
 
@@ -122,7 +126,7 @@ const showNewSlotModal = ref(false);
 const newSlotName = ref('');
 
 function openNewSlotModal(): void {
-  newSlotName.value = `存档 ${slots.value.length + 1}`;
+  newSlotName.value = t('save.newSlotModal.defaultName', { n: slots.value.length + 1 });
   showNewSlotModal.value = true;
 }
 
@@ -142,13 +146,13 @@ async function createSlot(): Promise<void> {
   });
   refreshSlots();
   showNewSlotModal.value = false;
-  eventBus.emit('ui:toast', { type: 'success', message: '已创建新存档槽', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('save.toast.newSlot'), duration: 1500 });
 }
 
 async function deleteSlot(slotId: string): Promise<void> {
   const pid = activeProfileId.value;
   if (slotId === 'auto') {
-    eventBus.emit('ui:toast', { type: 'error', message: '不能删除自动存档槽', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.toast.deleteAutoForbidden'), duration: 2000 });
     return;
   }
   if (!saveManager || !profileManager || !pid) return;
@@ -159,10 +163,10 @@ async function deleteSlot(slotId: string): Promise<void> {
     await profileManager.removeSaveSlot(pid, slotId);
     refreshSlots();
     if (activeSlotId.value === slotId) store.clearGame();
-    eventBus.emit('ui:toast', { type: 'warning', message: '已删除存档', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'warning', message: t('save.toast.deleteSuccess'), duration: 1500 });
   } catch (err) {
     console.error('[SavePanel] deleteSlot failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '删除失败', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.toast.deleteFailed'), duration: 2000 });
   }
 }
 
@@ -171,20 +175,17 @@ function isActiveSlot(slotId: string): boolean {
 }
 
 function formatTime(isoStr: string | null): string {
-  if (!isoStr) return '从未保存';
+  if (!isoStr) return t('save.slot.neverSaved');
   try {
-    return new Date(isoStr).toLocaleString('zh-CN', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    });
+    return formatDateTime(isoStr);
   } catch { return isoStr; }
 }
 
 function saveTypeBadge(type: SaveSlotMeta['saveType']): { label: string; cls: string } | null {
   switch (type) {
-    case 'pre-round': return { label: '回合前', cls: 'badge--info' };
-    case 'timepoint': return { label: '时间点', cls: 'badge--warning' };
-    case 'exit':      return { label: '退出前', cls: 'badge--purple' };
+    case 'pre-round': return { label: t('save.badge.preRound'), cls: 'badge--info' };
+    case 'timepoint': return { label: t('save.badge.timepoint'), cls: 'badge--warning' };
+    case 'exit':      return { label: t('save.badge.exit'), cls: 'badge--purple' };
     default:          return null; // manual — no badge
   }
 }
@@ -202,7 +203,7 @@ async function rebuildVectors(slotId: string): Promise<void> {
   try {
     const saveData = await saveManager.loadGame(pid, slotId);
     if (!saveData) {
-      eventBus.emit('ui:toast', { type: 'error', message: '存档为空，无法重建', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('save.vectors.rebuildEmptySlot'), duration: 2000 });
       return;
     }
 
@@ -214,21 +215,21 @@ async function rebuildVectors(slotId: string): Promise<void> {
       : [];
 
     if (events.length === 0) {
-      eventBus.emit('ui:toast', { type: 'info', message: '暂无 Engram 事件，无需重建', duration: 2500 });
+      eventBus.emit('ui:toast', { type: 'info', message: t('save.vectors.rebuildEmpty'), duration: 2500 });
       return;
     }
 
-    eventBus.emit('ui:toast', { type: 'info', message: `正在重建 ${events.length} 条向量索引…`, duration: 3000 });
+    eventBus.emit('ui:toast', { type: 'info', message: t('save.vectors.rebuildStart', { count: events.length }), duration: 3000 });
 
     const texts = events.map((e) => e.text ?? '');
     const vectors = await embedder.embed(texts);
     const model = loadEngramConfig().embeddingModel ?? 'unknown';
     await vectorStore.mergeEventVectors(events, vectors, model, { profileId: pid, slotId });
 
-    eventBus.emit('ui:toast', { type: 'success', message: `向量索引重建完成（${events.length} 条）`, duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('save.vectors.rebuildSuccess', { count: events.length }), duration: 2500 });
   } catch (err) {
     console.error('[SavePanel] rebuildVectors failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '向量重建失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.vectors.rebuildFailed'), duration: 2500 });
   } finally {
     rebuildingSlotId.value = null;
   }
@@ -262,12 +263,12 @@ async function exportSingleSave(_slot: SaveSlotMeta): Promise<void> {
     URL.revokeObjectURL(a.href);
     eventBus.emit('ui:toast', {
       type: 'success',
-      message: `已导出角色「${charName}」的完整数据`,
+      message: t('save.toast.exportSuccess', { name: charName }),
       duration: 2500,
     });
   } catch (err) {
     console.error('[SavePanel] exportSingleSave failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '导出失败', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.toast.exportFailed'), duration: 2000 });
   }
 }
 
@@ -318,7 +319,7 @@ function startTimepointSave(intervalMinutes: number): void {
       const existing = slots.value.find((s) => s.slotId === slotId);
       await saveManager.saveGame(pid, slotId, snapshot, {
         slotId,
-        slotName: '时间点存档',
+        slotName: t('save.autoSave.timepoint.slotName'),
         lastSavedAt: new Date().toISOString(),
         packId: existing?.packId ?? packId,
         packVersion: existing?.packVersion ?? '',
@@ -391,10 +392,10 @@ async function exportFullBackup(): Promise<void> {
     a.download = `full-backup-${today}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    eventBus.emit('ui:toast', { type: 'success', message: '完整备份已导出', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('save.backup.exportToast'), duration: 2000 });
   } catch (err) {
     console.error('[SavePanel] exportFullBackup failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '备份导出失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.backup.exportError'), duration: 2500 });
   } finally {
     isExportingBackup.value = false;
   }
@@ -425,7 +426,7 @@ async function exportCustomPresets(): Promise<void> {
   if (!customPresetStore || isExportingPresets.value) return;
   const pid = activePackId.value;
   if (!pid) {
-    eventBus.emit('ui:toast', { type: 'warning', message: '当前没有活跃的 game pack', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'warning', message: t('save.presets.noActivePack'), duration: 2500 });
     return;
   }
   isExportingPresets.value = true;
@@ -436,7 +437,7 @@ async function exportCustomPresets(): Promise<void> {
       0,
     );
     if (totalCount === 0) {
-      eventBus.emit('ui:toast', { type: 'info', message: '当前没有任何自定义预设可导出', duration: 2500 });
+      eventBus.emit('ui:toast', { type: 'info', message: t('save.presets.exportEmpty'), duration: 2500 });
       return;
     }
     const payload: CustomPresetsExportFile = {
@@ -455,12 +456,12 @@ async function exportCustomPresets(): Promise<void> {
     URL.revokeObjectURL(a.href);
     eventBus.emit('ui:toast', {
       type: 'success',
-      message: `已导出 ${totalCount} 条自定义预设`,
+      message: t('save.presets.exportToast', { count: totalCount }),
       duration: 2500,
     });
   } catch (err) {
     console.error('[SavePanel] exportCustomPresets failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '导出自定义预设失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.toast.exportFailed'), duration: 2500 });
   } finally {
     isExportingPresets.value = false;
   }
@@ -468,7 +469,7 @@ async function exportCustomPresets(): Promise<void> {
 
 function openCustomPresetImportPicker(): void {
   if (!customPresetStore) {
-    eventBus.emit('ui:toast', { type: 'error', message: '自定义预设功能未启用', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.presets.notEnabled'), duration: 2500 });
     return;
   }
   const input = document.createElement('input');
@@ -501,7 +502,7 @@ async function importCustomPresets(file: File): Promise<void> {
     if (payload.type !== 'custom_presets') {
       eventBus.emit('ui:toast', {
         type: 'error',
-        message: '文件格式不对 —— 应为自定义预设包（type=custom_presets）',
+        message: t('save.presets.importFormatError'),
         duration: 3500,
       });
       return;
@@ -511,20 +512,19 @@ async function importCustomPresets(file: File): Promise<void> {
     if (typeof payload.version !== 'number' || payload.version > SUPPORTED_VERSION) {
       eventBus.emit('ui:toast', {
         type: 'error',
-        message: `预设包版本 ${payload.version} 高于当前支持的 v${SUPPORTED_VERSION}，请升级应用后再导入`,
+        message: t('save.presets.importVersionError', { version: payload.version, supported: SUPPORTED_VERSION }),
         duration: 4000,
       });
       return;
     }
     const pid = activePackId.value || payload.packId;
     if (!pid) {
-      eventBus.emit('ui:toast', { type: 'error', message: '无法确定目标 game pack', duration: 2500 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('save.presets.noPack'), duration: 2500 });
       return;
     }
     if (payload.packId !== pid) {
       const confirmed = window.confirm(
-        `此预设包来自 pack "${payload.packId}"，但当前活跃 pack 是 "${pid}"。\n` +
-        `导入可能因字段不匹配而显示异常。是否继续？`,
+        t('save.presets.importPackMismatch', { source: payload.packId, target: pid }),
       );
       if (!confirmed) return;
     }
@@ -545,7 +545,7 @@ async function importCustomPresets(file: File): Promise<void> {
 
     eventBus.emit('ui:toast', {
       type: 'success',
-      message: `已导入 ${importedCount} 条自定义预设（追加，不覆盖）`,
+      message: t('save.presets.importToast', { count: importedCount }),
       duration: 3000,
     });
     // 让创角面板等监听 customPresetStore 的组件刷新
@@ -555,7 +555,7 @@ async function importCustomPresets(file: File): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     eventBus.emit('ui:toast', {
       type: 'error',
-      message: `导入失败：${msg.slice(0, 80)}`,
+      message: t('save.presets.importFailed', { error: msg.slice(0, 80) }),
       duration: 3500,
     });
   } finally {
@@ -583,8 +583,8 @@ async function prepareImport(file: File): Promise<void> {
     const raw = JSON.parse(text) as Record<string, unknown>;
     // Basic shape check — backupService.importAll does the full check
     if (typeof raw.version !== 'number' || typeof raw.exportedAt !== 'string') {
-      backupImportError.value = '文件格式无效，不是合法的备份包';
-      eventBus.emit('ui:toast', { type: 'error', message: '备份文件格式无效', duration: 2500 });
+      backupImportError.value = t('save.backup.importError');
+      eventBus.emit('ui:toast', { type: 'error', message: t('save.backup.importError'), duration: 2500 });
       return;
     }
 
@@ -622,8 +622,8 @@ async function prepareImport(file: File): Promise<void> {
     showBackupConfirm.value = true;
   } catch (err) {
     console.error('[SavePanel] prepareImport failed:', err);
-    backupImportError.value = '文件解析失败，请确认文件格式正确';
-    eventBus.emit('ui:toast', { type: 'error', message: '备份文件解析失败', duration: 2500 });
+    backupImportError.value = t('save.backup.parseError');
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.backup.parseError'), duration: 2500 });
   }
 }
 
@@ -636,7 +636,7 @@ async function executeImport(): Promise<void> {
   if (info.bundleType === 'full' && !fullImportAcknowledged.value) {
     eventBus.emit('ui:toast', {
       type: 'warning',
-      message: '请先勾选确认，此操作将替换所有本地数据',
+      message: t('save.import.acknowledgeRequired'),
       duration: 2500,
     });
     return;
@@ -652,7 +652,7 @@ async function executeImport(): Promise<void> {
       sessionStorage.setItem('aga_post_import_resume', '1');
       eventBus.emit('ui:toast', {
         type: 'success',
-        message: '恢复成功，即将刷新页面…',
+        message: t('save.import.fullSuccess'),
         duration: 2000,
       });
       // 给 toast 一点时间显示，然后刷新
@@ -664,14 +664,14 @@ async function executeImport(): Promise<void> {
       refreshSlots();
       eventBus.emit('ui:toast', {
         type: 'success',
-        message: '角色数据导入成功',
+        message: t('save.import.profileSuccess'),
         duration: 2500,
       });
     }
   } catch (err) {
     console.error('[SavePanel] executeImport failed:', err);
-    const msg = err instanceof Error ? err.message : '未知错误';
-    eventBus.emit('ui:toast', { type: 'error', message: `恢复失败：${msg.slice(0, 120)}`, duration: 5000 });
+    const msg = err instanceof Error ? err.message : t('common.fallback.unknownError');
+    eventBus.emit('ui:toast', { type: 'error', message: t('save.import.failed', { error: msg.slice(0, 120) }), duration: 5000 });
   } finally {
     isImportingBackup.value = false;
     pendingImportBlob.value = null;
@@ -703,17 +703,17 @@ async function ghSaveToken(): Promise<void> {
     ghCloudInfo.value = null;
     return;
   }
-  ghStatus.value = { stage: 'checking', message: '验证连接…' };
+  ghStatus.value = { stage: 'checking', message: t('save.github.validating') };
   const result = await githubSync.validate();
   if (result.ok) {
     ghUsername.value = githubSync.getOwner();
     ghOwner.value = ghUsername.value;
     ghStatus.value = { stage: 'idle', message: '' };
-    eventBus.emit('ui:toast', { type: 'success', message: `已连接 GitHub: ${ghUsername.value}`, duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('save.github.connectedToast', { username: ghUsername.value }), duration: 2000 });
     void ghRefreshCloudInfo();
   } else {
     ghUsername.value = '';
-    ghStatus.value = { stage: 'error', message: result.error ?? '验证失败' };
+    ghStatus.value = { stage: 'error', message: result.error ?? t('save.github.connectFailed') };
   }
 }
 
@@ -739,7 +739,7 @@ function ghCopyToken(): void {
   ta.select();
   document.execCommand('copy');
   document.body.removeChild(ta);
-  eventBus.emit('ui:toast', { type: 'success', message: 'Token 已复制', duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('save.github.tokenCopied'), duration: 1200 });
 }
 
 async function ghUpload(): Promise<void> {
@@ -764,7 +764,7 @@ async function ghUpload(): Promise<void> {
     await githubSync.upload((s) => { ghStatus.value = s; });
     void ghRefreshCloudInfo();
   } catch (err) {
-    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : '上传失败' };
+    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : t('save.github.uploadFailed') };
   }
 }
 
@@ -776,10 +776,10 @@ async function ghDownload(): Promise<void> {
   try {
     await githubSync.download((s) => { ghStatus.value = s; });
     sessionStorage.setItem('aga_post_import_resume', '1');
-    eventBus.emit('ui:toast', { type: 'success', message: '云存档恢复成功，即将刷新…', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('save.github.downloadSuccess'), duration: 2000 });
     setTimeout(() => window.location.reload(), 1500);
   } catch (err) {
-    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : '下载失败' };
+    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : t('save.github.downloadFailed') };
   }
 }
 
@@ -820,10 +820,10 @@ async function lanUpload(): Promise<void> {
   try {
     const result = await lanSync.upload();
     const kb = Math.round(result.size / 1024);
-    lanStatus.value = `已上传 (${kb} KB)`;
-    eventBus.emit('ui:toast', { type: 'success', message: `内网中继已上传 ${kb} KB`, duration: 2000 });
+    lanStatus.value = t('save.github.uploadUploaded', { size: kb });
+    eventBus.emit('ui:toast', { type: 'success', message: t('save.lan.uploadToast', { size: kb }), duration: 2000 });
   } catch (err) {
-    lanStatus.value = err instanceof Error ? err.message : '上传失败';
+    lanStatus.value = err instanceof Error ? err.message : t('save.github.uploadFailed');
   } finally {
     lanBusy.value = false;
   }
@@ -836,10 +836,10 @@ async function lanDownload(): Promise<void> {
   try {
     await lanSync.download();
     sessionStorage.setItem('aga_post_import_resume', '1');
-    eventBus.emit('ui:toast', { type: 'success', message: '内网存档恢复成功，即将刷新…', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('save.lan.downloadSuccess'), duration: 2000 });
     setTimeout(() => window.location.reload(), 1500);
   } catch (err) {
-    lanStatus.value = err instanceof Error ? err.message : '下载失败';
+    lanStatus.value = err instanceof Error ? err.message : t('save.github.downloadFailed');
   } finally {
     lanBusy.value = false;
   }
@@ -854,27 +854,27 @@ const showSettings = ref(false);
   <div class="save-panel">
     <template v-if="isLoaded">
       <header class="panel-header">
-        <h2 class="panel-title">存档管理</h2>
+        <h2 class="panel-title">{{ $t('save.title') }}</h2>
         <div class="header-actions">
-          <button class="btn btn--ghost btn--sm" @click="showSettings = !showSettings" :class="{ 'btn--ghost-active': showSettings }" title="存档设置">
+          <button class="btn btn--ghost btn--sm" @click="showSettings = !showSettings" :class="{ 'btn--ghost-active': showSettings }" :title="$t('save.settingsTitle')">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
           </button>
-          <button class="btn btn--primary btn--sm" type="button" @click="openNewSlotModal">+ 新建槽</button>
+          <button class="btn btn--primary btn--sm" type="button" @click="openNewSlotModal">{{ $t('save.newSlot') }}</button>
         </div>
       </header>
 
       <!-- ── Settings section ── -->
       <Transition name="cfg-expand">
         <section v-if="showSettings" class="settings-section">
-          <p class="settings-title">自动存档</p>
+          <p class="settings-title">{{ $t('save.settingsTitle') }}</p>
           <div class="settings-row">
             <label class="toggle-label">
               <input type="checkbox" v-model="autoSaveSettings.timepointEnabled" class="toggle-cb" />
-              <span>时间点存档</span>
+              <span>{{ $t('save.autoSave.timepoint.label') }}</span>
             </label>
             <Transition name="fade-in">
               <div v-if="autoSaveSettings.timepointEnabled" class="inline-row">
-                <span class="cfg-label">每</span>
+                <span class="cfg-label">{{ $t('save.autoSave.timepoint.every') }}</span>
                 <input
                   class="cfg-num"
                   type="number"
@@ -882,26 +882,26 @@ const showSettings = ref(false);
                   max="999"
                   v-model.number="autoSaveSettings.timepointInterval"
                 />
-                <span class="cfg-label">分钟</span>
+                <span class="cfg-label">{{ $t('save.autoSave.timepoint.unit') }}</span>
               </div>
             </Transition>
           </div>
-          <p class="settings-hint">时间点存档在面板打开时运行，写入专用「时间点存档」槽。</p>
+          <p class="settings-hint">{{ $t('save.autoSave.timepoint.hint') }}</p>
 
           <div class="backup-row">
-            <p class="settings-title">完整备份</p>
+            <p class="settings-title">{{ $t('save.backup.sectionTitle') }}</p>
             <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--color-text-secondary);margin-bottom:4px;">
               <input type="checkbox" v-model="includeReferenceAssets" style="accent-color:var(--color-sage-400)" />
-              包含参考素材图片
+              {{ $t('save.backup.includeRef') }}
             </label>
             <div class="backup-btns">
               <button class="btn btn--secondary btn--sm" :disabled="isExportingBackup" @click="exportFullBackup">
                 <span v-if="isExportingBackup" class="spinner" />
-                {{ isExportingBackup ? '导出中…' : '导出备份' }}
+                {{ isExportingBackup ? $t('save.backup.exportBusy') : $t('save.backup.exportBtn') }}
               </button>
               <button class="btn btn--secondary btn--sm" :disabled="isImportingBackup" @click="openImportFilePicker">
                 <span v-if="isImportingBackup" class="spinner" />
-                {{ isImportingBackup ? '恢复中…' : '恢复备份' }}
+                {{ isImportingBackup ? $t('save.backup.restoreBusy') : $t('save.backup.restoreBtn') }}
               </button>
             </div>
             <p v-if="backupImportError" class="backup-error">{{ backupImportError }}</p>
@@ -910,33 +910,33 @@ const showSettings = ref(false);
           <!-- ── GitHub Cloud Sync ── -->
           <div class="gh-section">
             <div class="gh-header">
-              <p class="settings-title">GitHub 云存档</p>
+              <p class="settings-title">{{ $t('save.github.sectionTitle') }}</p>
               <span v-if="ghUsername" class="gh-badge">{{ ghUsername }}</span>
             </div>
 
             <!-- 未连接：配置表单 -->
             <template v-if="!ghUsername">
               <p class="gh-hint">
-                将完整存档同步到你的 GitHub 私有仓库。需要
+                {{ $t('save.github.hintBefore') }}
                 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" class="link-subtle">Personal Access Token</a>
-                （Fine-grained, Contents Read &amp; Write）。
+                {{ $t('save.github.hintAfter') }}
               </p>
               <div class="gh-form">
                 <div class="gh-field">
-                  <label class="gh-label">Token</label>
+                  <label class="gh-label">{{ $t('save.github.tokenLabel') }}</label>
                   <div class="gh-token-row">
-                    <input :type="ghShowToken ? 'text' : 'password'" class="gh-input gh-input--mono" v-model="ghToken" placeholder="github_pat_..." spellcheck="false" autocomplete="off" />
-                    <button class="gh-eye" @click="ghShowToken = !ghShowToken" :title="ghShowToken ? '隐藏' : '显示'">
+                    <input :type="ghShowToken ? 'text' : 'password'" class="gh-input gh-input--mono" v-model="ghToken" :placeholder="$t('save.github.tokenPlaceholder')" spellcheck="false" autocomplete="off" />
+                    <button class="gh-eye" @click="ghShowToken = !ghShowToken" :title="ghShowToken ? $t('save.github.hideToken') : $t('save.github.showToken')">
                       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z" /><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4" /></svg>
                     </button>
                   </div>
                 </div>
                 <div class="gh-field">
-                  <label class="gh-label">仓库</label>
-                  <input class="gh-input" v-model="ghRepoName" placeholder="aga-cloud-save" spellcheck="false" />
+                  <label class="gh-label">{{ $t('save.github.repoLabel') }}</label>
+                  <input class="gh-input" v-model="ghRepoName" :placeholder="$t('save.github.repoPlaceholder')" spellcheck="false" />
                 </div>
                 <button class="gh-connect-btn" @click="ghSaveToken" :disabled="ghStatus.stage === 'checking' || !ghToken.trim()">
-                  {{ ghStatus.stage === 'checking' ? '验证中…' : '连接' }}
+                  {{ ghStatus.stage === 'checking' ? $t('save.github.connecting') : $t('save.github.connectBtn') }}
                 </button>
               </div>
             </template>
@@ -946,24 +946,23 @@ const showSettings = ref(false);
               <div class="gh-cloud-row">
                 <div class="gh-cloud-meta">
                   <span v-if="ghCloudInfo?.exists" class="gh-cloud-info">
-                    云端: {{ ghCloudInfo.updatedAt ? new Date(ghCloudInfo.updatedAt).toLocaleString() : '未知' }}
-                    · {{ ghCloudInfo.sizeKB ?? 0 }} KB
+                    {{ $t('save.github.cloudInfo', { time: ghCloudInfo.updatedAt ? formatDateTime(ghCloudInfo.updatedAt) : $t('common.fallback.unknown'), size: ghCloudInfo.sizeKB ?? 0 }) }}
                   </span>
-                  <span v-else-if="ghCloudInfo" class="gh-cloud-info gh-cloud-empty">云端暂无存档</span>
+                  <span v-else-if="ghCloudInfo" class="gh-cloud-info gh-cloud-empty">{{ $t('save.github.cloudEmpty') }}</span>
                 </div>
-                <button class="gh-copy-btn" @click="ghCopyToken" title="复制 Token 到剪贴板">
+                <button class="gh-copy-btn" @click="ghCopyToken" :title="$t('save.github.copyToken')">
                   <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
                 </button>
                 <div class="gh-actions">
                   <button class="gh-action-btn gh-action-btn--up" :disabled="ghBusy()" @click="ghUpload">
                     <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
-                    {{ ghStatus.stage === 'uploading' ? '上传中…' : '上传' }}
+                    {{ ghStatus.stage === 'uploading' ? $t('save.github.uploading') : $t('save.github.uploadBtn') }}
                   </button>
                   <button class="gh-action-btn gh-action-btn--down" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghShowDownloadConfirm = true">
                     <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
-                    {{ ghStatus.stage === 'downloading' ? '下载中…' : '下载' }}
+                    {{ ghStatus.stage === 'downloading' ? $t('save.github.downloading') : $t('save.github.downloadBtn') }}
                   </button>
-                  <button class="gh-action-btn gh-action-btn--disconnect" @click="ghUsername = ''; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" title="断开连接">
+                  <button class="gh-action-btn gh-action-btn--disconnect" @click="ghUsername = ''; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" :title="$t('save.github.disconnect')">
                     <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06"/></svg>
                   </button>
                 </div>
@@ -977,24 +976,24 @@ const showSettings = ref(false);
           <!-- ── LAN Sync (dev mode only) ── -->
           <div v-if="lanAvailable" class="gh-section">
             <div class="gh-header">
-              <p class="settings-title">内网中继</p>
+              <p class="settings-title">{{ $t('save.lan.sectionTitle') }}</p>
               <label class="lan-toggle-label">
                 <input type="checkbox" :checked="lanEnabled" @change="lanToggle" class="lan-toggle-cb" />
-                <span class="lan-toggle-text">{{ lanEnabled ? '已启用' : '已关闭' }}</span>
+                <span class="lan-toggle-text">{{ lanEnabled ? $t('save.lan.enabled') : $t('save.lan.disabled') }}</span>
               </label>
             </div>
             <template v-if="lanEnabled">
               <p class="settings-hint">
-                同一 WiFi 下的设备可通过此中继互传存档。数据仅存在于开发服务器内存中，关闭终端即清除。
+                {{ $t('save.lan.hint') }}
               </p>
               <div class="gh-actions" style="margin-top: 8px">
                 <button class="gh-action-btn gh-action-btn--up" :disabled="lanBusy" @click="lanUpload">
                   <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
-                  {{ lanBusy ? '处理中…' : '上传到中继' }}
+                  {{ lanBusy ? $t('save.lan.busy') : $t('save.lan.uploadBtn') }}
                 </button>
                 <button class="gh-action-btn gh-action-btn--down" :disabled="lanBusy" @click="lanDownload">
                   <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
-                  {{ lanBusy ? '处理中…' : '从中继下载' }}
+                  {{ lanBusy ? $t('save.lan.busy') : $t('save.lan.downloadBtn') }}
                 </button>
               </div>
               <p v-if="lanStatus" class="gh-status-msg">{{ lanStatus }}</p>
@@ -1003,10 +1002,9 @@ const showSettings = ref(false);
 
           <!-- 2026-04-14 Phase 5：自定义预设独立导出/导入（创意素材包） -->
           <div class="backup-row">
-            <p class="settings-title">自定义创角预设包</p>
+            <p class="settings-title">{{ $t('save.presets.sectionTitle') }}</p>
             <p class="settings-hint">
-              单独导出/导入用户自定义的世界 / 出身 / 特质 / 天赋等条目，文件小巧，便于在玩家间分享。
-              不含存档、向量、API 配置。
+              {{ $t('save.presets.hint') }}
             </p>
             <div class="backup-btns">
               <button
@@ -1015,7 +1013,7 @@ const showSettings = ref(false);
                 @click="exportCustomPresets"
               >
                 <span v-if="isExportingPresets" class="spinner" />
-                {{ isExportingPresets ? '导出中…' : '导出预设包' }}
+                {{ isExportingPresets ? $t('save.presets.exportBusy') : $t('save.presets.exportBtn') }}
               </button>
               <button
                 class="btn btn--secondary btn--sm"
@@ -1023,7 +1021,7 @@ const showSettings = ref(false);
                 @click="openCustomPresetImportPicker"
               >
                 <span v-if="isImportingPresets" class="spinner" />
-                {{ isImportingPresets ? '导入中…' : '导入预设包' }}
+                {{ isImportingPresets ? $t('save.presets.importBusy') : $t('save.presets.importBtn') }}
               </button>
             </div>
           </div>
@@ -1040,7 +1038,7 @@ const showSettings = ref(false);
           <div class="slot-header">
             <div class="slot-title-area">
               <span class="slot-name">{{ slot.slotName }}</span>
-              <span v-if="isActiveSlot(slot.slotId)" class="badge badge--active">当前</span>
+              <span v-if="isActiveSlot(slot.slotId)" class="badge badge--active">{{ $t('save.badge.active') }}</span>
               <span
                 v-if="saveTypeBadge(slot.saveType)"
                 :class="['badge', saveTypeBadge(slot.saveType)!.cls]"
@@ -1058,70 +1056,70 @@ const showSettings = ref(false);
           </div>
 
           <div class="slot-actions">
-            <button class="action-btn action-btn--save" type="button" @click="initiatesSave(slot.slotId)">保存</button>
-            <button class="action-btn action-btn--load" type="button" :disabled="!slot.lastSavedAt" @click="loadSlot(slot.slotId)">读取</button>
+            <button class="action-btn action-btn--save" type="button" @click="initiatesSave(slot.slotId)">{{ $t('save.slot.save') }}</button>
+            <button class="action-btn action-btn--load" type="button" :disabled="!slot.lastSavedAt" @click="loadSlot(slot.slotId)">{{ $t('save.slot.load') }}</button>
             <button
               class="action-btn action-btn--export"
               type="button"
               :disabled="!slot.lastSavedAt"
               @click="exportSingleSave(slot)"
-              title="导出此存档"
-            >导出</button>
+              :title="$t('save.slot.export')"
+            >{{ $t('save.slot.export') }}</button>
             <button
               v-if="vectorStore && embedder"
               class="action-btn action-btn--rebuild"
               type="button"
               :disabled="!slot.lastSavedAt || rebuildingSlotId === slot.slotId"
               @click="rebuildVectors(slot.slotId)"
-              title="重建向量索引"
+              :title="$t('save.slot.vectors')"
             >
               <span v-if="rebuildingSlotId === slot.slotId" class="spinner spinner--sm" />
-              <span v-else>向量</span>
+              <span v-else>{{ $t('save.slot.vectors') }}</span>
             </button>
             <button
               v-if="slot.slotId !== 'auto'"
               class="action-btn action-btn--delete"
               type="button"
               @click="deleteSlot(slot.slotId)"
-            >删除</button>
+            >{{ $t('save.slot.delete') }}</button>
           </div>
         </div>
 
         <p v-if="slots.length === 0" class="slots-empty-hint">
-          暂无存档槽元数据；完成创角或从管理页导入后会出现列表。
+          {{ $t('save.emptySlots') }}
         </p>
       </div>
     </template>
 
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p>{{ $t('save.noGame') }}</p>
     </div>
 
     <!-- Overwrite confirm -->
-    <Modal v-model="confirmOverwrite" title="确认覆盖" width="380px">
-      <p class="confirm-text">此存档已有数据，确定要覆盖吗？此操作不可撤销。</p>
+    <Modal v-model="confirmOverwrite" :title="$t('save.overwrite.title')" width="380px">
+      <p class="confirm-text">{{ $t('save.overwrite.text') }}</p>
       <template #footer>
-        <button class="btn btn--secondary" type="button" @click="confirmOverwrite = false">取消</button>
-        <button class="btn btn--danger" type="button" @click="confirmSave">确认覆盖</button>
+        <button class="btn btn--secondary" type="button" @click="confirmOverwrite = false">{{ $t('save.overwrite.cancel') }}</button>
+        <button class="btn btn--danger" type="button" @click="confirmSave">{{ $t('save.overwrite.confirm') }}</button>
       </template>
     </Modal>
 
     <!-- New slot -->
-    <Modal v-model="showNewSlotModal" title="创建新存档槽" width="380px">
+    <Modal v-model="showNewSlotModal" :title="$t('save.newSlotModal.title')" width="380px">
       <div class="form-group">
-        <label class="form-label">存档名称</label>
-        <input v-model="newSlotName" type="text" class="form-input" placeholder="输入存档名称" @keydown.enter="createSlot" />
+        <label class="form-label">{{ $t('save.newSlotModal.nameLabel') }}</label>
+        <input v-model="newSlotName" type="text" class="form-input" :placeholder="$t('save.newSlotModal.namePlaceholder')" @keydown.enter="createSlot" />
       </div>
       <template #footer>
-        <button class="btn btn--secondary" type="button" @click="showNewSlotModal = false">取消</button>
-        <button class="btn btn--primary" type="button" @click="createSlot">创建</button>
+        <button class="btn btn--secondary" type="button" @click="showNewSlotModal = false">{{ $t('save.newSlotModal.cancel') }}</button>
+        <button class="btn btn--primary" type="button" @click="createSlot">{{ $t('save.newSlotModal.create') }}</button>
       </template>
     </Modal>
 
     <!-- Backup import confirm -->
     <Modal
       v-model="showBackupConfirm"
-      :title="pendingImportInfo?.bundleType === 'full' ? '恢复完整备份（破坏性操作）' : '导入角色数据'"
+      :title="pendingImportInfo?.bundleType === 'full' ? $t('save.import.fullBackupTitle') : $t('save.import.profileTitle')"
       width="460px"
     >
       <div v-if="pendingImportInfo" class="import-preview">
@@ -1130,37 +1128,37 @@ const showSettings = ref(false);
           <span
             v-if="pendingImportInfo.bundleType === 'full'"
             class="import-badge import-badge--full"
-          >完整备份</span>
-          <span v-else class="import-badge import-badge--profile">单角色备份</span>
+          >{{ $t('save.import.badgeFull') }}</span>
+          <span v-else class="import-badge import-badge--profile">{{ $t('save.import.badgeProfile') }}</span>
         </div>
 
         <!-- 基本信息 -->
         <div class="import-info">
           <div class="import-info__row">
-            <span class="import-info__label">导出时间</span>
-            <span class="import-info__value">{{ new Date(pendingImportInfo.exportedAt).toLocaleString('zh-CN') }}</span>
+            <span class="import-info__label">{{ $t('save.import.exportedAt') }}</span>
+            <span class="import-info__value">{{ formatDateTime(pendingImportInfo.exportedAt) }}</span>
           </div>
           <div class="import-info__row">
-            <span class="import-info__label">角色数</span>
-            <span class="import-info__value">{{ pendingImportInfo.profileCount }} 个</span>
+            <span class="import-info__label">{{ $t('save.import.profileCount') }}</span>
+            <span class="import-info__value">{{ $t('save.import.profileCountValue', { count: pendingImportInfo.profileCount }) }}</span>
           </div>
           <div class="import-info__row">
-            <span class="import-info__label">存档数</span>
-            <span class="import-info__value">{{ pendingImportInfo.saveCount }} 个</span>
+            <span class="import-info__label">{{ $t('save.import.saveCount') }}</span>
+            <span class="import-info__value">{{ $t('save.import.saveCountValue', { count: pendingImportInfo.saveCount }) }}</span>
           </div>
           <div v-if="pendingImportInfo.vectorCount > 0" class="import-info__row">
-            <span class="import-info__label">向量索引</span>
-            <span class="import-info__value">{{ pendingImportInfo.vectorCount }} 组</span>
+            <span class="import-info__label">{{ $t('save.import.vectorCount') }}</span>
+            <span class="import-info__value">{{ $t('save.import.vectorCountValue', { count: pendingImportInfo.vectorCount }) }}</span>
           </div>
           <div v-if="pendingImportInfo.hasActiveProfile" class="import-info__row">
-            <span class="import-info__label">活跃游戏</span>
-            <span class="import-info__value">包含（恢复后自动继续）</span>
+            <span class="import-info__label">{{ $t('save.import.activeGame') }}</span>
+            <span class="import-info__value">{{ $t('save.import.activeGameValue') }}</span>
           </div>
         </div>
 
         <!-- 角色列表 -->
         <div v-if="pendingImportInfo.profileNames.length > 0" class="import-profiles">
-          <span class="import-profiles__label">{{ pendingImportInfo.bundleType === 'full' ? '将恢复的角色' : '将导入的角色' }}</span>
+          <span class="import-profiles__label">{{ pendingImportInfo.bundleType === 'full' ? $t('save.import.profileListFull') : $t('save.import.profileListProfile') }}</span>
           <div class="import-profiles__list">
             <span
               v-for="name in pendingImportInfo.profileNames"
@@ -1175,21 +1173,21 @@ const showSettings = ref(false);
           v-if="pendingImportInfo.bundleType === 'full'"
           class="import-warning import-warning--danger"
         >
-          <strong>⚠ 此操作将清除所有本地数据并用备份替换</strong>
+          <strong>⚠ {{ $t('save.import.warningFull') }}</strong>
           <ul class="import-warning__list">
-            <li>所有现有角色、存档、向量将被删除</li>
-            <li>所有 API 配置、界面设置、Prompt 覆盖将被替换</li>
-            <li>建议先点"导出备份"保存当前数据</li>
-            <li>如备份中含有活跃游戏指针，刷新后将自动继续</li>
+            <li>{{ $t('save.import.warningFullList1') }}</li>
+            <li>{{ $t('save.import.warningFullList2') }}</li>
+            <li>{{ $t('save.import.warningFullList3') }}</li>
+            <li>{{ $t('save.import.warningFullList4') }}</li>
           </ul>
           <label class="import-acknowledge">
             <input type="checkbox" v-model="fullImportAcknowledged" />
-            <span>我已了解此操作将替换所有本地数据</span>
+            <span>{{ $t('save.import.acknowledge') }}</span>
           </label>
         </div>
         <div v-else class="import-warning import-warning--info">
-          <strong>提示：此操作仅新增或覆盖以上列出的角色</strong>
-          <p class="import-warning__text">其他角色、API 配置、全局设置均不受影响。</p>
+          <strong>{{ $t('save.import.warningProfile') }}</strong>
+          <p class="import-warning__text">{{ $t('save.import.warningProfileHint') }}</p>
         </div>
       </div>
 
@@ -1198,7 +1196,7 @@ const showSettings = ref(false);
           class="btn btn--secondary"
           :disabled="isImportingBackup"
           @click="showBackupConfirm = false"
-        >取消</button>
+        >{{ $t('save.import.cancel') }}</button>
         <button
           class="btn"
           :class="pendingImportInfo?.bundleType === 'full' ? 'btn--danger' : 'btn--primary'"
@@ -1206,19 +1204,19 @@ const showSettings = ref(false);
           @click="executeImport"
         >
           <span v-if="isImportingBackup" class="spinner" />
-          {{ isImportingBackup ? '恢复中…' : (pendingImportInfo?.bundleType === 'full' ? '确认替换并恢复' : '确认导入') }}
+          {{ isImportingBackup ? $t('save.import.restoring') : (pendingImportInfo?.bundleType === 'full' ? $t('save.import.confirmFull') : $t('save.import.confirmProfile')) }}
         </button>
       </template>
     </Modal>
 
     <!-- GitHub download confirm -->
-    <Modal v-model="ghShowDownloadConfirm" title="从 GitHub 下载存档" width="400px">
+    <Modal v-model="ghShowDownloadConfirm" :title="$t('save.github.downloadConfirmTitle')" width="400px">
       <p class="confirm-text" style="color: var(--color-danger, #ef4444)">
-        此操作将<strong>覆盖本地所有数据</strong>（存档、设置、图片）。不可撤销。
+        {{ $t('save.github.downloadConfirmText') }}
       </p>
       <template #footer>
-        <button class="btn-modal btn-modal--secondary" @click="ghShowDownloadConfirm = false">取消</button>
-        <button class="btn-modal btn-modal--danger" @click="ghDownload">确认下载并覆盖</button>
+        <button class="btn-modal btn-modal--secondary" @click="ghShowDownloadConfirm = false">{{ $t('save.github.downloadConfirmCancel') }}</button>
+        <button class="btn-modal btn-modal--danger" @click="ghDownload">{{ $t('save.github.downloadConfirmOk') }}</button>
       </template>
     </Modal>
   </div>

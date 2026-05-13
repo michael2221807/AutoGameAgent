@@ -9,11 +9,15 @@
  */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { loadEngramConfig } from '@/engine/memory/engram/engram-config';
 import { eventBus } from '@/engine/core/event-bus';
 import { useSidebarDrawer } from '@/ui/composables/useSidebarDrawer';
+import { useLocale } from '@/ui/composables/useLocale';
 
 const route = useRoute();
+const { t } = useI18n();
+const { formatTime } = useLocale();
 const isCollapsed = ref(false);
 const { isMobile, leftOpen, closeAll } = useSidebarDrawer();
 
@@ -44,7 +48,7 @@ let clockTimer: ReturnType<typeof setInterval> | null = null;
 
 function updateClock(): void {
   const now = new Date();
-  clockTime.value = now.toLocaleTimeString('zh-CN', { hour12: false });
+  clockTime.value = formatTime(now);
 }
 
 onMounted(() => {
@@ -117,41 +121,41 @@ const icons = {
   plot:         '<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V15"/></svg>',
 } as const;
 
-const BASE_SYSTEM_ITEMS: PanelItem[] = [
-  { route: '/game/variables',       label: '变量',        icon: icons.variables },
-  { route: '/game/assistant',       label: 'AI 助手',     icon: icons.assistant },
-  { route: '/game/prompts',          label: 'Prompt',      icon: icons.prompts },
-  { route: '/game/api',              label: 'API',         icon: icons.api },
-  { route: '/game/settings',         label: '设置',        icon: icons.settings },
-  { route: '/game/save',             label: '存档',        icon: icons.save },
-  { route: '/game/prompt-assembly',  label: 'Prompt 组装', icon: icons.assembly },
-  { route: '/game/image',            label: '图像生成',    icon: icons.image },
-  { route: '/game/engram-debug',     label: 'Engram 调试', icon: icons.engram },
-];
+const BASE_SYSTEM_ITEMS = computed<PanelItem[]>(() => [
+  { route: '/game/variables',       label: t('layout.sidebar.item.variables'),       icon: icons.variables },
+  { route: '/game/assistant',       label: t('layout.sidebar.item.assistant'),       icon: icons.assistant },
+  { route: '/game/prompts',          label: t('layout.sidebar.item.prompt'),          icon: icons.prompts },
+  { route: '/game/api',              label: t('layout.sidebar.item.api'),             icon: icons.api },
+  { route: '/game/settings',         label: t('layout.sidebar.item.settings'),        icon: icons.settings },
+  { route: '/game/save',             label: t('layout.sidebar.item.save'),            icon: icons.save },
+  { route: '/game/prompt-assembly',  label: t('layout.sidebar.item.promptAssembly'),  icon: icons.assembly },
+  { route: '/game/image',            label: t('layout.sidebar.item.imageGeneration'), icon: icons.image },
+  { route: '/game/engram-debug',     label: t('layout.sidebar.item.engramDebug'),     icon: icons.engram },
+]);
 
 const panelGroups = computed<PanelGroup[]>(() => [
   {
-    label: '游戏',
+    label: t('layout.sidebar.group.game'),
     items: [
-      { route: '/game',              label: '主面板',   icon: icons.main },
-      { route: '/game/character',    label: '角色详情', icon: icons.character },
-      { route: '/game/inventory',    label: '背包',     icon: icons.inventory },
-      { route: '/game/relationships',label: '社交关系', icon: icons.relationships },
-      { route: '/game/map',          label: '地图',     icon: icons.map },
-      { route: '/game/plot',         label: '剧情',     icon: icons.plot },
+      { route: '/game',              label: t('layout.sidebar.item.mainPanel'),       icon: icons.main },
+      { route: '/game/character',    label: t('layout.sidebar.item.characterDetail'), icon: icons.character },
+      { route: '/game/inventory',    label: t('layout.sidebar.item.inventory'),       icon: icons.inventory },
+      { route: '/game/relationships',label: t('layout.sidebar.item.relationships'),   icon: icons.relationships },
+      { route: '/game/map',          label: t('layout.sidebar.item.map'),             icon: icons.map },
+      { route: '/game/plot',         label: t('layout.sidebar.item.plot'),            icon: icons.plot },
     ],
   },
   {
-    label: '记忆',
+    label: t('layout.sidebar.group.memory'),
     items: [
-      { route: '/game/memory',    label: '记忆', icon: icons.memory },
-      { route: '/game/events',    label: '事件', icon: icons.events },
-      { route: '/game/heartbeat', label: '心跳', icon: icons.heartbeat },
+      { route: '/game/memory',    label: t('layout.sidebar.item.memory'),    icon: icons.memory },
+      { route: '/game/events',    label: t('layout.sidebar.item.events'),    icon: icons.events },
+      { route: '/game/heartbeat', label: t('layout.sidebar.item.heartbeat'), icon: icons.heartbeat },
     ],
   },
   {
-    label: '系统',
-    items: BASE_SYSTEM_ITEMS.filter(
+    label: t('layout.sidebar.group.system'),
+    items: BASE_SYSTEM_ITEMS.value.filter(
       (item) => item.route !== '/game/engram-debug' || engramDebugVisible.value,
     ),
   },
@@ -168,7 +172,7 @@ const panelGroups = computed<PanelGroup[]>(() => [
   <nav
     :class="['sidebar', { 'sidebar--collapsed': isCollapsed, 'drawer-open': leftOpen }]"
     role="navigation"
-    aria-label="游戏导航"
+    :aria-label="$t('layout.sidebar.ariaNav')"
   >
     <!-- Header: back-to-main + clock -->
     <div class="sidebar__header">
@@ -176,15 +180,15 @@ const panelGroups = computed<PanelGroup[]>(() => [
         v-if="isSubPanel"
         to="/game"
         class="sidebar__back-main"
-        aria-label="返回主面板"
-        :title="isCollapsed ? '返回主面板' : undefined"
+        :aria-label="$t('layout.sidebar.ariaBackMain')"
+        :title="isCollapsed ? $t('layout.sidebar.ariaBackMain') : undefined"
       >
         <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
           <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
         </svg>
-        <span v-if="!isCollapsed" class="sidebar__back-main-label">主面板</span>
+        <span v-if="!isCollapsed" class="sidebar__back-main-label">{{ $t('layout.sidebar.mainPanelText') }}</span>
       </router-link>
-      <span v-if="!isCollapsed" class="sidebar__clock" aria-label="当前时间">{{ clockTime }}</span>
+      <span v-if="!isCollapsed" class="sidebar__clock" :aria-label="$t('layout.sidebar.ariaCurrentTime')">{{ clockTime }}</span>
     </div>
 
     <!-- Panel groups -->
@@ -216,8 +220,8 @@ const panelGroups = computed<PanelGroup[]>(() => [
     <div class="sidebar__footer">
       <button
         class="sidebar__collapse-btn"
-        :aria-label="isCollapsed ? '展开侧栏' : '收起侧栏'"
-        :title="isCollapsed ? '展开侧栏' : '收起侧栏'"
+        :aria-label="isCollapsed ? $t('layout.sidebar.ariaExpand') : $t('layout.sidebar.ariaCollapse')"
+        :title="isCollapsed ? $t('layout.sidebar.ariaExpand') : $t('layout.sidebar.ariaCollapse')"
         @click="toggleCollapse"
       >
         <svg
@@ -229,7 +233,7 @@ const panelGroups = computed<PanelGroup[]>(() => [
         >
           <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
         </svg>
-        <span v-if="!isCollapsed" class="sidebar__item-label">收起</span>
+        <span v-if="!isCollapsed" class="sidebar__item-label">{{ $t('layout.sidebar.collapseText') }}</span>
       </button>
     </div>
   </nav>

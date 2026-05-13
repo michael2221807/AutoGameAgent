@@ -12,7 +12,10 @@
  * calling `ImageService.regenerateFromPrompts` with its own subject params.
  */
 import { ref, computed, watch, inject, onMounted, onUnmounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ImageBackendType, CivitaiLoraSnapshot, ImageReferenceInput } from '@/engine/image/types';
+
+const { t } = useI18n();
 import { PROVIDER_CAPABILITIES } from '@/engine/image/provider-capabilities';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 
@@ -134,32 +137,32 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 <template>
   <Teleport to="body">
     <div class="regen-overlay" @click.self="cancel">
-      <div ref="dialogRef" class="regen-dialog" role="dialog" aria-label="同提示词重新生成">
+      <div ref="dialogRef" class="regen-dialog" role="dialog" :aria-label="$t('image.regenerate.dialogAriaLabel')">
         <header class="regen-header">
           <div class="regen-title-col">
-            <h3 class="regen-title">生成同款</h3>
+            <h3 class="regen-title">{{ $t('image.regenerate.dialogTitle') }}</h3>
             <div class="regen-subject">
               <span class="regen-subject-main">{{ subjectLabel }}</span>
               <span v-if="subtitle" class="regen-subject-sub">{{ subtitle }}</span>
             </div>
           </div>
-          <button type="button" class="regen-close" aria-label="关闭" @click="cancel">×</button>
+          <button type="button" class="regen-close" :aria-label="$t('image.regenerate.closeAriaLabel')" @click="cancel">×</button>
         </header>
 
         <section class="regen-body">
           <div class="regen-field-row">
-            <label class="regen-label">生成后端</label>
+            <label class="regen-label">{{ $t('image.regenerate.backendLabel') }}</label>
             <AgaSelect v-model="chosenBackend" :options="backendOptions" />
-            <p class="regen-hint">可跨模型切换；相同提示词会被直接交给选中的后端。</p>
+            <p class="regen-hint">{{ $t('image.regenerate.backendHint') }}</p>
           </div>
 
           <div class="regen-meta">
-            <span class="regen-meta-chip">尺寸 {{ width }} × {{ height }}</span>
-            <span class="regen-meta-chip">原后端 {{ initialBackend }}</span>
+            <span class="regen-meta-chip">{{ $t('image.regenerate.sizeChip', { w: width, h: height }) }}</span>
+            <span class="regen-meta-chip">{{ $t('image.regenerate.originalBackend', { backend: initialBackend }) }}</span>
           </div>
 
           <div v-if="civitaiLoraSnapshot?.loras?.length" class="regen-lora-summary">
-            <div class="regen-prompt-label">原图使用的 LoRA</div>
+            <div class="regen-prompt-label">{{ $t('image.regenerate.originalLoras') }}</div>
             <div class="regen-meta">
               <span v-for="l in civitaiLoraSnapshot.loras" :key="l.id" class="regen-meta-chip">
                 {{ l.name }} ({{ l.strength.toFixed(2) }})
@@ -167,64 +170,64 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
             </div>
             <div v-if="civitaiLoraSnapshot.loras.flatMap(l => l.injectedTriggers).length > 0" class="regen-meta" style="margin-top: 4px;">
               <span class="regen-meta-chip" style="font-style: italic;">
-                触发词: {{ civitaiLoraSnapshot.loras.flatMap(l => l.injectedTriggers).join(', ') }}
+                {{ $t('image.regenerate.triggerLabel', { triggers: civitaiLoraSnapshot.loras.flatMap(l => l.injectedTriggers).join(', ') }) }}
               </span>
             </div>
           </div>
 
           <div v-if="initialBackend === 'civitai'" class="regen-hint" style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">
-            本次重新生成将按当前书架设置应用 LoRA，可能与原图不同。
+            {{ $t('image.regenerate.loraNote') }}
           </div>
 
           <div v-if="canUseReference" class="regen-ref-block">
             <label class="regen-ref-toggle">
               <input type="checkbox" v-model="useReference" :disabled="busy" />
-              <span>用原图作参考重绘</span>
+              <span>{{ $t('image.regenerate.useRefRedraw') }}</span>
             </label>
             <div v-if="useReference" class="regen-ref-controls">
-              <div class="regen-label">重绘幅度</div>
+              <div class="regen-label">{{ $t('image.regenerate.redrawStrength') }}</div>
               <div class="regen-ref-slider">
                 <input type="range" min="0.1" max="1" step="0.05" v-model.number="referenceDenoise" />
                 <span class="regen-ref-val">{{ referenceDenoise.toFixed(2) }}</span>
               </div>
               <div class="regen-ref-marks">
-                <span>0.25 近似原图</span>
-                <span>0.55 保留构图</span>
-                <span>0.80 大幅重绘</span>
+                <span>{{ $t('image.regenerate.markNear') }}</span>
+                <span>{{ $t('image.regenerate.markKeep') }}</span>
+                <span>{{ $t('image.regenerate.markHeavy') }}</span>
               </div>
               <p v-if="blobCheckFailed" class="regen-hint" style="color: var(--color-error, #f87171); margin-top: 4px;">
-                原图缓存缺失，无法参考重绘。请取消勾选或删除后重新生成。
+                {{ $t('image.regenerate.cacheMissing') }}
               </p>
-              <p class="regen-hint">参考重绘会把源图发送给当前生成后端。</p>
+              <p class="regen-hint">{{ $t('image.regenerate.refNote') }}</p>
             </div>
           </div>
 
           <div class="regen-prompt-block">
-            <div class="regen-prompt-label">正向提示词</div>
+            <div class="regen-prompt-label">{{ $t('image.regenerate.positiveLabel') }}</div>
             <textarea
               v-model="editedPositive"
               class="regen-prompt-textarea"
               rows="5"
               :disabled="busy"
-              placeholder="正向提示词…"
+              :placeholder="$t('image.regenerate.positivePlaceholder')"
             />
           </div>
           <div class="regen-prompt-block">
-            <div class="regen-prompt-label">负面提示词</div>
+            <div class="regen-prompt-label">{{ $t('image.regenerate.negativeLabel') }}</div>
             <textarea
               v-model="editedNegative"
               class="regen-prompt-textarea regen-prompt-textarea--neg"
               rows="3"
               :disabled="busy"
-              placeholder="负面提示词（可选）"
+              :placeholder="$t('image.regenerate.negativePlaceholder')"
             />
           </div>
         </section>
 
         <footer class="regen-footer">
-          <button type="button" class="regen-btn regen-btn--ghost" :disabled="busy" @click="cancel">取消</button>
+          <button type="button" class="regen-btn regen-btn--ghost" :disabled="busy" @click="cancel">{{ $t('image.regenerate.cancelBtn') }}</button>
           <button type="button" class="regen-btn regen-btn--primary" :disabled="busy || !editedPositive.trim()" @click="confirm">
-            {{ busy ? '生成中…' : '开始生成' }}
+            {{ busy ? $t('image.regenerate.generatingBtn') : $t('image.regenerate.generateBtn') }}
           </button>
         </footer>
       </div>

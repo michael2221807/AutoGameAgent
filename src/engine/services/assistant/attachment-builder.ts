@@ -36,6 +36,13 @@ const NSFW_STRIP_PATTERNS: readonly string[] = [
 export interface AttachmentBuilderDeps {
   stateManager: StateManager;
   gamePack: GamePack | null;
+  /**
+   * Current UI locale (e.g. 'zh-CN', 'en').
+   * When provided, the builder looks up `pathLabel.*` entries from
+   * `gamePack.i18n[locale]` to translate path segments in display labels.
+   * Optional — when absent, raw Chinese segments are used as fallback.
+   */
+  locale?: string;
 }
 
 export class AttachmentBuilder {
@@ -115,11 +122,26 @@ export class AttachmentBuilder {
   private buildLabel(path: string, value: unknown): string {
     const segments = path.split('.');
     const tail = segments[segments.length - 1];
-    const schemaLabel = this.extractAssistantLabel(path) ?? tail;
+    // Priority: x-assistant-label from schema > pathLabel translation > raw segment
+    const pathLabelTranslation = this.getPathLabelTranslation(tail);
+    const schemaLabel = this.extractAssistantLabel(path) ?? pathLabelTranslation ?? tail;
     if (Array.isArray(value)) {
       return `${schemaLabel}（${value.length} 项）`;
     }
     return schemaLabel;
+  }
+
+  /**
+   * Look up a pathLabel translation from the pack's i18n data for the current locale.
+   * Returns null if no locale is set, no pack i18n exists, or the key is missing.
+   */
+  private getPathLabelTranslation(segment: string): string | null {
+    const locale = this.deps.locale;
+    if (!locale) return null;
+    const i18nData = this.deps.gamePack?.i18n?.[locale];
+    if (!i18nData) return null;
+    const label = i18nData[`pathLabel.${segment}`];
+    return typeof label === 'string' ? label : null;
   }
 
   /**

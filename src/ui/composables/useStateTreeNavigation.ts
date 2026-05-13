@@ -11,6 +11,7 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md Phase 5a。
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
+import { i18n } from '@/ui/i18n';
 
 // ─── 类型 ───────────────────────────────────────────────
 
@@ -19,6 +20,8 @@ export interface TreeNode {
   key: string;
   /** 完整 dot-path（如 "角色.基础信息"） */
   fullPath: string;
+  /** Locale-aware display label for the key (e.g. "Basic Info" in English mode) */
+  displayKey: string;
   /** "string" / "number" / "boolean" / "object" / "array" / "null" */
   type: string;
   /** 子项数量（仅 object/array） */
@@ -45,11 +48,20 @@ export interface UseStateTreeNavigationOptions {
   searchMaxDepth?: number;
   /** 搜索结果上限 */
   searchMaxResults?: number;
+  /**
+   * Pack-level i18n data for the current locale (flat key-value).
+   * Used to translate state tree path segments for display only.
+   * Keys are formatted as `pathLabel.<segment>`, e.g. `pathLabel.角色` → "Character".
+   * When absent or key is missing, the raw Chinese segment is used as-is.
+   */
+  pathLabels?: Ref<Record<string, string> | undefined>;
 }
 
 export interface StateTreeNavigation {
   selectedPath: Ref<string>;
   breadcrumb: ComputedRef<string[]>;
+  /** Locale-translated breadcrumb segments (display only) */
+  displayBreadcrumb: ComputedRef<string[]>;
   currentChildren: ComputedRef<TreeNode[]>;
   fieldEntries: ComputedRef<FieldEntry[]>;
   searchQuery: Ref<string>;
@@ -59,6 +71,8 @@ export interface StateTreeNavigation {
   navigateBreadcrumb: (index: number) => void;
   goBack: () => void;
   navigateToSearchResult: (path: string) => void;
+  /** Translate a single path segment using pack pathLabels (display only) */
+  translateSegment: (segment: string) => string;
 }
 
 export interface SearchResult {
@@ -80,30 +94,41 @@ export function truncate(s: string, n: number): string {
 }
 
 export function summarizeNode(_key: string, val: unknown): string {
+  const t = i18n.global.t;
   if (val === null || val === undefined) return 'null';
   if (typeof val !== 'object') return truncate(String(val), 40);
   if (Array.isArray(val)) {
-    if (val.length === 0) return '(空)';
+    if (val.length === 0) return t('common.navigation.emptyArray');
     const first = val[0];
     if (first && typeof first === 'object' && !Array.isArray(first)) {
       const o = first as Record<string, unknown>;
       const name = o['名称'] ?? o['name'] ?? o['标题'] ?? o['title'] ?? o['id'] ?? o['subject'];
-      if (name) return `${val.length} 项 · 首项: ${truncate(String(name), 40)}`;
+      if (name) return t('common.navigation.itemCountWithFirst', { count: val.length, first: truncate(String(name), 40) });
     }
-    return `${val.length} 项`;
+    return t('common.navigation.itemCount', { count: val.length });
   }
   const obj = val as Record<string, unknown>;
   const nameField = obj['名称'] ?? obj['name'] ?? obj['姓名'] ?? obj['标题'] ?? obj['描述'];
   if (nameField && typeof nameField === 'string') return truncate(nameField, 40);
   const keys = Object.keys(obj);
-  if (keys.length === 0) return '(空)';
+  if (keys.length === 0) return t('common.navigation.emptyObject');
   const first = obj[keys[0]];
   if (typeof first === 'string') return `${keys[0]}: ${truncate(first, 35)}`;
   if (typeof first === 'number') return `${keys[0]}: ${first}`;
-  return `${keys.length} 字段`;
+  return t('common.navigation.fieldCount', { count: keys.length });
 }
 
 // ─── Composable 主体 ───────────────────────────────────
+
+/**
+ * Translate a single path segment using pack-level pathLabel i18n data.
+ * Returns the translated label if found, otherwise the raw segment.
+ * This is a pure display helper — never affects data paths.
+ */
+export function getPathLabel(segment: string, packI18n?: Record<string, string>): string {
+  if (!packI18n) return segment;
+  return packI18n[`pathLabel.${segment}`] ?? segment;
+}
 
 export function useStateTreeNavigation(opts: UseStateTreeNavigationOptions): StateTreeNavigation {
   const selectedPath = ref<string>('');
@@ -111,8 +136,16 @@ export function useStateTreeNavigation(opts: UseStateTreeNavigationOptions): Sta
   const maxDepth = opts.searchMaxDepth ?? 6;
   const maxResults = opts.searchMaxResults ?? 100;
 
+  function translateSegment(segment: string): string {
+    return getPathLabel(segment, opts.pathLabels?.value);
+  }
+
   const breadcrumb = computed<string[]>(() =>
     selectedPath.value ? selectedPath.value.split('.') : [],
+  );
+
+  const displayBreadcrumb = computed<string[]>(() =>
+    breadcrumb.value.map((seg) => translateSegment(seg)),
   );
 
   const currentChildren = computed<TreeNode[]>(() => {
@@ -132,7 +165,8 @@ export function useStateTreeNavigation(opts: UseStateTreeNavigationOptions): Sta
         if (val && typeof val === 'object') {
           childCount = Array.isArray(val) ? val.length : Object.keys(val as Record<string, unknown>).length;
         }
-        return { key, fullPath, type, childCount, preview: summarizeNode(key, val) };
+        const displayKey = translateSegment(key);
+        return { key, fullPath, displayKey, type, childCount, preview: summarizeNode(key, val) };
       });
   });
 
@@ -194,8 +228,9 @@ export function useStateTreeNavigation(opts: UseStateTreeNavigationOptions): Sta
   }
 
   return {
-    selectedPath, breadcrumb, currentChildren, fieldEntries,
+    selectedPath, breadcrumb, displayBreadcrumb, currentChildren, fieldEntries,
     searchQuery, searchResults, isSearching,
     navigateTo, navigateBreadcrumb, goBack, navigateToSearchResult,
+    translateSegment,
   };
 }

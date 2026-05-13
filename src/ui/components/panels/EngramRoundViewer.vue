@@ -8,6 +8,7 @@
  * chosen (or rejected).
  */
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import type {
   EngramWriteSnapshot,
@@ -31,6 +32,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<{ 'update:modelValue': [value: boolean] }>();
 
+const { t } = useI18n();
+
 const expandedInjected = ref<number | null>(null);
 const expandedFiltered = ref<number | null>(null);
 const showFiltered = ref(false);
@@ -47,8 +50,8 @@ function toggleFiltered(idx: number): void {
 
 const title = computed(() =>
   props.roundNumber > 0
-    ? `Engram · 第 ${props.roundNumber} 回合`
-    : 'Engram 详情',
+    ? t('mainGame.engram.title', { n: props.roundNumber })
+    : t('mainGame.engram.titleGeneric'),
 );
 
 const injectedCandidates = computed(() =>
@@ -74,19 +77,19 @@ function barFillWidth(c: ScoredCandidateTrace): string {
 
 function sourceLabel(s: ScoredCandidateTrace['source']): string {
   const map: Record<string, string> = {
-    'edge': '事实边',
-    'entity': '实体',
-    'event': '事件',
+    'edge': t('mainGame.engram.source.edge'),
+    'entity': t('mainGame.engram.source.entity'),
+    'event': t('mainGame.engram.source.event'),
   };
   return map[s] ?? s;
 }
 
 function outcomeLabel(o: ScoredCandidateTrace['outcome']): string {
   const map: Record<string, string> = {
-    'injected': '已注入',
-    'filtered-by-topK': 'topK 截断',
-    'filtered-by-rerank': '重排淘汰',
-    'filtered-as-redundant': '去重淘汰',
+    'injected': t('mainGame.engram.outcome.injected'),
+    'filtered-by-topK': t('mainGame.engram.outcome.filteredByTopK'),
+    'filtered-by-rerank': t('mainGame.engram.outcome.filteredByRerank'),
+    'filtered-as-redundant': t('mainGame.engram.outcome.filteredAsRedundant'),
   };
   return map[o] ?? o;
 }
@@ -107,34 +110,34 @@ function fmtScore(n: number): string {
     <div class="erv">
       <!-- ═══ WRITE PATH ═══ -->
       <section v-if="props.write" class="erv__section">
-        <h3 class="erv__heading erv__heading--write">写入</h3>
+        <h3 class="erv__heading erv__heading--write">{{ $t('mainGame.engram.headingWrite') }}</h3>
 
         <!-- Event -->
         <div v-if="props.write.event" class="erv__card">
-          <div class="erv__card-label">事件提取</div>
-          <div class="erv__card-title">{{ props.write.event.title || '(无标题)' }}</div>
+          <div class="erv__card-label">{{ $t('mainGame.engram.eventExtraction') }}</div>
+          <div class="erv__card-title">{{ props.write.event.title || $t('mainGame.engram.noTitle') }}</div>
           <div class="erv__card-meta">
-            <span v-if="props.write.event.roles.length">角色: {{ props.write.event.roles.join(', ') }}</span>
-            <span v-if="props.write.event.location.length">地点: {{ props.write.event.location.join(', ') }}</span>
-            <span v-if="props.write.event.timeAnchor">时间: {{ props.write.event.timeAnchor }}</span>
+            <span v-if="props.write.event.roles.length">{{ $t('mainGame.engram.roles') }}: {{ props.write.event.roles.join(', ') }}</span>
+            <span v-if="props.write.event.location.length">{{ $t('mainGame.engram.location') }}: {{ props.write.event.location.join(', ') }}</span>
+            <span v-if="props.write.event.timeAnchor">{{ $t('mainGame.engram.timeAnchor') }}: {{ props.write.event.timeAnchor }}</span>
           </div>
         </div>
 
         <!-- Entity deltas -->
         <div v-if="props.write.entities.deltas.length > 0" class="erv__card">
-          <div class="erv__card-label">实体变化 <span class="erv__muted">({{ props.write.entities.total }} 总计)</span></div>
+          <div class="erv__card-label">{{ $t('mainGame.engram.entityDeltas') }} <span class="erv__muted">({{ $t('mainGame.engram.entityTotal', { n: props.write.entities.total }) }})</span></div>
           <div v-for="d in props.write.entities.deltas" :key="d.name" class="erv__delta-row">
             <span class="erv__delta-badge" :class="d.isNew ? 'erv__delta-badge--new' : 'erv__delta-badge--update'">
               {{ d.isNew ? '+' : '↻' }}
             </span>
             <span class="erv__delta-name">{{ d.name }}</span>
-            <span class="erv__muted">({{ d.type }}{{ d.descriptionUpdated ? ' · 描述更新' : '' }})</span>
+            <span class="erv__muted">({{ d.type }}{{ d.descriptionUpdated ? ` · ${$t('mainGame.engram.descriptionUpdated')}` : '' }})</span>
           </div>
         </div>
 
         <!-- 事实边变化 -->
         <div v-if="props.write.edges" class="erv__card">
-          <div class="erv__card-label">事实边变化 <span class="erv__muted">({{ props.write.edges.total }} 总计 · +{{ props.write.edges.newCount }} 新 · ↻{{ props.write.edges.reinforcedCount }} 加固)</span></div>
+          <div class="erv__card-label">{{ $t('mainGame.engram.edgeDeltas') }} <span class="erv__muted">({{ $t('mainGame.engram.edgeSummary', { total: props.write.edges.total, newCount: props.write.edges.newCount, reinforcedCount: props.write.edges.reinforcedCount }) }})</span></div>
           <div v-for="e in props.write.edges.topNew" :key="`${e.sourceEntity}→${e.targetEntity}`" class="erv__delta-row">
             <span class="erv__delta-badge erv__delta-badge--new">+</span>
             <span>{{ e.sourceEntity }} → {{ e.targetEntity }}</span>
@@ -146,35 +149,35 @@ function fmtScore(n: number): string {
         <!-- Trim + vectorize summary -->
         <div class="erv__summary-row">
           <span v-if="props.write.trimmed.eventsBefore !== props.write.trimmed.eventsAfter">
-            事件修剪 {{ props.write.trimmed.eventsBefore }} → {{ props.write.trimmed.eventsAfter }}
+            {{ $t('mainGame.engram.eventTrim', { before: props.write.trimmed.eventsBefore, after: props.write.trimmed.eventsAfter }) }}
           </span>
-          <span v-if="props.write.edges?.prunedCount">边修剪 {{ props.write.edges.prunedCount }} 条</span>
-          <span v-if="props.write.vectorizeQueued > 0">排队向量化 {{ props.write.vectorizeQueued }} 条</span>
+          <span v-if="props.write.edges?.prunedCount">{{ $t('mainGame.engram.edgePrune', { n: props.write.edges.prunedCount }) }}</span>
+          <span v-if="props.write.vectorizeQueued > 0">{{ $t('mainGame.engram.vectorizeQueued', { n: props.write.vectorizeQueued }) }}</span>
           <span class="erv__muted">{{ props.write.totalDurationMs.toFixed(0) }}ms</span>
         </div>
       </section>
 
       <!-- ═══ WRITE PATH — Review Result ═══ -->
       <section v-if="props.write?.reviewResult" class="erv__section">
-        <h3 class="erv__heading erv__heading--review">知识边审查</h3>
+        <h3 class="erv__heading erv__heading--review">{{ $t('mainGame.engram.headingReview') }}</h3>
         <div class="erv__card">
-          <div class="erv__card-label">审查结果</div>
+          <div class="erv__card-label">{{ $t('mainGame.engram.reviewResult') }}</div>
           <div class="erv__review-stats">
-            <span>审查 {{ props.write.reviewResult.reviewed }} 条</span>
-            <span class="erv__review-invalidated">已不再成立 {{ props.write.reviewResult.invalidated }} 条</span>
-            <span>保留 {{ props.write.reviewResult.kept }} 条</span>
+            <span>{{ $t('mainGame.engram.reviewedCount', { n: props.write.reviewResult.reviewed }) }}</span>
+            <span class="erv__review-invalidated">{{ $t('mainGame.engram.invalidatedCount', { n: props.write.reviewResult.invalidated }) }}</span>
+            <span>{{ $t('mainGame.engram.keptCount', { n: props.write.reviewResult.kept }) }}</span>
           </div>
         </div>
         <template v-if="props.write.reviewResult.invalidatedEdges?.length">
           <div v-for="ie in props.write.reviewResult.invalidatedEdges" :key="ie.edgeId" class="erv__review-detail erv__review-detail--invalidated">
-            <span class="erv__review-badge erv__review-badge--invalidated">已不再成立</span>
+            <span class="erv__review-badge erv__review-badge--invalidated">{{ $t('mainGame.engram.badgeInvalidated') }}</span>
             <span class="erv__review-fact">{{ ie.fact }}</span>
             <span v-if="ie.reason" class="erv__review-reason">{{ ie.reason }}</span>
           </div>
         </template>
         <template v-if="props.write.reviewResult.keptEdges?.length">
           <div v-for="ke in props.write.reviewResult.keptEdges" :key="ke.edgeId" class="erv__review-detail erv__review-detail--kept">
-            <span class="erv__review-badge erv__review-badge--kept">保留</span>
+            <span class="erv__review-badge erv__review-badge--kept">{{ $t('mainGame.engram.badgeKept') }}</span>
             <span class="erv__review-fact">{{ ke.fact }}</span>
             <span v-if="ke.reason" class="erv__review-reason">{{ ke.reason }}</span>
           </div>
@@ -183,29 +186,29 @@ function fmtScore(n: number): string {
 
       <!-- ═══ READ PATH ═══ -->
       <section v-if="props.read" class="erv__section">
-        <h3 class="erv__heading erv__heading--read">召回</h3>
+        <h3 class="erv__heading erv__heading--read">{{ $t('mainGame.engram.headingRead') }}</h3>
 
         <!-- Pipeline summary -->
           <div class="erv__pipeline-bar">
-            <span class="erv__pipeline-query">查询: "{{ props.read.query.length > 60 ? props.read.query.slice(0, 60) + '…' : props.read.query }}"</span>
+            <span class="erv__pipeline-query">{{ $t('mainGame.engram.pipelineQuery') }}: "{{ props.read.query.length > 60 ? props.read.query.slice(0, 60) + '…' : props.read.query }}"</span>
             <div class="erv__pipeline-stats">
-              <span title="事件语义命中">事件{{ props.read.pipeline.vectorEventCount }}</span>
-              <span title="实体语义命中">实体{{ props.read.pipeline.vectorEntityCount }}</span>
-              <span title="事实候选">事实{{ props.read.pipeline.graphCount }}</span>
+              <span :title="$t('mainGame.engram.pipelineVectorEvent')">{{ $t('mainGame.engram.pipelineVectorEvent') }}{{ props.read.pipeline.vectorEventCount }}</span>
+              <span :title="$t('mainGame.engram.pipelineVectorEntity')">{{ $t('mainGame.engram.pipelineVectorEntity') }}{{ props.read.pipeline.vectorEntityCount }}</span>
+              <span :title="$t('mainGame.engram.pipelineGraph')">{{ $t('mainGame.engram.pipelineGraph') }}{{ props.read.pipeline.graphCount }}</span>
               <span class="erv__pipeline-arrow">→</span>
-              <span title="融合后候选">融合{{ props.read.pipeline.afterMerge }}</span>
+              <span :title="$t('mainGame.engram.pipelineMerge')">{{ $t('mainGame.engram.pipelineMerge') }}{{ props.read.pipeline.afterMerge }}</span>
               <span v-if="props.read.config.rerankEnabled" class="erv__pipeline-arrow">→</span>
-              <span v-if="props.read.config.rerankEnabled" title="精排后">精排{{ props.read.pipeline.afterRerank }}</span>
+              <span v-if="props.read.config.rerankEnabled" :title="$t('mainGame.engram.pipelineRerank')">{{ $t('mainGame.engram.pipelineRerank') }}{{ props.read.pipeline.afterRerank }}</span>
               <span class="erv__pipeline-arrow">→</span>
-              <span class="erv__pipeline-injected" title="最终注入数">注入{{ props.read.pipeline.injectedCount }}</span>
+              <span class="erv__pipeline-injected" :title="$t('mainGame.engram.pipelineInjected')">{{ $t('mainGame.engram.pipelineInjected') }}{{ props.read.pipeline.injectedCount }}</span>
               <span class="erv__muted">{{ props.read.totalDurationMs.toFixed(0) }}ms</span>
             </div>
           </div>
 
         <!-- Config context -->
         <div class="erv__config-row">
-          向量{{ props.read.config.embeddingEnabled ? '开' : '关' }} · 阈值 {{ fmtScore(props.read.config.minScore) }} · 候选 {{ props.read.config.maxCandidates }}（边{{ props.read.config.edgeBudget }}/实体{{ props.read.config.entityBudget }}/事件{{ props.read.config.eventBudget }}）
-          <span v-if="props.read.config.rerankEnabled"> · 精排 topN {{ props.read.config.rerankTopN }}</span>
+          {{ $t('mainGame.engram.configVector') }}{{ props.read.config.embeddingEnabled ? $t('mainGame.engram.configOn') : $t('mainGame.engram.configOff') }} · {{ $t('mainGame.engram.configThreshold') }} {{ fmtScore(props.read.config.minScore) }} · {{ $t('mainGame.engram.configCandidates') }} {{ props.read.config.maxCandidates }}（{{ $t('mainGame.engram.configEdgeBudget') }}{{ props.read.config.edgeBudget }}/{{ $t('mainGame.engram.configEntityBudget') }}{{ props.read.config.entityBudget }}/{{ $t('mainGame.engram.configEventBudget') }}{{ props.read.config.eventBudget }}）
+          <span v-if="props.read.config.rerankEnabled"> · {{ $t('mainGame.engram.configRerankTopN') }} {{ props.read.config.rerankTopN }}</span>
         </div>
 
         <!-- Injected candidates -->
@@ -242,12 +245,12 @@ function fmtScore(n: number): string {
           <div class="erv__candidate-tags">
             <span class="erv__tag" :class="'erv__tag--' + c.source">{{ sourceLabel(c.source) }}</span>
             <span v-if="c.roundNumber != null" class="erv__muted">R{{ c.roundNumber }}</span>
-            <span v-if="c.rerankBlendedScore != null" class="erv__muted">rerank {{ fmtScore(c.rerankBlendedScore) }}</span>
+            <span v-if="c.rerankBlendedScore != null" class="erv__muted">{{ $t('mainGame.engram.rerank') }} {{ fmtScore(c.rerankBlendedScore) }}</span>
           </div>
 
           <!-- Expanded detail card -->
           <div v-if="expandedInjected === idx" class="erv__detail" @click.stop>
-            <div class="erv__detail-title">评分分解</div>
+            <div class="erv__detail-title">{{ $t('mainGame.engram.scoreBreakdown') }}</div>
             <div v-for="(comp, ci) in c.components" :key="'d-' + ci" class="erv__detail-row">
               <span class="erv__detail-swatch" :style="{ backgroundColor: componentColorMap[comp.color] }" />
               <span class="erv__detail-label">{{ comp.label }}</span>
@@ -255,13 +258,13 @@ function fmtScore(n: number): string {
               <span class="erv__detail-value">= {{ fmtScore(comp.contribution) }}</span>
             </div>
             <div v-if="c.preRerankScore != null" class="erv__detail-section">
-              <div class="erv__detail-title">重排</div>
+              <div class="erv__detail-title">{{ $t('mainGame.engram.pipelineRerank') }}</div>
               <div class="erv__detail-row">
-                <span class="erv__detail-label">重排前</span>
+                <span class="erv__detail-label">{{ $t('mainGame.engram.preRerank') }}</span>
                 <span class="erv__detail-value">{{ fmtScore(c.preRerankScore) }}</span>
               </div>
               <div class="erv__detail-row">
-                <span class="erv__detail-label">重排后</span>
+                <span class="erv__detail-label">{{ $t('mainGame.engram.postRerank') }}</span>
                 <span class="erv__detail-value">{{ fmtScore(c.finalScore) }}</span>
               </div>
             </div>
@@ -271,7 +274,7 @@ function fmtScore(n: number): string {
         <!-- Filtered (collapsed by default) -->
         <div v-if="filteredCandidates.length > 0" class="erv__filtered-toggle">
           <button class="erv__filtered-btn" @click.stop="showFiltered = !showFiltered">
-            {{ showFiltered ? '收起' : '展开' }} 被淘汰 ({{ filteredCandidates.length }})
+            {{ showFiltered ? $t('mainGame.engram.filteredToggle.collapse') : $t('mainGame.engram.filteredToggle.expand') }} {{ $t('mainGame.engram.filteredToggle.label', { n: filteredCandidates.length }) }}
           </button>
         </div>
         <template v-if="showFiltered">
@@ -305,7 +308,7 @@ function fmtScore(n: number): string {
               <span class="erv__tag" :class="'erv__tag--' + c.source">{{ sourceLabel(c.source) }}</span>
             </div>
             <div v-if="expandedFiltered === idx" class="erv__detail" @click.stop>
-              <div class="erv__detail-title">评分分解</div>
+              <div class="erv__detail-title">{{ $t('mainGame.engram.scoreBreakdown') }}</div>
               <div v-for="(comp, ci) in c.components" :key="'fd-' + ci" class="erv__detail-row">
                 <span class="erv__detail-swatch" :style="{ backgroundColor: componentColorMap[comp.color] }" />
                 <span class="erv__detail-label">{{ comp.label }}</span>
@@ -318,16 +321,16 @@ function fmtScore(n: number): string {
 
         <!-- Legend -->
         <div class="erv__legend">
-          <span v-for="(color, label) in { '向量相似度': 'blue', '关键词命中': 'green', '时间衰减': 'orange', '角色命中': 'purple', '图权重': 'red' }" :key="label" class="erv__legend-item">
-            <span class="erv__legend-swatch" :style="{ backgroundColor: componentColorMap[color as ScoredComponent['color']] }" />
-            {{ label }}
+          <span v-for="(color, key) in { vectorSimilarity: 'blue', keywordHit: 'green', timeDecay: 'orange', characterHit: 'purple', graphWeight: 'red' } as Record<string, ScoredComponent['color']>" :key="key" class="erv__legend-item">
+            <span class="erv__legend-swatch" :style="{ backgroundColor: componentColorMap[color] }" />
+            {{ $t(`mainGame.engram.legend.${key}`) }}
           </span>
         </div>
       </section>
 
       <!-- Empty state -->
       <div v-if="!props.write && !props.read" class="erv__empty">
-        本回合无 Engram 数据
+        {{ $t('mainGame.engram.empty') }}
       </div>
     </div>
   </Modal>

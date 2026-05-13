@@ -14,7 +14,7 @@
         v-if="visible"
         :class="['loading-overlay', { 'loading-overlay--fullscreen': fullscreen }]"
         role="status"
-        :aria-label="message || '加载中'"
+        :aria-label="message || $t('common.loading.ariaDefault')"
         aria-live="assertive"
       >
         <div class="loading-content">

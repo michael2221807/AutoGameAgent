@@ -15,8 +15,11 @@
  * useCreationFlow.addCustomPreset / updateCustomPreset 落盘。
  */
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import type { CustomPresetSchema } from '@/engine/types';
+
+const { t } = useI18n();
 
 const props = withDefaults(defineProps<{
   /** 控制显示（v-model:modelValue） */
@@ -86,7 +89,7 @@ function validate(): boolean {
     // required check
     if (f.required) {
       if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) {
-        errs.push(`${f.label} 不能为空`);
+        errs.push(t('creation.customPreset.requiredError', { label: f.label }));
         continue;
       }
     }
@@ -95,13 +98,13 @@ function validate(): boolean {
       const n = Number(v);
       if (v !== '' && v !== null && Number.isFinite(n)) {
         if (typeof f.min === 'number' && n < f.min) {
-          errs.push(`${f.label} 不能小于 ${f.min}`);
+          errs.push(t('creation.customPreset.minError', { label: f.label, min: f.min }));
         }
         if (typeof f.max === 'number' && n > f.max) {
-          errs.push(`${f.label} 不能大于 ${f.max}`);
+          errs.push(t('creation.customPreset.maxError', { label: f.label, max: f.max }));
         }
       } else if (f.required) {
-        errs.push(`${f.label} 必须是数字`);
+        errs.push(t('creation.customPreset.numberError', { label: f.label }));
       }
     }
   }
@@ -192,10 +195,10 @@ function setVal(key: string, v: string): void {
     </div>
 
     <template #footer>
-      <button class="btn btn--secondary" :disabled="saving" @click="close">取消</button>
+      <button class="btn btn--secondary" :disabled="saving" @click="close">{{ $t('creation.customPreset.cancel') }}</button>
       <button class="btn btn--primary" :disabled="submitDisabled" @click="submit">
         <span v-if="saving" class="btn-spinner" />
-        {{ saving ? '保存中…' : '保存' }}
+        {{ saving ? $t('creation.customPreset.saving') : $t('creation.customPreset.save') }}
       </button>
     </template>
   </Modal>

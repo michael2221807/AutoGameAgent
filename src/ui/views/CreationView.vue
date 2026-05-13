@@ -37,6 +37,7 @@ import {
   type Component,
 } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { set as _set } from 'lodash-es';
 import { useCreationFlow } from '@/ui/composables/useCreationFlow';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
@@ -54,6 +55,7 @@ import LoadingOverlay from '@/ui/components/common/LoadingOverlay.vue';
 import { eventBus } from '@/engine/core/event-bus';
 
 const router = useRouter();
+const { t } = useI18n();
 const engineState = useEngineStateStore();
 
 // ─── Creation flow composable ─────────────────────────────────
@@ -179,8 +181,8 @@ const currentBudget = computed(() => remainingBudget.value ?? 0);
  * AI generation shows a different message than finalization.
  */
 const loadingMessage = computed(() => {
-  if (isFinalizing.value) return '正在创建角色世界…';
-  if (isGenerating.value) return 'AI 正在生成…';
+  if (isFinalizing.value) return t('creation.loading.creatingWorld');
+  if (isGenerating.value) return t('creation.loading.aiGenerating');
   return '';
 });
 
@@ -202,21 +204,21 @@ async function onCustomSave(payload: { fields: Record<string, unknown>; editingI
     if (payload.editingId) {
       const ok = await updateCustomPreset(step, payload.editingId, payload.fields);
       if (ok) {
-        eventBus.emit('ui:toast', { type: 'success', message: '已更新自定义条目', duration: 1500 });
+        eventBus.emit('ui:toast', { type: 'success', message: t('creation.toast.customUpdated'), duration: 1500 });
       } else {
-        eventBus.emit('ui:toast', { type: 'error', message: '更新失败', duration: 2500 });
+        eventBus.emit('ui:toast', { type: 'error', message: t('creation.toast.updateFailed'), duration: 2500 });
       }
     } else {
       const entry = await addCustomPreset(step, payload.fields, 'manual');
       if (entry) {
-        eventBus.emit('ui:toast', { type: 'success', message: `已保存自定义${step.label}`, duration: 1500 });
+        eventBus.emit('ui:toast', { type: 'success', message: t('creation.toast.customSaved', { label: step.label }), duration: 1500 });
       } else {
-        eventBus.emit('ui:toast', { type: 'error', message: '保存失败 —— 自定义功能未启用', duration: 2500 });
+        eventBus.emit('ui:toast', { type: 'error', message: t('creation.toast.saveFailed'), duration: 2500 });
       }
     }
   } catch (err) {
     console.error('[CreationView] onCustomSave failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '保存自定义条目失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('creation.toast.saveItemFailed'), duration: 2500 });
   }
 }
 
@@ -227,11 +229,11 @@ async function onCustomRemove(id: string): Promise<void> {
   try {
     const ok = await removeCustomPreset(step, id);
     if (ok) {
-      eventBus.emit('ui:toast', { type: 'warning', message: '已删除自定义条目', duration: 1500 });
+      eventBus.emit('ui:toast', { type: 'warning', message: t('creation.toast.customDeleted'), duration: 1500 });
     }
   } catch (err) {
     console.error('[CreationView] onCustomRemove failed:', err);
-    eventBus.emit('ui:toast', { type: 'error', message: '删除失败', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('creation.toast.deleteFailed'), duration: 2500 });
   }
 }
 
@@ -331,11 +333,11 @@ async function onFinalize(): Promise<void> {
         { splitGen: splitGenOpening.value },
       );
       if (!result.success) {
-        finalizeError.value = result.error ?? '创角失败';
+        finalizeError.value = result.error ?? t('creation.error.creationFailed');
         return;
       }
       if (!gamePackInjected) {
-        finalizeError.value = '内部错误：缺少 gamePack';
+        finalizeError.value = t('creation.error.missingGamePack');
         return;
       }
       /*
@@ -382,7 +384,7 @@ async function onFinalize(): Promise<void> {
     router.push('/game');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    finalizeError.value = `创角失败: ${msg}`;
+    finalizeError.value = t('creation.error.creationFailedMsg', { msg });
     console.error('[CreationView] Finalization failed:', err);
   } finally {
     isFinalizing.value = false;
@@ -405,14 +407,14 @@ function goHome(): void {
   <div class="creation-view">
     <!-- Top bar with back button and title -->
     <header class="creation-header">
-      <button class="btn-back" @click="goHome" aria-label="返回首页">
+      <button class="btn-back" @click="goHome" :aria-label="$t('creation.header.backHome')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="15 18 9 12 15 6" />
         </svg>
       </button>
-      <h1 class="creation-title">角色创建</h1>
+      <h1 class="creation-title">{{ $t('creation.header.title') }}</h1>
       <button class="btn-reset" @click="onReset" :disabled="isFirstStep && !Object.keys(selections).length">
-        重置
+        {{ $t('creation.header.reset') }}
       </button>
     </header>
 
@@ -421,7 +423,7 @@ function goHome(): void {
       The current step is highlighted; completed steps are filled.
       Clicking a dot jumps to that step (backward always, forward only if validated).
     -->
-    <nav class="progress-bar" aria-label="创角进度">
+    <nav class="progress-bar" :aria-label="$t('creation.progress.label')">
       <div class="progress-track">
         <div class="progress-fill" :style="{ width: `${progress * 100}%` }" />
       </div>
@@ -434,7 +436,7 @@ function goHome(): void {
             active: idx === currentStepIndex,
             completed: idx < currentStepIndex,
           }"
-          :aria-label="`步骤 ${idx + 1}: ${step.label}`"
+          :aria-label="$t('creation.progress.stepLabel', { num: idx + 1, label: step.label })"
           :aria-current="idx === currentStepIndex ? 'step' : undefined"
           @click="onDotClick(idx)"
         >
@@ -473,7 +475,7 @@ function goHome(): void {
         <button
           class="error-dismiss"
           @click="finalizeError = null"
-          aria-label="关闭错误提示"
+          :aria-label="$t('creation.error.dismiss')"
         >
           &times;
         </button>
@@ -487,7 +489,7 @@ function goHome(): void {
         :disabled="isFirstStep || isFinalizing"
         @click="onPrev"
       >
-        上一步
+        {{ $t('creation.nav.previous') }}
       </button>
 
       <button
@@ -496,7 +498,7 @@ function goHome(): void {
         :disabled="!canProceed || isFinalizing"
         @click="onNext"
       >
-        下一步
+        {{ $t('creation.nav.next') }}
       </button>
 
       <button
@@ -505,7 +507,7 @@ function goHome(): void {
         :disabled="!canProceed || isFinalizing"
         @click="onFinalize"
       >
-        开始游戏
+        {{ $t('creation.nav.startGame') }}
       </button>
     </footer>
 

@@ -364,6 +364,8 @@ export class MemoryManager {
       logger.warn(msg);
       eventBus.emit('ui:toast', {
         type: 'warning',
+        i18nKey: 'engine.toast.memoryPairMismatch',
+        i18nParams: { short: short.length, implicit: implicit.length },
         message: `短期/隐式中期记忆配对异常 (${short.length} vs ${implicit.length})，可能丢失回合对齐`,
         duration: 4000,
       });
@@ -576,6 +578,8 @@ export class MemoryManager {
       logger.warn(msg);
       eventBus.emit('ui:toast', {
         type: 'warning',
+        i18nKey: 'engine.toast.implicitMemoryOverflow',
+        i18nParams: { before: implicit.length, after: keep.length },
         message: `隐式中期记忆异常溢出，已自动清理 (${implicit.length} → ${keep.length})`,
         duration: 4500,
       });

@@ -12,6 +12,7 @@
  * - 稀有度 (rarity) 始终渲染为彩色徽章（若字段存在）
  */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { DetailField } from '@/engine/types';
 
 interface PresetEntry {
@@ -32,11 +33,13 @@ const props = defineProps<{
   costField?: string;
 }>();
 
+const { t } = useI18n();
+
 const HIDDEN_KEYS = new Set(['id', 'name', 'label', 'description', 'rarity']);
 
 /** 展示名称 */
 function getDisplayName(entry: PresetEntry): string {
-  return entry.name ?? entry.label ?? entry.id ?? '未命名';
+  return entry.name ?? entry.label ?? entry.id ?? t('creation.selectOne.unnamed');
 }
 
 /** 花费值 */
@@ -80,7 +83,7 @@ function formatVal(v: unknown): string {
                JSON.stringify(x))
             : String(x),
         )
-        .join('、') || '—'
+        .join(t('creation.confirm.separator')) || '—'
     );
   }
   if (typeof v === 'object') {
@@ -96,7 +99,7 @@ function formatVal(v: unknown): string {
     <!-- 空态 -->
     <div v-if="!item" class="detail-empty">
       <span class="detail-empty-icon" aria-hidden="true">◈</span>
-      <p>悬停或选择一个选项查看详情</p>
+      <p>{{ $t('creation.presetDetail.empty') }}</p>
     </div>
 
     <template v-else>
@@ -108,13 +111,13 @@ function formatVal(v: unknown): string {
           class="rarity-badge"
           :class="`rarity--${item.rarity}`"
         >
-          {{ item.rarity }}
+          {{ $t('creation.presetDetail.rarity.' + item.rarity) }}
         </span>
       </div>
 
       <!-- 花费 -->
       <div v-if="costDisplay !== null" class="detail-cost">
-        花费 <strong>{{ costDisplay }}</strong> 点
+        {{ $t('creation.presetDetail.cost', { value: costDisplay }) }}
       </div>
 
       <!-- 自定义字段列表（若 detailFields 已配置） -->
@@ -134,7 +137,7 @@ function formatVal(v: unknown): string {
         <p v-if="item.description" class="detail-description">
           {{ item.description }}
         </p>
-        <p v-else class="detail-no-desc">暂无描述</p>
+        <p v-else class="detail-no-desc">{{ $t('creation.presetDetail.noDesc') }}</p>
 
         <div
           v-for="(val, key) in extraFields"

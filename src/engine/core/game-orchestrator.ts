@@ -311,6 +311,7 @@ export class GameOrchestrator {
           // R-05: 无快照时给用户明确反馈（连续第二次回退、或第一回合回退）
           eventBus.emit('ui:toast', {
             type: 'info',
+            i18nKey: 'engine.toast.noRollbackSnapshot',
             message: '没有可回退的快照（每回合只能回退一次）',
             duration: 2500,
           });
@@ -585,6 +586,7 @@ export class GameOrchestrator {
           console.log(`[Orchestrator] PrivacyProfileRepairPipeline completed in ${result.attempts} attempt(s)`);
           eventBus.emit('ui:toast', {
             type: 'success',
+            i18nKey: 'engine.toast.privacyFieldsRepaired',
             message: '扩展字段已自动补齐',
             duration: 1500,
           });
@@ -594,6 +596,8 @@ export class GameOrchestrator {
           );
           eventBus.emit('ui:toast', {
             type: 'warning',
+            i18nKey: 'engine.toast.privacyFieldsIncomplete',
+            i18nParams: { count: result.remaining.total },
             message: `仍有 ${result.remaining.total} 项扩展字段未补齐（已达重试上限）`,
             duration: 3000,
           });
@@ -616,6 +620,7 @@ export class GameOrchestrator {
             console.log(`[Orchestrator] FieldRepairPipeline completed in ${result.attempts} attempt(s)`);
             eventBus.emit('ui:toast', {
               type: 'success',
+              i18nKey: 'engine.toast.basicFieldsRepaired',
               message: '基础字段已自动补齐',
               duration: 1500,
             });
@@ -625,6 +630,8 @@ export class GameOrchestrator {
             );
             eventBus.emit('ui:toast', {
               type: 'warning',
+              i18nKey: 'engine.toast.basicFieldsIncomplete',
+              i18nParams: { count: result.remaining.total },
               message: `仍有 ${result.remaining.total} 项字段未补齐（已达重试上限）`,
               duration: 3000,
             });
@@ -668,7 +675,7 @@ export class GameOrchestrator {
           const paths = this.subPipelines.paths;
           const location = stateManager.get<string>(paths?.playerLocation ?? '角色.基础信息.当前位置') ?? '';
           const defaultBackend = (stateManager.get<string>('系统.扩展.image.config.defaultBackend') ?? 'novelai') as ImageBackendType;
-          eventBus.emit('ui:toast', { type: 'info', message: '正在自动生成场景图…', duration: 2000 });
+          eventBus.emit('ui:toast', { type: 'info', i18nKey: 'engine.toast.autoSceneGenStart', message: '正在自动生成场景图…', duration: 2000 });
           // P3 env-tags port (2026-04-19): forward env state so auto-gen scene
           // images reflect current weather/festival/environment (same plumbing
           // as ImagePanel.vue manual generation).
@@ -685,7 +692,7 @@ export class GameOrchestrator {
             presentNpcs: sceneAnchors.presentNpcs,
             roleAnchors: sceneAnchors.roleAnchors.length > 0 ? sceneAnchors.roleAnchors : undefined,
           }).then(() => {
-            eventBus.emit('ui:toast', { type: 'success', message: '场景图已生成', duration: 2000 });
+            eventBus.emit('ui:toast', { type: 'success', i18nKey: 'engine.toast.autoSceneGenComplete', message: '场景图已生成', duration: 2000 });
           }).catch((err) => console.debug('[Orchestrator] Auto scene gen failed:', err));
         } catch (err) {
           console.debug('[Orchestrator] Auto scene trigger error:', err);
@@ -724,7 +731,7 @@ export class GameOrchestrator {
               appearance: String(npc['外貌描写'] ?? npc['描述'] ?? ''),
               backend: defaultBackend,
             }).then(() => {
-              eventBus.emit('ui:toast', { type: 'success', message: `${name} 自动肖像已生成`, duration: 2000 });
+              eventBus.emit('ui:toast', { type: 'success', i18nKey: 'engine.toast.autoPortraitComplete', i18nParams: { name }, message: `${name} 自动肖像已生成`, duration: 2000 });
             }).catch((err) => console.debug(`[Orchestrator] Auto portrait for ${name} failed:`, err));
           }
         } catch (err) {

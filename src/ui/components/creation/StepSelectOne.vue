@@ -7,10 +7,13 @@
  * 额外渲染一个 "AI 生成" 按钮供用户请求 AI 生成自定义条目。
  */
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { CreationStep } from '@/engine/types';
 import PresetDetailPanel from './PresetDetailPanel.vue';
 import CustomPresetModal from './CustomPresetModal.vue';
 import AIPresetGenModal from './AIPresetGenModal.vue';
+
+const { t } = useI18n();
 
 /** 预设条目的最小类型契约 — 根据 Game Pack JSON 运行时结构 */
 interface PresetEntry {
@@ -89,7 +92,7 @@ function handleRemove(preset: PresetEntry, ev: Event): void {
   // 防止冒泡触发 selectPreset
   ev.stopPropagation();
   if (preset.source !== 'user' || typeof preset.id !== 'string') return;
-  if (!window.confirm(`确认删除自定义 "${getDisplayName(preset)}"？此操作不可撤销。`)) return;
+  if (!window.confirm(t('creation.selectOne.confirmDelete', { name: getDisplayName(preset) }))) return;
   emit('customRemove', preset.id);
 }
 
@@ -143,7 +146,7 @@ function isSelected(preset: PresetEntry): boolean {
 
 /** 获取预设的显示名称 */
 function getDisplayName(preset: PresetEntry): string {
-  return preset.name ?? preset.label ?? preset.id ?? '未命名';
+  return preset.name ?? preset.label ?? preset.id ?? t('creation.selectOne.unnamed');
 }
 
 /** 获取预设的花费值（如存在 costField） */
@@ -184,7 +187,7 @@ const selectedPreset = computed<PresetEntry | null>(() =>
           class="custom-add-btn"
           @click="openAddModal"
         >
-          + 自定义{{ step.label }}
+          {{ $t('creation.selectOne.addCustom', { label: step.label }) }}
         </button>
 
         <button
@@ -200,31 +203,31 @@ const selectedPreset = computed<PresetEntry | null>(() =>
             <span class="preset-name">{{ getDisplayName(preset) }}</span>
             <!-- 2026-04-14：user 项显示徽章 + 编辑/删除按钮 -->
             <div v-if="preset.source === 'user'" class="user-badge-row">
-              <span class="user-badge" :title="'用户自定义条目，可编辑可删除'">自定义</span>
+              <span class="user-badge" :title="$t('creation.selectOne.userCustomTooltip')">{{ $t('creation.selectOne.customizeStep', { label: '' }) }}</span>
               <button
                 type="button"
                 class="user-action user-action--edit"
-                title="编辑"
+                :title="$t('common.actions.edit')"
                 @click="handleEdit(preset, $event)"
               >✏</button>
               <button
                 type="button"
                 class="user-action user-action--del"
-                title="删除"
+                :title="$t('common.actions.delete')"
                 @click="handleRemove(preset, $event)"
               >🗑</button>
             </div>
           </div>
           <span v-if="preset.description" class="preset-desc">{{ preset.description }}</span>
           <span v-if="getCost(preset) !== null" class="preset-cost">
-            花费: {{ getCost(preset) }}
+            {{ $t('creation.selectOne.cost', { value: getCost(preset) }) }}
           </span>
         </button>
 
         <!-- AI 生成按钮 —— 仅在 step 配置了 customSchema 且 aiGeneration.enabled 时显示 -->
         <div v-if="aiEnabled && hasCustomSchema" class="ai-section">
           <button class="btn-ai" @click="openAIGenModal">
-            ✦ AI 生成自定义选项
+            {{ $t('creation.selectOne.aiGenButton') }}
           </button>
         </div>
       </div>
@@ -245,10 +248,10 @@ const selectedPreset = computed<PresetEntry | null>(() =>
       v-model="customModalOpen"
       :title="
         editingId
-          ? `编辑自定义${step.label}`
+          ? t('creation.selectOne.editCustom', { label: step.label })
           : aiSourceFlag
-          ? `审阅 AI 推演的${step.label}`
-          : `自定义${step.label}`
+          ? t('creation.selectOne.reviewAIGenerated', { label: step.label })
+          : t('creation.selectOne.customizeStep', { label: step.label })
       "
       :schema="step.customSchema"
       :initial-data="editingInitial"

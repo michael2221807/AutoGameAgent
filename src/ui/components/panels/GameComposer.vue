@@ -93,12 +93,12 @@ defineExpose({
     <button
       class="action-options__toggle"
       :aria-expanded="!actionOptionsCollapsed"
-      :aria-label="actionOptionsCollapsed ? '展开行动选项' : '收起行动选项'"
-      :title="actionOptionsCollapsed ? '展开行动选项' : '收起行动选项'"
+      :aria-label="actionOptionsCollapsed ? $t('mainGame.composer.expandActions') : $t('mainGame.composer.collapseActions')"
+      :title="actionOptionsCollapsed ? $t('mainGame.composer.expandActions') : $t('mainGame.composer.collapseActions')"
       @click="toggleActionOptionsCollapsed"
     >
       <span class="action-options__hint">
-        {{ actionOptionsCollapsed ? `${props.actionOptions.length} 个行动选项` : '行动选项' }}
+        {{ actionOptionsCollapsed ? $t('mainGame.composer.actionCountHint', { n: props.actionOptions.length }) : $t('mainGame.composer.actionLabel') }}
       </span>
       <svg
         class="action-options__chevron"
@@ -123,7 +123,7 @@ defineExpose({
       >
         <button
           class="action-copy"
-          title="复制文本"
+          :title="$t('mainGame.composer.copyText')"
           @click.stop="emit('copy-option', option)"
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
@@ -143,20 +143,20 @@ defineExpose({
       v-if="props.isGenerating"
       class="cancel-btn"
       @click="emit('cancel-generation')"
-      aria-label="取消生成"
+      :aria-label="$t('mainGame.composer.cancelAriaLabel')"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <rect x="3" y="3" width="18" height="18" rx="2" />
       </svg>
-      取消
+      {{ $t('mainGame.composer.cancelLabel') }}
     </button>
 
     <div class="input-row">
       <button
         class="rollback-btn"
         :disabled="!props.canRollback"
-        :title="props.canRollback ? '回滚到上回合' : '暂无可用快照'"
-        aria-label="回滚到上回合"
+        :title="props.canRollback ? $t('mainGame.composer.rollbackTitle') : $t('mainGame.composer.rollbackUnavailable')"
+        :aria-label="$t('mainGame.composer.rollbackAriaLabel')"
         @click="emit('request-rollback')"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -169,7 +169,7 @@ defineExpose({
         ref="textareaRef"
         v-model="userInput"
         class="message-input"
-        placeholder="输入你的行动…"
+        :placeholder="$t('mainGame.composer.inputPlaceholder')"
         rows="1"
         :disabled="props.isGenerating"
         @keydown="onKeydown"
@@ -179,7 +179,7 @@ defineExpose({
         class="send-btn"
         :disabled="!canSend"
         @click="sendMessage"
-        aria-label="发送"
+        :aria-label="$t('mainGame.composer.sendAriaLabel')"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="22" y1="2" x2="11" y2="13" />

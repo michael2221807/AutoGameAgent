@@ -11,6 +11,7 @@
  * 2026-04-08 升级：英雄头像区、Tab 结构（基础/属性/关系/成就）
  */
 import { ref, computed, inject, watch, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -39,6 +40,7 @@ import { generateReferenceId } from '@/engine/image/utils';
 
 const P = DEFAULT_ENGINE_PATHS;
 
+const { t } = useI18n();
 const { isLoaded, useValue, setValue, get } = useGameState();
 const imageService = inject<ImageService>('imageService');
 const aiService = inject<AIService | undefined>('aiService', undefined);
@@ -77,7 +79,7 @@ const availableBackendOptions = computed(() => {
     { label: 'Civitai', value: 'civitai' },
   ];
   const available = configuredImageBackends.value;
-  if (available.size === 0) return [{ label: '请先在 API 管理中添加图像 API', value: '' }];
+  if (available.size === 0) return [{ label: t('character.image.noImageApi'), value: '' }];
   return ALL.filter((o) => available.has(o.value));
 });
 
@@ -97,10 +99,10 @@ async function analyzePlayerImageFromCard(assetId: string) {
   if (!imageService) return;
   try {
     const entry = await imageService.getAssetCache().retrieve(assetId);
-    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法提炼', duration: 2000 }); return; }
-    eventBus.emit('ui:toast', { type: 'info', message: '请前往图像工作台使用图片提炼功能', duration: 3000 });
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.cacheMissingExtract'), duration: 2000 }); return; }
+    eventBus.emit('ui:toast', { type: 'info', message: t('character.toast.goToWorkbench'), duration: 3000 });
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `操作失败: ${(err as Error).message}`, duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.operationFailed', { error: (err as Error).message }), duration: 2000 });
   }
 }
 
@@ -108,7 +110,7 @@ async function savePlayerAsReferenceMaterial(assetId: string) {
   if (!imageService) return;
   try {
     const entry = await imageService.getAssetCache().retrieve(assetId);
-    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: '原图缓存缺失，无法保存', duration: 2000 }); return; }
+    if (!entry) { eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.cacheMissing'), duration: 2000 }); return; }
     const refAssetId = `ref_copy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     await imageService.getAssetCache().store({
       id: refAssetId, taskId: '', storageKey: refAssetId,
@@ -126,9 +128,9 @@ async function savePlayerAsReferenceMaterial(assetId: string) {
       source: 'player',
       createdAt: Date.now(),
     });
-    eventBus.emit('ui:toast', { type: 'success', message: '已保存为参考素材（独立副本）', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('character.toast.savedAsReference'), duration: 2000 });
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `保存失败: ${(err as Error).message}`, duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.saveFailed', { error: (err as Error).message }), duration: 2000 });
   }
 }
 
@@ -149,18 +151,18 @@ const activeBackendStatus = computed(() => {
 });
 
 // ─── Player image generation ───
-const compositionOptions: SelectOption[] = [
-  { label: '头像 (1:1)', value: 'portrait' },
-  { label: '半身 (3:4)', value: 'half-body' },
-  { label: '立绘 (全身)', value: 'full-length' },
-  { label: '自定义 (构图描述)', value: 'custom' },
-];
-const styleOptions: SelectOption[] = [
-  { label: '通用', value: 'generic' },
-  { label: '二次元', value: 'anime' },
-  { label: '写实', value: 'realistic' },
-  { label: '国风', value: 'chinese' },
-];
+const compositionOptions = computed<SelectOption[]>(() => [
+  { label: t('character.image.composition.portrait'), value: 'portrait' },
+  { label: t('character.image.composition.halfBody'), value: 'half-body' },
+  { label: t('character.image.composition.fullLength'), value: 'full-length' },
+  { label: t('character.image.composition.custom'), value: 'custom' },
+]);
+const styleOptions = computed<SelectOption[]>(() => [
+  { label: t('character.image.style.generic'), value: 'generic' },
+  { label: t('character.image.style.anime'), value: 'anime' },
+  { label: t('character.image.style.realistic'), value: 'realistic' },
+  { label: t('character.image.style.chinese'), value: 'chinese' },
+]);
 
 const playerComposition = ref('portrait');
 const playerCustomComposition = ref('');
@@ -195,7 +197,7 @@ async function onPlayerRefFileChange(e: Event) {
   if (!file) return;
   if (file.size > playerRefConfigMaxBytes.value) {
     const limitMB = (playerRefConfigMaxBytes.value / 1048576).toFixed(0);
-    eventBus.emit('ui:toast', { type: 'error', message: `文件大小超过上限 ${limitMB}MB`, duration: 3000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.fileSizeLimit', { limit: limitMB }), duration: 3000 });
     (e.target as HTMLInputElement).value = '';
     return;
   }
@@ -249,15 +251,15 @@ const playerImageStats = computed(() => ({
 // Artist/PNG presets from state
 const playerArtistPresetOptions = computed<SelectOption[]>(() => {
   const raw = get('系统.扩展.image.artistPresets');
-  if (!Array.isArray(raw)) return [{ label: '不使用', value: '' }];
+  if (!Array.isArray(raw)) return [{ label: t('character.image.formLabel.noPreset'), value: '' }];
   const npcPresets = (raw as Array<Record<string, unknown>>).filter((p) => p.scope === 'npc' && !String(p.id ?? '').startsWith('png_') && !String(p.id ?? '').startsWith('img_'));
-  return [{ label: '不使用', value: '' }, ...npcPresets.map((p) => ({ label: String(p.name ?? ''), value: String(p.id ?? '') }))];
+  return [{ label: t('character.image.formLabel.noPreset'), value: '' }, ...npcPresets.map((p) => ({ label: String(p.name ?? ''), value: String(p.id ?? '') }))];
 });
 const playerPngPresetOptions = computed<SelectOption[]>(() => {
   const raw = get('系统.扩展.image.artistPresets');
-  if (!Array.isArray(raw)) return [{ label: '不启用', value: '' }];
+  if (!Array.isArray(raw)) return [{ label: t('character.image.formLabel.noPngPreset'), value: '' }];
   const pngPresets = (raw as Array<Record<string, unknown>>).filter((p) => p.scope === 'npc' && (String(p.id ?? '').startsWith('png_') || String(p.id ?? '').startsWith('img_')));
-  return [{ label: '不启用', value: '' }, ...pngPresets.map((p) => ({ label: String(p.name ?? ''), value: String(p.id ?? '') }))];
+  return [{ label: t('character.image.formLabel.noPngPreset'), value: '' }, ...pngPresets.map((p) => ({ label: String(p.name ?? ''), value: String(p.id ?? '') }))];
 });
 
 // ─── Player anchor management ───
@@ -287,7 +289,7 @@ watch(() => playerAnchor.value, (anchor) => {
 
 async function extractPlayerAnchor() {
   if (!aiService) {
-    eventBus.emit('ui:toast', { type: 'error', message: 'AI 服务未就绪', duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.aiServiceNotReady'), duration: 2500 });
     return;
   }
   extractingAnchor.value = true;
@@ -336,9 +338,9 @@ async function extractPlayerAnchor() {
     anchors.push(newAnchor);
     setValue('系统.扩展.image.characterAnchors', anchors);
     eventBus.emit('engine:request-save');
-    eventBus.emit('ui:toast', { type: 'success', message: '锚点提取完成', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('character.toast.anchorExtracted'), duration: 2000 });
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `锚点提取失败：${(err as Error).message}`, duration: 3500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.anchorExtractFailed', { error: (err as Error).message }), duration: 3500 });
   } finally {
     extractingAnchor.value = false;
   }
@@ -374,7 +376,7 @@ function deletePlayerAnchor() {
 async function generatePlayerImage() {
   if (!imageService || playerGenerating.value) return;
   if (isPlayerCustomComposition.value && !playerCustomComposition.value.trim()) {
-    playerGenError.value = '请先填写自定义构图描述。';
+    playerGenError.value = t('character.toast.customCompositionRequired');
     return;
   }
   playerGenerating.value = true;
@@ -451,7 +453,7 @@ async function generatePlayerImage() {
     });
 
     if (task.status === 'failed') {
-      playerGenError.value = task.error ?? '生成失败';
+      playerGenError.value = task.error ?? t('character.toast.generationFailed');
     }
     // Archive write is now handled by image-service via ImageStateManager.__player__ path
   } catch (err) {
@@ -503,7 +505,7 @@ const playerRegenBusy = ref(false);
 function openPlayerRegenerate(img: Record<string, unknown>, asReference = false) {
   const positive = String(img.positivePrompt ?? '');
   if (!positive.trim()) {
-    eventBus.emit('ui:toast', { type: 'error', message: '该记录未保存提示词，无法同款生成', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.regenMissingPrompt'), duration: 2000 });
     return;
   }
   const comp = (String(img.composition ?? 'portrait') as 'portrait' | 'half-body' | 'full-length' | 'custom');
@@ -512,7 +514,7 @@ function openPlayerRegenerate(img: Record<string, unknown>, asReference = false)
   const rawBackend = String(img.backend ?? '');
   const bk = (rawBackend as ImageBackendType) || resolveDefaultBackend();
   const playerName = String(name.value ?? '主角');
-  const compLabel = comp === 'portrait' ? '头像' : comp === 'half-body' ? '半身' : comp === 'custom' ? '自定义' : '立绘';
+  const compLabel = comp === 'portrait' ? t('character.image.archive.compositionPortrait') : comp === 'half-body' ? t('character.image.archive.compositionHalfBody') : comp === 'custom' ? t('character.image.archive.compositionCustom') : t('character.image.archive.compositionFullLength');
   playerRegenPayload.value = {
     subjectLabel: playerName,
     subtitle: [compLabel, `${width} × ${height}`, bk].filter(Boolean).join(' · '),
@@ -552,13 +554,13 @@ async function confirmPlayerRegenerate(opts: { backend: ImageBackendType; positi
       reference: opts.reference,
     });
     if (task.status === 'failed') {
-      eventBus.emit('ui:toast', { type: 'error', message: `同款生成失败：${task.error ?? '未知错误'}`, duration: 2500 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.regenFailed', { error: task.error ?? '' }), duration: 2500 });
     } else {
-      eventBus.emit('ui:toast', { type: 'success', message: '同款任务已提交', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('character.toast.regenSubmitted'), duration: 2000 });
       playerRegenPayload.value = null;
     }
   } catch (err) {
-    eventBus.emit('ui:toast', { type: 'error', message: `同款生成失败：${(err as Error).message}`, duration: 2500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.regenFailed', { error: (err as Error).message }), duration: 2500 });
   } finally {
     playerRegenBusy.value = false;
   }
@@ -688,6 +690,17 @@ const bodyParts = computed<BodyPart[]>(() => {
   return raw.filter((p): p is BodyPart => !!p?.部位名称);
 });
 
+function displayBodyPartName(name: string | undefined): string {
+  if (!name) return '';
+  const map: Record<string, string> = {
+    嘴: t('character.body.partName.mouth'),
+    胸部: t('character.body.partName.breast'),
+    小穴: t('character.body.partName.pussy'),
+    屁穴: t('character.body.partName.anus'),
+  };
+  return map[name] ?? name;
+}
+
 const devEntries = computed<Array<{ part: string; val: number }>>(() => {
   const raw = playerBody.value?.开发度;
   if (!raw || typeof raw !== 'object') return [];
@@ -698,19 +711,19 @@ const devEntries = computed<Array<{ part: string; val: number }>>(() => {
 
 // ─── Player secret part close-up (mirrors NPC flow in ImagePanel.vue) ───
 
-const playerSecretParts = [
-  { key: 'breast' as const, label: '胸部' },
-  { key: 'vagina' as const, label: '小穴' },
-  { key: 'anus' as const, label: '屁穴' },
-];
+const playerSecretParts = computed(() => [
+  { key: 'breast' as const, label: t('character.image.secret.partBreast') },
+  { key: 'vagina' as const, label: t('character.image.secret.partVagina') },
+  { key: 'anus' as const, label: t('character.image.secret.partAnus') },
+]);
 
-const playerSecretSizeOptions = [
-  { label: '无要求', value: 'none' },
+const playerSecretSizeOptions = computed(() => [
+  { label: t('character.image.secret.sizeNone'), value: 'none' },
   { label: '1:1', value: '1:1' },
   { label: '3:4', value: '3:4' },
   { label: '9:16', value: '9:16' },
   { label: '16:9', value: '16:9' },
-];
+]);
 
 const PLAYER_SECRET_SIZE_MAP: Record<string, { w: number; h: number }> = {
   '1:1': { w: 1024, h: 1024 },
@@ -763,10 +776,10 @@ function resolvePlayerSecretPreset(): import('@/engine/image/types').StylePreset
 
 async function generatePlayerSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
   if (!imageService || playerSecretBusy.value) return;
-  const part = playerSecretParts.find((p) => p.key === partKey);
+  const part = playerSecretParts.value.find((p) => p.key === partKey);
   if (!part) return;
   playerSecretBusy.value = partKey;
-  playerSecretStatusText.value = `${part.label}特写已提交，正在加入图片队列。`;
+  playerSecretStatusText.value = t('character.toast.secretSubmitted', { part: part.label });
   try {
     const rawPresets = get('系统.扩展.image.artistPresets');
     const presetArr = Array.isArray(rawPresets) ? rawPresets as PromptStylePresetLike[] : [];
@@ -791,12 +804,12 @@ async function generatePlayerSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
       styleParamOverrides: styleApplicability?.applied,
     });
     if (task.status === 'failed') {
-      playerSecretStatusText.value = `${part.label}特写生成失败：${task.error ?? '未知错误'}`;
+      playerSecretStatusText.value = t('character.toast.secretFailed', { part: part.label, error: task.error ?? '' });
     } else {
-      playerSecretStatusText.value = `${part.label}特写已完成，可在图库/历史查看。`;
+      playerSecretStatusText.value = t('character.toast.secretDone', { part: part.label });
     }
   } catch (err) {
-    playerSecretStatusText.value = `${part.label}特写提交后出现失败：${(err as Error).message}`;
+    playerSecretStatusText.value = t('character.toast.secretSubmitFailed', { part: part.label, error: (err as Error).message });
   } finally {
     playerSecretBusy.value = '';
   }
@@ -805,7 +818,7 @@ async function generatePlayerSecretPart(partKey: 'breast' | 'vagina' | 'anus') {
 async function generateAllPlayerSecretParts() {
   if (!imageService || playerSecretBusy.value) return;
   playerSecretBusy.value = 'all';
-  playerSecretStatusText.value = '三处特写已提交，正在加入图片队列。';
+  playerSecretStatusText.value = t('character.toast.secretAllSubmitted');
   try {
     const rawPresets = get('系统.扩展.image.artistPresets');
     const presetArr = Array.isArray(rawPresets) ? rawPresets as PromptStylePresetLike[] : [];
@@ -818,7 +831,7 @@ async function generateAllPlayerSecretParts() {
     const styleApplicability = pngObj ? resolveStyleParams(pngObj, playerDefaultBackend.value) : null;
     const anchor = playerAnchor.value;
     const failed: string[] = [];
-    for (const part of playerSecretParts) {
+    for (const part of playerSecretParts.value) {
       const task = await imageService.generateSecretPartImage({
         characterName: '__player__',
         part: part.key,
@@ -834,10 +847,10 @@ async function generateAllPlayerSecretParts() {
       if (task.status === 'failed') failed.push(part.label);
     }
     playerSecretStatusText.value = failed.length
-      ? `${failed.join('、')}特写生成失败，其余已完成。`
-      : '三处特写已完成，可在图库/历史查看。';
+      ? t('character.toast.secretPartialFailed', { parts: failed.join('、') })
+      : t('character.toast.secretAllDone');
   } catch {
-    playerSecretStatusText.value = '部分特写提交失败，请查看队列。';
+    playerSecretStatusText.value = t('character.toast.secretSubmitError');
   } finally {
     playerSecretBusy.value = '';
   }
@@ -847,17 +860,17 @@ async function generatePlayerSecretPartWithReference(partKey: 'breast' | 'vagina
   if (!imageService || playerSecretBusy.value) return;
   const prevAssetId = getPlayerSecretPartAssetId(partKey);
   if (!prevAssetId) {
-    eventBus.emit('ui:toast', { type: 'error', message: '没有上一张结果可作为参考', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.noReferenceImage'), duration: 2000 });
     return;
   }
-  const part = playerSecretParts.find((p) => p.key === partKey);
+  const part = playerSecretParts.value.find((p) => p.key === partKey);
   if (!part) return;
   playerSecretBusy.value = partKey;
-  playerSecretStatusText.value = `${part.label}参考重绘已提交…`;
+  playerSecretStatusText.value = t('character.toast.secretRefSubmitted', { part: part.label });
   try {
     const entry = await imageService.getAssetCache().retrieve(prevAssetId);
     if (!entry) {
-      eventBus.emit('ui:toast', { type: 'error', message: '上一张结果缓存缺失', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'error', message: t('character.toast.prevCacheMissing'), duration: 2000 });
       return;
     }
     const rawPresets = get('系统.扩展.image.artistPresets');
@@ -881,10 +894,10 @@ async function generatePlayerSecretPartWithReference(partKey: 'breast' | 'vagina
       anchorNegative: anchor?.enabled !== false ? String(anchor?.negativePrompt ?? '') || undefined : undefined,
     });
     playerSecretStatusText.value = task.status === 'failed'
-      ? `${part.label}参考重绘失败：${task.error ?? '未知错误'}`
-      : `${part.label}参考重绘完成。`;
+      ? t('character.toast.secretRefFailed', { part: part.label, error: task.error ?? '' })
+      : t('character.toast.secretRefDone', { part: part.label });
   } catch (err) {
-    playerSecretStatusText.value = `${part.label}参考重绘失败：${(err as Error).message}`;
+    playerSecretStatusText.value = t('character.toast.secretRefFailed', { part: part.label, error: (err as Error).message });
   } finally {
     playerSecretBusy.value = '';
   }
@@ -897,15 +910,15 @@ const activeTab = ref<Tab>('basic');
 
 const tabList = computed(() => {
   const tabs: Array<{ id: Tab; label: string; count?: number }> = [
-    { id: 'basic', label: '基础' },
-    { id: 'attributes', label: '属性' },
-    { id: 'relations', label: '关系', count: relationList.value.length },
-    { id: 'achievements', label: '成就' },
+    { id: 'basic', label: t('character.tab.basic') },
+    { id: 'attributes', label: t('character.tab.attributes') },
+    { id: 'relations', label: t('character.tab.relations'), count: relationList.value.length },
+    { id: 'achievements', label: t('character.tab.achievements') },
   ];
   if (nsfwEnabled.value) {
-    tabs.push({ id: 'body', label: '身体' });
+    tabs.push({ id: 'body', label: t('character.tab.body') });
   }
-  tabs.push({ id: 'playerImage', label: '主角生图' });
+  tabs.push({ id: 'playerImage', label: t('character.tab.playerImage') });
   return tabs;
 });
 
@@ -938,7 +951,7 @@ function commitInlineEdit(): void {
   }
 
   editingField.value = null;
-  eventBus.emit('ui:toast', { type: 'success', message: '已更新', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('character.toast.updated'), duration: 1500 });
 }
 
 function cancelInlineEdit(): void {
@@ -982,7 +995,7 @@ function onSchemaUpdate(newValue: unknown): void {
 function saveSchemaEdit(): void {
   setValue(schemaModalPath.value, schemaModalData.value);
   showSchemaModal.value = false;
-  eventBus.emit('ui:toast', { type: 'success', message: '数据已保存', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('character.toast.dataSaved'), duration: 1500 });
 }
 
 // ─── Attributes computed ───
@@ -1082,7 +1095,7 @@ const avatarInitial = computed<string>(() => {
     <template v-if="isLoaded">
       <!-- ─── Hero Header ─── -->
       <div class="hero-header">
-        <button class="hero-avatar" title="查看主角图库" @click="activeTab = 'playerImage'">
+        <button class="hero-avatar" :title="t('character.hero.viewGallery')" @click="activeTab = 'playerImage'">
           <ImageDisplay
             v-if="playerAvatarId"
             :asset-id="playerAvatarId"
@@ -1094,12 +1107,12 @@ const avatarInitial = computed<string>(() => {
         </button>
         <div class="hero-info">
           <div class="hero-name-row">
-            <h2 class="hero-name">{{ name ?? '未命名' }}</h2>
+            <h2 class="hero-name">{{ name ?? $t('character.hero.unnamed') }}</h2>
             <span v-if="occupation" class="occupation-badge">{{ occupation }}</span>
           </div>
           <div class="hero-sub">
             <span v-if="gender" class="hero-meta-item">{{ gender }}</span>
-            <span v-if="age != null" class="hero-meta-item">{{ age }} 岁</span>
+            <span v-if="age != null" class="hero-meta-item">{{ $t('character.hero.ageSuffix', { n: age }) }}</span>
             <span v-if="location" class="hero-meta-item location-item">📍 {{ location }}</span>
           </div>
           <!--
@@ -1111,7 +1124,7 @@ const avatarInitial = computed<string>(() => {
             <span v-if="talentTier" class="trait-chip trait-chip--tier">{{ talentTier }}</span>
           </div>
         </div>
-        <button class="btn-edit-all" title="编辑基础信息" @click="openSchemaEdit(P.characterBaseInfo, '编辑基础信息')">
+        <button class="btn-edit-all" :title="t('character.hero.editBasicInfo')" @click="openSchemaEdit(P.characterBaseInfo, t('character.hero.editBasicInfo'))">
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
             <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
           </svg>
@@ -1135,11 +1148,11 @@ const avatarInitial = computed<string>(() => {
 
       <!-- ─── Tab: 基础 ─── -->
       <template v-if="activeTab === 'basic'">
-        <section class="info-card" aria-label="基础信息">
+        <section class="info-card" :aria-label="$t('character.basic.sectionBasicInfo')">
           <div class="info-grid">
             <!-- Name -->
-            <div class="info-row" @dblclick="startInlineEdit(P.playerName, '姓名', name)">
-              <span class="info-label">姓名</span>
+            <div class="info-row" @dblclick="startInlineEdit(P.playerName, $t('character.basic.fieldName'), name)">
+              <span class="info-label">{{ $t('character.basic.fieldName') }}</span>
               <template v-if="editingField?.path === P.playerName">
                 <input
                   v-model="editInputValue"
@@ -1153,8 +1166,8 @@ const avatarInitial = computed<string>(() => {
             </div>
 
             <!-- Age -->
-            <div class="info-row" @dblclick="startInlineEdit(P.characterAge, '年龄', age)">
-              <span class="info-label">年龄</span>
+            <div class="info-row" @dblclick="startInlineEdit(P.characterAge, $t('character.basic.fieldAge'), age)">
+              <span class="info-label">{{ $t('character.basic.fieldAge') }}</span>
               <template v-if="editingField?.path === P.characterAge">
                 <input
                   v-model="editInputValue"
@@ -1170,19 +1183,19 @@ const avatarInitial = computed<string>(() => {
 
             <!-- Gender -->
             <div class="info-row">
-              <span class="info-label">性别</span>
+              <span class="info-label">{{ $t('character.basic.fieldGender') }}</span>
               <span class="info-value">{{ gender ?? '—' }}</span>
             </div>
 
             <!-- Occupation -->
             <div class="info-row">
-              <span class="info-label">职业/地位</span>
+              <span class="info-label">{{ $t('character.basic.fieldOccupation') }}</span>
               <span class="info-value">{{ occupation ?? '—' }}</span>
             </div>
 
             <!-- Location -->
             <div class="info-row">
-              <span class="info-label">当前位置</span>
+              <span class="info-label">{{ $t('character.basic.fieldLocation') }}</span>
               <span class="info-value">{{ location ?? '—' }}</span>
             </div>
           </div>
@@ -1196,26 +1209,26 @@ const avatarInitial = computed<string>(() => {
         <section
           v-if="origin || talentTier || traitText || talentNames.length"
           class="info-card"
-          aria-label="身份"
+          :aria-label="$t('character.basic.sectionIdentity')"
         >
-          <h3 class="card-title">身份</h3>
+          <h3 class="card-title">{{ $t('character.basic.sectionIdentity') }}</h3>
           <div class="info-grid">
             <div v-if="origin" class="info-row">
-              <span class="info-label">出身</span>
+              <span class="info-label">{{ $t('character.basic.fieldOrigin') }}</span>
               <span class="info-value">{{ origin }}</span>
             </div>
             <div v-if="talentTier" class="info-row">
-              <span class="info-label">天资</span>
+              <span class="info-label">{{ $t('character.basic.fieldTalentTier') }}</span>
               <span class="info-value">{{ talentTier }}</span>
             </div>
             <div v-if="traitText" class="info-row">
-              <span class="info-label">特质</span>
+              <span class="info-label">{{ $t('character.basic.fieldTrait') }}</span>
               <span class="info-value">{{ traitText }}</span>
             </div>
           </div>
           <div v-if="talentNames.length" class="talent-section">
             <div class="talent-header">
-              <span class="talent-label">天赋</span>
+              <span class="talent-label">{{ $t('character.basic.fieldTalent') }}</span>
               <span class="badge">{{ talentNames.length }}</span>
             </div>
             <div class="talent-list">
@@ -1224,8 +1237,8 @@ const avatarInitial = computed<string>(() => {
           </div>
         </section>
 
-        <section v-if="description" class="info-card" aria-label="角色描述">
-          <h3 class="card-title">地位描述</h3>
+        <section v-if="description" class="info-card" :aria-label="$t('character.basic.sectionDescription')">
+          <h3 class="card-title">{{ $t('character.basic.sectionDescription') }}</h3>
           <p class="description-text">{{ description }}</p>
         </section>
       </template>
@@ -1237,8 +1250,8 @@ const avatarInitial = computed<string>(() => {
           与下方后天六维（运行时值，1-20 范围）对应同一套字段名，但来自不同状态树路径。
           先天六维 = 玩家分配的基线；后天六维 = 基线 + 出身修正 + 天赋修正。
         -->
-        <section v-if="innateStatList.length" class="info-card" aria-label="先天六维">
-          <h3 class="card-title">先天六维 <span class="card-subtitle">基线 · 1-10</span></h3>
+        <section v-if="innateStatList.length" class="info-card" :aria-label="$t('character.attributes.sectionInnate')">
+          <h3 class="card-title">{{ $t('character.attributes.sectionInnate') }} <span class="card-subtitle">{{ $t('character.attributes.innateSubtitle') }}</span></h3>
           <div class="attribute-list attribute-list--compact">
             <div v-for="attr in innateStatList" :key="attr.key" class="attribute-item">
               <div class="attribute-header">
@@ -1257,10 +1270,10 @@ const avatarInitial = computed<string>(() => {
           </div>
         </section>
 
-        <section class="info-card" aria-label="后天六维">
+        <section class="info-card" :aria-label="$t('character.attributes.sectionAcquired')">
           <h3 class="card-title">
-            后天六维 <span class="card-subtitle">当前 · 1-20</span>
-            <button class="btn-icon" title="编辑属性" @click="openSchemaEdit(P.characterAttributes, '编辑属性')">
+            {{ $t('character.attributes.sectionAcquired') }} <span class="card-subtitle">{{ $t('character.attributes.acquiredSubtitle') }}</span>
+            <button class="btn-icon" :title="$t('character.attributes.editAttributes')" @click="openSchemaEdit(P.characterAttributes, t('character.attributes.editAttributes'))">
               <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
                 <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
               </svg>
@@ -1282,7 +1295,7 @@ const avatarInitial = computed<string>(() => {
               </div>
             </div>
           </div>
-          <p v-else class="empty-hint">暂无属性数据</p>
+          <p v-else class="empty-hint">{{ $t('character.attributes.empty') }}</p>
         </section>
       </template>
 
@@ -1324,73 +1337,73 @@ const avatarInitial = computed<string>(() => {
           </div>
         </div>
         <div v-else class="empty-state">
-          <p>尚无社交关系记录</p>
+          <p>{{ $t('character.relations.empty') }}</p>
         </div>
       </template>
 
       <!-- ─── Tab: 身体 (NSFW) ─── -->
       <template v-else-if="activeTab === 'body' && nsfwEnabled">
         <div v-if="hasBodyData" class="body-nsfw-card">
-          <div class="body-nsfw-title">♥ 法身档案 <span class="body-nsfw-badge">PRIVATE</span></div>
+          <div class="body-nsfw-title">{{ $t('character.body.title') }} <span class="body-nsfw-badge">{{ $t('character.body.privateBadge') }}</span></div>
 
           <!-- Measurements row -->
           <div v-if="playerBody?.身高 || playerBody?.体重" class="body-metrics-row">
             <div v-if="playerBody?.身高" class="body-metric">
               <span class="body-metric-val">{{ playerBody.身高 }}</span>
-              <span class="body-metric-lbl">cm</span>
+              <span class="body-metric-lbl">{{ $t('character.body.heightUnit') }}</span>
             </div>
             <div v-if="playerBody?.体重" class="body-metric">
               <span class="body-metric-val">{{ playerBody.体重 }}</span>
-              <span class="body-metric-lbl">kg</span>
+              <span class="body-metric-lbl">{{ $t('character.body.weightUnit') }}</span>
             </div>
             <template v-if="playerBody?.三围">
               <div v-if="playerBody.三围.胸围" class="body-metric">
                 <span class="body-metric-val">{{ playerBody.三围.胸围 }}</span>
-                <span class="body-metric-lbl">胸围</span>
+                <span class="body-metric-lbl">{{ $t('character.body.bust') }}</span>
               </div>
               <div v-if="playerBody.三围.腰围" class="body-metric">
                 <span class="body-metric-val">{{ playerBody.三围.腰围 }}</span>
-                <span class="body-metric-lbl">腰围</span>
+                <span class="body-metric-lbl">{{ $t('character.body.waist') }}</span>
               </div>
               <div v-if="playerBody.三围.臀围" class="body-metric">
                 <span class="body-metric-val">{{ playerBody.三围.臀围 }}</span>
-                <span class="body-metric-lbl">臀围</span>
+                <span class="body-metric-lbl">{{ $t('character.body.hip') }}</span>
               </div>
             </template>
           </div>
 
           <!-- Text descriptions -->
           <div v-if="playerBody?.胸部描述" class="body-desc-field">
-            <span class="body-hint">胸部描述</span>
+            <span class="body-hint">{{ $t('character.body.breastDesc') }}</span>
             <p class="body-desc-text">{{ playerBody.胸部描述 }}</p>
           </div>
           <div v-if="playerBody?.私处描述" class="body-desc-field">
-            <span class="body-hint">私处描述</span>
+            <span class="body-hint">{{ $t('character.body.privateDesc') }}</span>
             <p class="body-desc-text">{{ playerBody.私处描述 }}</p>
           </div>
           <div v-if="playerBody?.生殖器描述" class="body-desc-field">
-            <span class="body-hint">生殖器描述</span>
+            <span class="body-hint">{{ $t('character.body.genitalDesc') }}</span>
             <p class="body-desc-text">{{ playerBody.生殖器描述 }}</p>
           </div>
 
           <!-- Body parts grid (mirrors NPC 私密信息.身体部位) -->
           <div v-if="bodyParts.length" class="body-parts-section">
-            <span class="body-hint" style="display:block;margin-bottom:6px">身体部位</span>
+            <span class="body-hint" style="display:block;margin-bottom:6px">{{ $t('character.body.bodyParts') }}</span>
             <div class="bp-grid">
               <div v-for="(bp, bi) in bodyParts" :key="bi" class="bp-card">
                 <div class="bp-head">
-                  {{ bp.部位名称 }}
+                  {{ displayBodyPartName(bp.部位名称) }}
                   <span v-if="bp.特殊印记" class="bp-mark">{{ bp.特殊印记 }}</span>
                 </div>
                 <p v-if="bp.特征描述" class="bp-desc">{{ bp.特征描述 }}</p>
                 <div class="bp-meters">
                   <div class="bp-meter">
-                    <span>敏感</span>
+                    <span>{{ $t('character.body.sensitivity') }}</span>
                     <div class="bp-bar"><div class="bp-fill" :style="{ width: (bp.敏感度 ?? 0) + '%' }" /></div>
                     <span>{{ bp.敏感度 ?? 0 }}</span>
                   </div>
                   <div class="bp-meter">
-                    <span>开发</span>
+                    <span>{{ $t('character.body.development') }}</span>
                     <div class="bp-bar"><div class="bp-fill bp-fill--dev" :style="{ width: (bp.开发度 ?? 0) + '%' }" /></div>
                     <span>{{ bp.开发度 ?? 0 }}</span>
                   </div>
@@ -1401,18 +1414,18 @@ const avatarInitial = computed<string>(() => {
 
           <!-- Uterus (mirrors NPC 子宫) -->
           <div v-if="playerBody?.子宫" class="body-uterus-section">
-            <span class="body-hint" style="display:block;margin-bottom:6px">子宫</span>
+            <span class="body-hint" style="display:block;margin-bottom:6px">{{ $t('character.body.uterus') }}</span>
             <div class="uterus-card">
               <div v-if="playerBody.子宫.状态" class="uterus-row">
-                <span class="body-hint">状态</span>
+                <span class="body-hint">{{ $t('character.body.uterusStatus') }}</span>
                 <span class="uterus-val">{{ playerBody.子宫.状态 }}</span>
               </div>
               <div v-if="playerBody.子宫.宫口状态" class="uterus-row">
-                <span class="body-hint">宫口</span>
+                <span class="body-hint">{{ $t('character.body.uterusCervix') }}</span>
                 <span class="uterus-val">{{ playerBody.子宫.宫口状态 }}</span>
               </div>
               <div v-if="playerBody.子宫.内射记录?.length" class="uterus-records">
-                <span class="body-hint">内射记录 ({{ playerBody.子宫.内射记录.length }})</span>
+                <span class="body-hint">{{ $t('character.body.inseminationRecords', { n: playerBody.子宫.内射记录.length }) }}</span>
                 <div v-for="(rec, ri) in playerBody.子宫.内射记录" :key="ri" class="uterus-record-item">
                   <span v-if="rec.日期" class="uterus-record-date">{{ rec.日期 }}</span>
                   <span v-if="rec.描述" class="uterus-record-desc">{{ rec.描述 }}</span>
@@ -1423,7 +1436,7 @@ const avatarInitial = computed<string>(() => {
 
           <!-- Legacy flat dev entries (for old saves that use 开发度 Record) -->
           <div v-if="devEntries.length && !bodyParts.length" class="body-dev-section">
-            <span class="body-hint" style="display:block;margin-bottom:6px">开发度</span>
+            <span class="body-hint" style="display:block;margin-bottom:6px">{{ $t('character.body.devLevel') }}</span>
             <div class="body-dev-grid">
               <div v-for="d in devEntries" :key="d.part" class="body-dev-item">
                 <span class="body-dev-name">{{ d.part }}</span>
@@ -1435,7 +1448,7 @@ const avatarInitial = computed<string>(() => {
 
           <!-- Sensitive points -->
           <div v-if="playerBody?.敏感点?.length" class="body-tag-section">
-            <span class="body-hint">敏感点</span>
+            <span class="body-hint">{{ $t('character.body.sensitivePoints') }}</span>
             <div class="body-tag-row">
               <span v-for="s in playerBody.敏感点" :key="s" class="body-tag body-tag--nsfw">{{ s }}</span>
             </div>
@@ -1443,22 +1456,22 @@ const avatarInitial = computed<string>(() => {
 
           <!-- Tattoos / marks -->
           <div v-if="playerBody?.纹身与印记?.length" class="body-tag-section">
-            <span class="body-hint">纹身与印记</span>
+            <span class="body-hint">{{ $t('character.body.tattoos') }}</span>
             <div class="body-tag-row">
               <span v-for="t in playerBody.纹身与印记" :key="t" class="body-tag body-tag--mark">{{ t }}</span>
             </div>
           </div>
         </div>
         <div v-else class="empty-state">
-          <p>尚无身体数据</p>
+          <p>{{ $t('character.body.empty') }}</p>
         </div>
       </template>
 
       <!-- ─── Tab: 成就 ─── -->
       <template v-else-if="activeTab === 'achievements'">
         <div class="achievement-placeholder">
-          <span class="achievement-icon">🏆</span>
-          <p>成就系统暂未开放</p>
+          <span class="achievement-icon">{{ $t('character.achievements.icon') }}</span>
+          <p>{{ $t('character.achievements.placeholder') }}</p>
         </div>
       </template>
 
@@ -1466,21 +1479,21 @@ const avatarInitial = computed<string>(() => {
       <template v-else-if="activeTab === 'playerImage'">
         <!-- Stats card (MRJH §C) -->
         <div class="player-stats-bar">
-          <div class="player-stat-card"><span class="player-stat-val">{{ playerImageStats.total }} 张</span><span class="player-stat-lbl">影像总数</span></div>
-          <div class="player-stat-card"><span class="player-stat-val" :style="{ color: playerImageStats.avatarBound ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted, #888)' }">{{ playerImageStats.avatarBound ? '已设置' : '未设置' }}</span><span class="player-stat-lbl">头像绑定</span></div>
-          <div class="player-stat-card"><span class="player-stat-val" :style="{ color: playerImageStats.portraitBound ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted, #888)' }">{{ playerImageStats.portraitBound ? '已设置' : '未设置' }}</span><span class="player-stat-lbl">立绘绑定</span></div>
-          <div class="player-stat-card"><span class="player-stat-val">{{ playerImageStats.anchorName ?? '未建立' }}</span><span class="player-stat-lbl">角色锚点</span></div>
+          <div class="player-stat-card"><span class="player-stat-val">{{ $t('character.image.statsTotal', { n: playerImageStats.total }) }}</span><span class="player-stat-lbl">{{ $t('character.image.statsLabel.total') }}</span></div>
+          <div class="player-stat-card"><span class="player-stat-val" :style="{ color: playerImageStats.avatarBound ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted, #888)' }">{{ playerImageStats.avatarBound ? $t('character.image.bound') : $t('character.image.unbound') }}</span><span class="player-stat-lbl">{{ $t('character.image.statsLabel.avatar') }}</span></div>
+          <div class="player-stat-card"><span class="player-stat-val" :style="{ color: playerImageStats.portraitBound ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted, #888)' }">{{ playerImageStats.portraitBound ? $t('character.image.bound') : $t('character.image.unbound') }}</span><span class="player-stat-lbl">{{ $t('character.image.statsLabel.portrait') }}</span></div>
+          <div class="player-stat-card"><span class="player-stat-val">{{ playerImageStats.anchorName ?? $t('character.image.anchorUnset') }}</span><span class="player-stat-lbl">{{ $t('character.image.statsLabel.anchor') }}</span></div>
         </div>
 
         <section class="player-image-section">
           <div class="player-image-form">
-            <h3 class="section-label">生成主角肖像</h3>
-            <p class="section-desc">为你的角色生成图片，可在下方设为头像或立绘</p>
+            <h3 class="section-label">{{ $t('character.image.generateTitle') }}</h3>
+            <p class="section-desc">{{ $t('character.image.generateDesc') }}</p>
             <div class="pi-backend-status">
               <span :class="['pi-status-dot', activeBackendStatus.configured ? 'pi-status-dot--ok' : 'pi-status-dot--off']" />
               <span class="pi-status-label">{{ activeBackendStatus.label }}</span>
               <span v-if="activeBackendStatus.model" class="pi-status-model">{{ activeBackendStatus.model }}</span>
-              <span v-if="!activeBackendStatus.configured" class="pi-status-warn">未配置</span>
+              <span v-if="!activeBackendStatus.configured" class="pi-status-warn">{{ $t('character.image.notConfigured') }}</span>
             </div>
 
             <CivitaiLoraShelf
@@ -1491,135 +1504,135 @@ const avatarInitial = computed<string>(() => {
             />
 
             <div class="pi-form-row">
-              <label class="pi-label">构图</label>
+              <label class="pi-label">{{ $t('character.image.formLabel.composition') }}</label>
               <AgaSelect v-model="playerComposition" :options="compositionOptions" />
             </div>
             <div v-if="isPlayerCustomComposition" class="pi-form-row">
-              <label class="pi-label">构图描述</label>
-              <input v-model="playerCustomComposition" class="pi-select" placeholder="例如：45度侧脸半身、古风战斗姿势、低机位仰拍" />
+              <label class="pi-label">{{ $t('character.image.formLabel.compositionDesc') }}</label>
+              <input v-model="playerCustomComposition" class="pi-select" :placeholder="$t('character.image.formLabel.compositionPlaceholder')" />
             </div>
 
             <div class="pi-form-row">
-              <label class="pi-label">画风</label>
+              <label class="pi-label">{{ $t('character.image.formLabel.style') }}</label>
               <AgaSelect v-model="playerStyle" :options="styleOptions" />
             </div>
 
             <div v-if="playerArtistPresetOptions.length > 1" class="pi-form-row">
-              <label class="pi-label">画师串预设</label>
+              <label class="pi-label">{{ $t('character.image.formLabel.artistPreset') }}</label>
               <AgaSelect v-model="playerArtistPreset" :options="playerArtistPresetOptions" />
             </div>
 
             <div v-if="playerPngPresetOptions.length > 1" class="pi-form-row">
-              <label class="pi-label">PNG 画风预设</label>
+              <label class="pi-label">{{ $t('character.image.formLabel.pngPreset') }}</label>
               <AgaSelect v-model="playerPngPreset" :options="playerPngPresetOptions" />
             </div>
 
             <div class="pi-form-row">
-              <label class="pi-label">额外要求</label>
-              <textarea v-model="playerExtraPrompt" class="pi-textarea" rows="2" placeholder="如：月下持剑、白衣飘飘…" />
+              <label class="pi-label">{{ $t('character.image.formLabel.extraPrompt') }}</label>
+              <textarea v-model="playerExtraPrompt" class="pi-textarea" rows="2" :placeholder="$t('character.image.formLabel.extraPlaceholder')" />
             </div>
 
             <div class="pi-form-row">
-              <label class="pi-label">尺寸</label>
-              <input v-model="playerSize" class="pi-select" placeholder="如 832x1216（留空使用默认）" style="max-width:200px" />
+              <label class="pi-label">{{ $t('character.image.formLabel.size') }}</label>
+              <input v-model="playerSize" class="pi-select" :placeholder="$t('character.image.formLabel.sizePlaceholder')" style="max-width:200px" />
             </div>
 
             <!-- Reference redraw (C1) -->
             <div v-if="PROVIDER_CAPABILITIES[playerDefaultBackend]?.imageToImage" class="pi-form-row" style="flex-direction:column;align-items:stretch">
               <div style="display:flex;align-items:center;gap:8px;">
-                <label class="pi-label" style="margin:0">参考重绘</label>
+                <label class="pi-label" style="margin:0">{{ $t('character.image.reference.label') }}</label>
                 <AgaToggle v-model="playerRefEnabled" />
               </div>
               <div v-if="playerRefEnabled" style="display:flex;flex-direction:column;gap:6px;padding-left:12px;border-left:2px solid rgba(163,190,140,0.3);margin-top:6px;">
-                <label class="pi-label">来源</label>
+                <label class="pi-label">{{ $t('character.image.reference.source') }}</label>
                 <AgaSelect
                   :options="[
-                    { label: '上传图片', value: 'upload' },
-                    { label: '当前头像', value: 'avatar' },
-                    { label: '当前立绘', value: 'portrait' },
+                    { label: $t('character.image.reference.sourceUpload'), value: 'upload' },
+                    { label: $t('character.image.reference.sourceAvatar'), value: 'avatar' },
+                    { label: $t('character.image.reference.sourcePortrait'), value: 'portrait' },
                   ]"
                   v-model="playerRefSource"
                 />
                 <div v-if="playerRefSource === 'upload'" style="margin-top:4px;">
                   <label style="display:inline-block;padding:4px 12px;font-size:0.8rem;border:1px dashed var(--color-border);border-radius:6px;color:var(--color-text-secondary);cursor:pointer;">
-                    {{ playerRefFile ? playerRefFile.name : '选择图片…' }}
+                    {{ playerRefFile ? playerRefFile.name : $t('character.image.reference.selectFile') }}
                     <input type="file" accept="image/*" style="display:none" @change="onPlayerRefFileChange" />
                   </label>
                 </div>
-                <label class="pi-label" style="margin-top:4px;">重绘幅度</label>
+                <label class="pi-label" style="margin-top:4px;">{{ $t('character.image.reference.denoise') }}</label>
                 <div style="display:flex;align-items:center;gap:8px;">
                   <input type="range" min="0.1" max="1" step="0.05" v-model.number="playerRefDenoise" style="flex:1" />
                   <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ playerRefDenoise.toFixed(2) }}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--color-text-muted);">
-                  <span>0.25 近似原图</span><span>0.55 保留构图</span><span>0.80 大幅重绘</span>
+                  <span>{{ $t('character.image.reference.denoiseNear') }}</span><span>{{ $t('character.image.reference.denoiseMid') }}</span><span>{{ $t('character.image.reference.denoiseFar') }}</span>
                 </div>
-                <p style="font-size:0.75rem;color:var(--color-text-muted);margin-top:2px;">参考重绘会把源图发送给当前生成后端。</p>
+                <p style="font-size:0.75rem;color:var(--color-text-muted);margin-top:2px;">{{ $t('character.image.reference.notice') }}</p>
               </div>
             </div>
-            <p v-else style="font-size:0.75rem;color:var(--color-text-muted);margin:0;">当前后端不支持参考重绘</p>
+            <p v-else style="font-size:0.75rem;color:var(--color-text-muted);margin:0;">{{ $t('character.image.reference.unsupported') }}</p>
 
             <AgaButton
               class="pi-gen-btn"
               :loading="playerGenerating"
               @click="generatePlayerImage"
             >
-              {{ `生成${playerComposition === 'portrait' ? '头像' : playerComposition === 'half-body' ? '半身' : '立绘'}` }}
+              {{ playerComposition === 'portrait' ? $t('character.image.generateButton.portrait') : playerComposition === 'half-body' ? $t('character.image.generateButton.halfBody') : $t('character.image.generateButton.fullLength') }}
             </AgaButton>
 
             <div v-if="playerGenError" class="pi-error">{{ playerGenError }}</div>
 
             <!-- Player anchor management (UI-IMPLEMENTATION-DESIGN §3.1) -->
             <div class="anchor-section">
-              <h3 class="section-label">主角角色锚点</h3>
-              <p class="section-desc">锚点保存角色的稳定视觉特征，让多次生图保持一致</p>
+              <h3 class="section-label">{{ $t('character.image.anchor.title') }}</h3>
+              <p class="section-desc">{{ $t('character.image.anchor.desc') }}</p>
 
               <div v-if="playerAnchor" class="anchor-editor">
-                <div class="anchor-status anchor-status--active">锚点已建立：{{ playerAnchor.name || '主角锚点' }}</div>
+                <div class="anchor-status anchor-status--active">{{ $t('character.image.anchor.established', { name: playerAnchor.name || $t('character.image.anchor.defaultName') }) }}</div>
 
                 <div class="pi-form-row">
-                  <label class="pi-label">正面提示词</label>
-                  <textarea v-model="anchorPositive" class="pi-textarea" rows="2" placeholder="稳定的角色视觉特征标签" />
+                  <label class="pi-label">{{ $t('character.image.anchor.positivePrompt') }}</label>
+                  <textarea v-model="anchorPositive" class="pi-textarea" rows="2" :placeholder="$t('character.image.anchor.positivePlaceholder')" />
                 </div>
                 <div class="pi-form-row">
-                  <label class="pi-label">负面提示词</label>
-                  <textarea v-model="anchorNegative" class="pi-textarea" rows="1" placeholder="需要排除的视觉元素" />
+                  <label class="pi-label">{{ $t('character.image.anchor.negativePrompt') }}</label>
+                  <textarea v-model="anchorNegative" class="pi-textarea" rows="1" :placeholder="$t('character.image.anchor.negativePlaceholder')" />
                 </div>
 
                 <div class="anchor-toggles">
                   <div class="anchor-toggle-row">
                     <div>
-                      <span class="pi-label">启用锚点</span>
-                      <span class="section-desc">关闭后不参与生图</span>
+                      <span class="pi-label">{{ $t('character.image.anchor.toggleEnabled') }}</span>
+                      <span class="section-desc">{{ $t('character.image.anchor.toggleEnabledDesc') }}</span>
                     </div>
                     <AgaToggle v-model="anchorEnabled" />
                   </div>
                   <div class="anchor-toggle-row">
                     <div>
-                      <span class="pi-label">生图默认附加</span>
-                      <span class="section-desc">NPC 单图自动带入</span>
+                      <span class="pi-label">{{ $t('character.image.anchor.toggleAppend') }}</span>
+                      <span class="section-desc">{{ $t('character.image.anchor.toggleAppendDesc') }}</span>
                     </div>
                     <AgaToggle v-model="anchorAppendDefault" />
                   </div>
                   <div class="anchor-toggle-row">
                     <div>
-                      <span class="pi-label">场景自动注入</span>
-                      <span class="section-desc">场景图自动注入</span>
+                      <span class="pi-label">{{ $t('character.image.anchor.toggleAutoScene') }}</span>
+                      <span class="section-desc">{{ $t('character.image.anchor.toggleAutoSceneDesc') }}</span>
                     </div>
                     <AgaToggle v-model="anchorAutoScene" />
                   </div>
                 </div>
 
                 <div class="anchor-actions">
-                  <AgaButton size="sm" @click="savePlayerAnchor">保存锚点</AgaButton>
-                  <AgaButton size="sm" variant="danger" @click="deletePlayerAnchor">删除锚点</AgaButton>
+                  <AgaButton size="sm" @click="savePlayerAnchor">{{ $t('character.image.anchor.save') }}</AgaButton>
+                  <AgaButton size="sm" variant="danger" @click="deletePlayerAnchor">{{ $t('character.image.anchor.delete') }}</AgaButton>
                 </div>
               </div>
 
               <div v-else class="anchor-empty">
-                <p>还没有主角锚点。点击下方按钮由 AI 提取。</p>
+                <p>{{ $t('character.image.anchor.emptyHint') }}</p>
                 <AgaButton size="sm" :loading="extractingAnchor" @click="extractPlayerAnchor">
-                  AI 提取锚点
+                  {{ $t('character.image.anchor.extractButton') }}
                 </AgaButton>
               </div>
             </div>
@@ -1638,19 +1651,19 @@ const avatarInitial = computed<string>(() => {
             />
             <div class="secret-header-row">
               <div>
-                <h3 class="section-label">私密部位特写</h3>
-                <p class="section-desc">为主角生成私密部位特写图片。</p>
+                <h3 class="section-label">{{ $t('character.image.secret.title') }}</h3>
+                <p class="section-desc">{{ $t('character.image.secret.desc') }}</p>
               </div>
               <AgaButton
                 size="sm"
                 :disabled="!!playerSecretBusy"
                 @click="generateAllPlayerSecretParts"
-              >{{ playerSecretBusy === 'all' ? '生成中...' : '全部生成' }}</AgaButton>
+              >{{ playerSecretBusy === 'all' ? $t('character.image.secret.generating') : $t('character.image.secret.generateAll') }}</AgaButton>
             </div>
 
             <div class="secret-config-grid">
               <div class="pi-form-row" style="flex-direction:column;align-items:stretch">
-                <label class="pi-label">分辨率 / 比例</label>
+                <label class="pi-label">{{ $t('character.image.secret.resolution') }}</label>
                 <div class="secret-btn-row">
                   <button v-for="opt in playerSecretSizeOptions" :key="opt.value" type="button"
                     :class="['secret-opt-btn', { 'secret-opt-btn--active': playerSecretSizePreset === opt.value }]"
@@ -1662,15 +1675,15 @@ const avatarInitial = computed<string>(() => {
 
             <div class="secret-config-grid">
               <div class="pi-form-row">
-                <label class="pi-label">画师串预设</label>
-                <AgaSelect :options="[{ label: '不使用', value: '' }, ...playerArtistPresetOptions.slice(1)]" v-model="playerSecretArtistPreset" />
+                <label class="pi-label">{{ $t('character.image.formLabel.artistPreset') }}</label>
+                <AgaSelect :options="[{ label: t('character.image.formLabel.noPreset'), value: '' }, ...playerArtistPresetOptions.slice(1)]" v-model="playerSecretArtistPreset" />
               </div>
               <div class="pi-form-row">
-                <label class="pi-label">PNG 画风预设</label>
+                <label class="pi-label">{{ $t('character.image.formLabel.pngPreset') }}</label>
                 <AgaSelect :options="playerPngPresetOptions" v-model="playerSecretPngPreset" />
               </div>
               <div class="pi-form-row" style="flex-direction:column;align-items:stretch">
-                <label class="pi-label">额外要求</label>
+                <label class="pi-label">{{ $t('character.image.formLabel.extraPrompt') }}</label>
                 <textarea v-model="playerSecretExtraPrompt" class="pi-textarea" rows="2" placeholder="如：近景柔光、细节清晰、细腻写实..." />
               </div>
             </div>
@@ -1682,14 +1695,14 @@ const avatarInitial = computed<string>(() => {
                 <div class="secret-card-header">
                   <span class="secret-card-label">{{ part.label }}</span>
                   <AgaButton size="sm" :disabled="!!playerSecretBusy" @click="generatePlayerSecretPart(part.key)">
-                    {{ playerSecretBusy === part.key ? '生成中...' : '生成' }}
+                    {{ playerSecretBusy === part.key ? $t('character.image.secret.generating') : $t('character.image.secret.generate') }}
                   </AgaButton>
                   <AgaButton
                     v-if="getPlayerSecretPartAssetId(part.key) && PROVIDER_CAPABILITIES[playerDefaultBackend]?.imageToImage"
                     size="sm" variant="ghost"
                     :disabled="!!playerSecretBusy"
                     @click="generatePlayerSecretPartWithReference(part.key)"
-                  >参考重绘</AgaButton>
+                  >{{ $t('character.image.secret.referenceRedraw') }}</AgaButton>
                 </div>
                 <div
                   class="secret-card-image"
@@ -1704,7 +1717,7 @@ const avatarInitial = computed<string>(() => {
                       class="secret-card-img"
                     />
                   </template>
-                  <div v-else class="secret-card-placeholder">暂无图片</div>
+                  <div v-else class="secret-card-placeholder">{{ $t('character.image.secret.noImage') }}</div>
                 </div>
               </div>
             </div>
@@ -1720,25 +1733,25 @@ const avatarInitial = computed<string>(() => {
 
           <!-- Player image archive -->
           <div class="player-archive">
-            <h3 class="section-label">主角影像档案</h3>
+            <h3 class="section-label">{{ $t('character.image.archive.title') }}</h3>
             <div v-if="playerArchiveHistory.length > 0" class="player-grid">
               <div v-for="img in playerArchiveHistory" :key="String(img.id)" class="player-img-card">
                 <div class="player-img-preview">
                   <ImageDisplay :asset-id="String(img.id)" :fallback-letter="name?.charAt(0) ?? '?'" size="lg" />
                   <div class="player-img-badges">
-                    <span class="player-img-badge player-img-badge--status">{{ img.status === 'failed' ? '失败' : '成功' }}</span>
-                    <span v-if="img.composition" class="player-img-badge">{{ img.composition === 'portrait' ? '头像' : img.composition === 'half-body' ? '半身' : img.composition === 'custom' ? '自定义' : '立绘' }}</span>
-                    <span v-if="playerAvatarId === String(img.id)" class="player-img-badge player-img-badge--selected">已设头像</span>
-                    <span v-if="playerPortraitId === String(img.id)" class="player-img-badge player-img-badge--selected">已设立绘</span>
+                    <span class="player-img-badge player-img-badge--status">{{ img.status === 'failed' ? $t('character.image.archive.statusFailed') : $t('character.image.archive.statusSuccess') }}</span>
+                    <span v-if="img.composition" class="player-img-badge">{{ img.composition === 'portrait' ? $t('character.image.archive.compositionPortrait') : img.composition === 'half-body' ? $t('character.image.archive.compositionHalfBody') : img.composition === 'custom' ? $t('character.image.archive.compositionCustom') : $t('character.image.archive.compositionFullLength') }}</span>
+                    <span v-if="playerAvatarId === String(img.id)" class="player-img-badge player-img-badge--selected">{{ $t('character.image.archive.selectedAvatar') }}</span>
+                    <span v-if="playerPortraitId === String(img.id)" class="player-img-badge player-img-badge--selected">{{ $t('character.image.archive.selectedPortrait') }}</span>
                   </div>
                 </div>
                 <div v-if="img.positivePrompt || img.negativePrompt" class="player-img-prompts">
                   <details v-if="img.positivePrompt" class="prompt-details">
-                    <summary>最终正向提示词</summary>
+                    <summary>{{ $t('character.image.archive.positivePrompt') }}</summary>
                     <pre class="prompt-text">{{ img.positivePrompt }}</pre>
                   </details>
                   <details v-if="img.negativePrompt" class="prompt-details">
-                    <summary>最终负面提示词</summary>
+                    <summary>{{ $t('character.image.archive.negativePrompt') }}</summary>
                     <pre class="prompt-text">{{ img.negativePrompt }}</pre>
                   </details>
                 </div>
@@ -1747,27 +1760,27 @@ const avatarInitial = computed<string>(() => {
                     v-if="img.positivePrompt"
                     size="sm"
                     @click="openPlayerRegenerate(img as Record<string, unknown>)"
-                  >生成同款</AgaButton>
+                  >{{ $t('character.image.archive.regenerateSame') }}</AgaButton>
                   <AgaButton
                     v-if="img.positivePrompt && PROVIDER_CAPABILITIES[playerDefaultBackend]?.imageToImage"
                     size="sm"
                     @click="openPlayerRegenerate(img as Record<string, unknown>, true)"
-                  >参考重绘</AgaButton>
-                  <AgaButton size="sm" variant="ghost" @click="analyzePlayerImageFromCard(String(img.id))">提炼画风</AgaButton>
-                  <AgaButton size="sm" variant="ghost" @click="savePlayerAsReferenceMaterial(String(img.id))">保存为参考素材</AgaButton>
+                  >{{ $t('character.image.archive.referenceRedraw') }}</AgaButton>
+                  <AgaButton size="sm" variant="ghost" @click="analyzePlayerImageFromCard(String(img.id))">{{ $t('character.image.archive.analyzeStyle') }}</AgaButton>
+                  <AgaButton size="sm" variant="ghost" @click="savePlayerAsReferenceMaterial(String(img.id))">{{ $t('character.image.archive.saveAsReference') }}</AgaButton>
                   <AgaButton
                     v-if="img.status !== 'failed' && img.composition !== 'secret_part'"
                     size="sm"
                     variant="secondary"
                     @click="setPlayerAvatar(String(img.id))"
-                  >{{ playerAvatarId === String(img.id) ? '取消头像' : '设为头像' }}</AgaButton>
+                  >{{ playerAvatarId === String(img.id) ? $t('character.image.archive.unsetAvatar') : $t('character.image.archive.setAsAvatar') }}</AgaButton>
                   <AgaButton
                     v-if="img.status !== 'failed' && img.composition !== 'secret_part'"
                     size="sm"
                     variant="secondary"
                     @click="setPlayerPortrait(String(img.id))"
-                  >{{ playerPortraitId === String(img.id) ? '取消立绘' : '设为立绘' }}</AgaButton>
-                  <AgaButton size="sm" variant="danger" @click="deletePlayerImage(String(img.id))">删除</AgaButton>
+                  >{{ playerPortraitId === String(img.id) ? $t('character.image.archive.unsetPortrait') : $t('character.image.archive.setAsPortrait') }}</AgaButton>
+                  <AgaButton size="sm" variant="danger" @click="deletePlayerImage(String(img.id))">{{ $t('common.actions.delete') }}</AgaButton>
                 </div>
               </div>
             </div>

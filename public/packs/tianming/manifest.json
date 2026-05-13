@@ -40,7 +40,8 @@
     "imageCharacterCot", "imageSceneCot", "imageSecretPartCot", "imageAnchorCot",
     "imageNaiTransformerPreset",
     "fieldRepair",
-    "plotDirective", "plotEvaluationStep2", "plotDecompose"
+    "plotDirective", "plotEvaluationStep2", "plotDecompose",
+    "edgeReview", "entityEnrich"
   ],
   "presets": {
     "worlds": "presets/worlds.json",
@@ -48,6 +49,13 @@
     "origins": "presets/origins.json",
     "traits": "presets/traits.json",
     "talents": "presets/talents.json"
+  },
+  "promptLocales": {
+    "en": "prompts-en"
+  },
+  "i18nFiles": {
+    "zh-CN": "i18n/zh-CN.json",
+    "en": "i18n/en.json"
   },
   "rules": {
     "enginePaths": "rules/engine-paths.json",

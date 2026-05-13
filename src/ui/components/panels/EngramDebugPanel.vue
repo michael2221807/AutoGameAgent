@@ -10,7 +10,10 @@
  *  - Engram 配置   → `loadEngramConfig()`（localStorage `aga_engram_config`）
  */
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
+
+const { t } = useI18n();
 import { useEngramDebugStore } from '@/engine/stores/engram-debug';
 import { loadEngramConfig } from '@/engine/memory/engram/engram-config';
 import { DEFAULT_ENGRAM_CONFIG } from '@/engine/memory/engram/engram-types';
@@ -150,7 +153,7 @@ function rebuildEdges(): void {
     v2Edges: [],
     meta: { ...(data.meta ?? {}), schemaVersion: 4, lastUpdated: Date.now() },
   });
-  alert('知识边已清空。下一轮 AI 回合将自动重新迁移。');
+  alert(t('engram.rebuild.alert'));
 }
 
 // ─── 导出 JSON ───
@@ -323,22 +326,26 @@ function initGraph(): void {
     const e = evt.originalEvent as MouseEvent;
     if (d.nodeCategory === 'event') {
       graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY,
-        html: `<div class="gtt-type">事件 · 第${d.roundNumber}轮</div><div class="gtt-title">${esc(d.fullLabel)}</div><div class="gtt-body">${esc(d.summary)}</div><div class="gtt-meta">提及: ${(d.mentionedEntities||[]).map(esc).join(', ')}</div>` };
+        html: `<div class="gtt-type">${esc(t('engram.graph.tooltip.eventType', { round: d.roundNumber }))}</div><div class="gtt-title">${esc(d.fullLabel)}</div><div class="gtt-body">${esc(d.summary)}</div><div class="gtt-meta">${esc(t('engram.graph.tooltip.mentioned', { entities: (d.mentionedEntities||[]).join(', ') }))}</div>` };
     } else {
-      const typeMap: Record<string, string> = { player: '玩家', npc: 'NPC', location: '地点', item: '物品' };
+      const typeMap: Record<string, string> = { player: t('engram.graph.nodeType.player'), npc: 'NPC', location: t('engram.graph.nodeType.location'), item: t('engram.graph.nodeType.item') };
+      const embedStatus = d.embedded ? t('engram.graph.tooltip.embedded') : t('engram.graph.tooltip.notEmbedded');
       graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY,
-        html: `<div class="gtt-type">${typeMap[d.nodeCategory]||esc(d.nodeCategory)}</div><div class="gtt-title">${esc(d.fullLabel)}</div><div class="gtt-body">${esc(d.summary||'')}</div><div class="gtt-meta">提及${d.mentionCount}次 · 第${d.firstSeen}轮—第${d.lastSeen}轮 · ${d.embedded?'✓ 已向量化':'○ 未向量化'}</div>` };
+        html: `<div class="gtt-type">${esc(typeMap[d.nodeCategory]||d.nodeCategory)}</div><div class="gtt-title">${esc(d.fullLabel)}</div><div class="gtt-body">${esc(d.summary||'')}</div><div class="gtt-meta">${esc(t('engram.graph.tooltip.mentionCount', { count: d.mentionCount, first: d.firstSeen, last: d.lastSeen, embedStatus }))}</div>` };
     }
   });
   cyInstance.on('mouseover', 'edge', (evt) => {
     const d = evt.target.data();
     const e = evt.originalEvent as MouseEvent;
     if (d.edgeCategory === 'mentions') {
-      graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY, html: `<div class="gtt-type">MENTIONS</div><div class="gtt-meta">事件提及此实体</div>` };
+      graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY, html: `<div class="gtt-type">MENTIONS</div><div class="gtt-meta">${esc(t('engram.graph.tooltip.mentionsEdge'))}</div>` };
     } else {
-      const status = d.invalidatedAtRound ? `<span style="color:#df6b6b;">已失效（第${d.invalidatedAtRound}轮）</span>` : '有效';
+      const statusText = d.invalidatedAtRound
+        ? `<span style="color:#df6b6b;">${esc(t('engram.graph.tooltip.factInvalid', { round: d.invalidatedAtRound }))}</span>`
+        : esc(t('engram.graph.tooltip.factValid'));
+      const embedStatus = d.embedded ? t('engram.graph.tooltip.embedded') : t('engram.graph.tooltip.notEmbedded');
       graphTooltip.value = { visible: true, x: e.clientX, y: e.clientY,
-        html: `<div class="gtt-type">事实边 · ${status}</div><div class="gtt-fact">${esc(d.fullFact)}</div><div class="gtt-meta">出现${d.episodes}轮 · 第${d.createdAtRound}轮创建 · ${d.embedded?'✓ 已向量化':'○ 未向量化'}</div>` };
+        html: `<div class="gtt-type">${t('engram.graph.tooltip.factEdge', { status: '' })} ${statusText}</div><div class="gtt-fact">${esc(d.fullFact)}</div><div class="gtt-meta">${esc(t('engram.graph.tooltip.factMeta', { episodes: d.episodes, created: d.createdAtRound, embedStatus }))}</div>` };
     }
   });
   cyInstance.on('mouseout', () => { graphTooltip.value.visible = false; });
@@ -435,18 +442,18 @@ onUnmounted(() => destroyGraph());
 <template>
   <div class="engram-panel">
     <header class="panel-header">
-      <h2 class="panel-title">Engram 调试</h2>
+      <h2 class="panel-title">{{ $t('engram.title') }}</h2>
       <div class="header-actions">
-        <button class="btn-sm" :disabled="events.length === 0" @click="exportJson">导出 JSON</button>
-        <button class="btn-sm" :disabled="v2Edges.length === 0" @click="rebuildEdges">重建事实边</button>
-        <button class="btn-sm btn-sm--danger" :disabled="events.length === 0" @click="openClearModal">清空数据</button>
+        <button class="btn-sm" :disabled="events.length === 0" @click="exportJson">{{ $t('engram.exportJson') }}</button>
+        <button class="btn-sm" :disabled="v2Edges.length === 0" @click="rebuildEdges">{{ $t('engram.rebuildEdges') }}</button>
+        <button class="btn-sm btn-sm--danger" :disabled="events.length === 0" @click="openClearModal">{{ $t('engram.clearData') }}</button>
       </div>
     </header>
 
     <!-- Debug 模式未开启 -->
     <div v-if="!debugEnabled" class="debug-off">
-      <p class="debug-off__title">Engram Debug 模式未开启</p>
-      <p class="debug-off__hint">请前往 <strong>设置 → Engram → 开启 Debug 模式</strong> 后重新进入此面板。</p>
+      <p class="debug-off__title">{{ $t('engram.debugOff.title') }}</p>
+      <p class="debug-off__hint" v-html="$t('engram.debugOff.hint')"></p>
     </div>
 
     <template v-else-if="isLoaded">
@@ -454,19 +461,19 @@ onUnmounted(() => destroyGraph());
       <div class="stats-grid">
         <div class="stat-card">
           <span class="stat-value">{{ events.length }}<span class="stat-limit"> / {{ maxEvents }}</span></span>
-          <span class="stat-label">事件</span>
+          <span class="stat-label">{{ $t('engram.stats.events') }}</span>
         </div>
         <div class="stat-card">
           <span class="stat-value">{{ entities.length }}<span class="stat-limit"> / {{ maxEntities }}</span></span>
-          <span class="stat-label">实体<span v-if="pendingEnrichCount > 0" class="stat-pending"> ({{ pendingEnrichCount }} 待补全)</span></span>
+          <span class="stat-label">{{ $t('engram.stats.entities') }}<span v-if="pendingEnrichCount > 0" class="stat-pending"> ({{ $t('engram.stats.pendingEnrich', { count: pendingEnrichCount }) }})</span></span>
         </div>
         <div class="stat-card">
           <span class="stat-value">{{ relations.length }}</span>
-          <span class="stat-label">关系</span>
+          <span class="stat-label">{{ $t('engram.stats.relations') }}</span>
         </div>
         <div class="stat-card">
           <span class="stat-value" style="color: var(--color-success, #22c55e);">{{ v2Edges.length }}</span>
-          <span class="stat-label">事实边</span>
+          <span class="stat-label">{{ $t('engram.stats.factEdges') }}</span>
         </div>
       </div>
 
@@ -474,7 +481,7 @@ onUnmounted(() => destroyGraph());
       <div class="embed-status">
         <div class="embed-row">
           <div class="embed-row__header">
-            <span class="embed-row__title">事件向量化</span>
+            <span class="embed-row__title">{{ $t('engram.embed.eventTitle') }}</span>
             <span class="embed-row__meta">
               <strong :class="eventEmbedPct === 100 ? 'text-ok' : eventEmbedPct > 0 ? 'text-partial' : 'text-zero'">
                 {{ embeddedEventCount }} / {{ events.length }}
@@ -492,7 +499,7 @@ onUnmounted(() => destroyGraph());
         </div>
         <div class="embed-row">
           <div class="embed-row__header">
-            <span class="embed-row__title">实体向量化</span>
+            <span class="embed-row__title">{{ $t('engram.embed.entityTitle') }}</span>
             <span class="embed-row__meta">
               <strong :class="entityEmbedPct === 100 ? 'text-ok' : entityEmbedPct > 0 ? 'text-partial' : 'text-zero'">
                 {{ embeddedEntityCount }} / {{ entities.length }}
@@ -510,7 +517,7 @@ onUnmounted(() => destroyGraph());
         </div>
         <div v-if="v2Edges.length > 0" class="embed-row">
           <div class="embed-row__header">
-            <span class="embed-row__title">事实边向量化</span>
+            <span class="embed-row__title">{{ $t('engram.embed.edgeTitle') }}</span>
             <span class="embed-row__meta">
               <strong :class="edgeEmbedPct === 100 ? 'text-ok' : edgeEmbedPct > 0 ? 'text-partial' : 'text-zero'">
                 {{ embeddedEdgeCount }} / {{ v2Edges.length }}
@@ -527,14 +534,14 @@ onUnmounted(() => destroyGraph());
           </div>
         </div>
         <p v-if="eventEmbedPct < 100 || entityEmbedPct < 100 || edgeEmbedPct < 100" class="embed-hint">
-          提示：部分条目尚未向量化 — 可能是 embedding API 调用失败、尚未配置，或正在异步向量化中。重启游戏后会自动补充。
+          {{ $t('engram.embed.hint') }}
         </p>
       </div>
 
       <!-- ─── 事件列表 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSection('events')">
-          <span class="section-title">事件列表</span>
+          <span class="section-title">{{ $t('engram.section.eventList') }}</span>
           <span class="section-badge">{{ events.length }}</span>
           <svg :class="['chevron', { 'chevron--open': isOpen('events') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -543,7 +550,7 @@ onUnmounted(() => destroyGraph());
 
         <Transition name="section-expand">
           <div v-if="isOpen('events')" class="section-body">
-            <div v-if="events.length === 0" class="empty-hint">暂无事件数据</div>
+            <div v-if="events.length === 0" class="empty-hint">{{ $t('engram.event.empty') }}</div>
             <template v-else>
               <div v-for="ev in pagedEvents" :key="ev.id" class="event-row">
                 <div class="event-header-row">
@@ -554,12 +561,12 @@ onUnmounted(() => destroyGraph());
                   </span>
                   <span
                     :class="['embed-badge', ev.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
-                    :title="ev.is_embedded ? '已向量化' : '尚未向量化'"
+                    :title="ev.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')"
                   >{{ ev.is_embedded ? '✓' : '○' }}</span>
                 </div>
                 <p class="event-text">{{ ev.text }}</p>
                 <div class="item-meta">
-                  <span v-if="ev.roundNumber != null">第{{ ev.roundNumber }}轮</span>
+                  <span v-if="ev.roundNumber != null">{{ $t('engram.event.round', { round: ev.roundNumber }) }}</span>
                   <span v-if="ev.tags?.length">{{ ev.tags.join(' · ') }}</span>
                 </div>
               </div>
@@ -578,7 +585,7 @@ onUnmounted(() => destroyGraph());
       <!-- ─── 实体列表 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSection('entities')">
-          <span class="section-title">实体列表</span>
+          <span class="section-title">{{ $t('engram.section.entityList') }}</span>
           <span class="section-badge">{{ entities.length }}</span>
           <svg :class="['chevron', { 'chevron--open': isOpen('entities') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -587,22 +594,22 @@ onUnmounted(() => destroyGraph());
 
         <Transition name="section-expand">
           <div v-if="isOpen('entities')" class="section-body">
-            <div v-if="entities.length === 0" class="empty-hint">暂无实体数据</div>
+            <div v-if="entities.length === 0" class="empty-hint">{{ $t('engram.entity.empty') }}</div>
             <div v-for="ent in entities" :key="ent.name" class="entity-row">
               <div class="entity-header">
                 <span class="entity-name">{{ ent.name }}</span>
                 <span class="entity-type" :style="{ color: entityColor(ent.type) }">{{ ent.type }}</span>
-                <span v-if="ent._pendingEnrichment" class="enrich-badge" title="Tier 1 桩实体，等待 AI 补全描述">待补全</span>
+                <span v-if="ent._pendingEnrichment" class="enrich-badge" :title="$t('engram.entity.pendingEnrich')">{{ $t('engram.entity.pendingEnrich') }}</span>
                 <span
                   :class="['embed-badge', ent.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
-                  :title="ent.is_embedded ? '已向量化' : '尚未向量化'"
+                  :title="ent.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')"
                 >{{ ent.is_embedded ? '✓' : '○' }}</span>
               </div>
               <div v-if="ent.summary" class="entity-desc">{{ ent.summary }}</div>
               <div class="item-meta">
-                <span>提及{{ ent.mentionCount }}次</span>
-                <span>第{{ ent.firstSeen }}轮首次出现</span>
-                <span>第{{ ent.lastSeen }}轮最后出现</span>
+                <span>{{ $t('engram.entity.mentions', { count: ent.mentionCount }) }}</span>
+                <span>{{ $t('engram.entity.firstSeen', { round: ent.firstSeen }) }}</span>
+                <span>{{ $t('engram.entity.lastSeen', { round: ent.lastSeen }) }}</span>
               </div>
             </div>
           </div>
@@ -612,7 +619,7 @@ onUnmounted(() => destroyGraph());
       <!-- ─── 关系/知识边列表 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSection('relations')">
-          <span class="section-title">事实边</span>
+          <span class="section-title">{{ $t('engram.section.factEdges') }}</span>
           <span class="section-badge">{{ v2Edges.length }}</span>
           <svg :class="['chevron', { 'chevron--open': isOpen('relations') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -621,7 +628,7 @@ onUnmounted(() => destroyGraph());
 
         <Transition name="section-expand">
           <div v-if="isOpen('relations')" class="section-body">
-            <div v-if="v2Edges.length === 0" class="empty-hint">暂无事实边 — 请运行几轮游戏</div>
+            <div v-if="v2Edges.length === 0" class="empty-hint">{{ $t('engram.edge.empty') }}</div>
             <template v-else>
               <div v-for="edge in v2Edges" :key="edge.id" class="relation-row" :class="{ 'relation-row--invalidated': (edge.invalidAtRound ?? edge.invalidatedAtRound) != null }">
                 <div class="edge-header">
@@ -630,16 +637,16 @@ onUnmounted(() => destroyGraph());
                   <span class="rel-to">{{ edge.targetEntity }}</span>
                   <span
                     :class="['embed-badge', edge.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
-                    :title="edge.is_embedded ? '已向量化' : '尚未向量化'"
+                    :title="edge.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')"
                   >{{ edge.is_embedded ? '✓' : '○' }}</span>
-                  <span v-if="(edge.invalidAtRound ?? edge.invalidatedAtRound) != null" class="rel-invalidated">已不再成立</span>
+                  <span v-if="(edge.invalidAtRound ?? edge.invalidatedAtRound) != null" class="rel-invalidated">{{ $t('engram.edge.invalidated') }}</span>
                 </div>
                 <div class="rel-fact" :title="edge.fact">{{ edge.fact }}</div>
                 <div class="item-meta">
-                  <span>出现{{ edge.episodes.length }}轮</span>
-                  <span>第{{ edge.createdAtRound }}轮创建</span>
-                  <span>第{{ edge.lastSeenRound }}轮最后出现</span>
-                  <span v-if="(edge.invalidAtRound ?? edge.invalidatedAtRound) != null">第{{ edge.invalidAtRound ?? edge.invalidatedAtRound }}轮失效</span>
+                  <span>{{ $t('engram.edge.episodeCount', { count: edge.episodes.length }) }}</span>
+                  <span>{{ $t('engram.edge.createdAt', { round: edge.createdAtRound }) }}</span>
+                  <span>{{ $t('engram.edge.lastSeen', { round: edge.lastSeenRound }) }}</span>
+                  <span v-if="(edge.invalidAtRound ?? edge.invalidatedAtRound) != null">{{ $t('engram.edge.invalidatedAt', { round: edge.invalidAtRound ?? edge.invalidatedAtRound }) }}</span>
                 </div>
               </div>
             </template>
@@ -650,7 +657,7 @@ onUnmounted(() => destroyGraph());
       <!-- ─── Graphiti 知识图谱 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSectionExt('graph')">
-          <span class="section-title">知识图谱</span>
+          <span class="section-title">{{ $t('engram.section.graph') }}</span>
           <svg :class="['chevron', { 'chevron--open': isOpenExt('graph') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
           </svg>
@@ -662,45 +669,45 @@ onUnmounted(() => destroyGraph());
             <!-- Filter bar -->
             <div class="gf-bar">
               <div class="gf-group gf-group--round-range">
-                <span class="gf-label">回合</span>
-                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMin" title="起始回合" />
+                <span class="gf-label">{{ $t('engram.graph.roundLabel') }}</span>
+                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMin" :title="$t('engram.graph.roundStart')" />
                 <span class="gf-val">{{ gfRoundMin }} – {{ gfRoundMax }}</span>
-                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMax" title="结束回合" />
+                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMax" :title="$t('engram.graph.roundEnd')" />
               </div>
               <span class="gf-sep" />
               <div class="gf-group">
-                <span class="gf-label">节点</span>
+                <span class="gf-label">{{ $t('engram.graph.nodeLabel') }}</span>
                 <button v-for="(on, key) in gfNodeTypes" :key="key"
                   :class="['gf-toggle', { 'gf-toggle--on': on }]"
                   @click="gfNodeTypes[key] = !gfNodeTypes[key]"
-                >{{ { player:'玩家',npc:'NPC',location:'地点',item:'物品',event:'事件' }[key] }}</button>
+                >{{ $t(`engram.graph.nodeType.${key}`) }}</button>
               </div>
               <span class="gf-sep" />
               <div class="gf-group">
-                <span class="gf-label">连线</span>
-                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeFact }]" @click="gfEdgeFact = !gfEdgeFact">事实边</button>
-                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeMentions }]" @click="gfEdgeMentions = !gfEdgeMentions">MENTIONS</button>
-                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeInvalidated }]" @click="gfEdgeInvalidated = !gfEdgeInvalidated">失效边</button>
+                <span class="gf-label">{{ $t('engram.graph.edgeLabel') }}</span>
+                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeFact }]" @click="gfEdgeFact = !gfEdgeFact">{{ $t('engram.graph.edgeType.fact') }}</button>
+                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeMentions }]" @click="gfEdgeMentions = !gfEdgeMentions">{{ $t('engram.graph.edgeType.mentions') }}</button>
+                <button :class="['gf-toggle', { 'gf-toggle--on': gfEdgeInvalidated }]" @click="gfEdgeInvalidated = !gfEdgeInvalidated">{{ $t('engram.graph.edgeType.invalidated') }}</button>
               </div>
               <span class="gf-sep" />
               <div class="gf-group">
                 <label class="gf-toggle gf-toggle--on" style="cursor:pointer;">
                   <input type="checkbox" v-model="gfShowLabels" style="display:none;" />
-                  标签{{ gfShowLabels ? '开' : '关' }}
+                  {{ gfShowLabels ? $t('engram.graph.labelToggleOn') : $t('engram.graph.labelToggleOff') }}
                 </label>
                 <select class="gf-select" v-model="gfLayout" @change="runGraphLayout()">
-                  <option value="cose">力导向</option>
-                  <option value="concentric">同心圆</option>
-                  <option value="breadthfirst">层级</option>
-                  <option value="circle">环形</option>
+                  <option value="cose">{{ $t('engram.graph.layout.cose') }}</option>
+                  <option value="concentric">{{ $t('engram.graph.layout.concentric') }}</option>
+                  <option value="breadthfirst">{{ $t('engram.graph.layout.breadthfirst') }}</option>
+                  <option value="circle">{{ $t('engram.graph.layout.circle') }}</option>
                 </select>
-                <button class="btn-sm" @click="runGraphLayout()">重排</button>
+                <button class="btn-sm" @click="runGraphLayout()">{{ $t('engram.graph.relayout') }}</button>
               </div>
             </div>
 
             <!-- Graph -->
             <div class="graph-card">
-              <div v-if="entities.length === 0 && events.length === 0" class="empty-hint" style="padding:40px;">暂无数据</div>
+              <div v-if="entities.length === 0 && events.length === 0" class="empty-hint" style="padding:40px;">{{ $t('engram.graph.emptyData') }}</div>
               <div v-else ref="graphContainer" class="cy-container" />
             </div>
 
@@ -718,7 +725,7 @@ onUnmounted(() => destroyGraph());
       <!-- ─── 架构说明 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSectionExt('architecture')">
-          <span class="section-title">Engram 机制说明</span>
+          <span class="section-title">{{ $t('engram.section.architecture') }}</span>
           <svg :class="['chevron', { 'chevron--open': isOpenExt('architecture') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
           </svg>
@@ -727,36 +734,36 @@ onUnmounted(() => destroyGraph());
         <Transition name="section-expand">
           <div v-if="isOpenExt('architecture')" class="section-body arch-body">
             <div class="arch-card">
-              <h4 class="arch-card__title">数据流</h4>
+              <h4 class="arch-card__title">{{ $t('engram.arch.dataFlowTitle') }}</h4>
               <div class="arch-flow">
-                <span class="arch-step">AI 回复</span>
+                <span class="arch-step">{{ $t('engram.arch.dataFlowStep.aiReply') }}</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step">事件提取</span>
+                <span class="arch-step">{{ $t('engram.arch.dataFlowStep.eventExtract') }}</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step">实体构建</span>
+                <span class="arch-step">{{ $t('engram.arch.dataFlowStep.entityBuild') }}</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step">事实边构建</span>
+                <span class="arch-step">{{ $t('engram.arch.dataFlowStep.edgeBuild') }}</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step arch-step--vec">向量化（事件+实体+边）</span>
+                <span class="arch-step arch-step--vec">{{ $t('engram.arch.dataFlowStep.vectorize') }}</span>
               </div>
               <div class="arch-flow" style="margin-top: 6px;">
-                <span class="arch-step">AI 回复</span>
+                <span class="arch-step">{{ $t('engram.arch.dataFlowStep.aiReply') }}</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step arch-step--triple">事实边提取</span>
+                <span class="arch-step arch-step--triple">{{ $t('engram.arch.dataFlowStep.edgeExtract') }}</span>
                 <span class="arch-arrow">→</span>
-                <span class="arch-step">去重追加</span>
+                <span class="arch-step">{{ $t('engram.arch.dataFlowStep.dedup') }}</span>
               </div>
             </div>
             <div class="arch-card">
-              <h4 class="arch-card__title">向量化范围</h4>
+              <h4 class="arch-card__title">{{ $t('engram.arch.vectorScopeTitle') }}</h4>
               <div class="arch-items">
-                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>事件 summary（burned 格式）</div>
-                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>实体 name + summary</div>
-                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>事实边 fact（完整句子）</div>
+                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>{{ $t('engram.arch.vectorScope.eventSummary') }}</div>
+                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>{{ $t('engram.arch.vectorScope.entityNameSummary') }}</div>
+                <div class="arch-item"><span class="arch-dot arch-dot--vec"></span>{{ $t('engram.arch.vectorScope.edgeFact') }}</div>
               </div>
             </div>
             <div class="arch-card">
-              <h4 class="arch-card__title">检索通道</h4>
+              <h4 class="arch-card__title">{{ $t('engram.arch.retrievalTitle') }}</h4>
               <div class="arch-items">
                 <div class="arch-item">1. Edge scope: Cosine + BM25 + BFS → RRF</div>
                 <div class="arch-item">2. Entity scope: Cosine + BM25 → RRF</div>
@@ -770,7 +777,7 @@ onUnmounted(() => destroyGraph());
       <!-- ─── 最近检索结果 ─── -->
       <section class="debug-section">
         <button class="section-header" @click="toggleSection('retrieval')">
-          <span class="section-title">最近检索快照</span>
+          <span class="section-title">{{ $t('engram.section.retrieval') }}</span>
           <span v-if="debugStore.lastRetrieve" class="section-ts">{{ new Date(debugStore.lastRetrieve.capturedAt).toLocaleTimeString('zh-CN', { hour12: false }) }}</span>
           <svg :class="['chevron', { 'chevron--open': isOpen('retrieval') }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -779,28 +786,28 @@ onUnmounted(() => destroyGraph());
 
         <Transition name="section-expand">
           <div v-if="isOpen('retrieval')" class="section-body">
-            <div v-if="!debugStore.lastRetrieve" class="empty-hint">尚无检索快照（运行一次 AI 回合后可见）</div>
+            <div v-if="!debugStore.lastRetrieve" class="empty-hint">{{ $t('engram.retrieval.empty') }}</div>
             <template v-else>
               <div class="retrieve-stats">
-                <div class="rs-row"><span class="rs-label">向量候选</span><span class="rs-val">{{ debugStore.lastRetrieve.vectorCandidateCount }}</span></div>
-                <div class="rs-row"><span class="rs-label">图遍历候选</span><span class="rs-val">{{ debugStore.lastRetrieve.graphCandidateCount }}</span></div>
-                <div class="rs-row"><span class="rs-label">合并后</span><span class="rs-val">{{ debugStore.lastRetrieve.afterMergeCount }}</span></div>
-                <div class="rs-row"><span class="rs-label">重排后</span><span class="rs-val">{{ debugStore.lastRetrieve.afterRerankCount }}</span></div>
+                <div class="rs-row"><span class="rs-label">{{ $t('engram.retrieval.vectorCandidates') }}</span><span class="rs-val">{{ debugStore.lastRetrieve.vectorCandidateCount }}</span></div>
+                <div class="rs-row"><span class="rs-label">{{ $t('engram.retrieval.graphCandidates') }}</span><span class="rs-val">{{ debugStore.lastRetrieve.graphCandidateCount }}</span></div>
+                <div class="rs-row"><span class="rs-label">{{ $t('engram.retrieval.afterMerge') }}</span><span class="rs-val">{{ debugStore.lastRetrieve.afterMergeCount }}</span></div>
+                <div class="rs-row"><span class="rs-label">{{ $t('engram.retrieval.afterRerank') }}</span><span class="rs-val">{{ debugStore.lastRetrieve.afterRerankCount }}</span></div>
                 <div class="rs-row">
-                  <span class="rs-label">重排</span>
+                  <span class="rs-label">{{ $t('engram.retrieval.rerank') }}</span>
                   <span :class="['rs-flag', debugStore.lastRetrieve.rerankUsed ? 'rs-flag--on' : 'rs-flag--off']">
-                    {{ debugStore.lastRetrieve.rerankUsed ? '已启用' : '未启用' }}
+                    {{ debugStore.lastRetrieve.rerankUsed ? $t('engram.retrieval.rerankEnabled') : $t('engram.retrieval.rerankDisabled') }}
                   </span>
                 </div>
                 <div class="rs-row">
-                  <span class="rs-label">向量 fallback</span>
+                  <span class="rs-label">{{ $t('engram.retrieval.embeddingFallback') }}</span>
                   <span :class="['rs-flag', debugStore.lastRetrieve.embeddingFallback ? 'rs-flag--warn' : 'rs-flag--off']">
-                    {{ debugStore.lastRetrieve.embeddingFallback ? '是' : '否' }}
+                    {{ debugStore.lastRetrieve.embeddingFallback ? $t('engram.retrieval.fallbackYes') : $t('engram.retrieval.fallbackNo') }}
                   </span>
                 </div>
               </div>
 
-              <h4 class="retrieve-subtitle">Top {{ debugStore.lastRetrieve.topScores.length }} 得分项</h4>
+              <h4 class="retrieve-subtitle">{{ $t('engram.retrieval.topScores', { count: debugStore.lastRetrieve.topScores.length }) }}</h4>
               <div v-for="(s, i) in debugStore.lastRetrieve.topScores" :key="i" class="score-row">
                 <span class="score-rank">#{{ i + 1 }}</span>
                 <span class="score-source" :class="`score-source--${s.source}`">{{ s.source }}</span>
@@ -814,25 +821,25 @@ onUnmounted(() => destroyGraph());
 
       <!-- meta 信息 -->
       <p v-if="engramData.meta?.lastUpdated" class="meta-footer">
-        最后更新：{{ formatTs(engramData.meta.lastUpdated) }}
+        {{ $t('engram.meta.lastUpdated', { time: formatTs(engramData.meta.lastUpdated) }) }}
       </p>
     </template>
 
-    <div v-else class="empty-state">尚未加载游戏数据</div>
+    <div v-else class="empty-state">{{ $t('engram.notLoaded') }}</div>
 
     <!-- ─── 清除确认 Modal ─── -->
-    <Modal v-model="showClearModal" title="清空 Engram 数据" width="380px">
+    <Modal v-model="showClearModal" :title="$t('engram.clear.title')" width="380px">
       <div v-if="clearStep === 1" style="color: var(--color-text,#e0e0e6);">
-        <p>此操作将清除状态树中所有 Engram 数据（事件 / 实体 / 关系）。</p>
-        <p>IndexedDB 中的向量数据不受影响（如需清除请使用存档面板的向量重建功能）。</p>
+        <p>{{ $t('engram.clear.step1') }}</p>
+        <p>{{ $t('engram.clear.step1Note') }}</p>
       </div>
       <div v-else style="color: var(--color-danger); font-weight: 600;">
-        确定要清空全部 {{ events.length }} 条事件、{{ entities.length }} 个实体、{{ relations.length }} 条关系吗？此操作不可撤销。
+        {{ $t('engram.clear.step2', { events: events.length, entities: entities.length, relations: relations.length }) }}
       </div>
       <template #footer>
-        <button class="btn-sm" @click="showClearModal = false; clearStep = 1">取消</button>
+        <button class="btn-sm" @click="showClearModal = false; clearStep = 1">{{ $t('engram.clear.cancel') }}</button>
         <button class="btn-sm btn-sm--danger" @click="confirmClear">
-          {{ clearStep === 1 ? '继续' : '确认清空' }}
+          {{ clearStep === 1 ? $t('engram.clear.continue') : $t('engram.clear.confirm') }}
         </button>
       </template>
     </Modal>

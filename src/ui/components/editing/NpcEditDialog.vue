@@ -13,7 +13,10 @@
  * 新建模式 (npcData 未传入) 与编辑模式 (npcData 已传入) 自动切换。
  */
 import { reactive, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '@/ui/components/shared/BaseModal.vue';
+
+const { t } = useI18n();
 
 /** NPC 表单数据结构 */
 interface NpcFormData {
@@ -24,12 +27,12 @@ interface NpcFormData {
   relationshipType: string;
 }
 
-/** 可选的关系类型 */
+/** Relationship type options — values are state tree data, not display-only strings */
 const RELATIONSHIP_OPTIONS = [
   '友好', '中立', '敌对', '商业', '从属', '同盟', '竞争', '未知',
 ] as const;
 
-/** 可选的 NPC 类型 */
+/** NPC type options — values are state tree data, not display-only strings */
 const NPC_TYPE_OPTIONS = [
   '商人', '守卫', '村民', '贵族', '冒险者', '导师', '敌人', '神秘人', '其他',
 ] as const;
@@ -54,7 +57,7 @@ const isEdit = computed<boolean>(() => props.npcData !== undefined);
 
 /** 对话框标题 */
 const dialogTitle = computed<string>(() =>
-  isEdit.value ? '编辑 NPC' : '新建 NPC',
+  isEdit.value ? t('relationship.edit.titleEdit') : t('relationship.npcEdit.titleNew'),
 );
 
 /** 内部表单数据 */
@@ -131,53 +134,53 @@ function saveNpc(): void {
       <!-- 名称 -->
       <div class="form-group">
         <label for="npc-name" class="form-label">
-          名称 <span class="required-mark">*</span>
+          {{ $t('relationship.npcEdit.label.name') }} <span class="required-mark">*</span>
         </label>
         <input
           id="npc-name"
           v-model="form.name"
           type="text"
           class="form-input"
-          placeholder="NPC 名称"
+          :placeholder="$t('relationship.npcEdit.placeholder.name')"
         />
       </div>
 
       <!-- 类型 -->
       <div class="form-group">
-        <label for="npc-type" class="form-label">类型</label>
+        <label for="npc-type" class="form-label">{{ $t('relationship.npcEdit.label.type') }}</label>
         <select id="npc-type" v-model="form.type" class="form-input form-select">
-          <option value="">请选择…</option>
+          <option value="">{{ $t('relationship.npcEdit.placeholder.selectType') }}</option>
           <option v-for="t in NPC_TYPE_OPTIONS" :key="t" :value="t">{{ t }}</option>
         </select>
       </div>
 
       <!-- 位置 -->
       <div class="form-group">
-        <label for="npc-location" class="form-label">所在位置</label>
+        <label for="npc-location" class="form-label">{{ $t('relationship.npcEdit.label.location') }}</label>
         <input
           id="npc-location"
           v-model="form.location"
           type="text"
           class="form-input"
-          placeholder="例如: 王城北门"
+          :placeholder="$t('relationship.npcEdit.placeholder.location')"
         />
       </div>
 
       <!-- 描述 -->
       <div class="form-group">
-        <label for="npc-desc" class="form-label">描述</label>
+        <label for="npc-desc" class="form-label">{{ $t('relationship.npcEdit.label.description') }}</label>
         <textarea
           id="npc-desc"
           v-model="form.description"
           class="form-input form-textarea"
           rows="4"
-          placeholder="NPC 的外貌、性格、背景等"
+          :placeholder="$t('relationship.npcEdit.placeholder.description')"
         />
       </div>
 
       <!-- 关系类型 -->
       <div class="form-group">
-        <label for="npc-rel" class="form-label">关系类型</label>
+        <label for="npc-rel" class="form-label">{{ $t('relationship.npcEdit.label.relationshipType') }}</label>
         <select id="npc-rel" v-model="form.relationshipType" class="form-input form-select">
           <option v-for="r in RELATIONSHIP_OPTIONS" :key="r" :value="r">{{ r }}</option>
         </select>
@@ -185,13 +188,13 @@ function saveNpc(): void {
     </form>
 
     <template #footer>
-      <button class="btn btn-cancel" @click="closeDialog">取消</button>
+      <button class="btn btn-cancel" @click="closeDialog">{{ $t('common.actions.cancel') }}</button>
       <button
         class="btn btn-save"
         :disabled="!canSave"
         @click="saveNpc"
       >
-        保存
+        {{ $t('common.actions.save') }}
       </button>
     </template>
   </BaseModal>

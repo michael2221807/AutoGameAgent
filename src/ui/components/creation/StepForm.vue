@@ -165,7 +165,7 @@ defineExpose({ hasValidationErrors });
           :required="field.required"
           @change="onSelectChange(field, $event)"
         >
-          <option value="" disabled>请选择…</option>
+          <option value="" disabled>{{ $t('creation.form.selectPlaceholder') }}</option>
           <option v-for="opt in (field.options ?? [])" :key="opt" :value="opt">
             {{ opt }}
           </option>
@@ -185,7 +185,7 @@ defineExpose({ hasValidationErrors });
     </form>
 
     <p v-if="hasValidationErrors" class="validation-hint">
-      请填写所有必填字段
+      {{ $t('creation.form.validationHint') }}
     </p>
   </div>
 </template>

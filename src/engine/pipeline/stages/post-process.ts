@@ -87,6 +87,8 @@ export class PostProcessStage implements PipelineStage {
         );
         eventBus.emit('ui:toast', {
           type: 'warning',
+          i18nKey: 'engine.toast.missingMidTermMemory',
+          i18nParams: { round: ctx.roundNumber },
           message: `AI 未按要求输出本回合中期记忆 (round ${ctx.roundNumber})，已插入占位`,
           duration: 3500,
         });

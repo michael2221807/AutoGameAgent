@@ -1,8 +1,11 @@
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-plot.md
 import { ref, computed, watch, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { usePlotStore } from '@/engine/plot/plot-store';
+
+const { t } = useI18n();
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_GAUGE_MAX_DELTA } from '@/engine/plot/types';
@@ -103,10 +106,10 @@ async function createArc(): Promise<void> {
         }
         persist();
       } else {
-        decomposeError.value = 'AI 拆解未返回有效结果，请手动添加节点';
+        decomposeError.value = t('plot.arc.decomposeNoResult');
       }
     } catch (err) {
-      decomposeError.value = `拆解失败: ${err instanceof Error ? err.message : String(err)}`;
+      decomposeError.value = t('plot.arc.decomposeFailed', { error: err instanceof Error ? err.message : String(err) });
     } finally {
       decomposing.value = false;
     }
@@ -354,12 +357,12 @@ function rejectAdvancement(): void {
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" style="opacity: 0.7">
             <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V15" />
           </svg>
-          剧情导向
+          {{ $t('plot.title') }}
         </h2>
         <div class="header-actions">
           <button
             class="header-btn"
-            title="新建弧线"
+            :title="$t('plot.arc.newArcBtn')"
             @click="showCreateArc = true"
           >+</button>
         </div>
@@ -381,27 +384,27 @@ function rejectAdvancement(): void {
               v-if="(displayArc.status === 'draft' || displayArc.status === 'abandoned') && displayArc.nodes.length > 0"
               class="arc-btn arc-btn--activate"
               @click="activateCurrentArc"
-            >{{ displayArc.status === 'abandoned' ? '重新激活' : '激活弧线' }}</button>
+            >{{ displayArc.status === 'abandoned' ? $t('plot.arc.reactivate') : $t('plot.arc.activate') }}</button>
             <button
               v-if="displayArc.status === 'active'"
               class="arc-btn arc-btn--abandon"
               @click="showConfirmAbandon = true"
-            >放弃弧线</button>
+            >{{ $t('plot.arc.abandon') }}</button>
             <button
               v-if="displayArc.status !== 'active'"
               class="arc-btn arc-btn--delete"
               @click="deleteCurrentArc"
-            >删除</button>
+            >{{ $t('plot.arc.delete') }}</button>
           </div>
-          <p v-if="decomposing" class="decompose-status">AI 正在拆解大纲...</p>
+          <p v-if="decomposing" class="decompose-status">{{ $t('plot.arc.decomposing') }}</p>
           <p v-if="decomposeError" class="decompose-error">{{ decomposeError }}</p>
         </section>
 
         <!-- Gauges + Management -->
         <section class="gauges-section">
           <div class="gauges-header">
-            <span class="gauges-label">度量值</span>
-            <button class="header-btn" title="添加度量值" @click="showAddGauge = true">+</button>
+            <span class="gauges-label">{{ $t('plot.gauge.title') }}</span>
+            <button class="header-btn" :title="$t('plot.gauge.addTitle')" @click="showAddGauge = true">+</button>
           </div>
           <div
             v-for="gauge in displayArc.gauges"
@@ -410,11 +413,11 @@ function rejectAdvancement(): void {
           >
             <GaugeBar :gauge="gauge" />
             <div class="gauge-item__actions">
-              <button class="gauge-action-btn" title="编辑" @click="startEditGauge(gauge)">&#9998;</button>
-              <button class="gauge-action-btn gauge-action-btn--remove" title="删除" @click="removeGauge(gauge.id)">&times;</button>
+              <button class="gauge-action-btn" :title="$t('plot.gauge.editBtn')" @click="startEditGauge(gauge)">&#9998;</button>
+              <button class="gauge-action-btn gauge-action-btn--remove" :title="$t('plot.gauge.deleteBtn')" @click="removeGauge(gauge.id)">&times;</button>
             </div>
           </div>
-          <p v-if="displayArc.gauges.length === 0" class="empty-hint">暂无度量值</p>
+          <p v-if="displayArc.gauges.length === 0" class="empty-hint">{{ $t('plot.gauge.empty') }}</p>
         </section>
 
         <!-- Node Chain -->
@@ -443,10 +446,10 @@ function rejectAdvancement(): void {
           </div>
           <div class="confirm-gate__actions">
             <button class="arc-btn arc-btn--activate" @click="confirmAdvancement">
-              确认完成
+              {{ $t('plot.confirm.title') }}
             </button>
             <button class="arc-btn arc-btn--delete" @click="rejectAdvancement">
-              还没有
+              {{ $t('plot.confirm.notYet') }}
             </button>
           </div>
         </section>
@@ -454,12 +457,12 @@ function rejectAdvancement(): void {
         <!-- Eval Log Toggle -->
         <section class="eval-log-section">
           <button class="eval-log-toggle" @click="showEvalLog = !showEvalLog">
-            {{ showEvalLog ? '▾' : '▸' }} 评估日志 ({{ plotStore.evaluationLog.length }})
+            {{ showEvalLog ? '▾' : '▸' }} {{ $t('plot.evalLog.title') }} ({{ plotStore.evaluationLog.length }})
           </button>
           <Transition name="cfg-expand">
             <div v-if="showEvalLog" class="eval-log-list">
               <div v-if="plotStore.evaluationLog.length === 0" class="eval-log-empty">
-                暂无评估记录
+                {{ $t('plot.evalLog.empty') }}
               </div>
               <div
                 v-for="log in [...plotStore.evaluationLog].reverse()"
@@ -482,54 +485,54 @@ function rejectAdvancement(): void {
 
       <!-- Empty State -->
       <div v-else class="empty-state">
-        <p>尚无剧情弧线</p>
+        <p>{{ $t('plot.empty.noArc') }}</p>
         <button class="arc-btn arc-btn--activate" @click="showCreateArc = true">
-          创建第一个弧线
+          {{ $t('plot.empty.createFirst') }}
         </button>
       </div>
 
       <!-- Create Arc Modal -->
-      <Modal v-model="showCreateArc" title="新建剧情弧线" width="460px">
+      <Modal v-model="showCreateArc" :title="$t('plot.arc.createTitle')" width="460px">
         <div class="modal-form">
           <label class="form-label">
-            弧线标题
-            <input v-model="newArcTitle" class="form-input" placeholder="如：高考冲刺篇" />
+            {{ $t('plot.arc.arcTitle') }}
+            <input v-model="newArcTitle" class="form-input" :placeholder="$t('plot.arc.arcTitlePlaceholder')" />
           </label>
           <label class="form-label">
-            概要描述
-            <textarea v-model="newArcSynopsis" class="form-textarea" rows="3" placeholder="简述这段剧情的主线走向..." />
+            {{ $t('plot.arc.synopsis') }}
+            <textarea v-model="newArcSynopsis" class="form-textarea" rows="3" :placeholder="$t('plot.arc.synopsisPlaceholder')" />
           </label>
         </div>
         <template #footer>
           <button class="arc-btn arc-btn--activate" :disabled="!newArcTitle.trim()" @click="createArc">
-            创建
+            {{ $t('plot.arc.create') }}
           </button>
         </template>
       </Modal>
 
       <!-- Add Node Modal -->
-      <Modal v-model="showAddNode" title="添加节点" width="500px">
+      <Modal v-model="showAddNode" :title="$t('plot.node.addTitle')" width="500px">
         <div class="modal-form">
           <label class="form-label">
-            节点标题
-            <input v-model="newNodeTitle" class="form-input" placeholder="如：发现好友作弊" />
+            {{ $t('plot.node.title') }}
+            <input v-model="newNodeTitle" class="form-input" :placeholder="$t('plot.node.titlePlaceholder')" />
           </label>
           <label class="form-label">
-            叙事目标
-            <textarea v-model="newNodeGoal" class="form-textarea" rows="2" placeholder="这个节点要达成什么叙事效果..." />
+            {{ $t('plot.node.narrativeGoal') }}
+            <textarea v-model="newNodeGoal" class="form-textarea" rows="2" :placeholder="$t('plot.node.narrativeGoalPlaceholder')" />
           </label>
           <label class="form-label">
-            AI 引导指令
-            <textarea v-model="newNodeDirective" class="form-textarea" rows="3" placeholder="告诉 AI 如何引导叙事方向（可选，留空则使用标题）" />
+            {{ $t('plot.node.directive') }}
+            <textarea v-model="newNodeDirective" class="form-textarea" rows="3" :placeholder="$t('plot.node.directivePlaceholder')" />
           </label>
           <label class="form-label">
-            完成标志
-            <input v-model="newNodeHint" class="form-input" placeholder="如何判断节点已完成（可选）" />
+            {{ $t('plot.node.completionHint') }}
+            <input v-model="newNodeHint" class="form-input" :placeholder="$t('plot.node.completionHintPlaceholder')" />
           </label>
         </div>
         <template #footer>
           <button class="arc-btn arc-btn--activate" :disabled="!newNodeTitle.trim()" @click="addNode">
-            添加
+            {{ $t('plot.node.add') }}
           </button>
         </template>
       </Modal>
@@ -538,63 +541,63 @@ function rejectAdvancement(): void {
       <Modal v-model="showNodeDetail" :title="selectedNode?.title ?? ''" width="560px">
         <div v-if="selectedNode" class="modal-form">
           <div class="detail-meta">
-            <span>状态: {{ selectedNode.status }}</span>
+            <span>{{ $t('plot.node.detailStatus', { status: selectedNode.status }) }}</span>
           </div>
           <label class="form-label">
-            叙事目标
+            {{ $t('plot.node.narrativeGoal') }}
             <textarea v-model="editingGoal" class="form-textarea" rows="2" />
           </label>
           <label class="form-label">
-            AI 引导指令
+            {{ $t('plot.node.directive') }}
             <textarea v-model="editingDirective" class="form-textarea" rows="4" />
           </label>
           <label class="form-label">
-            完成标志
+            {{ $t('plot.node.completionHint') }}
             <textarea v-model="editingHint" class="form-textarea" rows="2" />
           </label>
           <div class="detail-row">
             <label class="form-label form-label--inline">
-              重要性
+              {{ $t('plot.node.importance') }}
               <select v-model="editingImportance" class="form-select">
-                <option value="critical">关键</option>
-                <option value="skippable">可跳过</option>
+                <option value="critical">{{ $t('plot.node.importance.critical') }}</option>
+                <option value="skippable">{{ $t('plot.node.importance.skippable') }}</option>
               </select>
             </label>
             <label class="form-label form-label--inline">
-              完成模式
+              {{ $t('plot.node.completionMode') }}
               <select v-model="editingCompletionMode" class="form-select">
-                <option value="hint_only">AI评估</option>
-                <option value="hint_and_gauges">AI+度量</option>
-                <option value="gauges_only">仅度量</option>
+                <option value="hint_only">{{ $t('plot.node.completionMode.hintOnly') }}</option>
+                <option value="hint_and_gauges">{{ $t('plot.node.completionMode.hintAndGauges') }}</option>
+                <option value="gauges_only">{{ $t('plot.node.completionMode.gaugesOnly') }}</option>
               </select>
             </label>
             <label class="form-label form-label--inline">
-              最大回合
+              {{ $t('plot.node.maxRounds') }}
               <input v-model.number="editingMaxRounds" type="number" class="form-input form-input--narrow" min="1" max="50" />
             </label>
           </div>
         </div>
         <template #footer>
           <button class="arc-btn arc-btn--activate" @click="saveNodeEdits">
-            保存
+            {{ $t('plot.node.save') }}
           </button>
         </template>
       </Modal>
 
       <!-- Edit Gauge Modal -->
-      <Modal v-model="showEditGauge" title="编辑度量值" width="420px">
+      <Modal v-model="showEditGauge" :title="$t('plot.gauge.editTitle')" width="420px">
         <div class="modal-form">
-          <label class="form-label">名称<input v-model="editGaugeName" class="form-input" /></label>
-          <label class="form-label">描述<textarea v-model="editGaugeDesc" class="form-textarea" rows="3" /></label>
+          <label class="form-label">{{ $t('plot.gauge.name') }}<input v-model="editGaugeName" class="form-input" /></label>
+          <label class="form-label">{{ $t('plot.gauge.description') }}<textarea v-model="editGaugeDesc" class="form-textarea" rows="3" /></label>
 
           <div class="gauge-edit-grid">
-            <label class="form-label">当前值<input v-model.number="editGaugeCurrent" type="number" class="form-input" /></label>
-            <label class="form-label">最大值<input v-model.number="editGaugeMax" type="number" class="form-input" min="1" /></label>
-            <label class="form-label">最小值<input v-model.number="editGaugeMin" type="number" class="form-input" /></label>
-            <label class="form-label">单位<input v-model="editGaugeUnit" class="form-input" /></label>
-            <label class="form-label">每轮自减<input v-model.number="editGaugeAutoDecrement" type="number" class="form-input" min="0" placeholder="0" /></label>
+            <label class="form-label">{{ $t('plot.gauge.currentValue') }}<input v-model.number="editGaugeCurrent" type="number" class="form-input" /></label>
+            <label class="form-label">{{ $t('plot.gauge.maxValue') }}<input v-model.number="editGaugeMax" type="number" class="form-input" min="1" /></label>
+            <label class="form-label">{{ $t('plot.gauge.minValue') }}<input v-model.number="editGaugeMin" type="number" class="form-input" /></label>
+            <label class="form-label">{{ $t('plot.gauge.unit') }}<input v-model="editGaugeUnit" class="form-input" /></label>
+            <label class="form-label">{{ $t('plot.gauge.autoDecrement') }}<input v-model.number="editGaugeAutoDecrement" type="number" class="form-input" min="0" placeholder="0" /></label>
             <div class="gauge-edit-toggle">
-              <span class="form-label">AI 可更新</span>
+              <span class="form-label">{{ $t('plot.gauge.aiUpdatable') }}</span>
               <span
                 :class="['gauge-toggle', { 'gauge-toggle--on': editGaugeAiUpdatable }]"
                 role="switch"
@@ -606,54 +609,54 @@ function rejectAdvancement(): void {
           </div>
         </div>
         <template #footer>
-          <button class="arc-btn arc-btn--activate" @click="saveGaugeEdits">保存</button>
+          <button class="arc-btn arc-btn--activate" @click="saveGaugeEdits">{{ $t('plot.gauge.save') }}</button>
         </template>
       </Modal>
 
       <!-- Add Gauge Modal (GAP-06) -->
-      <Modal v-model="showAddGauge" title="添加度量值" width="420px">
+      <Modal v-model="showAddGauge" :title="$t('plot.gauge.addTitle')" width="420px">
         <div class="modal-form">
           <label class="form-label">
-            名称
-            <input v-model="newGaugeName" class="form-input" placeholder="如：好友怀疑程度" />
+            {{ $t('plot.gauge.name') }}
+            <input v-model="newGaugeName" class="form-input" :placeholder="$t('plot.gauge.namePlaceholder')" />
           </label>
           <label class="form-label">
-            描述（给 AI 的语义说明）
-            <textarea v-model="newGaugeDesc" class="form-textarea" rows="2" placeholder="衡量好友对主角发现其秘密的怀疑程度" />
+            {{ $t('plot.gauge.description') }}
+            <textarea v-model="newGaugeDesc" class="form-textarea" rows="2" :placeholder="$t('plot.gauge.descriptionPlaceholder')" />
           </label>
           <div class="detail-row">
             <label class="form-label form-label--inline">
-              最大值
+              {{ $t('plot.gauge.maxValue') }}
               <input v-model.number="newGaugeMax" type="number" class="form-input form-input--narrow" min="1" />
             </label>
             <label class="form-label form-label--inline">
-              单位
+              {{ $t('plot.gauge.unit') }}
               <input v-model="newGaugeUnit" class="form-input form-input--narrow" placeholder="%" />
             </label>
           </div>
         </div>
         <template #footer>
           <button class="arc-btn arc-btn--activate" :disabled="!newGaugeName.trim()" @click="addGauge">
-            添加
+            {{ $t('plot.gauge.add') }}
           </button>
         </template>
       </Modal>
 
       <!-- Confirm Abandon -->
-      <Modal v-model="showConfirmAbandon" title="确认放弃" width="380px">
+      <Modal v-model="showConfirmAbandon" :title="$t('plot.arc.confirmAbandonTitle')" width="380px">
         <p class="confirm-text">
-          放弃后，当前活跃节点将被跳过，所有未完成的节点将不再引导。此操作不可撤销。
+          {{ $t('plot.arc.confirmAbandonText') }}
         </p>
         <template #footer>
           <button class="arc-btn arc-btn--abandon" @click="abandonCurrentArc(); showConfirmAbandon = false">
-            确认放弃
+            {{ $t('plot.arc.confirmAbandonBtn') }}
           </button>
         </template>
       </Modal>
     </template>
 
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p>{{ $t('plot.notLoaded') }}</p>
     </div>
   </div>
 </template>

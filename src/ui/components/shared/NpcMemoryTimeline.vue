@@ -32,7 +32,7 @@ const recentMemories = computed(() =>
   <div class="npc-memory-tl">
     <!-- Summaries (if any) -->
     <div v-if="summaries?.length" class="tl-section">
-      <div class="tl-section-label">总结</div>
+      <div class="tl-section-label">{{ $t('modal.npcMemory.sectionSummaries') }}</div>
       <div v-for="(s, i) in summaries" :key="'s-' + i" class="tl-item tl-item--summary">
         <span class="tl-dot tl-dot--summary" />
         <div class="tl-content">
@@ -44,7 +44,7 @@ const recentMemories = computed(() =>
 
     <!-- Individual memories -->
     <div v-if="memories.length" class="tl-section">
-      <div v-if="summaries?.length" class="tl-section-label">近期</div>
+      <div v-if="summaries?.length" class="tl-section-label">{{ $t('modal.npcMemory.sectionRecent') }}</div>
       <div v-for="(mem, i) in recentMemories" :key="'m-' + i" class="tl-item">
         <span class="tl-dot" />
         <div class="tl-content">
@@ -54,7 +54,7 @@ const recentMemories = computed(() =>
       </div>
     </div>
 
-    <p v-if="!memories.length && !summaries?.length" class="tl-empty">这段关系还没有留下记忆</p>
+    <p v-if="!memories.length && !summaries?.length" class="tl-empty">{{ $t('modal.npcMemory.empty') }}</p>
   </div>
 </template>
 

@@ -9,10 +9,13 @@
  * then an `engine:request-save` is emitted so the change is persisted.
  */
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import { useGameState } from '@/ui/composables/useGameState';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
+
+const { t } = useI18n();
 
 const { isLoaded, useValue, get, setValue } = useGameState();
 
@@ -129,6 +132,30 @@ function setMaxYear(v: number): void {
 const EVENT_TYPES = ['势力冲突', '局势变化', '重大发现', '人物风波', '特殊NPC'] as const;
 type EventTypeName = typeof EVENT_TYPES[number];
 
+/** i18n display labels for event type names (state path keys stay Chinese) */
+const EVENT_TYPE_LABELS: Record<EventTypeName, string> = {
+  '势力冲突': 'event.config.type.factionConflict',
+  '局势变化': 'event.config.type.situationChange',
+  '重大发现': 'event.config.type.majorDiscovery',
+  '人物风波': 'event.config.type.characterIncident',
+  '特殊NPC': 'event.config.type.specialNpc',
+} as const;
+
+function eventTypeLabel(name: EventTypeName): string {
+  return t(EVENT_TYPE_LABELS[name]);
+}
+
+/** i18n display labels for impact levels (data values stay Chinese) */
+const IMPACT_LABELS: Record<string, string> = {
+  '低': 'event.template.impactLow',
+  '中': 'event.template.impactMedium',
+  '高': 'event.template.impactHigh',
+} as const;
+
+function impactLabel(level: string): string {
+  return IMPACT_LABELS[level] ? t(IMPACT_LABELS[level]) : level;
+}
+
 function typeEnabled(name: EventTypeName): boolean {
   return cfgBool(`类型开关.${name}`);
 }
@@ -170,7 +197,7 @@ function openAddForm(): void {
 function submitAddTemplate(): void {
   const { name, type, description } = newTemplate.value;
   if (!name.trim() || !type.trim() || !description.trim()) {
-    newTemplateError.value = '名称、类型、描述均为必填项';
+    newTemplateError.value = t('event.template.requiredError');
     return;
   }
   const id = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -223,10 +250,10 @@ function persist(): void {
     <template v-if="isLoaded">
       <header class="panel-header">
         <h2 class="panel-title">
-          事件日志
+          {{ t('event.title') }}
           <span v-if="timeline.length" class="badge">{{ timeline.length }}</span>
         </h2>
-        <button class="config-toggle" :class="{ 'config-toggle--active': configOpen }" @click="configOpen = !configOpen" title="事件配置">
+        <button class="config-toggle" :class="{ 'config-toggle--active': configOpen }" @click="configOpen = !configOpen" :title="t('event.configToggle')">
           <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
             <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
           </svg>
@@ -239,9 +266,9 @@ function persist(): void {
 
           <!-- Interval -->
           <div class="cfg-group">
-            <p class="cfg-group-title">事件间隔（年）</p>
+            <p class="cfg-group-title">{{ t('event.config.intervalTitle') }}</p>
             <div class="cfg-row">
-              <label class="cfg-label" for="evt-min">最小年</label>
+              <label class="cfg-label" for="evt-min">{{ t('event.config.minYear') }}</label>
               <input
                 id="evt-min"
                 class="cfg-input"
@@ -251,7 +278,7 @@ function persist(): void {
                 max="99"
                 @change="setMinYear(Number(($event.target as HTMLInputElement).value))"
               />
-              <label class="cfg-label" for="evt-max">最大年</label>
+              <label class="cfg-label" for="evt-max">{{ t('event.config.maxYear') }}</label>
               <input
                 id="evt-max"
                 class="cfg-input"
@@ -266,28 +293,28 @@ function persist(): void {
 
           <!-- Type toggles -->
           <div class="cfg-group">
-            <p class="cfg-group-title">事件类型开关</p>
+            <p class="cfg-group-title">{{ t('event.config.typeToggleTitle') }}</p>
             <div class="cfg-toggles">
               <button
                 v-for="typeName in EVENT_TYPES"
                 :key="typeName"
                 :class="['type-toggle', { 'type-toggle--on': typeEnabled(typeName) }]"
                 @click="toggleType(typeName)"
-              >{{ typeName }}</button>
+              >{{ eventTypeLabel(typeName) }}</button>
             </div>
           </div>
 
           <!-- Re-roll -->
           <div class="cfg-group cfg-group--inline">
-            <p class="cfg-group-title">手动重抽下次事件</p>
-            <button class="btn btn--secondary btn--sm" @click="rerollNextEvent">重抽</button>
+            <p class="cfg-group-title">{{ t('event.config.rerollTitle') }}</p>
+            <button class="btn btn--secondary btn--sm" @click="rerollNextEvent">{{ t('event.config.rerollBtn') }}</button>
           </div>
 
           <!-- Custom templates -->
           <div class="cfg-group">
             <div class="cfg-group-header">
-              <p class="cfg-group-title">自定义事件模板 <span class="cfg-count">{{ customTemplates.length }}</span></p>
-              <button class="btn btn--primary btn--sm" @click="openAddForm">+ 新增</button>
+              <p class="cfg-group-title">{{ t('event.config.customTemplateTitle') }} <span class="cfg-count">{{ customTemplates.length }}</span></p>
+              <button class="btn btn--primary btn--sm" @click="openAddForm">{{ t('event.config.addTemplate') }}</button>
             </div>
 
             <div v-if="customTemplates.length" class="template-list">
@@ -295,16 +322,16 @@ function persist(): void {
                 <div class="template-info">
                   <span class="template-name">{{ tpl.name }}</span>
                   <span class="template-type">{{ tpl.type }}</span>
-                  <span :class="['template-impact', `template-impact--${tpl.impact}`]">{{ tpl.impact }}</span>
+                  <span :class="['template-impact', `template-impact--${tpl.impact}`]">{{ impactLabel(tpl.impact) }}</span>
                 </div>
-                <button class="btn-icon btn-icon--danger" title="删除" @click="confirmDelete(tpl.id)">
+                <button class="btn-icon btn-icon--danger" :title="t('event.template.deleteBtn')" @click="confirmDelete(tpl.id)">
                   <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
                     <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
                   </svg>
                 </button>
               </div>
             </div>
-            <p v-else class="cfg-empty">暂无自定义模板</p>
+            <p v-else class="cfg-empty">{{ t('event.config.noTemplates') }}</p>
           </div>
         </section>
       </Transition>
@@ -343,51 +370,51 @@ function persist(): void {
       </div>
 
       <div v-else class="empty-state">
-        <p>暂无事件记录</p>
+        <p>{{ t('event.empty') }}</p>
       </div>
     </template>
 
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p>{{ t('event.notLoaded') }}</p>
     </div>
   </div>
 
   <!-- ── Add template modal ── -->
-  <Modal v-model="addFormOpen" title="新增自定义事件模板" width="400px">
+  <Modal v-model="addFormOpen" :title="t('event.template.addTitle')" width="400px">
     <div class="form-field">
-      <label class="form-label">名称 <span class="req">*</span></label>
-      <input v-model="newTemplate.name" class="form-input" placeholder="模板名称" maxlength="40" />
+      <label class="form-label">{{ t('event.template.name') }} <span class="req">{{ t('event.template.required') }}</span></label>
+      <input v-model="newTemplate.name" class="form-input" :placeholder="t('event.template.namePlaceholder')" maxlength="40" />
     </div>
     <div class="form-field">
-      <label class="form-label">类型 <span class="req">*</span></label>
-      <input v-model="newTemplate.type" class="form-input" placeholder="如：世界、战斗" maxlength="20" />
+      <label class="form-label">{{ t('event.template.type') }} <span class="req">{{ t('event.template.required') }}</span></label>
+      <input v-model="newTemplate.type" class="form-input" :placeholder="t('event.template.typePlaceholder')" maxlength="20" />
     </div>
     <div class="form-field">
-      <label class="form-label">描述模板 <span class="req">*</span></label>
-      <textarea v-model="newTemplate.description" class="form-textarea" placeholder="事件描述模板" rows="3" />
+      <label class="form-label">{{ t('event.template.description') }} <span class="req">{{ t('event.template.required') }}</span></label>
+      <textarea v-model="newTemplate.description" class="form-textarea" :placeholder="t('event.template.descriptionPlaceholder')" rows="3" />
     </div>
     <div class="form-field">
-      <label class="form-label">影响等级</label>
+      <label class="form-label">{{ t('event.template.impact') }}</label>
       <div class="impact-options">
-        <label v-for="opt in ['低', '中', '高']" :key="opt" class="impact-option">
+        <label v-for="opt in (['低', '中', '高'] as const)" :key="opt" class="impact-option">
           <input type="radio" :value="opt" v-model="newTemplate.impact" />
-          {{ opt }}
+          {{ impactLabel(opt) }}
         </label>
       </div>
     </div>
     <p v-if="newTemplateError" class="form-error">{{ newTemplateError }}</p>
     <template #footer>
-      <button class="btn btn--secondary" @click="addFormOpen = false">取消</button>
-      <button class="btn btn--primary" @click="submitAddTemplate">确认添加</button>
+      <button class="btn btn--secondary" @click="addFormOpen = false">{{ t('event.template.cancel') }}</button>
+      <button class="btn btn--primary" @click="submitAddTemplate">{{ t('event.template.confirm') }}</button>
     </template>
   </Modal>
 
   <!-- ── Delete confirm modal ── -->
-  <Modal v-model="showDeleteModal" title="确认删除" width="360px">
-    <p>确定要删除这个自定义事件模板吗？此操作无法撤销。</p>
+  <Modal v-model="showDeleteModal" :title="t('event.template.deleteTitle')" width="360px">
+    <p>{{ t('event.template.deleteText') }}</p>
     <template #footer>
-      <button class="btn btn--secondary" @click="deleteTargetId = null">取消</button>
-      <button class="btn btn--danger" @click="doDelete">删除</button>
+      <button class="btn btn--secondary" @click="deleteTargetId = null">{{ t('event.template.cancel') }}</button>
+      <button class="btn btn--danger" @click="doDelete">{{ t('event.template.deleteBtn') }}</button>
     </template>
   </Modal>
 </template>

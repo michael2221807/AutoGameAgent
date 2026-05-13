@@ -50,6 +50,8 @@ export class RateLimiter {
 
     eventBus.emit('ui:toast', {
       type: 'info',
+      i18nKey: 'engine.toast.rateLimitQueued',
+      i18nParams: { seconds: Math.ceil(waitMs / 1000) },
       message: `低负荷模式：请求排队中，预计等待 ${Math.ceil(waitMs / 1000)} 秒`,
       duration: waitMs + 1000,
       id: 'rate-limiter-queue',

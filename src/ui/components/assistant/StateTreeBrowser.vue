@@ -11,10 +11,13 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md Phase 5a。
  */
 import { computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
 import { useStateTreeNavigation } from '@/ui/composables/useStateTreeNavigation';
 import SearchInput from '@/ui/components/common/SearchInput.vue';
+
+const { t, locale } = useI18n();
 
 const props = withDefaults(defineProps<{
   /** none: 仅浏览；single: 单选；multi: 多选（v-model:selectedPaths） */
@@ -37,9 +40,15 @@ const emit = defineEmits<{
 }>();
 
 const { tree, get } = useGameState();
-const { getStateSchema } = useConfig();
+const { getStateSchema, pack } = useConfig();
 
-const nav = useStateTreeNavigation({ tree, get });
+// Pack-level i18n data for the current locale — provides pathLabel.* translations
+const pathLabelsRef = computed<Record<string, string> | undefined>(() => {
+  if (!pack?.i18n) return undefined;
+  return pack.i18n[locale.value];
+});
+
+const nav = useStateTreeNavigation({ tree, get, pathLabels: pathLabelsRef });
 
 // ─── x-assistant-editable 过滤 ──────────────────────
 
@@ -166,10 +175,10 @@ watch(() => props.selectedPaths, () => { /* trigger reactivity */ }, { deep: tru
   <div class="state-tree-browser">
     <!-- Header: search + breadcrumb -->
     <div class="browser-header">
-      <SearchInput v-model="nav.searchQuery.value" placeholder="搜索路径..." />
+      <SearchInput v-model="nav.searchQuery.value" :placeholder="t('assistant.stateTree.searchPlaceholder')" />
       <div class="breadcrumb">
-        <a href="#" class="crumb" @click.prevent="nav.navigateBreadcrumb(-1)">根</a>
-        <template v-for="(seg, i) in nav.breadcrumb.value" :key="i">
+        <a href="#" class="crumb" @click.prevent="nav.navigateBreadcrumb(-1)">{{ t('assistant.stateTree.root') }}</a>
+        <template v-for="(seg, i) in nav.displayBreadcrumb.value" :key="i">
           <span class="crumb-sep">/</span>
           <a href="#" class="crumb" @click.prevent="nav.navigateBreadcrumb(i)">{{ seg }}</a>
         </template>
@@ -187,13 +196,13 @@ watch(() => props.selectedPaths, () => { /* trigger reactivity */ }, { deep: tru
         <span class="search-path">{{ r.path }}</span>
         <span class="search-type" :data-type="r.type">{{ r.type }}</span>
       </div>
-      <div v-if="nav.searchResults.value.length === 0" class="empty-state">无匹配</div>
+      <div v-if="nav.searchResults.value.length === 0" class="empty-state">{{ t('assistant.stateTree.noMatch') }}</div>
     </div>
 
     <!-- Children list -->
     <div v-else class="children-list">
       <div v-if="filteredChildren.length === 0" class="empty-state">
-        {{ showOnlyEditable ? '此层级无可编辑路径' : '空' }}
+        {{ showOnlyEditable ? t('assistant.stateTree.noEditablePaths') : t('assistant.stateTree.empty') }}
       </div>
       <div
         v-for="child in filteredChildren"
@@ -213,7 +222,7 @@ watch(() => props.selectedPaths, () => { /* trigger reactivity */ }, { deep: tru
           @click.stop="toggleSelect(child.fullPath)"
         />
         <div class="child-main" @click="onChildClick(child.fullPath, $event)">
-          <span class="child-key">{{ child.key }}</span>
+          <span class="child-key">{{ child.displayKey }}</span>
           <span class="child-type" :data-type="child.type">{{ child.type }}</span>
           <span v-if="child.childCount > 0" class="child-count">{{ child.childCount }}</span>
           <span class="child-preview">{{ child.preview }}</span>

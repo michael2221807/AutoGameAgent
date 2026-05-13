@@ -1,0 +1,30 @@
+{
+  "engine": {
+    "toast": {
+      "noRollbackSnapshot": "没有可回退的快照（每回合只能回退一次）",
+      "privacyFieldsRepaired": "扩展字段已自动补齐",
+      "privacyFieldsIncomplete": "仍有 {count} 项扩展字段未补齐（已达重试上限）",
+      "basicFieldsRepaired": "基础字段已自动补齐",
+      "basicFieldsIncomplete": "仍有 {count} 项字段未补齐（已达重试上限）",
+      "autoSceneGenStart": "正在自动生成场景图…",
+      "autoSceneGenComplete": "场景图已生成",
+      "autoPortraitComplete": "{name} 自动肖像已生成",
+      "rateLimitQueued": "低负荷模式：请求排队中，预计等待 {seconds} 秒",
+      "unknownPathRoot": "AI 写入未知路径根段 \"{root}\" — 详见控制台",
+      "memoryPairMismatch": "短期/隐式中期记忆配对异常 ({short} vs {implicit})，可能丢失回合对齐",
+      "implicitMemoryOverflow": "隐式中期记忆异常溢出，已自动清理 ({before} → {after})",
+      "imageGenComplete": "图像生成完成",
+      "imageTasksRecovered": "{count} 个图像生成任务因页面刷新中断",
+      "missingMidTermMemory": "AI 未按要求输出本回合中期记忆 (round {round})，已插入占位",
+      "fieldRepairFailed": "字段补齐/记忆维护失败（不影响本回合）",
+      "missingFieldsDetected": "检测到 {count} 项缺失的扩展字段，将自动补齐"
+    },
+    "progress": {
+      "stage": "[{name}]",
+      "aiCallStep1": "[AICall:分步第1步]",
+      "aiCallStep2": "[AICall:分步第2步]",
+      "bodyPolish": "[BodyPolish:润色中]",
+      "responseRepair": "[ResponseRepair:救援中]"
+    }
+  }
+}

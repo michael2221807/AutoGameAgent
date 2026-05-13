@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import AgaButton from '@/ui/components/shared/AgaButton.vue';
@@ -27,16 +28,21 @@ const emit = defineEmits<{
   (e: 'update:scope', scope: CivitaiLoraScope): void;
 }>();
 
+const { t } = useI18n();
+
 const SHELF_PATH = '系统.扩展.image.config.civitai.loras';
 const RAW_NETWORKS_PATH = '系统.扩展.image.config.civitai.additionalNetworksJson';
 const { setValue, useValue } = useGameState();
 
-const SCOPE_LABELS: Record<CivitaiLoraScope, string> = {
-  player: '主角',
-  character: '角色',
-  scene: '场景',
-  secret_part: '私密',
-};
+function scopeLabel(scope: CivitaiLoraScope): string {
+  const map: Record<CivitaiLoraScope, string> = {
+    player: t('image.lora.scope.player'),
+    character: t('image.lora.scope.character'),
+    scene: t('image.lora.scope.scene'),
+    secret_part: t('image.lora.scope.secretPart'),
+  };
+  return map[scope];
+}
 
 const SCOPE_KEYS: CivitaiLoraScope[] = ['player', 'character', 'scene', 'secret_part'];
 
@@ -79,7 +85,7 @@ const addError = ref('');
 
 function addLora() {
   const air = newAir.value.trim();
-  if (!air) { addError.value = 'AIR 不能为空'; return; }
+  if (!air) { addError.value = t('image.lora.airEmpty'); return; }
 
   const dup = shelf.value.find((l) => l.air.trim() === air);
   if (dup) {
@@ -90,7 +96,7 @@ function addLora() {
   }
 
   const airResult = validateLoraAir(air);
-  if (!airResult.valid) { addError.value = airResult.error ?? 'AIR 无效'; return; }
+  if (!airResult.valid) { addError.value = airResult.error ?? t('image.lora.airInvalid'); return; }
 
   const now = Date.now();
   const item: CivitaiLoraShelfItem = {
@@ -154,7 +160,7 @@ function addTrigger(loraId: string) {
   const text = newTriggerText.value.trim();
   if (!text) return;
   if (/<lora:/i.test(text)) {
-    triggerError.value = 'Civitai 使用 strength 滑块控制 LoRA 强度；触发词应为普通 prompt 关键词。';
+    triggerError.value = t('image.lora.triggerFormatError');
     return;
   }
   triggerError.value = '';
@@ -225,7 +231,7 @@ async function importMetadata(loraId: string) {
       triggers: [...lora.triggers, ...newTriggers],
     });
   } catch {
-    metadataError.value = '元数据获取失败';
+    metadataError.value = t('image.lora.metadataFailed');
   } finally {
     metadataLoading.value = null;
   }
@@ -246,7 +252,7 @@ const previewNetworks = computed(() => {
 
 // ── Validation helpers ──
 function strengthWarning(strength: number): string {
-  if (Math.abs(strength) > 1.5) return '效果可能过强';
+  if (Math.abs(strength) > 1.5) return t('image.lora.strengthWarning');
   return '';
 }
 
@@ -266,7 +272,7 @@ function formatAirShort(air: string): string {
     <div v-if="activeForScope.length > 0" class="lora-compact__summary">
       <span class="lora-compact__badge">LoRA ×{{ activeForScope.length }}</span>
       <span v-if="activeTriggerCount > 0" class="lora-compact__badge lora-compact__badge--trigger">
-        触发词 ×{{ activeTriggerCount }}
+        {{ $t('image.lora.trigger') }} ×{{ activeTriggerCount }}
       </span>
       <span
         v-for="lora in activeForScope" :key="lora.id"
@@ -277,23 +283,23 @@ function formatAirShort(air: string): string {
       </span>
     </div>
     <div v-else class="lora-compact__empty">
-      当前 flow 无生效 LoRA
+      {{ $t('image.lora.compactEmpty') }}
     </div>
     <div v-if="activeForScope.some(l => l.mature) && !matureEnabled" class="lora-compact__warn">
-      活跃 LoRA 含 Mature 标记，但 allowMatureContent 未开启
+      {{ $t('image.lora.matureWarning') }}
     </div>
-    <div class="lora-compact__hint">前往图像工作台 → 设置 → Civitai LoRA 书架管理</div>
+    <div class="lora-compact__hint">{{ $t('image.lora.compactHint') }}</div>
   </div>
 
   <!-- ═══ FULL MODE ═══ -->
   <div v-else class="lora-shelf">
     <!-- Stats bar -->
     <div class="lora-shelf__stats">
-      <span class="lora-shelf__pill"><strong>{{ activeForScope.length }}</strong> 个 LoRA 生效</span>
-      <span class="lora-shelf__pill lora-shelf__pill--warm"><strong>{{ activeTriggerCount }}</strong> 个触发词注入</span>
-      <span class="lora-shelf__pill"><strong>{{ shelf.length }}</strong> 个书架资源</span>
+      <span class="lora-shelf__pill"><strong>{{ activeForScope.length }}</strong> {{ $t('image.lora.activeSuffix') }}</span>
+      <span class="lora-shelf__pill lora-shelf__pill--warm"><strong>{{ activeTriggerCount }}</strong> {{ $t('image.lora.triggerInjectSuffix') }}</span>
+      <span class="lora-shelf__pill"><strong>{{ shelf.length }}</strong> {{ $t('image.lora.shelfSuffix') }}</span>
       <AgaButton variant="primary" size="sm" @click="showAddForm = !showAddForm">
-        {{ showAddForm ? '取消' : '添加 LoRA' }}
+        {{ showAddForm ? $t('image.lora.addCancel') : $t('image.lora.addLora') }}
       </AgaButton>
     </div>
 
@@ -301,25 +307,25 @@ function formatAirShort(air: string): string {
     <div v-if="showAddForm" class="lora-shelf__add">
       <div class="lora-shelf__add-grid">
         <div class="lora-shelf__field">
-          <label class="form-label">名称</label>
-          <input v-model="newName" class="form-input" placeholder="LoRA 名称" />
+          <label class="form-label">{{ $t('image.lora.label.name') }}</label>
+          <input v-model="newName" class="form-input" :placeholder="$t('image.lora.placeholder.name')" />
         </div>
         <div class="lora-shelf__field">
-          <label class="form-label">AIR</label>
-          <input v-model="newAir" class="form-input" placeholder="urn:air:sdxl:lora:civitai:123@456" />
+          <label class="form-label">{{ $t('image.lora.label.air') }}</label>
+          <input v-model="newAir" class="form-input" :placeholder="$t('image.lora.placeholder.air')" />
         </div>
         <div class="lora-shelf__field">
-          <label class="form-label">Strength</label>
+          <label class="form-label">{{ $t('image.lora.strength') }}</label>
           <input v-model.number="newStrength" type="number" min="-2" max="2" step="0.05" class="form-input" />
         </div>
-        <AgaButton variant="primary" size="sm" @click="addLora">加入</AgaButton>
+        <AgaButton variant="primary" size="sm" @click="addLora">{{ $t('image.lora.addSubmit') }}</AgaButton>
       </div>
       <p v-if="addError" class="lora-shelf__error">{{ addError }}</p>
     </div>
 
     <!-- Empty state -->
     <div v-if="shelf.length === 0 && !showAddForm" class="lora-shelf__empty">
-      <p>粘贴 Civitai LoRA AIR 后可保存到书架；触发词可从元数据导入，也可手动添加。</p>
+      <p>{{ $t('image.lora.emptyHint') }}</p>
     </div>
 
     <!-- LoRA list -->
@@ -348,16 +354,16 @@ function formatAirShort(air: string): string {
             <output>{{ lora.strength.toFixed(2) }}</output>
           </div>
           <div class="lora-item__badges">
-            <span v-for="s in lora.scopes" :key="s" class="lora-item__scope-badge">{{ SCOPE_LABELS[s] }}</span>
-            <span v-if="lora.triggers.filter(t => t.enabled).length > 0" class="lora-item__trigger-badge">
-              词 ×{{ lora.triggers.filter(t => t.enabled).length }}
+            <span v-for="s in lora.scopes" :key="s" class="lora-item__scope-badge">{{ scopeLabel(s) }}</span>
+            <span v-if="lora.triggers.filter(tr => tr.enabled).length > 0" class="lora-item__trigger-badge">
+              {{ $t('image.lora.trigger') }} ×{{ lora.triggers.filter(tr => tr.enabled).length }}
             </span>
             <span v-if="lora.mature" class="lora-item__mature-badge">Mature</span>
-            <span v-if="lora.enabled && isAirInvalid(lora.air)" class="lora-item__error-badge">AIR 无效</span>
+            <span v-if="lora.enabled && isAirInvalid(lora.air)" class="lora-item__error-badge">{{ $t('image.lora.airInvalid') }}</span>
             <span v-if="strengthWarning(lora.strength)" class="lora-item__warn-badge">{{ strengthWarning(lora.strength) }}</span>
           </div>
-          <button class="lora-item__expand" :aria-label="selectedId === lora.id ? '折叠' : '展开'" @click="selectLora(lora.id)">{{ selectedId === lora.id ? '▴' : '▾' }}</button>
-          <button class="lora-item__delete" aria-label="删除此 LoRA" @click="deleteLora(lora.id)">×</button>
+          <button class="lora-item__expand" :aria-label="selectedId === lora.id ? $t('image.lora.collapse') : $t('image.lora.expand')" @click="selectLora(lora.id)">{{ selectedId === lora.id ? '▴' : '▾' }}</button>
+          <button class="lora-item__delete" :aria-label="$t('image.lora.deleteAriaLabel')" @click="deleteLora(lora.id)">×</button>
         </div>
 
         <!-- Expanded editor -->
@@ -366,25 +372,25 @@ function formatAirShort(air: string): string {
             <!-- Identity -->
             <div class="lora-editor__section">
               <div class="lora-shelf__field">
-                <label class="form-label">名称</label>
+                <label class="form-label">{{ $t('image.lora.label.name') }}</label>
                 <input
                   class="form-input" :value="lora.name"
                   @change="updateLora(lora.id, { name: ($event.target as HTMLInputElement).value })"
                 />
               </div>
               <div class="lora-shelf__field">
-                <label class="form-label">AIR</label>
+                <label class="form-label">{{ $t('image.lora.label.air') }}</label>
                 <input
                   class="form-input" :value="lora.air"
                   @change="updateLora(lora.id, { air: ($event.target as HTMLInputElement).value.trim() })"
                 />
               </div>
               <div class="lora-shelf__field">
-                <label class="form-label">备注</label>
+                <label class="form-label">{{ $t('image.lora.label.notes') }}</label>
                 <input
                   class="form-input" :value="lora.notes ?? ''"
                   @change="updateLora(lora.id, { notes: ($event.target as HTMLInputElement).value || undefined })"
-                  placeholder="可选备注"
+                  :placeholder="$t('image.lora.placeholder.notes')"
                 />
               </div>
             </div>
@@ -397,10 +403,10 @@ function formatAirShort(air: string): string {
                   :loading="metadataLoading === lora.id"
                   @click="importMetadata(lora.id)"
                 >
-                  {{ metadataLoading === lora.id ? '获取中…' : '导入元数据' }}
+                  {{ metadataLoading === lora.id ? $t('image.lora.importingMeta') : $t('image.lora.importMeta') }}
                 </AgaButton>
                 <span v-if="lora.modelName" class="form-hint">{{ lora.modelName }}{{ lora.versionName ? ` · ${lora.versionName}` : '' }}{{ lora.baseModel ? ` · ${lora.baseModel}` : '' }}</span>
-                <span v-else class="form-hint">未拉取元数据</span>
+                <span v-else class="form-hint">{{ $t('image.lora.noMetadata') }}</span>
               </div>
               <p v-if="metadataError && metadataLoading === null && selectedId === lora.id" class="lora-shelf__error">{{ metadataError }}</p>
             </div>
@@ -430,33 +436,33 @@ function formatAirShort(air: string): string {
             <!-- Trigger dictionary -->
             <div class="lora-editor__section">
               <div class="lora-editor__trigger-header">
-                <label class="form-label">触发词</label>
+                <label class="form-label">{{ $t('image.lora.triggerLabel') }}</label>
                 <AgaToggle
                   :model-value="lora.autoInjectTriggers"
                   @update:model-value="updateLora(lora.id, { autoInjectTriggers: $event })"
-                  label="自动注入"
+                  :label="$t('image.lora.autoInjectLabel')"
                 />
-                <span class="form-hint">{{ lora.autoInjectTriggers ? '启用后，触发词自动追加到正向 prompt' : '已关闭自动注入' }}</span>
+                <span class="form-hint">{{ lora.autoInjectTriggers ? $t('image.lora.autoInjectOnHint') : $t('image.lora.autoInjectOffHint') }}</span>
               </div>
               <div v-if="lora.triggers.length > 0" class="lora-editor__triggers">
                 <span
-                  v-for="t in lora.triggers" :key="t.id"
+                  v-for="tt in lora.triggers" :key="tt.id"
                   class="lora-editor__trigger-chip"
-                  :class="{ 'lora-editor__trigger-chip--off': !t.enabled }"
+                  :class="{ 'lora-editor__trigger-chip--off': !tt.enabled }"
                 >
-                  <button :aria-label="t.enabled ? '停用触发词' : '启用触发词'" @click="toggleTrigger(lora.id, t.id)">{{ t.enabled ? '●' : '○' }}</button>
-                  {{ t.text }}
-                  <button class="lora-editor__trigger-del" aria-label="删除触发词" @click="deleteTrigger(lora.id, t.id)">×</button>
+                  <button :aria-label="tt.enabled ? $t('image.lora.disableTrigger') : $t('image.lora.enableTrigger')" @click="toggleTrigger(lora.id, tt.id)">{{ tt.enabled ? '●' : '○' }}</button>
+                  {{ tt.text }}
+                  <button class="lora-editor__trigger-del" :aria-label="$t('image.lora.deleteTrigger')" @click="deleteTrigger(lora.id, tt.id)">×</button>
                 </span>
               </div>
-              <div v-else class="form-hint">没有触发词。这个 LoRA 只会按 strength 加载。</div>
+              <div v-else class="form-hint">{{ $t('image.lora.noTriggers') }}</div>
               <div class="lora-editor__trigger-add">
                 <input
                   v-model="newTriggerText" class="form-input"
                   placeholder="例如：moonlit robe"
                   @keydown.enter="addTrigger(lora.id)"
                 />
-                <AgaButton variant="secondary" size="sm" @click="addTrigger(lora.id)">添加词条</AgaButton>
+                <AgaButton variant="secondary" size="sm" @click="addTrigger(lora.id)">{{ $t('image.lora.addTrigger') }}</AgaButton>
               </div>
               <p v-if="triggerError" class="lora-shelf__error">{{ triggerError }}</p>
             </div>
@@ -464,7 +470,7 @@ function formatAirShort(air: string): string {
 
           <!-- Scopes -->
           <div class="lora-editor__side">
-            <label class="form-label">适用范围</label>
+            <label class="form-label">{{ $t('image.lora.scopeLabel') }}</label>
             <div class="lora-editor__scopes">
               <button
                 v-for="sk in SCOPE_KEYS" :key="sk"
@@ -473,12 +479,12 @@ function formatAirShort(air: string): string {
                 :aria-pressed="lora.scopes.includes(sk)"
                 @click="toggleScope(lora.id, sk)"
               >
-                {{ lora.scopes.includes(sk) ? '●' : '○' }} {{ SCOPE_LABELS[sk] }}
+                {{ lora.scopes.includes(sk) ? '●' : '○' }} {{ scopeLabel(sk) }}
               </button>
             </div>
             <!-- Danger zone -->
             <div class="lora-editor__danger">
-              <AgaButton variant="danger" size="sm" @click="deleteLora(lora.id)">删除此 LoRA</AgaButton>
+              <AgaButton variant="danger" size="sm" @click="deleteLora(lora.id)">{{ $t('image.lora.deleteLora') }}</AgaButton>
             </div>
           </div>
         </div>
@@ -487,10 +493,10 @@ function formatAirShort(air: string): string {
 
     <!-- Request preview -->
     <details v-if="shelf.length > 0" class="lora-shelf__preview form-advanced">
-      <summary>请求预览</summary>
+      <summary>{{ $t('image.lora.previewTitle') }}</summary>
       <div class="lora-shelf__preview-body">
         <div class="lora-shelf__field">
-          <label class="form-label">预览 Flow</label>
+          <label class="form-label">{{ $t('image.lora.previewFlow') }}</label>
           <div class="lora-editor__scopes">
             <button
               v-for="sk in SCOPE_KEYS" :key="sk"
@@ -498,38 +504,38 @@ function formatAirShort(air: string): string {
               :class="{ 'lora-editor__scope-chip--on': previewScope === sk }"
               @click="previewScope = sk; emit('update:scope', sk)"
             >
-              {{ SCOPE_LABELS[sk] }}
+              {{ scopeLabel(sk) }}
             </button>
           </div>
         </div>
         <div class="lora-shelf__field">
-          <label class="form-label">生效 LoRA ({{ previewActive.length }})</label>
+          <label class="form-label">{{ $t('image.lora.activeLoras', { n: previewActive.length }) }}</label>
           <div v-if="previewActive.length > 0" class="lora-shelf__preview-list">
             <span v-for="l in previewActive" :key="l.id" class="lora-compact__chip">
               {{ l.name }} <small>{{ l.strength.toFixed(2) }}</small>
             </span>
           </div>
-          <span v-else class="form-hint">无</span>
+          <span v-else class="form-hint">{{ $t('image.lora.previewNone') }}</span>
         </div>
         <div v-if="previewTriggers.length > 0" class="lora-shelf__field">
-          <label class="form-label">注入触发词</label>
+          <label class="form-label">{{ $t('image.lora.injectedTriggers') }}</label>
           <pre class="lora-shelf__preview-code">{{ previewTriggers.join(', ') }}</pre>
         </div>
         <div class="lora-shelf__field">
           <label class="form-label">additionalNetworks</label>
-          <pre class="lora-shelf__preview-code">{{ previewNetworks.mergedJson ? JSON.stringify(previewNetworks.merged, null, 2) : '(空)' }}</pre>
+          <pre class="lora-shelf__preview-code">{{ previewNetworks.mergedJson ? JSON.stringify(previewNetworks.merged, null, 2) : $t('image.lora.previewEmpty') }}</pre>
         </div>
         <div v-if="previewNetworks.conflicts.length > 0" class="lora-shelf__preview-warn">
-          冲突: {{ previewNetworks.conflicts.join(', ') }} — 书架强度优先
+          {{ $t('image.lora.conflict', { list: previewNetworks.conflicts.join(', ') }) }}
         </div>
         <div v-if="previewActive.some(l => l.mature) && !matureEnabled" class="lora-shelf__preview-warn">
-          活跃 LoRA 含 Mature 标记，但 allowMatureContent 未开启
+          {{ $t('image.lora.matureWarning') }}
         </div>
         <div v-if="previewActive.length > 5" class="lora-shelf__preview-warn">
-          {{ previewActive.length }} 个 LoRA 生效 — 可能影响质量和 Buzz 消耗
+          {{ $t('image.lora.tooMany', { n: previewActive.length }) }}
         </div>
         <div v-if="previewActive.some(l => isAirInvalid(l.air))" class="lora-shelf__preview-warn lora-shelf__preview-warn--error">
-          存在无效 AIR — 生成将被阻止
+          {{ $t('image.lora.invalidAir') }}
         </div>
       </div>
     </details>

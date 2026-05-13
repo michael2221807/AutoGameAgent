@@ -14,6 +14,7 @@
  * preserved (no fork).
  */
 import { ref, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import DeltaViewer, { type DeltaChange } from '@/ui/components/common/DeltaViewer.vue';
 import {
@@ -46,6 +47,8 @@ defineEmits<{
   'update:modelValue': [value: boolean];
 }>();
 
+const { t } = useI18n();
+
 type Tab = 'commands' | 'delta';
 const activeTab = ref<Tab>(props.initialTab);
 
@@ -62,8 +65,8 @@ const commandStats = computed<CommandStats>(() => computeCommandStats(props.comm
 
 function title(): string {
   return props.roundNumber > 0
-    ? `变更详情 · 第 ${props.roundNumber} 回合`
-    : '变更详情';
+    ? t('mainGame.commandsViewer.title', { n: props.roundNumber })
+    : t('mainGame.commandsViewer.titleGeneric');
 }
 </script>
 
@@ -83,7 +86,7 @@ function title(): string {
         :aria-selected="activeTab === 'commands'"
         @click="activeTab = 'commands'"
       >
-        AI 请求命令
+        {{ $t('mainGame.commandsViewer.tabCommands') }}
         <span v-if="commandStats.total > 0" class="cmd-viewer__tab-count">{{ commandStats.total }}</span>
       </button>
       <button
@@ -93,7 +96,7 @@ function title(): string {
         :aria-selected="activeTab === 'delta'"
         @click="activeTab = 'delta'"
       >
-        生效变更
+        {{ $t('mainGame.commandsViewer.tabDelta') }}
         <span v-if="props.delta.length > 0" class="cmd-viewer__tab-count">{{ props.delta.length }}</span>
       </button>
     </div>
@@ -101,7 +104,7 @@ function title(): string {
     <!-- Commands tab -->
     <div v-if="activeTab === 'commands'" class="cmd-viewer__panel">
       <div v-if="props.commands.length === 0" class="cmd-viewer__empty">
-        本回合 AI 未请求任何命令
+        {{ $t('mainGame.commandsViewer.emptyCommands') }}
       </div>
       <template v-else>
         <div class="cmd-viewer__stats">

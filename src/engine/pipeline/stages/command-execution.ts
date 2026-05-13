@@ -98,6 +98,8 @@ export class CommandExecutionStage implements PipelineStage {
     );
     eventBus.emit('ui:toast', {
       type: 'warning',
+      i18nKey: 'engine.toast.missingFieldsDetected',
+      i18nParams: { count: report.total },
       message: `检测到 ${report.total} 项缺失的扩展字段，将自动补齐`,
       duration: 2500,
     });

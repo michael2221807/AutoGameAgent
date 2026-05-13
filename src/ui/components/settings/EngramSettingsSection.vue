@@ -36,12 +36,12 @@ const config = ref<EngramConfig>(loadEngramConfig());
 
 const embeddingApiName = computed(() => {
   const api = apiStore.getAPIForType('embedding');
-  return api ? api.id : '（未分配）';
+  return api ? api.id : null;
 });
 
 const rerankApiName = computed(() => {
   const api = apiStore.getAPIForType('rerank');
-  return api ? api.id : '（未分配）';
+  return api ? api.id : null;
 });
 
 // ─── Persistence ───
@@ -59,9 +59,9 @@ watch(config, () => {
   <div class="engram-section">
     <!-- ── 折叠标题栏 ── -->
     <button class="engram-header" @click="expanded = !expanded">
-      <span class="engram-title">Engram 记忆增强</span>
+      <span class="engram-title">{{ $t('settings.engram.sectionTitle') }}</span>
       <span class="engram-status-badge" :class="config.enabled ? 'badge--on' : 'badge--off'">
-        {{ config.enabled ? '已启用' : '已关闭' }}
+        {{ config.enabled ? $t('settings.engram.statusOn') : $t('settings.engram.statusOff') }}
       </span>
       <span class="expand-icon">{{ expanded ? '▲' : '▼' }}</span>
     </button>
@@ -72,8 +72,8 @@ watch(config, () => {
       <!-- ─ 主开关 ─ -->
       <div class="setting-row">
         <div class="setting-info">
-          <span class="setting-label">启用 Engram</span>
-          <span class="setting-desc">开启后每回合提取语义记忆节点，构建知识图谱</span>
+          <span class="setting-label">{{ $t('settings.engram.enabled.label') }}</span>
+          <span class="setting-desc">{{ $t('settings.engram.enabled.desc') }}</span>
         </div>
         <button
           :class="['toggle-switch', { 'toggle-switch--on': config.enabled }]"
@@ -88,12 +88,12 @@ watch(config, () => {
 
         <!-- ─ 检索模式 ─ -->
         <div class="sub-section">
-          <div class="sub-section-title">检索模式</div>
+          <div class="sub-section-title">{{ $t('settings.engram.retrieval.title') }}</div>
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">检索策略</span>
+              <span class="setting-label">{{ $t('settings.engram.retrieval.strategy.label') }}</span>
               <span class="setting-desc">
-                传统：关键词+时间衰减；混合：向量+BM25+RRF+BFS 三路并行检索
+                {{ $t('settings.engram.retrieval.strategy.desc') }}
               </span>
             </div>
             <div class="radio-group">
@@ -103,7 +103,7 @@ watch(config, () => {
                   type="radio"
                   value="legacy"
                 />
-                <span>传统</span>
+                <span>{{ $t('settings.engram.retrieval.strategy.legacy') }}</span>
               </label>
               <label class="radio-option">
                 <input
@@ -111,7 +111,7 @@ watch(config, () => {
                   type="radio"
                   value="hybrid"
                 />
-                <span>混合</span>
+                <span>{{ $t('settings.engram.retrieval.strategy.hybrid') }}</span>
               </label>
             </div>
           </div>
@@ -119,12 +119,12 @@ watch(config, () => {
 
         <!-- ─ 向量嵌入 ─ -->
         <div class="sub-section">
-          <div class="sub-section-title">向量嵌入</div>
+          <div class="sub-section-title">{{ $t('settings.engram.embedding.title') }}</div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">启用向量检索</span>
-              <span class="setting-desc">需要在 API 管理中分配 Embedding API</span>
+              <span class="setting-label">{{ $t('settings.engram.embedding.enabled.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.embedding.enabled.desc') }}</span>
             </div>
             <button
               :class="['toggle-switch', { 'toggle-switch--on': config.embedding.enabled }]"
@@ -136,16 +136,16 @@ watch(config, () => {
 
           <div class="setting-row readonly-row">
             <div class="setting-info">
-              <span class="setting-label">分配的 API</span>
-              <span class="setting-desc">在 API 管理面板 → RAG 功能分配处设置</span>
+              <span class="setting-label">{{ $t('settings.engram.embedding.assignedApi.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.embedding.assignedApi.desc') }}</span>
             </div>
-            <span class="api-badge">{{ embeddingApiName }}</span>
+            <span class="api-badge">{{ embeddingApiName ?? $t('settings.engram.embedding.assignedApi.none') }}</span>
           </div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">检索数量 topK</span>
-              <span class="setting-desc">向量近邻检索返回的最大候选数（1–200）</span>
+              <span class="setting-label">{{ $t('settings.engram.embedding.topK.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.embedding.topK.desc') }}</span>
             </div>
             <input
               v-model.number="config.embedding.topK"
@@ -158,8 +158,8 @@ watch(config, () => {
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">相似度阈值 minScore</span>
-              <span class="setting-desc">低于此分数的结果丢弃（0.0–1.0）</span>
+              <span class="setting-label">{{ $t('settings.engram.embedding.minScore.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.embedding.minScore.desc') }}</span>
             </div>
             <div class="slider-group">
               <input
@@ -177,12 +177,12 @@ watch(config, () => {
 
         <!-- ─ 重排序 ─ -->
         <div class="sub-section">
-          <div class="sub-section-title">重排序</div>
+          <div class="sub-section-title">{{ $t('settings.engram.rerank.title') }}</div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">启用重排序</span>
-              <span class="setting-desc">对召回结果二次精排（需分配 Rerank API）</span>
+              <span class="setting-label">{{ $t('settings.engram.rerank.enabled.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.rerank.enabled.desc') }}</span>
             </div>
             <button
               :class="['toggle-switch', { 'toggle-switch--on': config.rerank.enabled }]"
@@ -194,16 +194,16 @@ watch(config, () => {
 
           <div class="setting-row readonly-row">
             <div class="setting-info">
-              <span class="setting-label">分配的 API</span>
-              <span class="setting-desc">在 API 管理面板 → RAG 功能分配处设置</span>
+              <span class="setting-label">{{ $t('settings.engram.rerank.assignedApi.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.rerank.assignedApi.desc') }}</span>
             </div>
-            <span class="api-badge">{{ rerankApiName }}</span>
+            <span class="api-badge">{{ rerankApiName ?? $t('settings.engram.embedding.assignedApi.none') }}</span>
           </div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">保留数量 topN</span>
-              <span class="setting-desc">重排后保留的最大条目数（1–50）</span>
+              <span class="setting-label">{{ $t('settings.engram.rerank.topN.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.rerank.topN.desc') }}</span>
             </div>
             <input
               v-model.number="config.rerank.topN"
@@ -217,12 +217,12 @@ watch(config, () => {
 
         <!-- ─ 检索预算 ─ -->
         <div class="sub-section">
-          <div class="sub-section-title">检索预算</div>
+          <div class="sub-section-title">{{ $t('settings.engram.budget.title') }}</div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">候选上限</span>
-              <span class="setting-desc">每次检索的最大候选总数，按 50/25/25 分配给事实/实体/事件（5–100）</span>
+              <span class="setting-label">{{ $t('settings.engram.budget.maxCandidates.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.budget.maxCandidates.desc') }}</span>
             </div>
             <input
               v-model.number="config.maxCandidates"
@@ -235,8 +235,8 @@ watch(config, () => {
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">短期窗口</span>
-              <span class="setting-desc">排除最近 N 轮的事件（与短期记忆重叠部分），避免重复注入（0–20）</span>
+              <span class="setting-label">{{ $t('settings.engram.budget.shortTermWindow.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.budget.shortTermWindow.desc') }}</span>
             </div>
             <input
               v-model.number="config.shortTermWindow"
@@ -250,12 +250,12 @@ watch(config, () => {
 
         <!-- ─ 事件修剪 ─ -->
         <div class="sub-section">
-          <div class="sub-section-title">事件修剪</div>
+          <div class="sub-section-title">{{ $t('settings.engram.trim.title') }}</div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">修剪触发方式</span>
-              <span class="setting-desc">超出限制时自动裁剪旧事件</span>
+              <span class="setting-label">{{ $t('settings.engram.trim.trigger.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.trim.trigger.desc') }}</span>
             </div>
             <div class="radio-group">
               <label class="radio-option">
@@ -264,7 +264,7 @@ watch(config, () => {
                   type="radio"
                   value="count"
                 />
-                <span>按数量</span>
+                <span>{{ $t('settings.engram.trim.trigger.count') }}</span>
               </label>
               <label class="radio-option">
                 <input
@@ -272,15 +272,15 @@ watch(config, () => {
                   type="radio"
                   value="token"
                 />
-                <span>按 Token</span>
+                <span>{{ $t('settings.engram.trim.trigger.token') }}</span>
               </label>
             </div>
           </div>
 
           <div v-if="config.trim.trigger === 'count'" class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">最大事件数</span>
-              <span class="setting-desc">事件总数超出时触发修剪（10–500）</span>
+              <span class="setting-label">{{ $t('settings.engram.trim.countLimit.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.trim.countLimit.desc') }}</span>
             </div>
             <input
               v-model.number="config.trim.countLimit"
@@ -293,8 +293,8 @@ watch(config, () => {
 
           <div v-if="config.trim.trigger === 'token'" class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">Token 预算</span>
-              <span class="setting-desc">事件文本估算 token 超出时修剪（500–50000）</span>
+              <span class="setting-label">{{ $t('settings.engram.trim.tokenLimit.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.trim.tokenLimit.desc') }}</span>
             </div>
             <input
               v-model.number="config.trim.tokenLimit"
@@ -308,8 +308,8 @@ watch(config, () => {
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">始终保留最近</span>
-              <span class="setting-desc">无论修剪多激进，始终保留最新 N 条事件（1–100）</span>
+              <span class="setting-label">{{ $t('settings.engram.trim.keepRecent.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.trim.keepRecent.desc') }}</span>
             </div>
             <input
               v-model.number="config.trim.keepRecent"
@@ -323,12 +323,12 @@ watch(config, () => {
 
         <!-- ─ 杂项 ─ -->
         <div class="sub-section">
-          <div class="sub-section-title">高级</div>
+          <div class="sub-section-title">{{ $t('settings.engram.advanced.title') }}</div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">只保留重点 NPC 数据</span>
-              <span class="setting-desc">过滤与非重点 NPC 关联的事件和实体，降低噪音</span>
+              <span class="setting-label">{{ $t('settings.engram.advanced.pruneToImportant.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.advanced.pruneToImportant.desc') }}</span>
             </div>
             <button
               :class="['toggle-switch', { 'toggle-switch--on': config.pruneToImportantNpcs }]"
@@ -340,8 +340,8 @@ watch(config, () => {
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">最大实体数</span>
-              <span class="setting-desc">实体节点保留上限（5–200）</span>
+              <span class="setting-label">{{ $t('settings.engram.advanced.maxEntities.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.advanced.maxEntities.desc') }}</span>
             </div>
             <input
               v-model.number="config.maxEntities"
@@ -354,8 +354,8 @@ watch(config, () => {
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">调试模式</span>
-              <span class="setting-desc">开启后侧边栏显示 Engram 调试面板</span>
+              <span class="setting-label">{{ $t('settings.engram.advanced.debug.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.advanced.debug.desc') }}</span>
             </div>
             <button
               :class="['toggle-switch', { 'toggle-switch--on': config.debug }]"
@@ -367,8 +367,8 @@ watch(config, () => {
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-label">事实边</span>
-              <span class="setting-desc">开启后 AI 每回合提取实体间事实，构建可搜索的知识图谱边</span>
+              <span class="setting-label">{{ $t('settings.engram.advanced.knowledgeEdge.label') }}</span>
+              <span class="setting-desc">{{ $t('settings.engram.advanced.knowledgeEdge.desc') }}</span>
             </div>
             <button
               :class="['toggle-switch', { 'toggle-switch--on': config.knowledgeEdgeMode === 'active' }]"

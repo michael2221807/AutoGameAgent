@@ -5,6 +5,7 @@
  * 1. fetch manifest.json → 解析 GamePackManifest
  * 2. 根据 manifest 声明并行加载所有 JSON/Markdown 资源
  * 3. 组装为完整的 GamePack 对象
+ * 4. (可选) 加载 locale-specific prompt 覆盖 + i18n JSON + 标签替换
  *
  * 所有资源通过 HTTP fetch 从 Vite dev server（或生产 static server）获取。
  * Game Pack 是纯数据（JSON + Markdown），不含可执行代码。
@@ -22,13 +23,12 @@ export class GamePackLoader {
   }
 
   /** 加载指定 Game Pack — 返回完整的运行时 GamePack 对象 */
-  async load(packId: string): Promise<GamePack> {
+  async load(packId: string, locale?: string): Promise<GamePack> {
     const manifestUrl = `${this.basePath}/${packId}/manifest.json`;
     const manifest = await this.fetchJson<GamePackManifest>(manifestUrl);
     const packBase = `${this.basePath}/${packId}`;
 
-    // 并行加载所有资源类型，最大化加载速度
-    const [stateSchema, creationFlow, presets, prompts, promptFlows, rules, theme, displaySettings] =
+    const [stateSchema, creationFlow, presets, prompts, promptFlows, rules, theme, displaySettings, engineFragments, transformerDefaults] =
       await Promise.all([
         this.fetchJson<Record<string, unknown>>(this.resolve(packBase, manifest.entrySchema)),
         this.fetchJson<GamePack['creationFlow']>(this.resolve(packBase, manifest.creationFlow)),
@@ -38,9 +38,11 @@ export class GamePackLoader {
         this.loadRules(packBase, manifest.rules),
         this.fetchJsonOptional<Record<string, unknown>>(this.resolve(packBase, 'ui/theme.json')),
         this.fetchJsonOptional<Record<string, unknown>>(this.resolve(packBase, 'ui/display-settings.json')),
+        this.fetchJsonOptional<Record<string, string>>(this.resolve(packBase, 'prompts/engine-fragments.json')),
+        this.fetchJsonOptional<Record<string, unknown>>(this.resolve(packBase, 'prompts/transformer-defaults.json')),
       ]);
 
-    return {
+    const pack: GamePack = {
       manifest,
       stateSchema,
       creationFlow,
@@ -50,7 +52,129 @@ export class GamePackLoader {
       rules,
       theme: theme ?? undefined,
       displaySettings: displaySettings ?? undefined,
+      engineFragments: engineFragments ?? undefined,
+      transformerDefaults: transformerDefaults ?? undefined,
     };
+
+    if (locale) {
+      await this.applyLocale(pack, packBase, locale);
+    }
+
+    return pack;
+  }
+
+  /**
+   * Apply locale-specific overlays:
+   * 1. Load i18n JSON → populate pack.i18n
+   * 2. Overlay locale-specific prompt files (404 → keep default)
+   * 3. Patch creation flow labels/placeholders from i18n data
+   */
+  private async applyLocale(pack: GamePack, packBase: string, locale: string): Promise<void> {
+    const i18nData = await this.loadPackI18n(pack, packBase, locale);
+
+    const promptDir = pack.manifest.promptLocales?.[locale];
+    if (promptDir) {
+      await this.overlayPrompts(pack, packBase, promptDir);
+      const [localeFragments, localeTransformerDefaults] = await Promise.all([
+        this.fetchJsonOptional<Record<string, string>>(
+          this.resolve(packBase, `${promptDir}/engine-fragments.json`),
+        ),
+        this.fetchJsonOptional<Record<string, unknown>>(
+          this.resolve(packBase, `${promptDir}/transformer-defaults.json`),
+        ),
+      ]);
+      if (localeFragments) {
+        pack.engineFragments = localeFragments;
+      }
+      if (localeTransformerDefaults) {
+        pack.transformerDefaults = localeTransformerDefaults;
+      }
+    }
+
+    if (i18nData) {
+      this.patchPackLabels(pack, i18nData);
+    }
+  }
+
+  /** Load pack-level i18n JSON and populate pack.i18n[locale] */
+  private async loadPackI18n(
+    pack: GamePack,
+    packBase: string,
+    locale: string,
+  ): Promise<Record<string, string> | null> {
+    const i18nPath = pack.manifest.i18nFiles?.[locale];
+    if (!i18nPath) return null;
+
+    const data = await this.fetchJsonOptional<Record<string, string>>(
+      this.resolve(packBase, i18nPath),
+    );
+    if (data) {
+      if (!pack.i18n) pack.i18n = {};
+      pack.i18n[locale] = data;
+    }
+    return data;
+  }
+
+  /** Overlay prompts from a locale-specific directory (404 → keep default) */
+  private async overlayPrompts(
+    pack: GamePack,
+    packBase: string,
+    promptDir: string,
+  ): Promise<void> {
+    const ids = Object.keys(pack.prompts);
+    const results = await Promise.all(
+      ids.map(id =>
+        this.fetchText(this.resolve(packBase, `${promptDir}/${id}.md`))
+          .catch(() => null),
+      ),
+    );
+    ids.forEach((id, i) => {
+      if (results[i] !== null) {
+        pack.prompts[id] = results[i]!;
+      }
+    });
+  }
+
+  /**
+   * Patch creation flow labels, field labels, and placeholders from i18n data.
+   * Only patches values that have corresponding keys in the i18n data.
+   */
+  private patchPackLabels(pack: GamePack, i18nData: Record<string, string>): void {
+    if (!pack.creationFlow?.steps) return;
+
+    for (const step of pack.creationFlow.steps) {
+      const labelKey = `creation.step.${step.id}.label`;
+      if (i18nData[labelKey]) step.label = i18nData[labelKey];
+
+      if (step.customSchema?.fields) {
+        this.patchFields(step.customSchema.fields, `creation.step.${step.id}`, i18nData);
+      }
+
+      if (step.fields) {
+        this.patchFields(step.fields, `creation.step.${step.id}`, i18nData);
+      }
+
+      if (step.attributeDescriptions) {
+        for (const attr of Object.keys(step.attributeDescriptions)) {
+          const descKey = `creation.step.${step.id}.attrDesc.${attr}`;
+          if (i18nData[descKey]) step.attributeDescriptions[attr] = i18nData[descKey];
+        }
+      }
+    }
+  }
+
+  private patchFields(
+    fields: Array<{ key?: string; label?: string; placeholder?: string }>,
+    stepPrefix: string,
+    i18nData: Record<string, string>,
+  ): void {
+    for (const field of fields) {
+      const fieldKey = field.key ?? field.label ?? '';
+      const labelKey = `${stepPrefix}.field.${fieldKey}.label`;
+      if (i18nData[labelKey]) field.label = i18nData[labelKey];
+      const placeholderKey = `${stepPrefix}.field.${fieldKey}.placeholder`;
+      if (field.placeholder && i18nData[placeholderKey]) field.placeholder = i18nData[placeholderKey];
+    }
   }
 
   /** 加载所有预设数据文件 — key 与 manifest.presets 的 key 一一对应 */

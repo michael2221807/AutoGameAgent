@@ -1,0 +1,6 @@
+{
+  "shortTermMemoryHeader": "# 【Recent Events】\n{entries}. Based on these just-occurred text events, generate the next text response coherently — ensure smooth continuity, no gaps, consistent with the preceding narrative",
+  "paceSlow": "## Pacing Hint\n\nCurrent pacing is **slow pace**: lean toward generating more nuanced, thoughtful options; encourage observation, dialogue, and deep interaction; avoid rushed progression actions.",
+  "paceFast": "## Pacing Hint\n\nCurrent pacing is **fast pace**: lean toward generating plot-advancing options; encourage clear actions and decisions; avoid pure observation or waiting.",
+  "customActionHeader": "## Custom Additional Requirements\n\n{content}"
+}

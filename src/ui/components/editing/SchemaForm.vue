@@ -8,7 +8,10 @@
  * 每个字段在值与 defaultValue 不同时显示 "重置" 按钮。
  */
 import { computed, toRaw } from 'vue';
+import { useI18n } from 'vue-i18n';
 import SchemaField from './SchemaField.vue';
+
+const { t } = useI18n();
 
 /** Schema 对象的运行时类型契约 */
 interface SchemaDef {
@@ -138,7 +141,7 @@ function resetAll(): void {
         class="reset-all-btn"
         @click="resetAll"
       >
-        全部重置
+        {{ t('schemaForm.resetAll') }}
       </button>
     </div>
 

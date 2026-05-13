@@ -53,6 +53,7 @@ import {
   onBeforeUnmount,
   inject,
 } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import type { EventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
@@ -120,6 +121,7 @@ interface ChatMessage {
 
 // ─── Dependencies ─────────────────────────────────────────────
 
+const { t } = useI18n();
 const { useValue } = useGameState();
 const eventBus = inject<EventBus>('eventBus');
 
@@ -361,7 +363,7 @@ function displayTextForAssistant(msg: ChatMessage): string {
 /** Display string for the round counter */
 const roundDisplay = computed(() => {
   const r = roundNumber.value;
-  return typeof r === 'number' && r > 0 ? `第 ${r} 回合` : '游戏开始';
+  return typeof r === 'number' && r > 0 ? t('mainGame.status.roundDisplay', { n: r }) : t('mainGame.status.gameStart');
 });
 
 // ─── Scroll management ───────────────────────────────────────
@@ -444,9 +446,9 @@ async function copyText(text: string): Promise<void> {
       document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    eventBus?.emit('ui:toast', { type: 'success', message: '已复制到剪贴板' });
+    eventBus?.emit('ui:toast', { type: 'success', message: t('mainGame.toast.copiedToClipboard') });
   } catch {
-    eventBus?.emit('ui:toast', { type: 'error', message: '复制失败' });
+    eventBus?.emit('ui:toast', { type: 'error', message: t('mainGame.toast.copyFailed') });
   }
 }
 
@@ -581,10 +583,10 @@ onMounted(() => {
         composerRef.value?.restoreInput(_lastSentInput);
         _lastSentInput = '';
       }
-      const errMsg = (payload as { error?: Error })?.error?.message ?? '未知错误';
+      const errMsg = (payload as { error?: Error })?.error?.message ?? t('mainGame.toast.aiErrorUnknown');
       eventBus.emit('ui:toast', {
         type: 'error',
-        message: `AI 请求失败：${errMsg}`,
+        message: t('mainGame.toast.aiError', { error: errMsg }),
         duration: 5000,
       });
     }),
@@ -596,7 +598,7 @@ onMounted(() => {
       const { attempt, maxRetries } = payload ?? { attempt: 0, maxRetries: 0 };
       eventBus.emit('ui:toast', {
         type: 'warning',
-        message: `请求失败，正在重试（${attempt}/${maxRetries}）…`,
+        message: t('mainGame.toast.retrying', { attempt, maxRetries }),
         duration: 3000,
       });
     }),
@@ -668,7 +670,7 @@ watch(
       <div class="status-bar__right">
         <FestivalChip :festival="festival" />
         <span v-if="isGenerating" class="status-generating">
-          AI 思考中…
+          {{ $t('mainGame.status.aiThinking') }}
         </span>
       </div>
     </div>
@@ -683,7 +685,7 @@ watch(
       >
       <!-- Empty state when no messages exist yet -->
       <div v-if="displayMessages.length === 0 && !isGenerating" class="empty-chat">
-        <p class="empty-text">游戏尚未开始，输入你的第一个行动</p>
+        <p class="empty-text">{{ $t('mainGame.empty.text') }}</p>
       </div>
 
       <!-- Message bubbles (each assistant preceded by a RoundDivider, except the opening one) -->
@@ -737,7 +739,7 @@ watch(
           <button
             v-if="msg.role === 'assistant' && msg._delta && msg._delta.length > 0"
             class="delta-badge"
-            :aria-label="`查看 ${msg._delta.length} 条状态变更`"
+            :aria-label="$t('mainGame.delta.ariaLabel', { n: msg._delta.length })"
             @click="openCommandsViewer(msg, 'delta')"
           >
             Δ {{ msg._delta.length }}
@@ -753,12 +755,12 @@ watch(
           v-if="msg.role === 'assistant' && (countCjkChars(msg.content) > 0 || msg._shortTermPreview)"
           class="message-meta-bottom"
         >
-          <span class="message-meta-bottom__chars">中文字数 · {{ countCjkChars(msg.content) }}字</span>
+          <span class="message-meta-bottom__chars">{{ $t('mainGame.meta.charCount', { n: countCjkChars(msg.content) }) }}</span>
           <span
             v-if="msg._shortTermPreview"
             class="message-meta-bottom__preview"
             :title="msg._shortTermPreview"
-          >记忆 · {{ truncate(msg._shortTermPreview, 40) }}</span>
+          >{{ $t('mainGame.meta.memoryPreview', { text: truncate(msg._shortTermPreview, 40) }) }}</span>
         </div>
       </div>
       </template>
@@ -774,7 +776,7 @@ watch(
             <span class="elapsed-time">{{ (generationElapsedMs / 1000).toFixed(1) }}s</span>
             <span v-if="streamingText.length > 0" class="char-count">· {{ streamingText.length }}字</span>
           </div>
-          <div class="typing-indicator" aria-label="AI 正在输入">
+          <div class="typing-indicator" :aria-label="$t('mainGame.typing.ariaLabel')">
             <span class="typing-dot" />
             <span class="typing-dot" />
             <span class="typing-dot" />
@@ -793,8 +795,8 @@ watch(
         <button
           v-if="isUserScrolledUp"
           class="scroll-to-bottom-btn"
-          aria-label="滚动到最新消息"
-          title="跳到最新消息"
+          :aria-label="$t('mainGame.scroll.ariaLabel')"
+          :title="$t('mainGame.scroll.title')"
           @click="scrollToBottom(true)"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
@@ -816,11 +818,11 @@ watch(
     />
 
     <!-- ── Rollback confirmation modal ── -->
-    <Modal v-model="showRollbackConfirm" title="确认回滚">
-      <p class="modal-body-text">确定要回滚到上一回合开始前的状态吗？当前回合的所有变化（包括 AI 叙事和状态变更）将被撤销。</p>
+    <Modal v-model="showRollbackConfirm" :title="$t('mainGame.rollback.modalTitle')">
+      <p class="modal-body-text">{{ $t('mainGame.rollback.modalBody') }}</p>
       <div class="modal-actions">
-        <button class="modal-btn modal-btn--cancel" @click="showRollbackConfirm = false">取消</button>
-        <button class="modal-btn modal-btn--confirm" @click="handleRollback">确认回滚</button>
+        <button class="modal-btn modal-btn--cancel" @click="showRollbackConfirm = false">{{ $t('mainGame.composer.cancelLabel') }}</button>
+        <button class="modal-btn modal-btn--confirm" @click="handleRollback">{{ $t('mainGame.rollback.confirm') }}</button>
       </div>
     </Modal>
 

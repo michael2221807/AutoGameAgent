@@ -8,6 +8,7 @@
  * B.1.4 AI 生成全局设置：流式输出开关 + 最大重试次数
  */
 import { ref, computed, inject, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import Modal from '@/ui/components/common/Modal.vue';
 import { eventBus } from '@/engine/core/event-bus';
@@ -16,6 +17,7 @@ import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
 import type { APIConfig, APIProviderType, UsageType, APICategory } from '@/engine/ai/types';
 
+const { t } = useI18n();
 const apiStore = useAPIManagementStore();
 const aiService = inject<AIService | undefined>('aiService', undefined);
 
@@ -33,45 +35,53 @@ interface UsageTypeMeta {
   tip: string;
 }
 
-const USAGE_TYPE_META: Record<UsageType, UsageTypeMeta> = {
-  main:                    { label: '主回合',        category: 'narrative',    tip: '每回合叙事生成的核心调用，消耗最多 token，建议分配最强模型' },
-  cot:                     { label: '思维链（CoT）', category: 'narrative',    tip: '主回合前的独立推理步骤，提升剧情一致性和判定质量，需额外 API 调用' },
-  bodyPolish:              { label: '文本润色',      category: 'narrative',    tip: '主回合生成后由独立 AI 对叙事文本进行润色，消耗额外 token' },
-  text_optimization:       { label: '文本优化',      category: 'narrative',    tip: '对生成文本做语法和文笔优化，可分配较便宜的模型' },
-  memory_summary:          { label: '记忆总结',      category: 'world_memory', tip: '将短期/中期记忆压缩为长期记忆摘要，定期触发' },
-  world_generation:        { label: '世界生成',      category: 'world_memory', tip: '开局时生成世界背景设定，仅在创建角色时调用一次' },
-  event_generation:        { label: '事件生成',      category: 'world_memory', tip: '生成世界随机事件（节日、灾害、商队等），丰富世界动态' },
-  world_heartbeat:         { label: '世界心跳',      category: 'world_memory', tip: '每隔数回合自动更新世界状态（天气、势力、物价等），模拟活世界' },
-  npc_chat:                { label: 'NPC 私聊',     category: 'npc_social',   tip: '独立于主回合的 1:1 NPC 对话，在关系面板中发起' },
-  location_npc_generation: { label: '地点 NPC 生成', category: 'npc_social',   tip: '玩家到达新地点时自动生成当地 NPC，需开启后才会触发' },
-  plot_decompose:          { label: '剧情大纲拆解',  category: 'plot',         tip: '将玩家输入的剧情大纲用 AI 拆解为可追踪的节点链' },
-  instruction_generation:  { label: '指令生成',      category: 'plot',         tip: '生成结构化指令和行动选项，通常随主回合一起执行' },
-  privacy_repair:          { label: '扩展字段修复',   category: 'repair',       tip: 'NSFW 模式下自动修复不合规的私密字段描述，可配置重试次数' },
-  field_repair:            { label: '字段补齐',      category: 'repair',       tip: '自动补齐 AI 遗漏的必填字段（如属性、装备等），减少数据缺失' },
-  imageGen_novelai:        { label: 'NovelAI 图像',   category: 'image',        tip: '分配用于 NovelAI 后端的图像 API 配置' },
-  imageGen_openai:         { label: 'DALL-E 图像',    category: 'image',        tip: '分配用于 OpenAI DALL-E 后端的图像 API 配置' },
-  imageGen_sd_webui:       { label: 'SD-WebUI 图像',  category: 'image',        tip: '分配用于 Stable Diffusion WebUI 后端的图像 API 配置' },
-  imageGen_comfyui:        { label: 'ComfyUI 图像',   category: 'image',        tip: '分配用于 ComfyUI 后端的图像 API 配置' },
-  imageGen_civitai:        { label: 'Civitai 图像',   category: 'image',        tip: '分配用于 Civitai 后端的图像 API 配置。需 Buzz 余额。' },
-  imageGeneration:         { label: '图像生成（兜底）', category: 'image',       tip: '当对应后端未单独分配时的兜底配置' },
-  imageCharacterTokenizer: { label: '角色视觉提取',  category: 'image',        tip: '用 LLM 从角色图像中提取叙事描述，供后续 prompt 引用' },
-  imageSceneTokenizer:     { label: '场景视觉提取',  category: 'image',        tip: '用 LLM 从场景图像中提取环境描述，增强叙事沉浸感' },
-  imageSecretTokenizer:    { label: '私密视觉提取',  category: 'image',        tip: '用 LLM 从 NSFW 图像中提取描述（仅 NSFW 模式下使用）' },
-  embedding:               { label: '向量化',        category: 'rag',          tip: '将文本转换为向量用于语义搜索，需分配 Embedding 类别的 API' },
-  rerank:                  { label: '重排序',        category: 'rag',          tip: '对检索结果做精排以提升相关性，需 Rerank 类别 API 或 LLM 兜底' },
-  assistant:               { label: 'AI 助手',      category: 'utility',      tip: '游戏内 AI 助手聊天面板，回答玩家关于游戏世界的问题' },
+/**
+ * Category assignment is static (no i18n needed); label/tip are reactive via t().
+ */
+const USAGE_TYPE_CATEGORIES: Record<UsageType, AssignCategory> = {
+  main: 'narrative',
+  cot: 'narrative',
+  bodyPolish: 'narrative',
+  text_optimization: 'narrative',
+  memory_summary: 'world_memory',
+  world_generation: 'world_memory',
+  event_generation: 'world_memory',
+  world_heartbeat: 'world_memory',
+  npc_chat: 'npc_social',
+  location_npc_generation: 'npc_social',
+  plot_decompose: 'plot',
+  instruction_generation: 'plot',
+  privacy_repair: 'repair',
+  field_repair: 'repair',
+  imageGen_novelai: 'image',
+  imageGen_openai: 'image',
+  imageGen_sd_webui: 'image',
+  imageGen_comfyui: 'image',
+  imageGen_civitai: 'image',
+  imageGeneration: 'image',
+  imageCharacterTokenizer: 'image',
+  imageSceneTokenizer: 'image',
+  imageSecretTokenizer: 'image',
+  embedding: 'rag',
+  rerank: 'rag',
+  assistant: 'utility',
 };
 
-const ASSIGN_CATEGORY_META: Record<AssignCategory, { label: string; hint?: string }> = {
-  narrative:    { label: '正文生成' },
-  world_memory: { label: '世界与记忆' },
-  npc_social:   { label: 'NPC 与社交' },
-  plot:         { label: '剧情导向' },
-  repair:       { label: '修复与补齐' },
-  image:        { label: '图像相关', hint: '为每个图像后端分配对应的 API 配置并开关。图像工作室只显示已开启的后端。词组转化器使用 LLM 类别的 API。' },
-  rag:          { label: 'RAG 检索', hint: '下拉框只显示类别匹配的 API。如果没有选项，请先添加 Embedding 或 Rerank 类别的 API 配置。' },
-  utility:      { label: '工具' },
-};
+function getUsageTypeMeta(key: UsageType): UsageTypeMeta {
+  return {
+    label: t(`api.usage.${key}`),
+    category: USAGE_TYPE_CATEGORIES[key],
+    tip: t(`api.usage.tip.${key}`),
+  };
+}
+
+function getAssignCategoryMeta(cat: AssignCategory): { label: string; hint?: string } {
+  const label = t(`api.category.${cat}`);
+  const hintKey = `api.category.${cat}.hint`;
+  // Only image and rag have hints in locale
+  const hint = (cat === 'image' || cat === 'rag') ? t(hintKey) : undefined;
+  return { label, hint };
+}
 
 const CATEGORY_ORDER: AssignCategory[] = [
   'narrative', 'world_memory', 'npc_social', 'plot', 'repair', 'image', 'rag', 'utility',
@@ -113,9 +123,9 @@ function isToggleable(type: UsageType): boolean {
 }
 
 function typesForCategory(cat: AssignCategory): UsageType[] {
-  return (Object.entries(USAGE_TYPE_META) as [UsageType, UsageTypeMeta][])
-    .filter(([, m]) => m.category === cat)
-    .map(([t]) => t);
+  return (Object.entries(USAGE_TYPE_CATEGORIES) as [UsageType, AssignCategory][])
+    .filter(([, c]) => c === cat)
+    .map(([key]) => key);
 }
 
 // ─── AI generation settings (B.1.4) ───
@@ -167,11 +177,11 @@ const testLatencies = ref<Record<string, number>>({});
 async function testConnection(api: APIConfig): Promise<void> {
   if (testStatuses.value[api.id] === 'testing') return;
   if (!aiService) {
-    eventBus.emit('ui:toast', { type: 'warning', message: 'AI 服务未初始化', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'warning', message: t('api.test.noService'), duration: 2000 });
     return;
   }
   if (!api.url || !api.apiKey || !api.model) {
-    eventBus.emit('ui:toast', { type: 'warning', message: '请先填写 URL、Key 和模型', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'warning', message: t('api.test.preflight'), duration: 2000 });
     return;
   }
 
@@ -179,7 +189,7 @@ async function testConnection(api: APIConfig): Promise<void> {
   // CR-R18: 在 toast 中展示正在测试的类别（LLM/Embedding/Rerank），让用户
   // 明确知道走的是哪条端点路径 —— 特别在配置 SiliconFlow 这类多端点 provider 时
   // 能一眼看出 "我点的是 Rerank 按钮，走的确实是 /rerank 端点"。
-  const categoryForToast = CATEGORY_META[api.apiCategory ?? 'llm'].label;
+  const categoryForToast = getCategoryMeta(api.apiCategory ?? 'llm').label;
   try {
     // §11.3: 按 apiCategory 测试对应的端点（LLM → chat/completions，
     // Embedding → /v1/embeddings，Rerank → /v1/rerank）
@@ -195,13 +205,13 @@ async function testConnection(api: APIConfig): Promise<void> {
     if (result.ok) {
       eventBus.emit('ui:toast', {
         type: 'success',
-        message: `${api.name} [${categoryForToast}] 连接成功 ${result.latencyMs}ms`,
+        message: t('api.test.success', { name: api.name, category: categoryForToast, latency: result.latencyMs }),
         duration: 2500,
       });
     } else {
       eventBus.emit('ui:toast', {
         type: 'error',
-        message: `${api.name} [${categoryForToast}] 连接失败: ${result.error}`,
+        message: t('api.test.failed', { name: api.name, category: categoryForToast, error: result.error }),
         duration: 4000,
       });
     }
@@ -209,7 +219,7 @@ async function testConnection(api: APIConfig): Promise<void> {
     testStatuses.value[api.id] = 'error';
     eventBus.emit('ui:toast', {
       type: 'error',
-      message: `${api.name} [${categoryForToast}] 连接异常`,
+      message: t('api.test.exception', { name: api.name, category: categoryForToast }),
       duration: 3000,
     });
   }
@@ -224,7 +234,7 @@ const MODEL_DATALIST_ID = 'api-model-list';
 async function fetchModelsForForm(): Promise<void> {
   if (!aiService) return;
   if (!form.value.url || !form.value.apiKey) {
-    eventBus.emit('ui:toast', { type: 'warning', message: '请先填写 API URL 和 Key', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'warning', message: t('api.fetchModels.preflight'), duration: 2000 });
     return;
   }
   isFetchingModels.value = true;
@@ -232,12 +242,12 @@ async function fetchModelsForForm(): Promise<void> {
     const models = await aiService.fetchModels({ url: form.value.url, apiKey: form.value.apiKey });
     availableModels.value = models;
     if (models.length === 0) {
-      eventBus.emit('ui:toast', { type: 'warning', message: '未返回任何模型', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'warning', message: t('api.fetchModels.empty'), duration: 2000 });
     } else {
-      eventBus.emit('ui:toast', { type: 'success', message: `获取到 ${models.length} 个模型`, duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('api.fetchModels.success', { count: models.length }), duration: 2000 });
     }
   } catch (e) {
-    eventBus.emit('ui:toast', { type: 'error', message: `获取模型失败: ${(e as Error).message?.slice(0, 60)}`, duration: 3000 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('api.fetchModels.error', { error: (e as Error).message?.slice(0, 60) }), duration: 3000 });
   } finally {
     isFetchingModels.value = false;
   }
@@ -269,49 +279,48 @@ interface APIFormData {
 /**
  * 三选一类别定义 — 用于编辑弹窗顶部的 segment 控件
  */
-const CATEGORY_META: Record<APICategory, { label: string; desc: string }> = {
-  llm: {
-    label: 'LLM',
-    desc: '对话 / 指令生成 / 叙事（主回合等）',
-  },
-  embedding: {
-    label: 'Embedding',
-    desc: '向量化 — 把文本转成向量供 Engram 检索使用',
-  },
-  rerank: {
-    label: 'Rerank',
-    desc: '重排序 — Cohere / SiliconFlow / Jina 格式原生端点',
-  },
-  image: {
-    label: '图像生成',
-    desc: '图像生成 — NovelAI / DALL-E / SD-WebUI / ComfyUI / Civitai 等图像 API',
-  },
-};
+function getCategoryMeta(cat: APICategory): { label: string; desc: string } {
+  return {
+    label: t(`api.apiCategory.${cat}`),
+    desc: t(`api.apiCategory.${cat}.desc`),
+  };
+}
 
 const CATEGORY_OPTIONS: APICategory[] = ['llm', 'embedding', 'rerank', 'image'];
 
 type ImageBackendHint = 'civitai' | 'novelai' | 'openai' | 'sd_webui' | 'comfyui' | 'custom';
-const IMAGE_BACKEND_PRESETS: Record<ImageBackendHint, { label: string; url: string; modelPlaceholder: string; modelHint: string }> = {
-  civitai:  { label: 'Civitai',       url: 'https://orchestration.civitai.com', modelPlaceholder: 'urn:air:sdxl:checkpoint:civitai:101055@128078', modelHint: '在 civitai.com 模型页面找到 AIR 标识符' },
-  novelai:  { label: 'NovelAI',       url: 'https://image.novelai.net',          modelPlaceholder: 'nai-diffusion-4-5-full',                       modelHint: 'NovelAI 模型名称' },
-  openai:   { label: 'OpenAI DALL-E', url: 'https://api.openai.com',             modelPlaceholder: 'dall-e-3',                                     modelHint: 'dall-e-2 或 dall-e-3' },
-  sd_webui: { label: 'SD-WebUI',      url: 'http://localhost:7860',              modelPlaceholder: 'v1-5-pruned-emaonly.safetensors',               modelHint: 'Checkpoint 文件名' },
-  comfyui:  { label: 'ComfyUI',       url: 'http://localhost:8188',              modelPlaceholder: 'v1-5-pruned-emaonly.safetensors',               modelHint: 'Checkpoint 文件名（仅基础模式使用）' },
-  custom:   { label: '自定义',         url: '',                                   modelPlaceholder: '',                                             modelHint: '由后端决定' },
+
+/** Static image backend data (URL, model placeholders). Labels and hints come from t() at call site. */
+const IMAGE_BACKEND_STATIC: Record<ImageBackendHint, { url: string; modelPlaceholder: string }> = {
+  civitai:  { url: 'https://orchestration.civitai.com', modelPlaceholder: 'urn:air:sdxl:checkpoint:civitai:101055@128078' },
+  novelai:  { url: 'https://image.novelai.net',          modelPlaceholder: 'nai-diffusion-4-5-full' },
+  openai:   { url: 'https://api.openai.com',             modelPlaceholder: 'dall-e-3' },
+  sd_webui: { url: 'http://localhost:7860',              modelPlaceholder: 'v1-5-pruned-emaonly.safetensors' },
+  comfyui:  { url: 'http://localhost:8188',              modelPlaceholder: 'v1-5-pruned-emaonly.safetensors' },
+  custom:   { url: '',                                   modelPlaceholder: '' },
 };
+
+function getImageBackendPreset(key: ImageBackendHint): { label: string; url: string; modelPlaceholder: string; modelHint: string } {
+  const s = IMAGE_BACKEND_STATIC[key];
+  return {
+    label: t(`api.imageBackend.${key}`),
+    modelHint: t(`api.imageBackend.hint.${key}`),
+    ...s,
+  };
+}
 const imageBackend = ref<ImageBackendHint>('civitai');
 
 function onImageBackendChange(): void {
-  const preset = IMAGE_BACKEND_PRESETS[imageBackend.value];
+  const preset = getImageBackendPreset(imageBackend.value);
   form.value.url = preset.url;
   form.value.model = '';
 }
 
-const activeImagePreset = computed(() => IMAGE_BACKEND_PRESETS[imageBackend.value] ?? IMAGE_BACKEND_PRESETS.custom);
+const activeImagePreset = computed(() => getImageBackendPreset(imageBackend.value));
 
 function inferImageBackend(url: string): ImageBackendHint {
   const result = inferImageBackendFromUrl(url);
-  return (result && result in IMAGE_BACKEND_PRESETS) ? result as ImageBackendHint : 'custom';
+  return (result && result in IMAGE_BACKEND_STATIC) ? result as ImageBackendHint : 'custom';
 }
 
 const form = ref<APIFormData>({
@@ -494,7 +503,7 @@ function onCategoryChange(previousCategory: APICategory): void {
   // 3. 切入 image 时，用 imageBackend 预设填充 URL
   if (newCat === 'image' && !cached) {
     imageBackend.value = 'civitai';
-    form.value.url = IMAGE_BACKEND_PRESETS.civitai.url;
+    form.value.url = IMAGE_BACKEND_STATIC.civitai.url;
   }
 }
 
@@ -515,8 +524,8 @@ function onProviderChange(): void {
  * 拉取模型列表仍在各自按钮上做更严格的 preflight 检查。
  */
 const formValidationError = computed<string | null>(() => {
-  if (!form.value.name.trim()) return '请输入 API 名称';
-  if (!form.value.url.trim()) return '请输入 API URL';
+  if (!form.value.name.trim()) return t('api.form.validationNameRequired');
+  if (!form.value.url.trim()) return t('api.form.validationUrlRequired');
   return null;
 });
 
@@ -529,12 +538,12 @@ function saveAPI(): void {
   }
   if (isNewAPI.value) {
     apiStore.addAPI(form.value);
-    eventBus.emit('ui:toast', { type: 'success', message: '已添加 API 配置', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('api.toast.added'), duration: 1500 });
   } else {
     apiStore.updateAPI(editingId.value, form.value);
     // Reset test status when config is updated
     delete testStatuses.value[editingId.value];
-    eventBus.emit('ui:toast', { type: 'success', message: '已更新 API 配置', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('api.toast.updated'), duration: 1500 });
   }
   showEditModal.value = false;
 }
@@ -543,7 +552,7 @@ function deleteAPI(id: string): void {
   try {
     apiStore.deleteAPI(id);
     delete testStatuses.value[id];
-    eventBus.emit('ui:toast', { type: 'warning', message: '已删除 API 配置', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'warning', message: t('api.toast.deleted'), duration: 1500 });
   } catch (e) {
     eventBus.emit('ui:toast', { type: 'error', message: (e as Error).message, duration: 2500 });
   }
@@ -573,7 +582,7 @@ const showAllInAssign = ref(false);
 
 function assignAPI(type: UsageType, apiId: string): void {
   apiStore.assignAPI(type, apiId);
-  eventBus.emit('ui:toast', { type: 'info', message: '分配已更新', duration: 1000 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('api.assign.updated'), duration: 1000 });
 }
 
 
@@ -637,10 +646,10 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   <div class="api-panel">
     <!-- ─── Header ─── -->
     <header class="panel-header">
-      <h2 class="panel-title">API 管理</h2>
+      <h2 class="panel-title">{{ $t('api.title') }}</h2>
       <div class="header-actions">
-        <button class="btn-secondary" @click="showAssignModal = true">功能分配</button>
-        <button class="btn-primary" @click="openAddModal">+ 添加 API</button>
+        <button class="btn-secondary" @click="showAssignModal = true">{{ $t('api.assignBtn') }}</button>
+        <button class="btn-primary" @click="openAddModal">{{ $t('api.addApi') }}</button>
       </div>
     </header>
 
@@ -656,15 +665,15 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             <!-- Status dot (B.1.1) -->
             <div
               :class="['status-dot', `status-dot--${testStatuses[api.id] ?? 'idle'}`]"
-              :title="testStatuses[api.id] === 'ok' ? `${testLatencies[api.id]}ms` : (testStatuses[api.id] ?? '未测试')"
+              :title="testStatuses[api.id] === 'ok' ? `${testLatencies[api.id]}ms` : (testStatuses[api.id] ?? $t('api.test.untested'))"
             />
             <span class="api-name">{{ api.name }}</span>
             <!-- §11.3: API 类别 badge -->
             <span
               :class="['api-category-badge', `api-category-badge--${api.apiCategory ?? 'llm'}`]"
-              :title="CATEGORY_META[api.apiCategory ?? 'llm'].desc"
+              :title="getCategoryMeta(api.apiCategory ?? 'llm').desc"
             >
-              {{ CATEGORY_META[api.apiCategory ?? 'llm'].label }}
+              {{ getCategoryMeta(api.apiCategory ?? 'llm').label }}
             </span>
             <span v-if="(api.apiCategory ?? 'llm') === 'llm'" class="api-provider">{{ providerName(api.provider) }}</span>
             <span v-if="testStatuses[api.id] === 'ok'" class="latency-badge">
@@ -674,7 +683,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
           <div class="api-actions">
             <button
               :class="['toggle-btn', { 'toggle-btn--on': api.enabled }]"
-              :title="api.enabled ? '禁用' : '启用'"
+              :title="api.enabled ? $t('api.card.disable') : $t('api.card.enable')"
               @click="apiStore.toggleAPI(api.id)"
             >
               {{ api.enabled ? 'ON' : 'OFF' }}
@@ -684,22 +693,22 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 
         <div class="api-details">
           <div class="detail-item">
-            <span class="detail-label">URL</span>
-            <span class="detail-value detail-value--mono">{{ api.url || '未设置' }}</span>
+            <span class="detail-label">{{ $t('api.card.url') }}</span>
+            <span class="detail-value detail-value--mono">{{ api.url || $t('api.card.notSet') }}</span>
           </div>
           <div class="detail-item">
-            <span class="detail-label">模型</span>
-            <span class="detail-value">{{ api.model || '未设置' }}</span>
+            <span class="detail-label">{{ $t('api.card.model') }}</span>
+            <span class="detail-value">{{ api.model || $t('api.card.notSet') }}</span>
           </div>
           <!-- §11.3: 温度仅 LLM 类别显示 -->
           <div v-if="(api.apiCategory ?? 'llm') === 'llm'" class="detail-item">
-            <span class="detail-label">温度</span>
+            <span class="detail-label">{{ $t('api.card.temperature') }}</span>
             <span class="detail-value detail-value--mono">{{ api.temperature }}</span>
           </div>
           <div class="detail-item">
-            <span class="detail-label">Key</span>
+            <span class="detail-label">{{ $t('api.card.key') }}</span>
             <span class="detail-value detail-value--mono">
-              {{ api.apiKey ? '••••••' + api.apiKey.slice(-4) : '未设置' }}
+              {{ api.apiKey ? $t('api.card.keyMasked') + api.apiKey.slice(-4) : $t('api.card.notSet') }}
             </span>
           </div>
         </div>
@@ -710,33 +719,33 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             :disabled="testStatuses[api.id] === 'testing'"
             @click="testConnection(api)"
           >
-            {{ testStatuses[api.id] === 'testing' ? '测试中…' : '测试连接' }}
+            {{ testStatuses[api.id] === 'testing' ? $t('api.test.testing') : $t('api.test.testConnection') }}
           </button>
-          <button class="btn-sm" @click="openEditModal(api)">编辑</button>
+          <button class="btn-sm" @click="openEditModal(api)">{{ $t('common.actions.edit') }}</button>
           <button
             v-if="api.id !== 'default'"
             class="btn-sm btn-sm--danger"
             @click="deleteAPI(api.id)"
           >
-            删除
+            {{ $t('common.actions.delete') }}
           </button>
         </div>
       </div>
     </div>
 
     <div v-else class="empty-state">
-      <p>暂无 API 配置</p>
+      <p>{{ $t('api.empty') }}</p>
     </div>
 
     <!-- ─── AI 生成全局设置 (B.1.4) ─── -->
     <section class="ai-settings-section">
-      <h3 class="settings-title">AI 生成设置</h3>
+      <h3 class="settings-title">{{ $t('api.aiSettings.title') }}</h3>
       <div class="settings-grid">
         <!-- Streaming toggle -->
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">流式输出</span>
-            <span class="setting-desc">逐字流式返回叙事内容</span>
+            <span class="setting-label">{{ $t('api.aiSettings.streaming.label') }}</span>
+            <span class="setting-desc">{{ $t('api.aiSettings.streaming.desc') }}</span>
           </div>
           <button
             role="switch"
@@ -751,8 +760,8 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         <!-- Split generation toggle -->
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">分步生成</span>
-            <span class="setting-desc">主回合分两次 API 调用：第1步生成正文叙事，第2步生成指令和行动选项，提高稳定性</span>
+            <span class="setting-label">{{ $t('api.aiSettings.splitGen.label') }}</span>
+            <span class="setting-desc">{{ $t('api.aiSettings.splitGen.desc') }}</span>
           </div>
           <button
             role="switch"
@@ -767,8 +776,8 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         <!-- Max retries -->
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">失败重试次数</span>
-            <span class="setting-desc">请求失败后的最大重试次数（0–5）</span>
+            <span class="setting-label">{{ $t('api.aiSettings.maxRetries.label') }}</span>
+            <span class="setting-desc">{{ $t('api.aiSettings.maxRetries.desc') }}</span>
           </div>
           <input
             v-model.number="maxRetries"
@@ -783,12 +792,8 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         <!-- §11.2 B: Privacy repair retries -->
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">扩展字段修复重试次数</span>
-            <span class="setting-desc">
-              扩展字段（NPC 私密信息 / 玩家法身）缺失时的自动修复调用次数（0–3）。
-              首次调用是必定的，此值控制失败/仍不完整时额外再调几次。
-              建议保持 1 — 避免 AI 顽固不配合导致的无限循环。
-            </span>
+            <span class="setting-label">{{ $t('api.aiSettings.privacyRepairRetries.label') }}</span>
+            <span class="setting-desc">{{ $t('api.aiSettings.privacyRepairRetries.desc') }}</span>
           </div>
           <input
             v-model.number="privacyRepairRetries"
@@ -803,12 +808,12 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
     </section>
 
     <!-- ─── Add/Edit Modal ─── -->
-    <Modal v-model="showEditModal" :title="isNewAPI ? '添加 API 配置' : '编辑 API 配置'" width="520px">
+    <Modal v-model="showEditModal" :title="isNewAPI ? $t('api.modal.addTitle') : $t('api.modal.editTitle')" width="520px">
       <div class="edit-form">
 
         <!-- §11.3: Three-way category segment -->
         <div class="form-group">
-          <label class="form-label">API 类别</label>
+          <label class="form-label">{{ $t('api.form.apiCategory') }}</label>
           <div class="category-segment">
             <button
               v-for="cat in CATEGORY_OPTIONS"
@@ -818,44 +823,44 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
               :class="{ 'category-segment__btn--active': form.apiCategory === cat }"
               @click="(() => { const prev = form.apiCategory; form.apiCategory = cat; onCategoryChange(prev); })()"
             >
-              {{ CATEGORY_META[cat].label }}
+              {{ getCategoryMeta(cat).label }}
             </button>
           </div>
-          <span class="form-hint">{{ CATEGORY_META[form.apiCategory].desc }}</span>
+          <span class="form-hint">{{ getCategoryMeta(form.apiCategory).desc }}</span>
         </div>
 
         <div class="form-group">
-          <label class="form-label">名称</label>
-          <input v-model="form.name" type="text" class="form-input" placeholder="API 显示名称" />
+          <label class="form-label">{{ $t('api.form.name') }}</label>
+          <input v-model="form.name" type="text" class="form-input" :placeholder="$t('api.form.namePlaceholder')" />
         </div>
 
         <!-- Provider only for LLM category -->
         <div v-if="form.apiCategory === 'llm'" class="form-group">
-          <label class="form-label">提供商</label>
+          <label class="form-label">{{ $t('api.form.provider') }}</label>
           <select v-model="form.provider" class="form-input" @change="onProviderChange">
-            <option value="openai">OpenAI</option>
-            <option value="claude">Claude</option>
-            <option value="gemini">Gemini</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="custom">自定义(OpenAI兼容)</option>
+            <option value="openai">{{ $t('api.form.provider.openai') }}</option>
+            <option value="claude">{{ $t('api.form.provider.claude') }}</option>
+            <option value="gemini">{{ $t('api.form.provider.gemini') }}</option>
+            <option value="deepseek">{{ $t('api.form.provider.deepseek') }}</option>
+            <option value="custom">{{ $t('api.form.provider.custom') }}</option>
           </select>
         </div>
 
         <!-- Image backend selector -->
         <div v-if="form.apiCategory === 'image'" class="form-group">
-          <label class="form-label">图像后端</label>
+          <label class="form-label">{{ $t('api.form.imageBackend') }}</label>
           <select v-model="imageBackend" class="form-input" @change="onImageBackendChange">
-            <option value="civitai">Civitai</option>
-            <option value="novelai">NovelAI</option>
-            <option value="openai">OpenAI DALL-E</option>
-            <option value="sd_webui">SD-WebUI (本地)</option>
-            <option value="comfyui">ComfyUI (本地)</option>
-            <option value="custom">自定义</option>
+            <option value="civitai">{{ $t('api.imageBackend.civitai') }}</option>
+            <option value="novelai">{{ $t('api.imageBackend.novelai') }}</option>
+            <option value="openai">{{ $t('api.imageBackend.openai') }}</option>
+            <option value="sd_webui">{{ $t('api.imageBackend.sd_webui') }}</option>
+            <option value="comfyui">{{ $t('api.imageBackend.comfyui') }}</option>
+            <option value="custom">{{ $t('api.imageBackend.custom') }}</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">API URL</label>
+          <label class="form-label">{{ $t('api.form.url') }}</label>
           <input
             v-model="form.url"
             type="text"
@@ -867,22 +872,22 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                 : 'https://api.example.com'"
           />
           <span v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-hint">
-            只填 base URL，不含 <code>/v1/...</code>。系统会自动拼接
+            {{ $t('api.form.urlHintEmbedding') }}
             <code>{{ form.apiCategory === 'rerank' ? '/v1/rerank' : '/v1/embeddings' }}</code>
           </span>
           <span v-else-if="form.apiCategory === 'image'" class="form-hint">
-            {{ activeImagePreset.label }} 的 base URL
+            {{ activeImagePreset.label }}{{ $t('api.form.urlHintImage') }}
           </span>
         </div>
 
         <div class="form-group">
-          <label class="form-label">API Key</label>
+          <label class="form-label">{{ $t('api.form.apiKey') }}</label>
           <input v-model="form.apiKey" type="password" class="form-input" placeholder="sk-..." />
         </div>
 
         <!-- Model with fetch button (B.1.2) -->
         <div class="form-group">
-          <label class="form-label">模型</label>
+          <label class="form-label">{{ $t('api.form.model') }}</label>
           <div class="model-input-row">
             <input
               v-model="form.model"
@@ -903,7 +908,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
               :disabled="isFetchingModels"
               @click="fetchModelsForForm"
             >
-              {{ isFetchingModels ? '获取中…' : '获取模型' }}
+              {{ isFetchingModels ? $t('api.form.fetchModelsBusy') : $t('api.form.fetchModels') }}
             </button>
           </div>
           <span v-if="form.apiCategory === 'image'" class="form-hint">
@@ -913,25 +918,25 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             <option v-for="m in availableModels" :key="m" :value="m" />
           </datalist>
           <span v-if="availableModels.length > 0" class="model-hint">
-            已获取 {{ availableModels.length }} 个模型，可在输入框中选择
+            {{ $t('api.form.modelsAvailable', { count: availableModels.length }) }}
           </span>
         </div>
 
         <!-- Temperature + maxTokens only for LLM category -->
         <div v-if="form.apiCategory === 'llm'" class="form-row">
           <div class="form-group form-group--half">
-            <label class="form-label">温度 ({{ form.temperature }})</label>
+            <label class="form-label">{{ $t('api.form.temperature') }} ({{ form.temperature }})</label>
             <input v-model.number="form.temperature" type="range" min="0" max="2" step="0.1" class="form-range" />
           </div>
           <div class="form-group form-group--half">
-            <label class="form-label">最大 Tokens</label>
+            <label class="form-label">{{ $t('api.form.maxTokens') }}</label>
             <input v-model.number="form.maxTokens" type="number" min="100" class="form-input" />
           </div>
         </div>
 
         <!-- §11.3: Advanced — custom routing path (only for embedding/rerank) -->
         <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-advanced">
-          <summary>高级选项</summary>
+          <summary>{{ $t('api.form.advancedOptions') }}</summary>
           <div class="form-group">
             <label class="form-label">
               <input
@@ -939,16 +944,14 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                 type="checkbox"
                 class="form-checkbox"
               />
-              使用自定义端点路径
+              {{ $t('api.form.useCustomRouting') }}
             </label>
             <span class="form-hint">
-              覆盖默认的
-              <code>{{ form.apiCategory === 'rerank' ? '/v1/rerank' : '/v1/embeddings' }}</code>
-              路径。仅在你的 provider 使用非标准路径时才需要。
+              {{ $t('api.form.customRoutingHint') }}
             </span>
           </div>
           <div v-if="form.useCustomRouting" class="form-group">
-            <label class="form-label">自定义路径</label>
+            <label class="form-label">{{ $t('api.form.customRoutingPath') }}</label>
             <input
               v-model="form.customRoutingPath"
               type="text"
@@ -964,34 +967,34 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
           {{ formValidationError }}
         </span>
         <div style="flex: 1" />
-        <button class="btn-secondary" @click="showEditModal = false">取消</button>
+        <button class="btn-secondary" @click="showEditModal = false">{{ $t('api.modal.cancel') }}</button>
         <button
           class="btn-primary"
           :disabled="!!formValidationError"
-          :title="formValidationError ?? '保存配置'"
+          :title="formValidationError ?? $t('api.modal.save')"
           @click="saveAPI"
         >
-          保存
+          {{ $t('api.modal.save') }}
         </button>
       </template>
     </Modal>
 
     <!-- ─── Assignment Modal (B.1.3 → categorized) ─── -->
-    <Modal v-model="showAssignModal" title="功能分配" width="620px">
+    <Modal v-model="showAssignModal" :title="$t('api.assign.title')" width="620px">
       <div class="assign-content">
         <label class="assign-show-all">
           <input type="checkbox" v-model="showAllInAssign" />
-          <span>显示全部 API（绕过类别过滤）</span>
+          <span>{{ $t('api.assign.showAll') }}</span>
           <span class="assign-show-all-hint">
             {{ showAllInAssign
-              ? '已启用：下拉框显示所有 API，允许跨类别强制分配'
-              : '默认：按任务类别过滤，防止误分配' }}
+              ? $t('api.assign.showAllHintOn')
+              : $t('api.assign.showAllHintOff') }}
           </span>
         </label>
 
         <div v-for="cat in CATEGORY_ORDER" :key="cat" class="assign-group">
-          <div class="assign-group-label">{{ ASSIGN_CATEGORY_META[cat].label }}</div>
-          <span v-if="ASSIGN_CATEGORY_META[cat].hint" class="assign-group-hint">{{ ASSIGN_CATEGORY_META[cat].hint }}</span>
+          <div class="assign-group-label">{{ getAssignCategoryMeta(cat).label }}</div>
+          <span v-if="getAssignCategoryMeta(cat).hint" class="assign-group-hint">{{ getAssignCategoryMeta(cat).hint }}</span>
           <div class="assign-list">
             <div v-for="type in typesForCategory(cat)" :key="type" class="assign-row">
               <div class="assign-label-with-toggle">
@@ -1000,16 +1003,16 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                   role="switch"
                   :aria-checked="isFeatureEnabled(type)"
                   :class="['feature-toggle', { 'feature-toggle--on': isFeatureEnabled(type) }]"
-                  :title="isFeatureEnabled(type) ? '已启用 — 点击关闭' : '已关闭 — 点击启用'"
+                  :title="isFeatureEnabled(type) ? $t('api.assign.featureOn') : $t('api.assign.featureOff')"
                   @click="toggleFeature(type)"
                 >
-                  {{ isFeatureEnabled(type) ? '开' : '关' }}
+                  {{ isFeatureEnabled(type) ? $t('api.assign.on') : $t('api.assign.off') }}
                 </button>
                 <span
                   :class="['assign-label', { 'assign-label--disabled': isToggleable(type) && !isFeatureEnabled(type) }]"
-                  :title="USAGE_TYPE_META[type].tip"
+                  :title="getUsageTypeMeta(type).tip"
                 >
-                  {{ USAGE_TYPE_META[type].label }}
+                  {{ getUsageTypeMeta(type).label }}
                   <span class="assign-tip-icon">?</span>
                 </span>
               </div>
@@ -1020,10 +1023,10 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
                 @change="assignAPI(type, ($event.target as HTMLSelectElement).value)"
               >
                 <option v-if="getAssignableAPIs(type).length === 0" value="">
-                  — 暂无匹配类别的 API —
+                  {{ $t('api.assign.noMatch') }}
                 </option>
                 <option v-for="api in getAssignableAPIs(type)" :key="api.id" :value="api.id">
-                  {{ api.name }}{{ !api.enabled ? ' (已禁用)' : '' }}{{ isApiCategoryMismatch(api, type) ? ' ⚠ 类别不匹配' : '' }}
+                  {{ api.name }}{{ !api.enabled ? ' ' + $t('api.assign.disabled') : '' }}{{ isApiCategoryMismatch(api, type) ? ' ⚠ ' + $t('api.assign.mismatch') : '' }}
                 </option>
               </select>
             </div>
@@ -1031,7 +1034,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         </div>
       </div>
       <template #footer>
-        <button class="btn-primary" @click="showAssignModal = false">完成</button>
+        <button class="btn-primary" @click="showAssignModal = false">{{ $t('api.assign.done') }}</button>
       </template>
     </Modal>
   </div>

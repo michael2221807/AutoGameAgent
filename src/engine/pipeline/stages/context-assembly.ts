@@ -76,8 +76,11 @@ export class ContextAssemblyStage implements PipelineStage {
     const shortTermEntries = this.stateManager.get<Array<{ summary: string; round?: number }>>(
       '记忆.短期'
     ) ?? [];
+    const shortTermJoined = shortTermEntries.map((e) => typeof e === 'string' ? e : (e.summary ?? '')).join('\n');
+    const shortTermTemplate = this.pack.engineFragments?.shortTermMemoryHeader
+      ?? '# 【最近事件】\n{entries}。根据这刚刚发生的文本事件，合理生成下一次文本信息，要保证衔接流畅、不断层，符合上文的文本信息';
     const shortTermText = shortTermEntries.length > 0
-      ? `# 【最近事件】\n${shortTermEntries.map((e) => typeof e === 'string' ? e : (e.summary ?? '')).join('\n')}。根据这刚刚发生的文本事件，合理生成下一次文本信息，要保证衔接流畅、不断层，符合上文的文本信息`
+      ? shortTermTemplate.replace('{entries}', shortTermJoined)
       : '';
 
     // ── 4. 构建模板变量 ──
@@ -111,9 +114,11 @@ export class ContextAssemblyStage implements PipelineStage {
     const actionPace = (this.stateManager.get<string>('系统.actionOptions.pace') ?? 'fast') as 'fast' | 'slow';
     const customActionPrompt = this.stateManager.get<string>('系统.actionOptions.customPrompt') ?? '';
 
+    const defaultPaceSlow = '## 节奏提示\n\n当前节奏为**慢节奏**：倾向于生成更细腻、更思考性的选项，鼓励观察、对话、深度互动；避免催促性的推进动作。';
+    const defaultPaceFast = '## 节奏提示\n\n当前节奏为**快节奏**：倾向于生成推进剧情的选项，鼓励明确的行动和决策；避免纯观察或等待。';
     const paceHint = actionPace === 'slow'
-      ? '## 节奏提示\n\n当前节奏为**慢节奏**：倾向于生成更细腻、更思考性的选项，鼓励观察、对话、深度互动；避免催促性的推进动作。'
-      : '## 节奏提示\n\n当前节奏为**快节奏**：倾向于生成推进剧情的选项，鼓励明确的行动和决策；避免纯观察或等待。';
+      ? (this.pack.engineFragments?.paceSlow ?? defaultPaceSlow)
+      : (this.pack.engineFragments?.paceFast ?? defaultPaceFast);
 
     // ── NPC Presence (Sprint Social-2) — read flag, render present/absent blocks ──
     const presenceEnabled = this.stateManager.get<boolean>('系统.设置.social.presenceEnabled') === true;
@@ -177,7 +182,7 @@ export class ContextAssemblyStage implements PipelineStage {
       ACTION_OPTIONS_PACE: actionPace,
       ACTION_PACE_HINT: paceHint,
       CUSTOM_ACTION_PROMPT: customActionPrompt
-        ? `## 自定义附加要求\n\n${customActionPrompt}`
+        ? (this.pack.engineFragments?.customActionHeader ?? '## 自定义附加要求\n\n{content}').replace('{content}', customActionPrompt)
         : '',
 
       // ── CoT plugin variables (Sprint CoT-2) ──

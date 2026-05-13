@@ -10,12 +10,12 @@
   <aside
     :class="['right-sidebar', { 'right-sidebar--collapsed': isCollapsed, 'drawer-open': rightOpen }]"
     role="complementary"
-    aria-label="角色状态栏"
+    :aria-label="$t('layout.right.ariaStatusBar')"
   >
     <div v-if="!isCollapsed" class="right-sidebar__content">
 
       <!-- ─── Identity row ─── -->
-      <section class="status-card" aria-label="角色身份">
+      <section class="status-card" :aria-label="$t('layout.right.ariaIdentity')">
         <div class="identity-row">
           <span class="identity-name">{{ engineState.characterName }}</span>
           <span v-if="occupation" class="identity-occupation">{{ occupation }}</span>
@@ -29,13 +29,13 @@
       </section>
 
       <!-- ─── Vitals ─── -->
-      <section class="status-card" aria-label="体力与精力">
-        <h3 class="status-card__title">体征</h3>
+      <section class="status-card" :aria-label="$t('layout.right.ariaVitals')">
+        <h3 class="status-card__title">{{ $t('layout.right.vitalsTitle') }}</h3>
 
         <!-- Health bar -->
         <div class="vital-row">
           <div class="vital-label">
-            <span class="vital-name">体力</span>
+            <span class="vital-name">{{ $t('layout.right.healthLabel') }}</span>
             <span class="vital-value">{{ engineState.vitalHealth.当前 }}<span class="vital-max">/ {{ engineState.vitalHealth.上限 }}</span></span>
           </div>
           <div
@@ -44,7 +44,7 @@
             :aria-valuenow="engineState.vitalHealth.当前"
             :aria-valuemin="0"
             :aria-valuemax="engineState.vitalHealth.上限"
-            :aria-label="`体力 ${engineState.vitalHealth.当前} / ${engineState.vitalHealth.上限}`"
+            :aria-label="`${$t('layout.right.ariaHealth')} ${engineState.vitalHealth.当前} / ${engineState.vitalHealth.上限}`"
           >
             <div
               :class="['vital-bar__fill', 'vital-bar__fill--health', healthColorClass]"
@@ -56,7 +56,7 @@
         <!-- Energy bar -->
         <div class="vital-row">
           <div class="vital-label">
-            <span class="vital-name">精力</span>
+            <span class="vital-name">{{ $t('layout.right.energyLabel') }}</span>
             <span class="vital-value">{{ engineState.vitalEnergy.当前 }}<span class="vital-max">/ {{ engineState.vitalEnergy.上限 }}</span></span>
           </div>
           <div
@@ -65,7 +65,7 @@
             :aria-valuenow="engineState.vitalEnergy.当前"
             :aria-valuemin="0"
             :aria-valuemax="engineState.vitalEnergy.上限"
-            :aria-label="`精力 ${engineState.vitalEnergy.当前} / ${engineState.vitalEnergy.上限}`"
+            :aria-label="`${$t('layout.right.ariaEnergy')} ${engineState.vitalEnergy.当前} / ${engineState.vitalEnergy.上限}`"
           >
             <div
               :class="['vital-bar__fill', 'vital-bar__fill--energy', energyColorClass]"
@@ -76,8 +76,8 @@
       </section>
 
       <!-- ─── Reputation ─── -->
-      <section v-if="hasReputation" class="status-card" aria-label="声望">
-        <h3 class="status-card__title">声望</h3>
+      <section v-if="hasReputation" class="status-card" :aria-label="$t('layout.right.ariaReputation')">
+        <h3 class="status-card__title">{{ $t('layout.right.reputationTitle') }}</h3>
         <div class="reputation-row">
           <span class="reputation-value">{{ engineState.reputation }}</span>
           <span class="reputation-tier">{{ reputationTier }}</span>
@@ -85,9 +85,9 @@
       </section>
 
       <!-- ─── Status effects ─── -->
-      <section v-if="normalizedEffects.length > 0" class="status-card" aria-label="状态效果">
+      <section v-if="normalizedEffects.length > 0" class="status-card" :aria-label="$t('layout.right.ariaStatusEffects')">
         <h3 class="status-card__title">
-          状态效果
+          {{ $t('layout.right.statusEffectsTitle') }}
           <span class="effects-count">{{ normalizedEffects.length }}</span>
         </h3>
         <div class="effects-list">
@@ -95,7 +95,7 @@
             v-for="(effect, i) in normalizedEffects"
             :key="i"
             :class="['effect-tag', effect.isDebuff ? 'effect-tag--debuff' : 'effect-tag--buff']"
-            :aria-label="`${effect.isDebuff ? '负面效果' : '正面效果'}：${effect.name}`"
+            :aria-label="`${effect.isDebuff ? $t('layout.right.ariaDebuff') : $t('layout.right.ariaBuff')}：${effect.name}`"
             @mouseenter="showEffectTip($event, effect)"
             @mouseleave="hideEffectTip"
             @click.stop="toggleEffectTip($event, effect)"
@@ -113,19 +113,19 @@
           :style="{ top: effectTip.y + 'px', left: effectTip.x + 'px' }"
         >
           <p v-if="effectTip.effect?.desc" class="effect-detail__desc">{{ effectTip.effect.desc }}</p>
-          <span v-if="effectTip.effect?.duration" class="effect-detail__dur">{{ effectTip.effect.duration }} 分钟</span>
+          <span v-if="effectTip.effect?.duration" class="effect-detail__dur">{{ effectTip.effect.duration }} {{ $t('layout.right.minutesUnit') }}</span>
         </div>
       </Teleport>
 
       <!-- ─── Attributes (collapsible) ─── -->
-      <section class="status-card" aria-label="属性">
+      <section class="status-card" :aria-label="$t('layout.right.ariaAttributes')">
         <button
           class="status-card__title status-card__title--btn"
           :aria-expanded="attrsExpanded"
           aria-controls="sidebar-attrs"
           @click="attrsExpanded = !attrsExpanded"
         >
-          属性
+          {{ $t('layout.right.attributesTitle') }}
           <svg
             :class="['collapse-icon', { 'collapse-icon--open': attrsExpanded }]"
             viewBox="0 0 16 16"
@@ -161,41 +161,41 @@
               </div>
             </div>
           </template>
-          <div v-else class="empty-hint">暂无属性数据</div>
+          <div v-else class="empty-hint">{{ $t('layout.right.noAttributes') }}</div>
         </div>
       </section>
 
       <!-- ─── Talents ─── -->
-      <section v-if="engineState.talents.length > 0" class="status-card" aria-label="天赋">
-        <h3 class="status-card__title">天赋</h3>
+      <section v-if="engineState.talents.length > 0" class="status-card" :aria-label="$t('layout.right.ariaTalents')">
+        <h3 class="status-card__title">{{ $t('layout.right.talentsTitle') }}</h3>
         <div class="talent-list">
           <span v-for="t in engineState.talents" :key="t" class="talent-tag">{{ t }}</span>
         </div>
       </section>
 
       <!-- ─── Quick actions ─── -->
-      <section class="status-card" aria-label="快捷操作">
+      <section class="status-card" :aria-label="$t('layout.right.ariaQuickActions')">
         <div class="quick-actions">
           <button
             class="quick-action-btn"
-            aria-label="保存游戏"
+            :aria-label="$t('layout.right.ariaSave')"
             @click="handleSave"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
               <path d="M5.5 2A1.5 1.5 0 004 3.5v13A1.5 1.5 0 005.5 18h9a1.5 1.5 0 001.5-1.5V6.621a1.5 1.5 0 00-.44-1.06l-3.12-3.122A1.5 1.5 0 0011.378 2H5.5zM10 12a2 2 0 100-4 2 2 0 000 4z" />
             </svg>
-            <span>保存</span>
+            <span>{{ $t('layout.right.saveText') }}</span>
           </button>
 
           <button
             class="quick-action-btn"
-            aria-label="导出存档"
+            :aria-label="$t('layout.right.ariaExport')"
             @click="handleExport"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
               <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
             </svg>
-            <span>导出</span>
+            <span>{{ $t('layout.right.exportText') }}</span>
           </button>
         </div>
       </section>
@@ -205,8 +205,8 @@
     <div class="right-sidebar__footer">
       <button
         class="right-sidebar__collapse-btn"
-        :aria-label="isCollapsed ? '展开右侧栏' : '收起右侧栏'"
-        :title="isCollapsed ? '展开右侧栏' : '收起右侧栏'"
+        :aria-label="isCollapsed ? $t('layout.right.ariaExpand') : $t('layout.right.ariaCollapse')"
+        :title="isCollapsed ? $t('layout.right.ariaExpand') : $t('layout.right.ariaCollapse')"
         @click="toggleCollapse"
       >
         <svg
@@ -218,7 +218,7 @@
         >
           <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
         </svg>
-        <span v-if="!isCollapsed" class="right-sidebar__collapse-label">收起</span>
+        <span v-if="!isCollapsed" class="right-sidebar__collapse-label">{{ $t('layout.right.collapseText') }}</span>
       </button>
     </div>
   </aside>
@@ -228,12 +228,14 @@
 // App doc: docs/user-guide/pages/game-overview.md §4.0.3
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { eventBus } from '@/engine/core/event-bus';
 import { useSidebarDrawer } from '@/ui/composables/useSidebarDrawer';
 
 const engineState = useEngineStateStore();
 const router = useRouter();
+const { t } = useI18n();
 
 const isCollapsed = ref(false);
 const { isMobile, rightOpen, closeAll } = useSidebarDrawer();
@@ -295,12 +297,12 @@ const hasReputation = computed(() => {
 
 const reputationTier = computed(() => {
   const r = engineState.reputation;
-  if (r < 10)  return '无名';
-  if (r < 50)  return '初显';
-  if (r < 100) return '知名';
-  if (r < 200) return '声誉卓著';
-  if (r < 500) return '名满天下';
-  return '传说';
+  if (r < 10)  return t('layout.right.reputation.unknown');
+  if (r < 50)  return t('layout.right.reputation.rising');
+  if (r < 100) return t('layout.right.reputation.known');
+  if (r < 200) return t('layout.right.reputation.renowned');
+  if (r < 500) return t('layout.right.reputation.famous');
+  return t('layout.right.reputation.legendary');
 });
 
 // ── Status effects (normalize field names) ──────────────────────
@@ -316,7 +318,7 @@ const normalizedEffects = computed<NormalizedEffect[]>(() => {
   // Deduplicate by name (last occurrence wins — newest from AI)
   const seen = new Map<string, NormalizedEffect>();
   for (const e of raw as Record<string, unknown>[]) {
-    const name = String(e['状态名称'] ?? e['名称'] ?? e['name'] ?? '未知效果');
+    const name = String(e['状态名称'] ?? e['名称'] ?? e['name'] ?? t('common.fallback.unknownEffect'));
     seen.set(name, {
       name,
       isDebuff: String(e['类型'] ?? e['type'] ?? '').toLowerCase().includes('debuff'),
@@ -384,14 +386,14 @@ function handleSave(): void {
     resolved = true;
     offComplete();
     offError();
-    eventBus.emit('ui:toast', { type: 'success', message: '保存成功', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('layout.right.saveSuccess'), duration: 2000 });
   });
   const offError = eventBus.on('engine:save-error', (payload: unknown) => {
     if (resolved) return;
     resolved = true;
     offComplete();
     offError();
-    const msg = (payload as { error?: string })?.error ?? '保存失败';
+    const msg = (payload as { error?: string })?.error ?? t('layout.right.saveFailed');
     eventBus.emit('ui:toast', { type: 'error', message: msg });
   });
   setTimeout(() => {

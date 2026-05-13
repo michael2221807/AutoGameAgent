@@ -1,0 +1,55 @@
+{
+  "memory.title": "记忆系统",
+  "memory.export.button": "导出叙事",
+  "memory.export.buttonTitle": "将全部叙事历史导出为文本文件",
+  "memory.export.emptyToast": "叙事历史为空",
+  "memory.export.fileHeader": "# 叙事导出",
+
+  "memory.tab.memoryList": "记忆列表",
+  "memory.tab.narrative": "叙事历史",
+  "memory.tab.config": "配置",
+
+  "memory.tier.short.title": "短期记忆",
+  "memory.tier.short.hint": "最近几回合的叙事快照，作为 AI 的即时上下文",
+  "memory.tier.implicit.title": "隐式中期",
+  "memory.tier.implicit.hint": "AI 对每段短期记忆的结构化理解，与短期 1:1 配对",
+  "memory.tier.mid.title": "中期记忆",
+  "memory.tier.mid.hint": "短期记忆溢出后升级而来，积累到阈值时触发长期总结",
+  "memory.tier.long.title": "长期记忆",
+  "memory.tier.long.hint": "世界观演化的产物，AI 对整个故事弧线的深层理解",
+
+  "memory.tier.countSuffix": "{n} 条",
+  "memory.tier.emptyState": "这段旅程尚未在此层留下印记",
+
+  "memory.narrative.rolePlayer": "玩家",
+  "memory.narrative.roleNarrator": "叙事",
+  "memory.narrative.emptyTitle": "叙事历史尚为空白",
+  "memory.narrative.emptyHint": "每回合的 AI 叙事和你的选择都会沉淀于此，渐渐织成独属于你的故事",
+  "memory.narrative.exportPlayerPrefix": "【玩家】",
+
+  "memory.config.flowLabel.short": "短期",
+  "memory.config.flowLabel.implicit": "隐式中期",
+  "memory.config.flowLabel.mid": "中期",
+  "memory.config.flowLabel.long": "长期",
+  "memory.config.flowCaption": "记忆从短期逐层沉淀，数字表示各层的容量或阈值",
+
+  "memory.config.group.capacity": "容量限制",
+  "memory.config.group.threshold": "升级阈值",
+
+  "memory.config.row.shortTermLimit.label": "短期记忆容量",
+  "memory.config.row.shortTermLimit.desc": "短期记忆保留的最近条目数",
+  "memory.config.row.longTermCap.label": "长期记忆上限",
+  "memory.config.row.longTermCap.desc": "长期记忆的最大存储条目数",
+  "memory.config.row.midTermRefineThreshold.label": "中期提炼阈值",
+  "memory.config.row.midTermRefineThreshold.desc": "中期记忆累积达此数量时触发长期总结",
+  "memory.config.row.longTermSummaryThreshold.label": "长期总结阈值",
+  "memory.config.row.longTermSummaryThreshold.desc": "触发世界观演化的中期记忆量",
+  "memory.config.row.longTermSummarizeCount.label": "长期总结批次",
+  "memory.config.row.longTermSummarizeCount.desc": "每次长期总结消费的中期记忆数",
+  "memory.config.row.midTermKeep.label": "中期保留数",
+  "memory.config.row.midTermKeep.desc": "长期总结后保留的最新中期记忆条目",
+
+  "memory.config.footerHint": "以上配置来自引擎默认值与设置面板覆盖。如需修改，请前往设置面板的记忆区域。",
+
+  "memory.notLoaded": "尚未加载游戏数据"
+}

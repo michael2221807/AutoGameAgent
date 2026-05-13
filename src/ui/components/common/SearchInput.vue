@@ -19,8 +19,8 @@
       type="text"
       class="search-input__field"
       :value="localValue"
-      :placeholder="placeholder"
-      aria-label="搜索"
+      :placeholder="effectivePlaceholder"
+      :aria-label="$t('common.search.ariaInput')"
       @input="handleInput"
       @keydown.escape="handleClear"
     />
@@ -30,7 +30,7 @@
       <button
         v-if="localValue"
         class="search-input__clear"
-        aria-label="清除搜索"
+        :aria-label="$t('common.search.ariaClear')"
         @click="handleClear"
       >
         <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
@@ -42,7 +42,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue';
+import { ref, watch, computed, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface SearchInputProps {
   modelValue: string;
@@ -51,9 +54,11 @@ interface SearchInputProps {
 }
 
 const props = withDefaults(defineProps<SearchInputProps>(), {
-  placeholder: '搜索…',
+  placeholder: '',
   debounceMs: 300,
 });
+
+const effectivePlaceholder = computed(() => props.placeholder || t('common.search.placeholder'));
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];

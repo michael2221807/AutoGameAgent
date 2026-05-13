@@ -17,6 +17,7 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md §6 + Phase 5b。
  */
 import { ref, computed, nextTick, watch, onActivated } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import Modal from '@/ui/components/common/Modal.vue';
 import AttachmentPickerModal from '@/ui/components/assistant/AttachmentPickerModal.vue';
@@ -26,6 +27,8 @@ import FestivalEditModal from '@/ui/components/panels/FestivalEditModal.vue';
 import EnvironmentArrayEditorModal from '@/ui/components/panels/EnvironmentArrayEditorModal.vue';
 import { useAssistant } from '@/ui/composables/useAssistant';
 import { useGameState } from '@/ui/composables/useGameState';
+import { useConfig } from '@/ui/composables/useConfig';
+import { getPathLabel } from '@/ui/composables/useStateTreeNavigation';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
 import type { EnvTag } from '@/ui/components/panels/assistant-env-attachments';
@@ -47,6 +50,15 @@ const {
   rollback,
   updateSettings,
 } = useAssistant();
+
+const { t, locale } = useI18n();
+const { pack } = useConfig();
+
+// Pack-level i18n data for translating path segments in attachment chip labels
+const packI18n = computed<Record<string, string> | undefined>(() => {
+  if (!pack?.i18n) return undefined;
+  return pack.i18n[locale.value];
+});
 
 // ─── Local UI state ──────────────────────────────────
 
@@ -91,7 +103,7 @@ function applyEditNpcQuery(): void {
     scope: 'target',
   };
   attachments.value = [...defaultContext, target];
-  userInput.value = `请帮我完善/修改 ${npcName} 的角色数据`;
+  userInput.value = t('assistant.editNpc.defaultPrompt', { name: npcName });
 
   router.replace({ query: {} });
 }
@@ -110,7 +122,7 @@ const currentMode = computed<'A' | 'B'>(() =>
 );
 
 const modeLabel = computed(() =>
-  currentMode.value === 'B' ? '数据助手' : '自由对话',
+  currentMode.value === 'B' ? t('assistant.mode.dataAssistant') : t('assistant.mode.freeChat'),
 );
 
 const canSend = computed(() => userInput.value.trim().length > 0 && !isSending.value);
@@ -214,7 +226,8 @@ function onSettingChange(key: 'maxHistoryTurns' | 'confirmBeforeInject' | 'confi
 // ─── Helpers ────────────────────────────────────────
 
 function attachmentLabelFromPath(path: string): string {
-  return path.split('.').slice(-2).join('.');
+  const i18nData = packI18n.value;
+  return path.split('.').slice(-2).map((seg) => getPathLabel(seg, i18nData)).join('.');
 }
 
 // ─── Env quick-actions (P4 env-tags port 2026-04-19) ──────────
@@ -232,7 +245,7 @@ function onApplyWeather(weather: string): void {
   setValue(DEFAULT_ENGINE_PATHS.weather, weather);
   eventBus.emit('ui:toast', {
     type: 'info',
-    message: `天气已设为「${weather}」`,
+    message: t('assistant.env.weatherSet', { weather }),
     duration: 1800,
   });
 }
@@ -241,7 +254,7 @@ function onApplyFestival(festival: EnvTag): void {
   setValue(DEFAULT_ENGINE_PATHS.festival, festival);
   eventBus.emit('ui:toast', {
     type: 'info',
-    message: `节日已设为「${festival.名称}」`,
+    message: t('assistant.env.festivalSet', { festival: festival.名称 }),
     duration: 1800,
   });
 }
@@ -249,8 +262,8 @@ function onApplyFestival(festival: EnvTag): void {
 function onApplyEnvTags(tags: EnvTag[]): void {
   setValue(DEFAULT_ENGINE_PATHS.environmentTags, tags);
   const msg = tags.length === 0
-    ? '环境标签已清空'
-    : `环境标签已更新（${tags.length} 条）`;
+    ? t('assistant.env.envTagsCleared')
+    : t('assistant.env.envTagsUpdated', { count: tags.length });
   eventBus.emit('ui:toast', { type: 'info', message: msg, duration: 1800 });
 }
 
@@ -258,9 +271,9 @@ function payloadButtonLabel(draft: PayloadDraft): string {
   const errs = draft.validated.filter((p) => p.status === 'error').length;
   const warns = draft.validated.filter((p) => p.status === 'warn').length;
   const oks = draft.validated.filter((p) => p.status === 'ok').length;
-  if (errs > 0) return `📦 注入包 · ${draft.validated.length} patch（${errs} 错误）`;
-  if (warns > 0) return `📦 注入包 · ${draft.validated.length} patch（${warns} 警告）`;
-  return `📦 注入包就绪 · ${oks} patch 全部 OK`;
+  if (errs > 0) return `📦 ${t('assistant.payload.errorsLabel', { total: draft.validated.length, errors: errs })}`;
+  if (warns > 0) return `📦 ${t('assistant.payload.warningsLabel', { total: draft.validated.length, warnings: warns })}`;
+  return `📦 ${t('assistant.payload.readyLabel', { count: oks })}`;
 }
 </script>
 
@@ -269,16 +282,16 @@ function payloadButtonLabel(draft: PayloadDraft): string {
     <!-- ── Header ── -->
     <header class="ap-header">
       <div class="header-left">
-        <h2 class="title">🪄 AI 助手</h2>
+        <h2 class="title">🪄 {{ t('assistant.title') }}</h2>
         <span class="mode-tag" :data-mode="currentMode">{{ modeLabel }}</span>
-        <span class="history-count">历史 {{ turnCount }}/{{ settings.maxHistoryTurns }}</span>
+        <span class="history-count">{{ t('assistant.historyCount', { current: turnCount, max: settings.maxHistoryTurns }) }}</span>
       </div>
       <div class="header-right">
         <button v-if="canRollback" class="action-btn rollback" @click="onRollback">
-          ↶ 撤销注入
+          ↶ {{ t('assistant.rollback') }}
         </button>
-        <button class="action-btn" @click="showSettings = true" title="设置">⚙</button>
-        <button class="action-btn danger" :disabled="messages.length === 0" @click="tryClear" title="清空对话">
+        <button class="action-btn" @click="showSettings = true" :title="t('assistant.settingsTitle')">⚙</button>
+        <button class="action-btn danger" :disabled="messages.length === 0" @click="tryClear" :title="t('assistant.clearTitle')">
           🗑
         </button>
       </div>
@@ -293,33 +306,33 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       reconcile (§四.5 in core.md).
     -->
     <div class="ap-quick-actions">
-      <span class="qa-label">环境快捷：</span>
+      <span class="qa-label">{{ t('assistant.env.quickLabel') }}</span>
       <button
         type="button"
         class="qa-chip"
         :disabled="isSending"
-        title="直接修改 世界.天气 状态"
+        :title="t('assistant.env.weatherTitle')"
         @click="showWeatherPicker = true"
       >
-        🌤 设置天气
+        {{ t('assistant.setWeather') }}
       </button>
       <button
         type="button"
         class="qa-chip"
         :disabled="isSending"
-        title="直接修改 世界.节日 状态"
+        :title="t('assistant.env.festivalTitle')"
         @click="showFestivalEditor = true"
       >
-        🏮 设置节日
+        {{ t('assistant.setFestival') }}
       </button>
       <button
         type="button"
         class="qa-chip"
         :disabled="isSending"
-        title="直接替换 世界.环境 数组（上限 3 条）"
+        :title="t('assistant.env.envTagsTitle')"
         @click="showEnvEditor = true"
       >
-        🏷 编辑环境标签
+        {{ t('assistant.editEnvTags') }}
       </button>
     </div>
 
@@ -327,7 +340,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
     <div class="ap-attachments">
       <div class="att-list">
         <div v-if="attachments.length === 0" class="att-empty">
-          📎 尚未添加附件 · Mode A（自由对话）
+          {{ t('assistant.noAttachment') }}
         </div>
         <div
           v-for="att in attachments"
@@ -337,18 +350,18 @@ function payloadButtonLabel(draft: PayloadDraft): string {
         >
           <span class="att-icon">{{ att.scope === 'target' ? '✏' : '📖' }}</span>
           <span class="att-label">{{ attachmentLabelFromPath(att.path) }}</span>
-          <span class="att-scope">{{ att.scope === 'target' ? '目标' : '参考' }}</span>
+          <span class="att-scope">{{ att.scope === 'target' ? t('assistant.attachment.scopeTarget') : t('assistant.attachment.scopeContext') }}</span>
           <button class="att-remove" @click="removeAttachment(att.path)">×</button>
         </div>
       </div>
-      <button class="att-add" @click="openPicker" :disabled="isSending">+ 添加附件</button>
+      <button class="att-add" @click="openPicker" :disabled="isSending">{{ t('assistant.addAttachment') }}</button>
     </div>
 
     <!-- ── Conversation ── -->
     <div ref="messagesContainer" class="ap-messages">
       <div v-if="messages.length === 0 && !isSending" class="msg-empty">
-        💬 输入你的需求开始对话。<br/>
-        附加游戏数据后，AI 可生成可注入的 patch；不附加时纯文字辅助。
+        {{ t('assistant.emptyHint') }}<br/>
+        {{ t('assistant.emptyHintSub') }}
       </div>
 
       <article
@@ -359,7 +372,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       >
         <div class="msg-header">
           <span class="msg-role">
-            {{ msg.role === 'user' ? '🧑 我' : msg.role === 'assistant' ? '🤖 助手' : '⚙ 系统' }}
+            {{ msg.role === 'user' ? t('assistant.roleUser') : msg.role === 'assistant' ? t('assistant.roleAssistant') : t('assistant.roleSystem') }}
           </span>
           <span class="msg-time">{{ new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour12: false }) }}</span>
         </div>
@@ -389,11 +402,11 @@ function payloadButtonLabel(draft: PayloadDraft): string {
             <span class="payload-summary">{{ msg.payloadDraft.raw.summary }}</span>
           </button>
           <div v-else-if="msg.payloadDraft.status === 'injected'" class="payload-status injected">
-            ✓ 已注入 {{ msg.payloadDraft.validated.length }} 个 patch
-            <span v-if="msg.payloadDraft.rolledBackAt">（已撤销）</span>
+            {{ t('assistant.payloadInjected', { count: msg.payloadDraft.validated.length }) }}
+            <span v-if="msg.payloadDraft.rolledBackAt">{{ t('assistant.payloadRolledBack') }}</span>
           </div>
           <div v-else class="payload-status discarded">
-            ✗ 已丢弃
+            {{ t('assistant.payloadDiscarded') }}
           </div>
         </div>
       </article>
@@ -401,10 +414,10 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       <!-- streaming bubble -->
       <article v-if="isSending" class="msg msg-assistant streaming">
         <div class="msg-header">
-          <span class="msg-role">🤖 助手</span>
-          <span class="msg-time">输入中…</span>
+          <span class="msg-role">{{ t('assistant.roleAssistant') }}</span>
+          <span class="msg-time">{{ t('assistant.streamingTime') }}</span>
         </div>
-        <div class="msg-content">{{ streamingContent || '⌛ 等待 AI 响应…' }}</div>
+        <div class="msg-content">{{ streamingContent || t('assistant.streamingWait') }}</div>
       </article>
     </div>
 
@@ -413,13 +426,13 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       <textarea
         v-model="userInput"
         class="input-textarea"
-        placeholder="输入你的需求...  Cmd/Ctrl+Enter 发送"
+        :placeholder="t('assistant.input.placeholder')"
         :disabled="isSending"
         rows="3"
         @keydown="onKeyDown"
       />
       <button class="send-btn" :disabled="!canSend" @click="onSend">
-        {{ isSending ? '生成中…' : '发送' }}
+        {{ isSending ? t('assistant.input.sending') : t('assistant.input.send') }}
       </button>
     </div>
 
@@ -455,19 +468,19 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       @apply="onApplyEnvTags"
     />
 
-    <Modal v-model="showClearConfirm" title="清空对话" width="450px">
-      <p>确定要清空当前对话吗？此操作不可撤销。</p>
-      <p class="confirm-hint">已注入的数据不会受影响。</p>
+    <Modal v-model="showClearConfirm" :title="t('assistant.clear.modalTitle')" width="450px">
+      <p>{{ t('assistant.clear.body') }}</p>
+      <p class="confirm-hint">{{ t('assistant.clear.hint') }}</p>
       <template #footer>
-        <button class="btn btn--secondary" @click="showClearConfirm = false">取消</button>
-        <button class="btn btn--danger" @click="doClear">确认清空</button>
+        <button class="btn btn--secondary" @click="showClearConfirm = false">{{ t('assistant.clear.cancel') }}</button>
+        <button class="btn btn--danger" @click="doClear">{{ t('assistant.clear.confirm') }}</button>
       </template>
     </Modal>
 
-    <Modal v-model="showSettings" title="助手设置" width="500px">
+    <Modal v-model="showSettings" :title="t('assistant.settings.modalTitle')" width="500px">
       <div class="settings-form">
         <div class="setting-row">
-          <label>历史保留 turn 数（1-50）</label>
+          <label>{{ t('assistant.settings.historyLabel') }}</label>
           <input
             type="number"
             min="1"
@@ -475,7 +488,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
             :value="settings.maxHistoryTurns"
             @input="onSettingChange('maxHistoryTurns', Math.max(1, Math.min(50, Number(($event.target as HTMLInputElement).value))))"
           />
-          <span class="setting-hint">1 turn = 1 问 + 1 答</span>
+          <span class="setting-hint">{{ t('assistant.settings.historyHint') }}</span>
         </div>
         <div class="setting-row">
           <label>
@@ -484,7 +497,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
               :checked="settings.confirmBeforeInject"
               @change="onSettingChange('confirmBeforeInject', ($event.target as HTMLInputElement).checked)"
             />
-            注入前二次确认
+            {{ t('assistant.settings.confirmInject') }}
           </label>
         </div>
         <div class="setting-row">
@@ -494,12 +507,12 @@ function payloadButtonLabel(draft: PayloadDraft): string {
               :checked="settings.confirmBeforeClear"
               @change="onSettingChange('confirmBeforeClear', ($event.target as HTMLInputElement).checked)"
             />
-            清空对话前二次确认
+            {{ t('assistant.settings.confirmClear') }}
           </label>
         </div>
       </div>
       <template #footer>
-        <button class="btn btn--primary" @click="showSettings = false">关闭</button>
+        <button class="btn btn--primary" @click="showSettings = false">{{ t('assistant.settings.close') }}</button>
       </template>
     </Modal>
   </div>

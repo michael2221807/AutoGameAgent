@@ -4,8 +4,8 @@
     用于 MainGamePanel 每条 AI 叙事消息旁的 Delta 按钮弹出的 Modal 内容区。
     变更分组按来源显示：主线 / 字段补齐 / 私密补齐 / 世界心跳 / NPC 生成。
   -->
-  <div class="delta-viewer" role="list" :aria-label="`${changes.length} 条状态变更`">
-    <div v-if="changes.length === 0" class="delta-empty">本回合无状态变更</div>
+  <div class="delta-viewer" role="list" :aria-label="$t('common.delta.ariaChanges', { n: changes.length })">
+    <div v-if="changes.length === 0" class="delta-empty">{{ $t('common.delta.empty') }}</div>
 
     <template v-for="group in groupedChanges" :key="group.source">
       <div v-if="group.items.length > 0" class="delta-group">
@@ -40,6 +40,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 export type AuditSource =
   | 'main'
@@ -77,12 +80,12 @@ const groupedChanges = computed(() => {
 
 function sourceLabel(s: AuditSource): string {
   const map: Record<AuditSource, string> = {
-    main: '主线',
-    fieldRepair: '字段补齐',
-    privacyRepair: '私密补齐',
-    worldHeartbeat: '世界心跳',
-    npcGeneration: 'NPC 生成',
-    bodyPolish: '身体润色',
+    main: t('common.delta.source.main'),
+    fieldRepair: t('common.delta.source.fieldRepair'),
+    privacyRepair: t('common.delta.source.privacyRepair'),
+    worldHeartbeat: t('common.delta.source.worldHeartbeat'),
+    npcGeneration: t('common.delta.source.npcGeneration'),
+    bodyPolish: t('common.delta.source.bodyPolish'),
   };
   return map[s] ?? s;
 }
@@ -100,7 +103,11 @@ function actionIcon(action: string): string {
 
 function actionLabel(action: string): string {
   const map: Record<string, string> = {
-    set: '设置', add: '增减', delete: '删除', push: '追加', pull: '移除',
+    set: t('common.delta.action.set'),
+    add: t('common.delta.action.add'),
+    delete: t('common.delta.action.delete'),
+    push: t('common.delta.action.push'),
+    pull: t('common.delta.action.pull'),
   };
   return map[action] ?? action;
 }
@@ -113,7 +120,7 @@ function fmt(v: unknown): string {
       const s = JSON.stringify(v);
       return s.length > 60 ? s.slice(0, 57) + '…' : s;
     } catch {
-      return '[对象]';
+      return `[${t('common.delta.format.object')}]`;
     }
   }
   const s = String(v);

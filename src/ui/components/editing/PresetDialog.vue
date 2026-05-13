@@ -10,7 +10,10 @@
  * 保存时通过 save 事件发出完整条目数据。
  */
 import { ref, computed, watch, toRaw } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '@/ui/components/shared/BaseModal.vue';
+
+const { t } = useI18n();
 import SchemaForm from './SchemaForm.vue';
 
 /**
@@ -44,7 +47,7 @@ const isEdit = computed<boolean>(() => props.existingEntry !== undefined);
 
 /** 对话框标题 */
 const dialogTitle = computed<string>(() =>
-  isEdit.value ? `编辑 ${props.presetType}` : `添加 ${props.presetType}`,
+  isEdit.value ? `${t('common.actions.edit')} ${props.presetType}` : `${t('common.actions.add')} ${props.presetType}`,
 );
 
 /**
@@ -154,8 +157,8 @@ function saveEntry(): void {
     />
 
     <template #footer>
-      <button class="btn btn-cancel" @click="closeDialog">取消</button>
-      <button class="btn btn-save" @click="saveEntry">保存</button>
+      <button class="btn btn-cancel" @click="closeDialog">{{ $t('common.actions.cancel') }}</button>
+      <button class="btn btn-save" @click="saveEntry">{{ $t('common.actions.save') }}</button>
     </template>
   </BaseModal>
 </template>

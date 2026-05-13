@@ -102,8 +102,8 @@ function onBadgeClick(): void {
           v-if="props.hasThinking"
           type="button"
           class="round-divider__icon-btn"
-          title="查看 AI 思考"
-          aria-label="查看本回合 AI 思考"
+          :title="$t('mainGame.roundDivider.thinkingTitle')"
+          :aria-label="$t('mainGame.roundDivider.thinkingAriaLabel')"
           @click="$emit('view-thinking')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
@@ -117,15 +117,15 @@ function onBadgeClick(): void {
         class="round-divider__badge"
         :class="{ 'round-divider__badge--clickable': props.polish?.applied }"
         :type="props.polish?.applied ? 'button' : undefined"
-        :title="props.polish?.applied ? `点击切换到${props.showingOriginal ? '优化' : '原文'}视图` : undefined"
+        :title="props.polish?.applied ? $t(props.showingOriginal ? 'mainGame.roundDivider.toggleToPolished' : 'mainGame.roundDivider.toggleToOriginal') : undefined"
         :aria-pressed="props.polish?.applied ? props.showingOriginal : undefined"
         @click="onBadgeClick"
       >
-        <span class="round-divider__badge-main">第 {{ props.roundNumber }} 回合</span>
+        <span class="round-divider__badge-main">{{ $t('mainGame.roundDivider.badge', { n: props.roundNumber }) }}</span>
         <span v-if="props.polish?.applied" class="round-divider__badge-sub">
-          {{ props.polish.manual ? '已手动优化' : '已自动优化' }}
+          {{ props.polish.manual ? $t('mainGame.roundDivider.polishManual') : $t('mainGame.roundDivider.polishAuto') }}
           ·
-          {{ props.showingOriginal ? '原文' : '优化' }}
+          {{ props.showingOriginal ? $t('mainGame.roundDivider.viewOriginal') : $t('mainGame.roundDivider.viewPolished') }}
         </span>
       </component>
 
@@ -135,8 +135,8 @@ function onBadgeClick(): void {
           v-if="props.isCurrent && props.hasCommands"
           type="button"
           class="round-divider__icon-btn round-divider__icon-btn--commands"
-          title="查看本回合命令 / 变更"
-          aria-label="查看本回合命令与生效变更"
+          :title="$t('mainGame.roundDivider.commandsTitle')"
+          :aria-label="$t('mainGame.roundDivider.commandsAriaLabel')"
           @click="$emit('view-commands')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
@@ -148,8 +148,8 @@ function onBadgeClick(): void {
           v-if="props.hasRaw"
           type="button"
           class="round-divider__icon-btn"
-          title="查看原始响应"
-          aria-label="查看本回合原始 AI 响应"
+          :title="$t('mainGame.roundDivider.rawTitle')"
+          :aria-label="$t('mainGame.roundDivider.rawAriaLabel')"
           @click="$emit('view-raw')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
@@ -161,8 +161,8 @@ function onBadgeClick(): void {
           v-if="props.hasEngram"
           type="button"
           class="round-divider__icon-btn round-divider__icon-btn--engram"
-          title="查看 Engram 记忆流程"
-          aria-label="查看本回合 Engram 写入与召回详情"
+          :title="$t('mainGame.roundDivider.engramTitle')"
+          :aria-label="$t('mainGame.roundDivider.engramAriaLabel')"
           @click="$emit('view-engram')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">

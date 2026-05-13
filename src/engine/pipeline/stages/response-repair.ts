@@ -92,7 +92,7 @@ export class ResponseRepairStage implements PipelineStage {
     if (!parsed || parsed.parseOk !== false) return ctx;
     if (!ctx.rawResponse || !ctx.rawResponse.trim()) return ctx;
 
-    ctx.onProgress?.('[ResponseRepair:救援中]');
+    ctx.onProgress?.({ i18nKey: 'engine.progress.responseRepair', message: '[ResponseRepair:救援中]' });
 
     // Step 1: 正文抢救 —— 零成本
     let recoveredText: string | null = extractNarrativeFromWrapper(ctx.rawResponse);

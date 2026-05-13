@@ -22,7 +22,7 @@ defineEmits<{
 <template>
   <Modal
     :model-value="modelValue"
-    title="节日详情"
+    :title="$t('mainGame.env.festival.popoverTitle')"
     width="360px"
     @update:model-value="(v) => $emit('update:modelValue', v)"
   >
@@ -34,7 +34,7 @@ defineEmits<{
         v-if="!festival.描述 && !festival.效果"
         class="festival-popover__empty"
       >
-        （暂无详细描述）
+        {{ $t('mainGame.env.festival.noDescription') }}
       </div>
     </div>
   </Modal>

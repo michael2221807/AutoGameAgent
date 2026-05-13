@@ -23,6 +23,7 @@
  */
 import { ref, computed, onMounted, inject } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { ProfileManager } from '@/engine/persistence/profile-manager';
 import type { SaveManager } from '@/engine/persistence/save-manager';
 import type { GamePack, GamePackManifest } from '@/engine/types/game-pack';
@@ -33,8 +34,11 @@ import APIPanel from '@/ui/components/panels/APIPanel.vue';
 import SettingsPanel from '@/ui/components/panels/SettingsPanel.vue';
 import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
 import { eventBus } from '@/engine/core/event-bus';
+import { useLocale } from '@/ui/composables/useLocale';
 
 const router = useRouter();
+const { t } = useI18n();
+const { formatRelativeTime, formatDateTime } = useLocale();
 const engineState = useEngineStateStore();
 
 const profileManager = inject<ProfileManager>('profileManager');
@@ -130,18 +134,8 @@ function getMostRecentSlot(profile: ProfileMeta): SaveSlotMeta | null {
 
 /** Format an ISO date string to a user-friendly relative/absolute display */
 function formatDate(iso: string | null): string {
-  if (!iso) return '从未保存';
-  const date = new Date(iso);
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return '刚刚';
-  if (diffMin < 60) return `${diffMin} 分钟前`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} 小时前`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay} 天前`;
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  if (!iso) return t('common.time.neverSaved');
+  return formatRelativeTime(iso);
 }
 
 // ─── Actions ──────────────────────────────────────────────────
@@ -190,7 +184,7 @@ async function loadProfileSlot(
   try {
     const stateTree = await saveManager.loadGame(profile.profileId, slot.slotId);
     if (!stateTree) {
-      loadError.value = '存档数据不存在或已损坏';
+      loadError.value = t('home.errors.saveCorrupted');
       return;
     }
 
@@ -199,7 +193,7 @@ async function loadProfileSlot(
     router.push('/game');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    loadError.value = `加载存档失败: ${msg}`;
+    loadError.value = t('home.errors.loadFailed', { error: msg });
     console.error('[HomeView] Failed to load save:', err);
   } finally {
     isLoading.value = false;
@@ -217,7 +211,7 @@ async function onProfileClick(profile: ProfileMeta): Promise<void> {
     : getMostRecentSlot(profile);
 
   if (!slot) {
-    loadError.value = '该角色没有可用的存档';
+    loadError.value = t('home.errors.noSaveForCharacter');
     return;
   }
 
@@ -279,7 +273,7 @@ function ghCopyToken(): void {
   ta.select();
   document.execCommand('copy');
   document.body.removeChild(ta);
-  eventBus.emit('ui:toast', { type: 'success', message: 'Token 已复制', duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('home.github.tokenCopied'), duration: 1200 });
 }
 
 const ghEditingRepo = ref(false);
@@ -290,13 +284,13 @@ async function ghSwitchRepo(): Promise<void> {
   githubSync.setRepoName(ghRepoName.value);
   ghEditingRepo.value = false;
   ghCloudInfo.value = null;
-  ghStatus.value = { stage: 'checking', message: '检查新仓库…' };
+  ghStatus.value = { stage: 'checking', message: t('home.github.checkingRepo') };
   const result = await githubSync.validate();
   if (result.ok) {
     ghStatus.value = { stage: 'idle', message: '' };
     try { ghCloudInfo.value = await githubSync.getCloudInfo(); } catch { ghCloudInfo.value = null; }
   } else {
-    ghStatus.value = { stage: 'error', message: result.error ?? '仓库不可访问' };
+    ghStatus.value = { stage: 'error', message: result.error ?? t('home.github.repoInaccessible') };
   }
 }
 
@@ -304,7 +298,7 @@ async function ghConnect(): Promise<void> {
   if (!githubSync || !ghToken.value.trim()) return;
   githubSync.setToken(ghToken.value);
   githubSync.setRepoName(ghRepoName.value);
-  ghStatus.value = { stage: 'checking', message: '验证连接…' };
+  ghStatus.value = { stage: 'checking', message: t('home.github.verifyingConnection') };
   const result = await githubSync.validate();
   if (result.ok) {
     ghConnected.value = true;
@@ -312,7 +306,7 @@ async function ghConnect(): Promise<void> {
     ghStatus.value = { stage: 'idle', message: '' };
     try { ghCloudInfo.value = await githubSync.getCloudInfo(); } catch { ghCloudInfo.value = null; }
   } else {
-    ghStatus.value = { stage: 'error', message: result.error ?? '连接失败' };
+    ghStatus.value = { stage: 'error', message: result.error ?? t('home.github.connectionFailed') };
   }
 }
 
@@ -321,10 +315,10 @@ async function ghDownloadToLocal(): Promise<void> {
   try {
     await githubSync.download((s) => { ghStatus.value = s; });
     sessionStorage.setItem('aga_post_import_resume', '1');
-    eventBus.emit('ui:toast', { type: 'success', message: '云存档恢复成功，即将刷新…', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('home.github.restoreSuccess'), duration: 2000 });
     setTimeout(() => window.location.reload(), 1500);
   } catch (err) {
-    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : '下载失败' };
+    ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : t('home.github.downloadFailed') };
   }
 }
 
@@ -362,19 +356,19 @@ onMounted(async () => {
     </header>
 
     <!-- Primary action buttons -->
-    <nav class="actions" aria-label="主操作">
+    <nav class="actions" :aria-label="$t('home.nav.primaryActions')">
       <button class="btn btn-primary" @click="goToCreation" :disabled="isLoading">
-        新建角色
+        {{ $t('home.buttons.newCharacter') }}
       </button>
       <button
         class="btn btn-accent"
         :disabled="!canContinue || isLoading"
         @click="continueGame"
       >
-        继续游戏
+        {{ $t('home.buttons.continueGame') }}
       </button>
       <button class="btn btn-secondary" @click="goToManagement" :disabled="isLoading">
-        管理存档
+        {{ $t('home.buttons.manageSaves') }}
       </button>
     </nav>
 
@@ -382,26 +376,26 @@ onMounted(async () => {
       2026-04-11：开局前配置入口 —— 首次使用时玩家必须先配置 API 才能开局，
       所以在 HomeView 提供直接入口。二级操作行，视觉上从属于主操作但常驻可见。
     -->
-    <nav class="actions actions--secondary" aria-label="配置操作">
+    <nav class="actions actions--secondary" :aria-label="$t('home.nav.configActions')">
       <button class="btn btn-ghost" @click="showApiModal = true" :disabled="isLoading">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 7h16M4 12h16M4 17h10" />
         </svg>
-        API 配置
+        {{ $t('home.buttons.apiConfig') }}
       </button>
       <button class="btn btn-ghost" @click="showSettingsModal = true" :disabled="isLoading">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
         </svg>
-        设置
+        {{ $t('home.buttons.settings') }}
       </button>
       <button class="btn btn-ghost" @click="showSyncModal = true" :disabled="isLoading">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
           <path d="M8 0a8.2 8.2 0 0 0-2.6.4.75.75 0 0 0 .5 1.42A6.7 6.7 0 0 1 8 1.5a6.5 6.5 0 0 1 0 13 6.7 6.7 0 0 1-2.1-.34.75.75 0 0 0-.5 1.42A8.2 8.2 0 0 0 8 16a8 8 0 1 0 0-16"/>
           <path d="M5.97 4.22a.75.75 0 0 0-1.06 1.06L6.44 6.8H.75a.75.75 0 0 0 0 1.5h5.69L4.91 9.84a.75.75 0 1 0 1.06 1.06l2.75-2.75a.75.75 0 0 0 .22-.53V7.5a.75.75 0 0 0-.22-.53z"/>
         </svg>
-        云存档
+        {{ $t('home.buttons.cloudSync') }}
         <span v-if="ghConnected" class="sync-dot" />
       </button>
     </nav>
@@ -410,21 +404,21 @@ onMounted(async () => {
     <Transition name="fade">
       <div v-if="loadError" class="error-banner" role="alert">
         <span class="error-text">{{ loadError }}</span>
-        <button class="error-dismiss" @click="loadError = null" aria-label="关闭">
+        <button class="error-dismiss" @click="loadError = null" :aria-label="$t('home.buttons.close')">
           &times;
         </button>
       </div>
     </Transition>
 
     <!-- Loading overlay for save operations -->
-    <div v-if="isLoading" class="inline-loading" role="status" aria-label="加载中">
+    <div v-if="isLoading" class="inline-loading" role="status" :aria-label="$t('home.status.loading')">
       <div class="spinner" aria-hidden="true" />
-      <span>加载存档中…</span>
+      <span>{{ $t('home.status.loadingSave') }}</span>
     </div>
 
     <!-- Recent profiles list -->
     <section v-if="sortedProfiles.length > 0" class="profiles-section">
-      <h2 class="section-title">最近的角色</h2>
+      <h2 class="section-title">{{ $t('home.sections.recentProfiles') }}</h2>
       <ul class="profile-list">
         <li
           v-for="profile in sortedProfiles"
@@ -432,7 +426,7 @@ onMounted(async () => {
           class="profile-card"
           tabindex="0"
           role="button"
-          :aria-label="`加载角色 ${profile.characterName}`"
+          :aria-label="$t('home.profileCard.loadAria', { name: profile.characterName })"
           @click="onProfileClick(profile)"
           @keydown.enter="onProfileClick(profile)"
         >
@@ -465,7 +459,7 @@ onMounted(async () => {
 
     <!-- Empty state when no profiles exist -->
     <section v-else class="empty-state">
-      <p class="empty-text">还没有角色，点击「新建角色」开始你的冒险</p>
+      <p class="empty-text">{{ $t('home.emptyState.noProfiles') }}</p>
     </section>
 
     <!--
@@ -498,8 +492,8 @@ onMounted(async () => {
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
           </svg>
           <div>
-            <h3 class="sync-modal-title">云存档</h3>
-            <p class="sync-modal-sub">跨设备同步你的游戏存档</p>
+            <h3 class="sync-modal-title">{{ $t('home.cloudSync.title') }}</h3>
+            <p class="sync-modal-sub">{{ $t('home.cloudSync.subtitle') }}</p>
           </div>
         </div>
 
@@ -517,28 +511,28 @@ onMounted(async () => {
                   spellcheck="false"
                   autocomplete="off"
                 />
-                <button class="sync-eye" @click="ghShowToken = !ghShowToken" tabindex="-1" title="显示/隐藏">
+                <button class="sync-eye" @click="ghShowToken = !ghShowToken" tabindex="-1" :title="$t('home.github.toggleVisibility')">
                   <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z"/><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4"/></svg>
                 </button>
-                <button class="sync-eye" @click="ghCopyToken()" tabindex="-1" title="复制 Token" :disabled="!ghToken.trim()">
+                <button class="sync-eye" @click="ghCopyToken()" tabindex="-1" :title="$t('home.github.copyToken')" :disabled="!ghToken.trim()">
                   <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
                 </button>
               </div>
             </div>
             <div class="sync-field">
-              <label class="sync-label">仓库名称</label>
+              <label class="sync-label">{{ $t('home.github.repoNameLabel') }}</label>
               <input class="sync-input" v-model="ghRepoName" placeholder="aga-cloud-save" spellcheck="false" />
             </div>
           </div>
           <p class="sync-footnote">
-            需要一个 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" class="sync-link">Fine-grained Token</a>，
-            权限 Contents Read &amp; Write，仅限同步仓库。仓库需提前手动创建。
+            {{ $t('home.github.tokenHint') }}
+            <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" class="sync-link">GitHub &rarr;</a>
           </p>
           <button class="sync-connect-btn" @click="ghConnect" :disabled="ghBusy() || !ghToken.trim()">
             <template v-if="ghStatus.stage === 'checking'">
-              <span class="sync-spinner" /> 验证中…
+              <span class="sync-spinner" /> {{ $t('home.github.verifying') }}
             </template>
-            <template v-else>连接 GitHub</template>
+            <template v-else>{{ $t('home.github.connectButton') }}</template>
           </button>
         </template>
 
@@ -552,7 +546,7 @@ onMounted(async () => {
                 <div class="sync-repo-row">
                   <template v-if="!ghEditingRepo">
                     <span class="sync-reponame">{{ ghRepoName }}</span>
-                    <button class="sync-repo-edit" @click="ghEditingRepo = true" title="更换仓库">
+                    <button class="sync-repo-edit" @click="ghEditingRepo = true" :title="$t('home.github.switchRepo')">
                       <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758z"/></svg>
                     </button>
                   </template>
@@ -565,40 +559,40 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
-            <button class="sync-disconnect" @click="ghConnected = false; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" title="断开连接">
-              断开
+            <button class="sync-disconnect" @click="ghConnected = false; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" :title="$t('home.github.disconnect')">
+              {{ $t('home.github.disconnectButton') }}
             </button>
           </div>
 
           <div class="sync-token-copy-row">
             <span class="sync-token-preview">Token: {{ ghToken.slice(0, 10) }}···{{ ghToken.slice(-4) }}</span>
-            <button class="sync-token-copy-btn" @click="ghCopyToken()" title="复制 Token">
+            <button class="sync-token-copy-btn" @click="ghCopyToken()" :title="$t('home.github.copyToken')">
               <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
-              复制 Token
+              {{ $t('home.github.copyTokenButton') }}
             </button>
           </div>
 
           <div class="sync-cloud-card">
             <template v-if="ghCloudInfo?.exists">
-              <div class="sync-cloud-label">云端存档</div>
+              <div class="sync-cloud-label">{{ $t('home.cloudStatus.hasArchive') }}</div>
               <div class="sync-cloud-detail">
-                {{ ghCloudInfo.updatedAt ? new Date(ghCloudInfo.updatedAt).toLocaleString() : '未知时间' }}
+                {{ ghCloudInfo.updatedAt ? $t('home.cloudStatus.updatedAt', { date: formatDateTime(ghCloudInfo.updatedAt) }) : $t('home.cloudStatus.unknownTime') }}
                 <span class="sync-cloud-size">{{ ghCloudInfo.sizeKB ?? 0 }} KB</span>
               </div>
             </template>
             <template v-else-if="ghCloudInfo">
-              <div class="sync-cloud-label">云端暂无存档</div>
-              <div class="sync-cloud-detail">上传后即可在其他设备下载</div>
+              <div class="sync-cloud-label">{{ $t('home.cloudStatus.noArchive') }}</div>
+              <div class="sync-cloud-detail">{{ $t('home.cloudStatus.uploadToSync') }}</div>
             </template>
             <template v-else>
-              <div class="sync-cloud-label">正在检查云端…</div>
+              <div class="sync-cloud-label">{{ $t('home.cloudStatus.checking') }}</div>
             </template>
           </div>
 
           <div class="sync-actions">
             <button class="sync-action sync-action--download" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghDownloadToLocal">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
-              {{ ghStatus.stage === 'downloading' ? '下载中…' : '下载到本地' }}
+              {{ ghStatus.stage === 'downloading' ? $t('home.cloudSync.downloading') : $t('home.cloudSync.downloadToLocal') }}
             </button>
           </div>
         </template>

@@ -7,8 +7,11 @@
  * 并提供 "开始游戏" 按钮。
  */
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { CreationStep } from '@/engine/types';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
+
+const { t } = useI18n();
 
 /** 单条摘要 — 步骤 ID + 显示标签 + 选择内容 */
 interface SummaryItem {
@@ -56,7 +59,7 @@ const summaryItems = computed<SummaryItem[]>(() => {
 function formatValue(val: unknown): string {
   if (val === null || val === undefined) return '—';
   if (Array.isArray(val)) {
-    return val.map((v) => formatValue(v)).join('、') || '—';
+    return val.map((v) => formatValue(v)).join(t('creation.confirm.separator')) || '—';
   }
   if (typeof val === 'object') {
     const obj = val as Record<string, unknown>;
@@ -66,7 +69,7 @@ function formatValue(val: unknown): string {
     if (keys.length === 0) return '—';
     return keys
       .map((k) => `${k}: ${formatValue(obj[k])}`)
-      .join('、');
+      .join(t('creation.confirm.separator'));
   }
   return String(val);
 }
@@ -98,7 +101,7 @@ function extractCharacterNameFromValue(val: unknown): string | null {
  * - 表单：`value` 为含 `角色.基础信息.姓名` 等键的平铺对象
  */
 const characterName = computed<string>(() => {
-  if (typeof props.selection !== 'object' || props.selection === null) return '未命名角色';
+  if (typeof props.selection !== 'object' || props.selection === null) return t('creation.confirm.unnamedCharacter');
   const sel = props.selection as Record<string, unknown>;
   for (const entry of Object.values(sel)) {
     if (typeof entry !== 'object' || entry === null) continue;
@@ -107,7 +110,7 @@ const characterName = computed<string>(() => {
     const name = extractCharacterNameFromValue(raw);
     if (name) return name;
   }
-  return '未命名角色';
+  return t('creation.confirm.unnamedCharacter');
 });
 
 // ─── 开局选项 ────────────────────────────────────────────────
@@ -174,25 +177,25 @@ function toggleGenerationMode(): void {
       </div>
 
       <div v-if="summaryItems.length === 0" class="summary-empty">
-        尚无选择数据
+        {{ $t('creation.confirm.noData') }}
       </div>
     </div>
 
     <!-- 开局选项 -->
     <div class="options-section">
-      <h4 class="options-title">开局选项</h4>
+      <h4 class="options-title">{{ $t('creation.confirm.options.title') }}</h4>
 
       <div class="toggle-row">
         <div class="toggle-info">
-          <span class="toggle-label">流式叙事</span>
-          <span class="toggle-desc">AI 叙事逐字出现，提供打字机效果</span>
+          <span class="toggle-label">{{ $t('creation.confirm.options.streaming') }}</span>
+          <span class="toggle-desc">{{ $t('creation.confirm.options.streamingDesc') }}</span>
         </div>
         <button
           class="toggle-switch"
           :class="{ active: streamingEnabled }"
           role="switch"
           :aria-checked="streamingEnabled"
-          aria-label="流式叙事开关"
+          :aria-label="$t('creation.confirm.options.streamingToggle')"
           @click="toggleStreaming"
         >
           <span class="toggle-thumb" />
@@ -201,15 +204,15 @@ function toggleGenerationMode(): void {
 
       <div class="toggle-row">
         <div class="toggle-info">
-          <span class="toggle-label">分步生成开局</span>
-          <span class="toggle-desc">分两次 API 调用：先产出开场正文，再生成初始指令。减少单次生成的复杂度，提高稳定性，但耗时加倍。</span>
+          <span class="toggle-label">{{ $t('creation.confirm.options.stepGen') }}</span>
+          <span class="toggle-desc">{{ $t('creation.confirm.options.stepGenDesc') }}</span>
         </div>
         <button
           class="toggle-switch"
           :class="{ active: generationMode === 'step' }"
           role="switch"
           :aria-checked="generationMode === 'step'"
-          aria-label="分步生成开关"
+          :aria-label="$t('creation.confirm.options.stepGenToggle')"
           @click="toggleGenerationMode"
         >
           <span class="toggle-thumb" />

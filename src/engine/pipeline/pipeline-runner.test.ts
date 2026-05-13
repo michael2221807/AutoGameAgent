@@ -93,13 +93,14 @@ describe('PipelineRunner', () => {
     await expect(runner.run(makeCtx({ abortSignal: ac.signal }))).rejects.toThrow('Pipeline aborted');
   });
 
-  it('calls onProgress for each stage', async () => {
-    const progress: string[] = [];
+  it('calls onProgress for each stage with i18n object', async () => {
+    const progress: Array<string | { i18nKey: string; i18nParams?: Record<string, unknown>; message: string }> = [];
     runner.addStage(makeStage('StageA'));
     runner.addStage(makeStage('StageB'));
-    await runner.run(makeCtx({ onProgress: (msg: string) => progress.push(msg) } as unknown as PipelineContext));
-    expect(progress).toContain('[StageA]');
-    expect(progress).toContain('[StageB]');
+    await runner.run(makeCtx({ onProgress: (msg: string | { i18nKey: string; i18nParams?: Record<string, unknown>; message: string }) => progress.push(msg) } as unknown as PipelineContext));
+    expect(progress).toHaveLength(2);
+    expect(progress[0]).toEqual({ i18nKey: 'engine.progress.stage', i18nParams: { name: 'StageA' }, message: '[StageA]' });
+    expect(progress[1]).toEqual({ i18nKey: 'engine.progress.stage', i18nParams: { name: 'StageB' }, message: '[StageB]' });
   });
 
   it('propagates meta flags set by stages', async () => {

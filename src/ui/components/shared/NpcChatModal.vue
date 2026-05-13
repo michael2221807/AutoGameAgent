@@ -20,7 +20,9 @@
  *   - npc: 目标 NPC 对象（包含 名称/类型/好感度/描述 等字段）
  */
 import { ref, computed, watch, nextTick, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
+import { useLocale } from '@/ui/composables/useLocale';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
 import FormattedText from '@/ui/components/common/FormattedText.vue';
@@ -45,6 +47,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
 }>();
 
+const { t } = useI18n();
+const { formatDate, formatTime } = useLocale();
 const npcChatPipeline = inject<NpcChatPipeline | null>('npcChatPipeline', null);
 const { useValue } = useGameState();
 
@@ -83,7 +87,7 @@ watch(
     if (!deleted) return;
     eventBus.emit('ui:toast', {
       type: 'warning',
-      message: `NPC「${props.npc?.名称 ?? ''}」已不存在，自动关闭私聊`,
+      message: t('modal.npcChat.npcDeleted', { name: props.npc?.名称 ?? '' }),
       duration: 2500,
     });
     emit('update:modelValue', false);
@@ -133,7 +137,7 @@ async function sendMessage(): Promise<void> {
   if (!npcChatPipeline) {
     eventBus.emit('ui:toast', {
       type: 'error',
-      message: 'NPC 私聊管线未就绪',
+      message: t('modal.npcChat.pipelineNotReady'),
       duration: 2000,
     });
     return;
@@ -159,7 +163,7 @@ async function sendMessage(): Promise<void> {
 
     const result = await npcChatPipeline.chat(props.npc.名称, text, handleChunk);
     if (!result.success) {
-      errorMsg.value = result.error ?? 'AI 调用失败';
+      errorMsg.value = result.error ?? t('modal.npcChat.aiCallFailed');
     }
   } catch (err) {
     errorMsg.value = err instanceof Error ? err.message : String(err);
@@ -182,9 +186,9 @@ function rollbackChat(): void {
   if (result.success) {
     streamingText.value = '';
     errorMsg.value = null;
-    eventBus.emit('ui:toast', { type: 'success', message: '已撤回上一条对话', duration: 2000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('modal.npcChat.rollbackSuccess'), duration: 2000 });
   } else {
-    eventBus.emit('ui:toast', { type: 'warning', message: result.error ?? '撤回失败', duration: 3000 });
+    eventBus.emit('ui:toast', { type: 'warning', message: result.error ?? t('modal.npcChat.rollbackFailed'), duration: 3000 });
   }
 }
 
@@ -224,22 +228,22 @@ function onKeydown(e: KeyboardEvent): void {
 /**
  * CR-R28 (2026-04-11)：date-aware timestamp
  *
- * 旧实现只显示 HH:mm，同一时间在不同日子产生的消息看起来一样。
- * 新规则：
- *   - 今天        → "HH:mm"
- *   - 昨天        → "昨天 HH:mm"
- *   - 同一年其他  → "M月D日 HH:mm"
- *   - 更早        → "YYYY-M-D HH:mm"
+ * Rules:
+ *   - Today       → "HH:mm"
+ *   - Yesterday   → "{yesterday} HH:mm"  (locale-aware label)
+ *   - Same year   → locale short date + time  (e.g. "5月12日 14:30" / "05/12 14:30")
+ *   - Older       → locale full date + time
  *
- * 使用本地时区；比较按"年月日"粒度而非毫秒差。
+ * Uses local timezone; comparison at year-month-day granularity.
+ * Date/time formatting delegated to useLocale() for locale-awareness.
  */
 function formatTimestamp(ts: number): string {
   if (!ts) return '';
   const d = new Date(ts);
   const now = new Date();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  const hhmm = `${hh}:${mm}`;
+  const timeStr = formatTime(d);
+  // formatTime returns "HH:mm:ss"; trim to "HH:mm" for chat display
+  const hhmm = timeStr.slice(0, 5);
 
   const sameDay = (a: Date, b: Date): boolean =>
     a.getFullYear() === b.getFullYear() &&
@@ -250,12 +254,14 @@ function formatTimestamp(ts: number): string {
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (sameDay(d, yesterday)) return `昨天 ${hhmm}`;
+  if (sameDay(d, yesterday)) return `${t('modal.npcChat.timestamp.yesterday')} ${hhmm}`;
 
   if (d.getFullYear() === now.getFullYear()) {
-    return `${d.getMonth() + 1}月${d.getDate()}日 ${hhmm}`;
+    // Short date without year + time
+    const dateStr = formatDate(d, 'short');
+    return `${dateStr} ${hhmm}`;
   }
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${hhmm}`;
+  return `${formatDate(d, 'long')}`;
 }
 
 // ─── 辅助：好感度颜色 ────────────────────────────────────────
@@ -277,7 +283,7 @@ function affinityColor(value: number | undefined): string {
           <header class="chat-header">
             <div class="npc-avatar">{{ npc.名称.charAt(0) }}</div>
             <div class="header-info">
-              <h3 id="npc-chat-title" class="npc-name">与 {{ npc.名称 }} 私聊</h3>
+              <h3 id="npc-chat-title" class="npc-name">{{ $t('modal.npcChat.title', { name: npc.名称 }) }}</h3>
               <div class="npc-meta">
                 <span v-if="npc.类型" class="meta-chip">{{ npc.类型 }}</span>
                 <span v-if="npc.位置" class="meta-location">📍 {{ npc.位置 }}</span>
@@ -290,7 +296,7 @@ function affinityColor(value: number | undefined): string {
                 </span>
               </div>
             </div>
-            <button class="btn-close" @click="close" aria-label="关闭">
+            <button class="btn-close" @click="close" :aria-label="$t('modal.npcChat.ariaClose')">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -304,7 +310,7 @@ function affinityColor(value: number | undefined): string {
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
-              <p>还没有对话 — 输入点什么开始吧</p>
+              <p>{{ $t('modal.npcChat.empty') }}</p>
             </div>
 
             <div
@@ -335,7 +341,7 @@ function affinityColor(value: number | undefined): string {
           <Transition name="slide">
             <div v-if="errorMsg" class="chat-error" role="alert">
               <span>{{ errorMsg }}</span>
-              <button class="btn-error-dismiss" @click="errorMsg = null" aria-label="关闭错误提示">&times;</button>
+              <button class="btn-error-dismiss" @click="errorMsg = null" :aria-label="$t('modal.npcChat.ariaDismissError')">&times;</button>
             </div>
           </Transition>
 
@@ -344,7 +350,7 @@ function affinityColor(value: number | undefined): string {
             <textarea
               v-model="userInput"
               class="chat-textarea"
-              :placeholder="`对 ${npc.名称} 说点什么…（Enter 发送，Shift+Enter 换行）`"
+              :placeholder="$t('modal.npcChat.placeholder', { name: npc.名称 })"
               rows="2"
               :disabled="isSending"
               @keydown="onKeydown"
@@ -356,14 +362,14 @@ function affinityColor(value: number | undefined): string {
                 :disabled="isSending"
                 @click="rollbackChat"
               >
-                撤回
+                {{ $t('modal.npcChat.buttonRollback') }}
               </button>
               <button
                 class="btn-send"
                 :disabled="!userInput.trim() || isSending"
                 @click="sendMessage"
               >
-                {{ isSending ? '发送中…' : '发送' }}
+                {{ isSending ? $t('modal.npcChat.buttonSending') : $t('modal.npcChat.buttonSend') }}
               </button>
             </div>
           </footer>

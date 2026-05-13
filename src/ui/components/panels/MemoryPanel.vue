@@ -1,9 +1,14 @@
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-memory.md
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
+import { useLocale } from '@/ui/composables/useLocale';
 import { eventBus } from '@/engine/core/event-bus';
+
+const { t } = useI18n();
+const { locale } = useLocale();
 
 const { isLoaded, useValue } = useGameState();
 const { getConfig } = useConfig();
@@ -49,7 +54,7 @@ function normalizeMemoryEntries(raw: unknown): MemoryEntry[] {
           content: String(obj['内容'] ?? obj['content'] ?? obj['记忆主体'] ?? obj['summary'] ?? JSON.stringify(obj)),
           timestamp: (() => {
             const ts = obj['时间'] ?? obj['事件时间'] ?? obj['timestamp'];
-            if (typeof ts === 'number') return new Date(ts).toLocaleString('zh-CN');
+            if (typeof ts === 'number') return new Date(ts).toLocaleString(locale.value);
             return typeof ts === 'string' ? ts : undefined;
           })(),
           tags: Array.isArray(obj['标签']) ? obj['标签'] as string[] : undefined,
@@ -110,29 +115,29 @@ interface TierConfig {
 const tiers = computed<TierConfig[]>(() => [
   {
     key: 'short',
-    title: '短期记忆',
-    hint: '最近几回合的叙事快照，作为 AI 的即时上下文',
+    title: t('memory.tier.short.title'),
+    hint: t('memory.tier.short.hint'),
     entries: shortTermEntries,
     tierClass: 'tier--short',
   },
   {
     key: 'implicit',
-    title: '隐式中期',
-    hint: 'AI 对每段短期记忆的结构化理解，与短期 1:1 配对',
+    title: t('memory.tier.implicit.title'),
+    hint: t('memory.tier.implicit.hint'),
     entries: implicitMidTermEntries,
     tierClass: 'tier--implicit',
   },
   {
     key: 'mid',
-    title: '中期记忆',
-    hint: '短期记忆溢出后升级而来，积累到阈值时触发长期总结',
+    title: t('memory.tier.mid.title'),
+    hint: t('memory.tier.mid.hint'),
     entries: midTermEntries,
     tierClass: 'tier--mid',
   },
   {
     key: 'long',
-    title: '长期记忆',
-    hint: '世界观演化的产物，AI 对整个故事弧线的深层理解',
+    title: t('memory.tier.long.title'),
+    hint: t('memory.tier.long.hint'),
     entries: longTermEntries,
     tierClass: 'tier--long',
   },
@@ -221,12 +226,12 @@ interface ConfigDisplayRow {
 const configRows = computed<ConfigDisplayRow[]>(() => {
   const c = effectiveConfig.value;
   return [
-    { key: 'shortTermLimit',          label: '短期记忆容量',   desc: '短期记忆保留的最近条目数',             value: c.shortTermLimit,          group: 'capacity' },
-    { key: 'longTermCap',             label: '长期记忆上限',   desc: '长期记忆的最大存储条目数',             value: c.longTermCap,             group: 'capacity' },
-    { key: 'midTermRefineThreshold',  label: '中期提炼阈值',   desc: '中期记忆累积达此数量时触发长期总结',   value: c.midTermRefineThreshold,  group: 'threshold' },
-    { key: 'longTermSummaryThreshold', label: '长期总结阈值',  desc: '触发世界观演化的中期记忆量',           value: c.longTermSummaryThreshold, group: 'threshold' },
-    { key: 'longTermSummarizeCount',  label: '长期总结批次',   desc: '每次长期总结消费的中期记忆数',         value: c.longTermSummarizeCount,  group: 'threshold' },
-    { key: 'midTermKeep',             label: '中期保留数',     desc: '长期总结后保留的最新中期记忆条目',     value: c.midTermKeep,             group: 'threshold' },
+    { key: 'shortTermLimit',          label: t('memory.config.row.shortTermLimit.label'),          desc: t('memory.config.row.shortTermLimit.desc'),          value: c.shortTermLimit,          group: 'capacity' },
+    { key: 'longTermCap',             label: t('memory.config.row.longTermCap.label'),             desc: t('memory.config.row.longTermCap.desc'),             value: c.longTermCap,             group: 'capacity' },
+    { key: 'midTermRefineThreshold',  label: t('memory.config.row.midTermRefineThreshold.label'),  desc: t('memory.config.row.midTermRefineThreshold.desc'),  value: c.midTermRefineThreshold,  group: 'threshold' },
+    { key: 'longTermSummaryThreshold', label: t('memory.config.row.longTermSummaryThreshold.label'), desc: t('memory.config.row.longTermSummaryThreshold.desc'), value: c.longTermSummaryThreshold, group: 'threshold' },
+    { key: 'longTermSummarizeCount',  label: t('memory.config.row.longTermSummarizeCount.label'),  desc: t('memory.config.row.longTermSummarizeCount.desc'),  value: c.longTermSummarizeCount,  group: 'threshold' },
+    { key: 'midTermKeep',             label: t('memory.config.row.midTermKeep.label'),             desc: t('memory.config.row.midTermKeep.desc'),             value: c.midTermKeep,             group: 'threshold' },
   ];
 });
 
@@ -251,12 +256,12 @@ function configRowRadiusClass(idx: number, total: number): string {
 function exportNarrative(): void {
   const entries = narrativeEntries.value;
   if (entries.length === 0) {
-    eventBus.emit('ui:toast', { type: 'info', message: '叙事历史为空', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'info', message: t('memory.export.emptyToast'), duration: 1500 });
     return;
   }
-  const lines: string[] = ['# 叙事导出', ''];
+  const lines: string[] = [t('memory.export.fileHeader'), ''];
   for (const msg of entries) {
-    lines.push(msg.role === 'user' ? `【玩家】${msg.content}` : msg.content);
+    lines.push(msg.role === 'user' ? `${t('memory.narrative.exportPlayerPrefix')}${msg.content}` : msg.content);
     lines.push('');
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
@@ -277,10 +282,10 @@ function exportNarrative(): void {
     <template v-if="isLoaded">
       <!-- ── Header ── -->
       <header class="panel-header">
-        <h2 class="panel-title">记忆系统</h2>
+        <h2 class="panel-title">{{ $t('memory.title') }}</h2>
         <div class="header-actions">
-          <button class="btn-ghost" @click="exportNarrative" title="将全部叙事历史导出为文本文件">
-            导出叙事
+          <button class="btn-ghost" @click="exportNarrative" :title="$t('memory.export.buttonTitle')">
+            {{ $t('memory.export.button') }}
           </button>
         </div>
       </header>
@@ -291,20 +296,20 @@ function exportNarrative(): void {
           :class="['tab-btn', { 'tab-btn--active': activeTab === 'memory' }]"
           @click="activeTab = 'memory'"
         >
-          记忆列表
+          {{ $t('memory.tab.memoryList') }}
         </button>
         <button
           :class="['tab-btn', { 'tab-btn--active': activeTab === 'narrative' }]"
           @click="activeTab = 'narrative'"
         >
-          叙事历史
+          {{ $t('memory.tab.narrative') }}
           <span v-if="totalNarrativeCount > 0" class="tab-badge">{{ totalNarrativeCount }}</span>
         </button>
         <button
           :class="['tab-btn', { 'tab-btn--active': activeTab === 'config' }]"
           @click="activeTab = 'config'; loadEffectiveConfig()"
         >
-          配置
+          {{ $t('memory.tab.config') }}
         </button>
       </div>
 
@@ -323,7 +328,7 @@ function exportNarrative(): void {
             <div class="tier-title-group">
               <span :class="['tier-indicator', `tier-indicator--${tier.key}`]" />
               <span class="tier-label">{{ tier.title }}</span>
-              <span class="tier-count">{{ tier.entries.value.length }} 条</span>
+              <span class="tier-count">{{ $t('memory.tier.countSuffix', { n: tier.entries.value.length }) }}</span>
             </div>
             <svg
               :class="['tier-chevron', { 'tier-chevron--open': isSectionOpen(tier.key) }]"
@@ -358,7 +363,7 @@ function exportNarrative(): void {
               </template>
 
               <div v-else class="tier-empty">
-                <p class="tier-empty-text">这段旅程尚未在此层留下印记</p>
+                <p class="tier-empty-text">{{ $t('memory.tier.emptyState') }}</p>
               </div>
             </div>
           </Transition>
@@ -372,7 +377,7 @@ function exportNarrative(): void {
             <div :class="['narrative-block', `narrative-block--${msg.role}`]">
               <div :class="['narrative-role', { 'narrative-role--user': msg.role === 'user' }]">
                 <span class="narrative-role-dot" />
-                {{ msg.role === 'user' ? '玩家' : '叙事' }}
+                {{ msg.role === 'user' ? $t('memory.narrative.rolePlayer') : $t('memory.narrative.roleNarrator') }}
               </div>
               <div class="narrative-prose">{{ msg.content }}</div>
             </div>
@@ -387,8 +392,8 @@ function exportNarrative(): void {
           <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <p class="empty-title">叙事历史尚为空白</p>
-          <p class="empty-hint">每回合的 AI 叙事和你的选择都会沉淀于此，渐渐织成独属于你的故事</p>
+          <p class="empty-title">{{ $t('memory.narrative.emptyTitle') }}</p>
+          <p class="empty-hint">{{ $t('memory.narrative.emptyHint') }}</p>
         </div>
       </div>
 
@@ -399,30 +404,30 @@ function exportNarrative(): void {
           <div class="memory-flow">
             <div class="flow-node">
               <div class="flow-dot flow-dot--short">{{ effectiveConfig.shortTermLimit }}</div>
-              <span class="flow-label">短期</span>
+              <span class="flow-label">{{ $t('memory.config.flowLabel.short') }}</span>
             </div>
             <div class="flow-arrow" />
             <div class="flow-node">
               <div class="flow-dot flow-dot--implicit">1:1</div>
-              <span class="flow-label">隐式中期</span>
+              <span class="flow-label">{{ $t('memory.config.flowLabel.implicit') }}</span>
             </div>
             <div class="flow-arrow" />
             <div class="flow-node">
               <div class="flow-dot flow-dot--mid">{{ effectiveConfig.midTermRefineThreshold }}</div>
-              <span class="flow-label">中期</span>
+              <span class="flow-label">{{ $t('memory.config.flowLabel.mid') }}</span>
             </div>
             <div class="flow-arrow" />
             <div class="flow-node">
               <div class="flow-dot flow-dot--long">{{ effectiveConfig.longTermCap }}</div>
-              <span class="flow-label">长期</span>
+              <span class="flow-label">{{ $t('memory.config.flowLabel.long') }}</span>
             </div>
           </div>
-          <p class="flow-caption">记忆从短期逐层沉淀，数字表示各层的容量或阈值</p>
+          <p class="flow-caption">{{ $t('memory.config.flowCaption') }}</p>
         </div>
 
         <!-- Capacity group -->
         <div class="config-group">
-          <div class="config-group-label">容量限制</div>
+          <div class="config-group-label">{{ $t('memory.config.group.capacity') }}</div>
           <div
             v-for="(row, idx) in capacityRows"
             :key="row.key"
@@ -438,7 +443,7 @@ function exportNarrative(): void {
 
         <!-- Threshold group -->
         <div class="config-group">
-          <div class="config-group-label">升级阈值</div>
+          <div class="config-group-label">{{ $t('memory.config.group.threshold') }}</div>
           <div
             v-for="(row, idx) in thresholdRows"
             :key="row.key"
@@ -457,14 +462,14 @@ function exportNarrative(): void {
           <svg class="config-footer-icon" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
           </svg>
-          以上配置来自引擎默认值与设置面板覆盖。如需修改，请前往设置面板的记忆区域。
+          {{ $t('memory.config.footerHint') }}
         </div>
       </div>
     </template>
 
     <!-- Not loaded state -->
     <div v-else class="empty-state">
-      <p class="empty-title">尚未加载游戏数据</p>
+      <p class="empty-title">{{ $t('memory.notLoaded') }}</p>
     </div>
   </div>
 </template>

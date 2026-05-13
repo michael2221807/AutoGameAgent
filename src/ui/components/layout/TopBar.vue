@@ -9,13 +9,13 @@
     it provides orientation context without competing with the main
     game content for focal attention.
   -->
-  <header class="topbar" role="banner" aria-label="游戏顶栏">
+  <header class="topbar" role="banner" :aria-label="$t('layout.topbar.ariaHeader')">
     <!-- ── Left: navigation + identity ── -->
     <div class="topbar__left">
       <button
         class="topbar__btn topbar__back"
-        aria-label="返回首页"
-        title="返回首页"
+        :aria-label="$t('layout.topbar.ariaBackHome')"
+        :title="$t('layout.topbar.ariaBackHome')"
         @click="navigateHome"
       >
         <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
@@ -24,13 +24,13 @@
       </button>
 
       <div class="topbar__title-group">
-        <h1 class="topbar__game-title">{{ engineState.packName }}</h1>
-        <span class="topbar__character-name">{{ engineState.characterName }}</span>
+        <h1 class="topbar__game-title">{{ displayPackName }}</h1>
+        <span class="topbar__character-name">{{ displayCharacterName }}</span>
       </div>
     </div>
 
     <!-- ── Center: location · time · round · status ── -->
-    <div class="topbar__center" aria-label="游戏状态信息">
+    <div class="topbar__center" :aria-label="$t('layout.topbar.ariaStatusInfo')">
       <!-- Location -->
       <span
         v-if="engineState.currentLocation && engineState.currentLocation !== '未知'"
@@ -48,37 +48,37 @@
 
       <!-- Game time -->
       <span
-        v-if="engineState.gameTime !== '未知时间'"
+        v-if="hasGameTime"
         class="topbar__info-item topbar__time"
-        :title="engineState.gameTime"
+        :title="localizedGameTime"
       >
         <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11" aria-hidden="true">
           <path fill-rule="evenodd" d="M8 1a7 7 0 100 14A7 7 0 008 1zm.5 3.5a.5.5 0 00-1 0V8a.5.5 0 00.146.354l2.5 2.5a.5.5 0 00.708-.708L8.5 7.793V4.5z" clip-rule="evenodd" />
         </svg>
-        <span class="topbar__info-text">{{ engineState.gameTime }}</span>
+        <span class="topbar__info-text">{{ localizedGameTime }}</span>
       </span>
 
       <!-- Separator -->
-      <span v-if="engineState.gameTime !== '未知时间' && engineState.roundNumber > 0" class="topbar__sep" aria-hidden="true">·</span>
+      <span v-if="hasGameTime && engineState.roundNumber > 0" class="topbar__sep" aria-hidden="true">·</span>
 
       <!-- Round number -->
       <span
         v-if="engineState.roundNumber > 0"
         class="topbar__info-item topbar__round"
-        :title="`当前第 ${engineState.roundNumber} 回合`"
+        :title="$t('layout.topbar.roundTooltip', { n: engineState.roundNumber })"
       >
-        <span class="topbar__info-text">第 {{ engineState.roundNumber }} 回合</span>
+        <span class="topbar__info-text">{{ $t('layout.topbar.roundText', { n: engineState.roundNumber }) }}</span>
       </span>
 
       <!-- AI status badge -->
       <span
         :class="['topbar__status-badge', isGenerating ? 'topbar__status-badge--generating' : 'topbar__status-badge--idle']"
-        :aria-label="isGenerating ? 'AI 生成中' : '空闲'"
+        :aria-label="isGenerating ? $t('layout.topbar.ariaAiGenerating') : $t('layout.topbar.ariaAiIdle')"
         role="status"
       >
         <span v-if="isGenerating" class="topbar__status-dot topbar__status-dot--pulse" aria-hidden="true" />
         <span v-else class="topbar__status-dot" aria-hidden="true" />
-        <span class="topbar__status-text">{{ isGenerating ? '生成中' : '空闲' }}</span>
+        <span class="topbar__status-text">{{ isGenerating ? $t('layout.topbar.statusGenerating') : $t('layout.topbar.statusIdle') }}</span>
       </span>
     </div>
 
@@ -87,8 +87,8 @@
       <!-- Fullscreen toggle -->
       <button
         class="topbar__btn"
-        :aria-label="isFullscreen ? '退出全屏' : '进入全屏'"
-        :title="isFullscreen ? '退出全屏' : '进入全屏'"
+        :aria-label="isFullscreen ? $t('layout.topbar.ariaExitFullscreen') : $t('layout.topbar.ariaEnterFullscreen')"
+        :title="isFullscreen ? $t('layout.topbar.ariaExitFullscreen') : $t('layout.topbar.ariaEnterFullscreen')"
         @click="toggleFullscreen"
       >
         <!-- Enter fullscreen icon -->
@@ -105,8 +105,8 @@
       <button
         class="topbar__btn"
         :class="{ 'topbar__btn--saving': isSaving }"
-        aria-label="快速保存"
-        title="快速保存"
+        :aria-label="$t('layout.topbar.ariaQuickSave')"
+        :title="$t('layout.topbar.ariaQuickSave')"
         :disabled="isSaving"
         @click="handleQuickSave"
       >
@@ -121,8 +121,8 @@
       <!-- Settings gear -->
       <button
         class="topbar__btn"
-        aria-label="设置"
-        title="设置"
+        :aria-label="$t('layout.topbar.ariaSettings')"
+        :title="$t('layout.topbar.ariaSettings')"
         @click="navigateSettings"
       >
         <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
@@ -133,19 +133,19 @@
   </header>
 
   <!-- Exit dialog -->
-  <Modal v-model="exitModalOpen" title="返回主界面" width="360px" :closable="!exitIsSaving">
-    <p class="exit-msg">是否在退出前保存游戏？</p>
+  <Modal v-model="exitModalOpen" :title="$t('layout.topbar.exitModalTitle')" width="360px" :closable="!exitIsSaving">
+    <p class="exit-msg">{{ $t('layout.topbar.exitConfirmMessage') }}</p>
     <p v-if="exitSaveError" class="exit-err">{{ exitSaveError }}</p>
     <template #footer>
-      <button class="btn btn--secondary" :disabled="exitIsSaving" @click="exitModalOpen = false">取消</button>
+      <button class="btn btn--secondary" :disabled="exitIsSaving" @click="exitModalOpen = false">{{ $t('layout.topbar.exitCancel') }}</button>
       <button class="btn btn--danger" :disabled="exitIsSaving" @click="handleDiscardExit">
-        {{ exitSaveError ? '忽略错误退出' : '不保存退出' }}
+        {{ exitSaveError ? $t('layout.topbar.exitIgnoreError') : $t('layout.topbar.exitDiscard') }}
       </button>
       <button v-if="!exitSaveError" class="btn btn--primary" :disabled="exitIsSaving" @click="handleSaveAndExit">
         <span v-if="exitIsSaving" class="btn-spinner" />
-        {{ exitIsSaving ? '保存中…' : '保存并退出' }}
+        {{ exitIsSaving ? $t('layout.topbar.savingInProgress') : $t('layout.topbar.saveAndExit') }}
       </button>
-      <button v-else class="btn btn--primary" @click="handleSaveAndExit">重试保存</button>
+      <button v-else class="btn btn--primary" @click="handleSaveAndExit">{{ $t('layout.topbar.retrySave') }}</button>
     </template>
   </Modal>
 </template>
@@ -154,6 +154,7 @@
 // App doc: docs/user-guide/pages/game-overview.md §4.0.1
 import { ref, computed, onMounted, onUnmounted, inject } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { eventBus } from '@/engine/core/event-bus';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -161,6 +162,7 @@ import type { SaveManager } from '@/engine/persistence/save-manager';
 import type { GameStateTree } from '@/engine/types';
 
 const router = useRouter();
+const { t } = useI18n();
 const engineState = useEngineStateStore();
 const saveManager = inject<SaveManager>('saveManager');
 
@@ -180,6 +182,31 @@ const locationShort = computed(() => {
   const parts = loc.split('·');
   return parts[parts.length - 1].trim();
 });
+
+const localizedGameTime = computed(() => {
+  const year = engineState.get<number>('世界.时间.年') ?? 0;
+  const month = engineState.get<number>('世界.时间.月') ?? 0;
+  const day = engineState.get<number>('世界.时间.日') ?? 0;
+  if (!year && !month && !day) return '';
+  const hour = engineState.get<number>('世界.时间.小时') ?? null;
+  const minute = engineState.get<number>('世界.时间.分钟') ?? null;
+  const timePart = (hour !== null && minute !== null)
+    ? ` ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+    : '';
+  return timePart
+    ? t('layout.topbar.gameTime', { year, month, day, time: timePart })
+    : t('layout.topbar.gameTimeNoTime', { year, month, day });
+});
+
+const hasGameTime = computed(() => localizedGameTime.value !== '');
+
+const displayPackName = computed(() =>
+  engineState.packName === '未知游戏包' ? t('common.fallback.unknownPack') : engineState.packName,
+);
+
+const displayCharacterName = computed(() =>
+  engineState.characterName === '未命名角色' ? t('common.fallback.unnamedCharacter') : engineState.characterName,
+);
 
 // ── Generation status via event bus ──────────────────────────────
 function onGenerationStart() { isGenerating.value = true; }
@@ -238,7 +265,7 @@ async function handleSaveAndExit(): Promise<void> {
     router.push('/');
   } catch (err) {
     console.error('[TopBar] Save before exit failed:', err);
-    exitSaveError.value = err instanceof Error ? err.message : '存档失败，请重试';
+    exitSaveError.value = err instanceof Error ? err.message : t('layout.topbar.saveFailedRetry');
   } finally {
     exitIsSaving.value = false;
   }
@@ -274,14 +301,14 @@ function handleQuickSave(): void {
     resolved = true;
     offComplete();
     offError();
-    cleanup(true, '快速保存成功');
+    cleanup(true, t('layout.topbar.quickSaveSuccess'));
   });
   const offError = eventBus.on('engine:save-error', (payload: unknown) => {
     if (resolved) return;
     resolved = true;
     offComplete();
     offError();
-    const msg = (payload as { error?: string })?.error ?? '保存失败';
+    const msg = (payload as { error?: string })?.error ?? t('layout.topbar.saveFailed');
     cleanup(false, msg);
   });
   // 3s fallback — if neither event fires (e.g. no active slot), release loading state

@@ -1,0 +1,26 @@
+{
+  "modal.base.ariaClose": "关闭",
+
+  "modal.confirm.ariaDialog": "确认",
+  "modal.confirm.defaultCancel": "取消",
+  "modal.confirm.defaultConfirm": "确认",
+
+  "modal.npcChat.title": "与 {name} 私聊",
+  "modal.npcChat.ariaClose": "关闭",
+  "modal.npcChat.empty": "还没有对话 — 输入点什么开始吧",
+  "modal.npcChat.ariaDismissError": "关闭错误提示",
+  "modal.npcChat.placeholder": "对 {name} 说点什么…（Enter 发送，Shift+Enter 换行）",
+  "modal.npcChat.buttonRollback": "撤回",
+  "modal.npcChat.buttonSending": "发送中…",
+  "modal.npcChat.buttonSend": "发送",
+  "modal.npcChat.npcDeleted": "NPC「{name}」已不存在，自动关闭私聊",
+  "modal.npcChat.pipelineNotReady": "NPC 私聊管线未就绪",
+  "modal.npcChat.aiCallFailed": "AI 调用失败",
+  "modal.npcChat.rollbackSuccess": "已撤回上一条对话",
+  "modal.npcChat.rollbackFailed": "撤回失败",
+  "modal.npcChat.timestamp.yesterday": "昨天",
+
+  "modal.npcMemory.sectionSummaries": "总结",
+  "modal.npcMemory.sectionRecent": "近期",
+  "modal.npcMemory.empty": "这段关系还没有留下记忆"
+}

@@ -8,15 +8,30 @@
  * Phase 6.3 新增：导出 JSON + 统计 Modal + 每字段复制按钮。
  */
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
+import { getPathLabel } from '@/ui/composables/useStateTreeNavigation';
 import SearchInput from '@/ui/components/common/SearchInput.vue';
 import Modal from '@/ui/components/common/Modal.vue';
 import SchemaForm from '@/ui/components/editing/SchemaForm.vue';
 import { eventBus } from '@/engine/core/event-bus';
 
+const { t, locale } = useI18n();
+
 const { isLoaded, tree, get, setValue } = useGameState();
-const { getStateSchema } = useConfig();
+const { getStateSchema, pack } = useConfig();
+
+// Pack-level i18n data for translating state tree path segments (display only)
+const packI18n = computed<Record<string, string> | undefined>(() => {
+  if (!pack?.i18n) return undefined;
+  return pack.i18n[locale.value];
+});
+
+/** Translate a single path segment for display using pack pathLabels */
+function translateSegment(segment: string): string {
+  return getPathLabel(segment, packI18n.value);
+}
 
 // ─── Tree navigation ───
 
@@ -25,10 +40,16 @@ const breadcrumb = computed<string[]>(() =>
   selectedPath.value ? selectedPath.value.split('.') : [],
 );
 
+/** Translated breadcrumb segments for display */
+const displayBreadcrumb = computed<string[]>(() =>
+  breadcrumb.value.map((seg) => translateSegment(seg)),
+);
+
 /** Children of the currently selected path */
 interface TreeNode {
   key: string;
   fullPath: string;
+  displayKey: string;
   type: string;
   childCount: number;
   preview: string;
@@ -53,7 +74,8 @@ const currentChildren = computed<TreeNode[]>(() => {
         childCount = Array.isArray(val) ? val.length : Object.keys(val as Record<string, unknown>).length;
       }
       const preview = summarizeNode(key, val);
-      return { key, fullPath, type, childCount, preview };
+      const displayKey = translateSegment(key);
+      return { key, fullPath, displayKey, type, childCount, preview };
     });
 });
 
@@ -76,24 +98,24 @@ function summarizeNode(_key: string, val: unknown): string {
     return truncate(String(val), 40);
   }
   if (Array.isArray(val)) {
-    if (val.length === 0) return '(空)';
+    if (val.length === 0) return t('variable.preview.empty');
     const first = val[0];
     if (first && typeof first === 'object' && !Array.isArray(first)) {
       const o = first as Record<string, unknown>;
       const name = o['名称'] ?? o['name'] ?? o['标题'] ?? o['title'] ?? o['id'] ?? o['subject'];
-      if (name) return `${val.length} 项 · 首项: ${truncate(String(name), 40)}`;
+      if (name) return t('variable.preview.firstItem', { count: val.length, name: truncate(String(name), 40) });
     }
-    return `${val.length} 项`;
+    return t('variable.preview.itemCount', { count: val.length });
   }
   const obj = val as Record<string, unknown>;
   const nameField = obj['名称'] ?? obj['name'] ?? obj['姓名'] ?? obj['标题'] ?? obj['描述'];
   if (nameField && typeof nameField === 'string') return truncate(nameField, 40);
   const keys = Object.keys(obj);
-  if (keys.length === 0) return '(空)';
+  if (keys.length === 0) return t('variable.preview.empty');
   const first = obj[keys[0]];
   if (typeof first === 'string') return `${keys[0]}: ${truncate(first, 35)}`;
   if (typeof first === 'number') return `${keys[0]}: ${first}`;
-  return `${keys.length} 字段`;
+  return t('variable.preview.fieldCount', { count: keys.length });
 }
 
 /** Navigate into a tree key */
@@ -232,7 +254,7 @@ function commitEdit(field: FieldEntry): void {
   }
   setValue(field.path, parsed);
   editingPath.value = null;
-  eventBus.emit('ui:toast', { type: 'success', message: '值已更新', duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('variable.toast.valueUpdated'), duration: 1200 });
 }
 
 function cancelEdit(): void {
@@ -241,7 +263,7 @@ function cancelEdit(): void {
 
 function toggleBoolean(field: FieldEntry): void {
   setValue(field.path, !(field.value as boolean));
-  eventBus.emit('ui:toast', { type: 'success', message: '值已更新', duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('variable.toast.valueUpdated'), duration: 1200 });
 }
 
 const pendingResetField = ref<FieldEntry | null>(null);
@@ -253,7 +275,7 @@ function confirmResetField(field: FieldEntry): void {
 function executeResetField(): void {
   if (!pendingResetField.value) return;
   setValue(pendingResetField.value.path, pendingResetField.value.defaultValue);
-  eventBus.emit('ui:toast', { type: 'info', message: '已重置为默认值', duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('variable.toast.resetDone'), duration: 1200 });
   pendingResetField.value = null;
 }
 
@@ -278,7 +300,7 @@ function openStringEdit(field: FieldEntry): void {
 function saveStringEdit(): void {
   setValue(stringEditPath.value, stringEditValue.value);
   showStringModal.value = false;
-  eventBus.emit('ui:toast', { type: 'success', message: '值已更新', duration: 1200 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('variable.toast.valueUpdated'), duration: 1200 });
 }
 
 // ─── SchemaForm modal for complex types ───
@@ -291,7 +313,7 @@ const schemaModalData = ref<unknown>({});
 function openSchemaEdit(path: string, title: string): void {
   const data = get<unknown>(path);
   schemaModalPath.value = path;
-  schemaModalTitle.value = `编辑: ${title}`;
+  schemaModalTitle.value = t('variable.schemaEdit.titlePrefix', { title });
   schemaModalData.value = data != null ? JSON.parse(JSON.stringify(data)) : {};
   showSchemaModal.value = true;
 }
@@ -303,7 +325,7 @@ function onSchemaUpdate(newValue: unknown): void {
 function saveSchemaEdit(): void {
   setValue(schemaModalPath.value, schemaModalData.value);
   showSchemaModal.value = false;
-  eventBus.emit('ui:toast', { type: 'success', message: '数据已保存', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('variable.toast.dataSaved'), duration: 1500 });
 }
 
 // ─── Raw JSON editor modal ───
@@ -317,7 +339,7 @@ const jsonEditorError = ref('');
 function openJsonEditor(path: string): void {
   const val = get<unknown>(path);
   jsonEditorPath.value = path;
-  jsonEditorTitle.value = path || '根';
+  jsonEditorTitle.value = path || t('variable.breadcrumb.root');
   jsonEditorText.value = JSON.stringify(val, null, 2) ?? '{}';
   jsonEditorError.value = '';
   showJsonEditor.value = true;
@@ -328,7 +350,7 @@ function validateJsonEditor(): void {
     JSON.parse(jsonEditorText.value);
     jsonEditorError.value = '';
   } catch (e) {
-    jsonEditorError.value = e instanceof Error ? e.message : '格式错误';
+    jsonEditorError.value = e instanceof Error ? e.message : t('variable.jsonEditor.formatError');
   }
 }
 
@@ -339,9 +361,9 @@ function saveJsonEditor(): void {
     const parsed = JSON.parse(jsonEditorText.value);
     setValue(jsonEditorPath.value, parsed);
     showJsonEditor.value = false;
-    eventBus.emit('ui:toast', { type: 'success', message: 'JSON 已保存', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('variable.toast.jsonSaved'), duration: 1500 });
   } catch (e) {
-    jsonEditorError.value = e instanceof Error ? e.message : '格式错误';
+    jsonEditorError.value = e instanceof Error ? e.message : t('variable.jsonEditor.formatError');
   }
 }
 
@@ -366,7 +388,7 @@ function displayValue(val: unknown): string {
   if (typeof val === 'boolean') return val ? 'true' : 'false';
   if (typeof val === 'object') {
     if (Array.isArray(val)) {
-      if (val.length === 0) return '[ ] (空数组)';
+      if (val.length === 0) return t('variable.preview.emptyArray');
       const preview = val.slice(0, 2).map((item) => {
         if (typeof item === 'string') return `"${truncate(item, 40)}"`;
         if (item && typeof item === 'object') {
@@ -378,11 +400,11 @@ function displayValue(val: unknown): string {
         }
         return String(item);
       }).join(', ');
-      return `[${val.length} 项] ${preview}${val.length > 2 ? ', …' : ''}`;
+      return `[${t('variable.preview.itemCount', { count: val.length })}] ${preview}${val.length > 2 ? ', …' : ''}`;
     }
     const obj = val as Record<string, unknown>;
     const keys = Object.keys(obj);
-    if (keys.length === 0) return '{ } (空对象)';
+    if (keys.length === 0) return t('variable.preview.emptyObject');
     const preview = keys.slice(0, 3).map((k) => {
       const v = obj[k];
       if (typeof v === 'string') return `${k}: "${truncate(v, 30)}"`;
@@ -452,7 +474,7 @@ function exportStateJson(): void {
   a.download = `game-state-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
-  eventBus.emit('ui:toast', { type: 'success', message: '状态已导出', duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'success', message: t('variable.toast.stateExported'), duration: 1500 });
 }
 
 // ─── Phase 6.3: Stats Modal ───────────────────────────────────
@@ -512,9 +534,9 @@ async function copyFieldValue(path: string): Promise<void> {
       document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    eventBus.emit('ui:toast', { type: 'success', message: '已复制', duration: 1000 });
+    eventBus.emit('ui:toast', { type: 'success', message: t('variable.toast.copied'), duration: 1000 });
   } catch {
-    eventBus.emit('ui:toast', { type: 'error', message: '复制失败', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'error', message: t('variable.toast.copyFailed'), duration: 1500 });
   }
 }
 </script>
@@ -524,26 +546,26 @@ async function copyFieldValue(path: string): Promise<void> {
     <template v-if="isLoaded">
       <!-- ─── Header ─── -->
       <header class="panel-header">
-        <h2 class="panel-title">游戏变量</h2>
+        <h2 class="panel-title">{{ t('variable.title') }}</h2>
         <div class="header-actions">
-          <button class="btn btn--ghost btn--sm" @click="showStatsModal = true" title="数据统计">
+          <button class="btn btn--ghost btn--sm" @click="showStatsModal = true" :title="t('variable.stats')">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
-            统计
+            {{ t('variable.stats') }}
           </button>
-          <button class="btn btn--primary btn--sm" @click="exportStateJson" title="导出完整状态 JSON">
+          <button class="btn btn--primary btn--sm" @click="exportStateJson" :title="t('variable.exportJson')">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-            导出 JSON
+            {{ t('variable.exportJson') }}
           </button>
         </div>
       </header>
 
       <!-- ─── Search bar ─── -->
-      <SearchInput v-model="searchQuery" placeholder="搜索路径或值…" :debounce-ms="200" />
+      <SearchInput v-model="searchQuery" :placeholder="t('variable.search.placeholder')" :debounce-ms="200" />
 
       <!-- ─── Search results overlay ─── -->
       <div v-if="isSearching" class="search-results">
         <div class="search-results-header">
-          搜索结果 ({{ searchResults.length }})
+          {{ t('variable.search.resultsTitle', { count: searchResults.length }) }}
         </div>
         <div v-if="searchResults.length" class="search-result-list">
           <div
@@ -558,18 +580,18 @@ async function copyFieldValue(path: string): Promise<void> {
             </span>
           </div>
         </div>
-        <p v-else class="empty-hint">没有匹配结果</p>
+        <p v-else class="empty-hint">{{ t('variable.search.noResults') }}</p>
       </div>
 
       <!-- ─── Main content (hidden during search) ─── -->
       <div v-else class="gv-content">
         <!-- Breadcrumb + JSON edit action -->
         <div class="breadcrumb-bar">
-          <nav class="breadcrumb" aria-label="路径导航">
+          <nav class="breadcrumb" :aria-label="t('variable.breadcrumb.root')">
             <button class="breadcrumb-item breadcrumb-item--root" @click="navigateBreadcrumb(-1)">
-              根
+              {{ t('variable.breadcrumb.root') }}
             </button>
-            <template v-for="(segment, idx) in breadcrumb" :key="idx">
+            <template v-for="(segment, idx) in displayBreadcrumb" :key="idx">
               <span class="breadcrumb-sep">/</span>
               <button
                 :class="['breadcrumb-item', { 'breadcrumb-item--active': idx === breadcrumb.length - 1 }]"
@@ -582,7 +604,7 @@ async function copyFieldValue(path: string): Promise<void> {
           <button
             v-if="selectedPath"
             class="btn btn--ghost btn--sm"
-            title="以 JSON 方式编辑当前路径"
+            :title="t('variable.breadcrumb.jsonEdit')"
             @click="openJsonEditor(selectedPath)"
           >
             { } JSON
@@ -597,7 +619,7 @@ async function copyFieldValue(path: string): Promise<void> {
               v-for="child in currentChildren"
               :key="child.fullPath"
               :class="['tree-node', { 'tree-node--selected': selectedPath === child.fullPath, 'tree-node--navigable': child.type === 'object' || child.type === 'array' }]"
-              :title="child.type === 'object' ? '点击展开此分类' : child.type === 'array' ? '点击查看列表内容' : '点击编辑此字段'"
+              :title="child.type === 'object' ? t('variable.tree.expandFolder') : child.type === 'array' ? t('variable.tree.viewList') : t('variable.tree.editField')"
               @click="(child.type === 'object' || child.type === 'array') ? navigateTo(child.fullPath) : startEdit({ key: child.key, path: child.fullPath, value: get(child.fullPath), type: child.type, isComplex: false, defaultValue: undefined, isDifferentFromDefault: false })"
             >
               <span :class="['tree-node-icon', `tree-node-icon--${child.type}`]">
@@ -605,19 +627,19 @@ async function copyFieldValue(path: string): Promise<void> {
                 <svg v-else-if="child.type === 'array'" viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M2 4a1 1 0 100-2 1 1 0 000 2zm3.75-1.5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zM3 8a1 1 0 10-2 0 1 1 0 002 0zm-1 5a1 1 0 100-2 1 1 0 000 2z"/></svg>
                 <span v-else class="tree-node-dot" :style="{ background: typeColor(child.type) }" />
               </span>
-              <span class="tree-node-name">{{ child.key }}</span>
+              <span class="tree-node-name">{{ child.displayKey }}</span>
               <span class="tree-node-preview" :style="{ color: (child.type === 'object' || child.type === 'array') ? '#8888a0' : typeColor(child.type) }">
                 {{ child.preview }}
               </span>
               <span v-if="child.type === 'object' || child.type === 'array'" class="tree-node-arrow">›</span>
             </div>
-            <p v-if="!currentChildren.length" class="empty-hint">此路径下无数据</p>
+            <p v-if="!currentChildren.length" class="empty-hint">{{ t('variable.tree.emptyPath') }}</p>
           </aside>
 
           <!-- Right: field list for selected path -->
           <main class="field-list">
             <div v-if="!selectedPath" class="field-list-hint">
-              <p>选择左侧的分类以查看和编辑字段</p>
+              <p>{{ t('variable.field.selectHint') }}</p>
             </div>
             <template v-else>
               <div
@@ -626,7 +648,7 @@ async function copyFieldValue(path: string): Promise<void> {
                 class="field-row"
               >
                 <div class="field-key-area">
-                  <span class="field-key">{{ field.key }}</span>
+                  <span class="field-key">{{ translateSegment(field.key) }}</span>
                   <span class="field-type-tag" :style="{ color: typeColor(field.type), borderColor: typeColor(field.type) }">
                     {{ field.type }}
                   </span>
@@ -668,7 +690,7 @@ async function copyFieldValue(path: string): Promise<void> {
                       class="field-value"
                       :style="{ color: typeColor(field.type) }"
                       @dblclick="startEdit(field)"
-                      title="双击编辑"
+                      :title="t('variable.field.doubleClickEdit')"
                     >
                       {{ displayValue(field.value) }}
                     </span>
@@ -677,7 +699,7 @@ async function copyFieldValue(path: string): Promise<void> {
                   <!-- Copy button -->
                   <button
                     class="copy-btn"
-                    title="复制此字段值"
+                    :title="t('variable.field.copyValue')"
                     @click.stop="copyFieldValue(field.path)"
                   >
                     <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
@@ -686,14 +708,14 @@ async function copyFieldValue(path: string): Promise<void> {
                   <button
                     v-if="field.isDifferentFromDefault"
                     class="reset-btn"
-                    title="重置为默认值（需确认）"
+                    :title="t('variable.field.resetDefault')"
                     @click.stop="confirmResetField(field)"
                   >
                     <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
                   </button>
                 </div>
               </div>
-              <p v-if="!fieldEntries.length" class="empty-hint">此路径下无字段</p>
+              <p v-if="!fieldEntries.length" class="empty-hint">{{ t('variable.field.emptyFields') }}</p>
             </template>
           </main>
         </div>
@@ -701,37 +723,37 @@ async function copyFieldValue(path: string): Promise<void> {
     </template>
 
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p>{{ t('variable.notLoaded') }}</p>
     </div>
 
     <!-- ─── Stats Modal ─── -->
-    <Modal v-model="showStatsModal" title="状态树统计" width="360px">
+    <Modal v-model="showStatsModal" :title="t('variable.stats.title')" width="360px">
       <div class="stats-grid">
         <div class="stats-row">
-          <span class="stats-label">估算大小</span>
+          <span class="stats-label">{{ t('variable.stats.estimatedSize') }}</span>
           <span class="stats-value">{{ stateStats.sizeKb }} KB</span>
         </div>
         <div class="stats-row">
-          <span class="stats-label">叶字段总数</span>
+          <span class="stats-label">{{ t('variable.stats.leafCount') }}</span>
           <span class="stats-value">{{ stateStats.leafCount.toLocaleString() }}</span>
         </div>
         <div class="stats-row">
-          <span class="stats-label">最大深度</span>
-          <span class="stats-value">{{ stateStats.depth }} 层</span>
+          <span class="stats-label">{{ t('variable.stats.maxDepth') }}</span>
+          <span class="stats-value">{{ t('variable.stats.maxDepthUnit', { depth: stateStats.depth }) }}</span>
         </div>
         <div class="stats-row">
-          <span class="stats-label">根节点数</span>
+          <span class="stats-label">{{ t('variable.stats.rootKeys') }}</span>
           <span class="stats-value">{{ stateStats.rootKeys }}</span>
         </div>
       </div>
       <template #footer>
-        <button class="btn-secondary" @click="showStatsModal = false">关闭</button>
-        <button class="btn-primary" @click="exportStateJson; showStatsModal = false">导出 JSON</button>
+        <button class="btn-secondary" @click="showStatsModal = false">{{ t('variable.stats.close') }}</button>
+        <button class="btn-primary" @click="exportStateJson; showStatsModal = false">{{ t('variable.exportJson') }}</button>
       </template>
     </Modal>
 
     <!-- ─── String Edit Modal ─── -->
-    <Modal v-model="showStringModal" :title="`编辑: ${stringEditKey}`" width="560px">
+    <Modal v-model="showStringModal" :title="t('variable.stringEdit.titlePrefix', { key: stringEditKey })" width="560px">
       <textarea
         v-model="stringEditValue"
         class="string-edit-textarea"
@@ -739,8 +761,8 @@ async function copyFieldValue(path: string): Promise<void> {
         spellcheck="false"
       />
       <template #footer>
-        <button class="btn-secondary" @click="showStringModal = false">取消</button>
-        <button class="btn-primary" @click="saveStringEdit">保存</button>
+        <button class="btn-secondary" @click="showStringModal = false">{{ t('variable.common.cancel') }}</button>
+        <button class="btn-primary" @click="saveStringEdit">{{ t('variable.common.save') }}</button>
       </template>
     </Modal>
 
@@ -752,29 +774,29 @@ async function copyFieldValue(path: string): Promise<void> {
         @update:value="onSchemaUpdate"
       />
       <template #footer>
-        <button class="btn-secondary" @click="showSchemaModal = false">取消</button>
-        <button class="btn-primary" @click="saveSchemaEdit">保存</button>
+        <button class="btn-secondary" @click="showSchemaModal = false">{{ t('variable.common.cancel') }}</button>
+        <button class="btn-primary" @click="saveSchemaEdit">{{ t('variable.common.save') }}</button>
       </template>
     </Modal>
 
     <!-- ─── Reset Confirmation ─── -->
-    <Modal :model-value="!!pendingResetField" @update:model-value="cancelReset" title="确认重置" width="400px">
+    <Modal :model-value="!!pendingResetField" @update:model-value="cancelReset" :title="t('variable.confirmReset.title')" width="400px">
       <p v-if="pendingResetField" style="font-size: 0.88rem; line-height: 1.6; margin: 0;">
-        确定要将 <code style="color: var(--color-primary);">{{ pendingResetField.path }}</code> 重置为默认值吗？此操作不可撤销。
+        {{ t('variable.confirmReset.text', { path: pendingResetField.path }) }}
       </p>
       <template #footer>
-        <button class="btn-secondary" @click="cancelReset">取消</button>
-        <button class="btn-primary" style="background:var(--color-danger);border-color:var(--color-danger);" @click="executeResetField">确认重置</button>
+        <button class="btn-secondary" @click="cancelReset">{{ t('variable.common.cancel') }}</button>
+        <button class="btn-primary" style="background:var(--color-danger);border-color:var(--color-danger);" @click="executeResetField">{{ t('variable.confirmReset.confirm') }}</button>
       </template>
     </Modal>
 
     <!-- ─── Raw JSON Editor Modal ─── -->
-    <Modal v-model="showJsonEditor" :title="`JSON 编辑: ${jsonEditorTitle}`" width="680px">
+    <Modal v-model="showJsonEditor" :title="t('variable.jsonEditor.titlePrefix', { title: jsonEditorTitle })" width="680px">
       <div class="json-editor">
         <div class="json-toolbar">
-          <button class="btn btn--ghost btn--sm" @click="formatJsonEditor">格式化</button>
-          <span v-if="jsonEditorError" class="json-error-badge">JSON 无效</span>
-          <span v-else class="json-ok-badge">JSON 有效</span>
+          <button class="btn btn--ghost btn--sm" @click="formatJsonEditor">{{ t('variable.jsonEditor.format') }}</button>
+          <span v-if="jsonEditorError" class="json-error-badge">{{ t('variable.jsonEditor.invalid') }}</span>
+          <span v-else class="json-ok-badge">{{ t('variable.jsonEditor.valid') }}</span>
         </div>
         <textarea
           v-model="jsonEditorText"
@@ -786,8 +808,8 @@ async function copyFieldValue(path: string): Promise<void> {
         <p v-if="jsonEditorError" class="json-error-msg">{{ jsonEditorError }}</p>
       </div>
       <template #footer>
-        <button class="btn-secondary" @click="showJsonEditor = false">取消</button>
-        <button class="btn-primary" :disabled="!jsonEditorValid" @click="saveJsonEditor">保存</button>
+        <button class="btn-secondary" @click="showJsonEditor = false">{{ t('variable.common.cancel') }}</button>
+        <button class="btn-primary" :disabled="!jsonEditorValid" @click="saveJsonEditor">{{ t('variable.common.save') }}</button>
       </template>
     </Modal>
   </div>

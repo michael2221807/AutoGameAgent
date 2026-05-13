@@ -28,7 +28,7 @@ import { joinPromptFragments } from './style-preset-injection';
 import { normalizeSingleCharacterOutput, processTransformerOutput, type SerializationStrategy } from './output-processor';
 import { buildDirectCharacterPrompt } from './direct-prompt-builder';
 import { getTransformerPresetContext } from './transformer-presets';
-import type { TransformerPromptPreset, ModelTransformerBundle } from './transformer-presets';
+import type { TransformerPromptPreset, ModelTransformerBundle, TransformerDefaultsData } from './transformer-presets';
 import { ImageStateManager, PLAYER_PSEUDO_NPC_ID } from './image-state-manager';
 import type { SceneCompositionMode, GameTime } from './scene-context';
 import { buildSceneContext } from './scene-context';
@@ -41,6 +41,8 @@ export class ImageService {
   private queue: ImageTaskQueue;
   /** Centralized state manager for image archive CRUD */
   readonly state: ImageStateManager;
+  /** Pack-level transformer defaults for i18n-aware prompt text */
+  private _transformerDefaults?: TransformerDefaultsData;
 
   constructor(
     private stateManager: StateManager,
@@ -73,12 +75,23 @@ export class ImageService {
       if (!payload || typeof payload !== 'object') return;
       const { status, error } = payload as { status?: string; error?: string };
       if (status === 'failed') {
+        // error text is provider-specific dynamic content — no i18nKey, message-only intentional
         const msg = error ? `图像生成失败: ${error.slice(0, 120)}` : '图像生成失败';
         eventBus.emit('ui:toast', { type: 'error', message: msg, duration: 5000 });
       } else if (status === 'complete') {
-        eventBus.emit('ui:toast', { type: 'success', message: '图像生成完成', duration: 2000 });
+        eventBus.emit('ui:toast', { type: 'success', i18nKey: 'engine.toast.imageGenComplete', message: '图像生成完成', duration: 2000 });
       }
     });
+  }
+
+  /** Set pack-level transformer defaults (called once at bootstrap after pack load) */
+  setTransformerDefaults(data: TransformerDefaultsData | undefined): void {
+    this._transformerDefaults = data;
+  }
+
+  /** Get pack-level transformer defaults (for UI to read and pass to getDefaultPresets) */
+  getTransformerDefaults(): TransformerDefaultsData | undefined {
+    return this._transformerDefaults;
   }
 
   /** Restore task queue from state tree (called after game load) */
@@ -105,6 +118,8 @@ export class ImageService {
       console.warn(`[ImageService] Recovered ${recovered} stuck task(s) after reload`);
       eventBus.emit('ui:toast', {
         type: 'warning',
+        i18nKey: 'engine.toast.imageTasksRecovered',
+        i18nParams: { count: recovered },
         message: `${recovered} 个图像生成任务因页面刷新中断`,
         duration: 4000,
       });
@@ -174,11 +189,21 @@ export class ImageService {
   private getCustomPresetOptions(): {
     customPresets?: TransformerPromptPreset[];
     customBundles?: ModelTransformerBundle[];
+    transformerDefaults?: TransformerDefaultsData;
   } {
     const ruleTemplates = this.stateManager.get<Array<Record<string, unknown>>>('系统.扩展.image.ruleTemplates');
     const modelRulesets = this.stateManager.get<Array<Record<string, unknown>>>('系统.扩展.image.modelRulesets');
 
-    const options: { customPresets?: TransformerPromptPreset[]; customBundles?: ModelTransformerBundle[] } = {};
+    const options: {
+      customPresets?: TransformerPromptPreset[];
+      customBundles?: ModelTransformerBundle[];
+      transformerDefaults?: TransformerDefaultsData;
+    } = {};
+
+    // Pass pack-level transformer defaults for i18n-aware fallback text
+    if (this._transformerDefaults) {
+      options.transformerDefaults = this._transformerDefaults;
+    }
 
     if (Array.isArray(ruleTemplates) && ruleTemplates.length > 0) {
       const scopeMap: Record<string, string> = { npc: 'npc', scene: 'scene', judge: 'scene_judge' };

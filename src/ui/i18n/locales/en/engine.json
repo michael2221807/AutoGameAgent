@@ -1,0 +1,30 @@
+{
+  "engine": {
+    "toast": {
+      "noRollbackSnapshot": "No rollback snapshot available (only one rollback per round)",
+      "privacyFieldsRepaired": "Extended fields auto-populated",
+      "privacyFieldsIncomplete": "{count} extended field(s) still incomplete (retry limit reached)",
+      "basicFieldsRepaired": "Basic fields auto-populated",
+      "basicFieldsIncomplete": "{count} field(s) still incomplete (retry limit reached)",
+      "autoSceneGenStart": "Auto-generating scene image…",
+      "autoSceneGenComplete": "Scene image generated",
+      "autoPortraitComplete": "Auto-portrait for {name} generated",
+      "rateLimitQueued": "Low-load mode: request queued, estimated wait {seconds}s",
+      "unknownPathRoot": "AI wrote to unknown path root \"{root}\" — see console",
+      "memoryPairMismatch": "Short/implicit mid-term memory pairing mismatch ({short} vs {implicit}), possible round alignment loss",
+      "implicitMemoryOverflow": "Implicit mid-term memory overflow, auto-cleaned ({before} → {after})",
+      "imageGenComplete": "Image generation complete",
+      "imageTasksRecovered": "{count} image generation task(s) interrupted by page refresh",
+      "missingMidTermMemory": "AI did not output mid-term memory for round {round}, placeholder inserted",
+      "fieldRepairFailed": "Field repair / memory maintenance failed (does not affect this round)",
+      "missingFieldsDetected": "Detected {count} missing extended field(s), will auto-populate"
+    },
+    "progress": {
+      "stage": "[{name}]",
+      "aiCallStep1": "[AICall: Split Step 1]",
+      "aiCallStep2": "[AICall: Split Step 2]",
+      "bodyPolish": "[BodyPolish: Polishing]",
+      "responseRepair": "[ResponseRepair: Rescuing]"
+    }
+  }
+}

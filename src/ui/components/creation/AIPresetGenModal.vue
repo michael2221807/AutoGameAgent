@@ -17,6 +17,7 @@
  * 全程通过 eventBus 触发 toast 给用户反馈（loading / success / error）。
  */
 import { ref, watch, inject, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import type { CustomPresetSchema, GamePack } from '@/engine/types';
 import type { AIService } from '@/engine/ai/ai-service';
@@ -38,6 +39,8 @@ const emit = defineEmits<{
   /** AI 生成成功后 emit；payload 是字段对象，父组件用它预填 CustomPresetModal */
   generated: [fields: Record<string, unknown>];
 }>();
+
+const { t } = useI18n();
 
 // ─── Dependencies ─────────────────────────────────────────
 
@@ -78,7 +81,7 @@ async function handleGenerate(): Promise<void> {
   if (isGenerating.value) return;
   const gen = generator.value;
   if (!gen) {
-    errorMsg.value = 'AI 服务未初始化';
+    errorMsg.value = t('creation.aiGen.error.serviceNotInit');
     eventBus.emit('ui:toast', { type: 'error', message: errorMsg.value, duration: 2500 });
     return;
   }
@@ -89,7 +92,7 @@ async function handleGenerate(): Promise<void> {
   // toast: 推演中
   eventBus.emit('ui:toast', {
     type: 'info',
-    message: `正在 AI 推演自定义${props.stepLabel}…`,
+    message: t('creation.aiGen.toast.generating', { label: props.stepLabel }),
     duration: 2500,
   });
 
@@ -102,7 +105,7 @@ async function handleGenerate(): Promise<void> {
     });
     eventBus.emit('ui:toast', {
       type: 'success',
-      message: `AI 推演完成 —— 请审阅后保存`,
+      message: t('creation.aiGen.toast.success'),
       duration: 2500,
     });
     emit('generated', result.fields);
@@ -112,7 +115,7 @@ async function handleGenerate(): Promise<void> {
     errorMsg.value = msg;
     eventBus.emit('ui:toast', {
       type: 'error',
-      message: `AI 推演失败：${msg.slice(0, 80)}`,
+      message: t('creation.aiGen.toast.error', { msg: msg.slice(0, 80) }),
       duration: 4000,
     });
   } finally {
@@ -124,41 +127,40 @@ async function handleGenerate(): Promise<void> {
 <template>
   <Modal
     :model-value="modelValue"
-    :title="`AI 推演自定义${stepLabel}`"
+    :title="t('creation.aiGen.title', { label: stepLabel })"
     width="500px"
     :closable="!isGenerating"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
     <div class="ai-preset-gen">
       <p class="hint">
-        填写一段简短的描述（如"末世废土风格的修真世界"），AI 会按字段定义生成一条候选预设供你审阅。
-        留空则让 AI 自由发挥。
+        {{ $t('creation.aiGen.hint') }}
       </p>
 
-      <label class="form-label" for="ai-seed-input">种子描述（可选）</label>
+      <label class="form-label" for="ai-seed-input">{{ $t('creation.aiGen.seedLabel') }}</label>
       <textarea
         id="ai-seed-input"
         v-model="userSeed"
         class="form-textarea"
         rows="5"
-        placeholder="如「一个末世背景的修真世界，灵气复苏前夕，幸存者建立宗门…」"
+        :placeholder="$t('creation.aiGen.seedPlaceholder')"
         :disabled="isGenerating"
       />
 
       <p v-if="errorMsg" class="error-msg">⚠ {{ errorMsg }}</p>
 
       <div class="meta-tip">
-        <span>使用 API：主游戏配置</span>
+        <span>{{ $t('creation.aiGen.apiLabel') }}</span>
         <span>·</span>
-        <span>已注入 jailbreak 提示词</span>
+        <span>{{ $t('creation.aiGen.jailbreakNote') }}</span>
       </div>
     </div>
 
     <template #footer>
-      <button class="btn btn--secondary" :disabled="isGenerating" @click="close">取消</button>
+      <button class="btn btn--secondary" :disabled="isGenerating" @click="close">{{ $t('creation.aiGen.cancel') }}</button>
       <button class="btn btn--primary" :disabled="isGenerating" @click="handleGenerate">
         <span v-if="isGenerating" class="btn-spinner" />
-        {{ isGenerating ? 'AI 推演中…' : '✦ 开始推演' }}
+        {{ isGenerating ? $t('creation.aiGen.generatingLabel') : $t('creation.aiGen.generate') }}
       </button>
     </template>
   </Modal>

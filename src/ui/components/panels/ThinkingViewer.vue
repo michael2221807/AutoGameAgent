@@ -10,7 +10,10 @@
  * Principle: the modal only *displays* — no editing. Edit flow belongs to
  * Phase 5's raw-response editor, which rewrites the full parser input.
  */
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
+
+const { t } = useI18n();
 
 interface Props {
   /** v-model for Modal visibility. */
@@ -32,8 +35,8 @@ defineEmits<{
 
 function title(): string {
   return props.roundNumber > 0
-    ? `AI 思考 · 第 ${props.roundNumber} 回合`
-    : 'AI 思考';
+    ? t('mainGame.thinkingViewer.title', { n: props.roundNumber })
+    : t('mainGame.thinkingViewer.titleGeneric');
 }
 </script>
 
@@ -45,7 +48,7 @@ function title(): string {
     @update:model-value="(v) => $emit('update:modelValue', v)"
   >
     <pre v-if="props.text && props.text.trim().length > 0" class="thinking-viewer__body">{{ props.text }}</pre>
-    <p v-else class="thinking-viewer__empty">（本回合无思考记录）</p>
+    <p v-else class="thinking-viewer__empty">{{ $t('mainGame.thinkingViewer.empty') }}</p>
   </Modal>
 </template>
 

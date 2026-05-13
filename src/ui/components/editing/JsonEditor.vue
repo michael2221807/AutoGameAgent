@@ -10,6 +10,9 @@
  *   - 只读模式
  */
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = withDefaults(defineProps<{
   /** 当前 JSON 文本（v-model） */
@@ -77,7 +80,7 @@ function validateJson(text: string): void {
     if (err instanceof SyntaxError) {
       errorMessage.value = err.message;
     } else {
-      errorMessage.value = '无效 JSON';
+      errorMessage.value = t('jsonEditor.invalid');
     }
   }
 }
@@ -113,23 +116,23 @@ function minifyJson(): void {
   <div class="json-editor" :class="{ 'has-error': !isValid, 'is-readonly': readonly }">
     <!-- 工具栏 -->
     <div class="editor-toolbar">
-      <span class="toolbar-label">JSON 编辑器</span>
+      <span class="toolbar-label">{{ t('jsonEditor.title') }}</span>
       <div class="toolbar-actions">
         <button
           class="toolbar-btn"
-          title="格式化"
+          :title="t('jsonEditor.format')"
           :disabled="readonly"
           @click="formatJson"
         >
-          格式化
+          {{ t('jsonEditor.format') }}
         </button>
         <button
           class="toolbar-btn"
-          title="压缩"
+          :title="t('jsonEditor.compress')"
           :disabled="readonly"
           @click="minifyJson"
         >
-          压缩
+          {{ t('jsonEditor.compress') }}
         </button>
       </div>
     </div>
@@ -154,8 +157,8 @@ function minifyJson(): void {
     <!-- 状态栏 -->
     <div class="editor-status">
       <span v-if="!isValid" class="status-error">{{ errorMessage }}</span>
-      <span v-else class="status-ok">JSON 有效</span>
-      <span class="status-lines">{{ lineCount }} 行</span>
+      <span v-else class="status-ok">{{ t('jsonEditor.valid') }}</span>
+      <span class="status-lines">{{ t('jsonEditor.lineCount', { count: lineCount }) }}</span>
     </div>
   </div>
 </template>

@@ -10,6 +10,7 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md Phase 5b。
  */
 import { ref, computed, inject, onMounted, type Ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type {
   AssistantService,
   AssistantSendError,
@@ -26,6 +27,7 @@ const SETTINGS_KEY = 'aga_assistant_settings';
 const SESSION_ID = 'default';
 
 export function useAssistant() {
+  const { t } = useI18n();
   const service = inject<AssistantService>('assistantService');
   if (!service) {
     throw new Error('[useAssistant] AssistantService not provided');
@@ -82,7 +84,7 @@ export function useAssistant() {
       const e = err as AssistantSendError | Error;
       eventBus.emit('ui:toast', {
         type: 'error',
-        message: `发送失败：${e.message ?? String(err)}`,
+        message: t('assistant.toast.sendFailed', { error: e.message ?? String(err) }),
         duration: 4000,
       });
     } finally {
@@ -95,7 +97,7 @@ export function useAssistant() {
   async function clear(): Promise<void> {
     await service!.clear(SESSION_ID);
     await refreshSession();
-    eventBus.emit('ui:toast', { type: 'info', message: '对话已清空', duration: 1500 });
+    eventBus.emit('ui:toast', { type: 'info', message: t('assistant.toast.conversationCleared'), duration: 1500 });
   }
 
   async function applyPayload(messageId: string, draft: PayloadDraft): Promise<void> {
@@ -103,13 +105,13 @@ export function useAssistant() {
     if (result.ok) {
       eventBus.emit('ui:toast', {
         type: 'success',
-        message: `已注入 ${result.patchCount} 个 patch`,
+        message: t('assistant.toast.patchInjected', { count: result.patchCount }),
         duration: 2500,
       });
     } else {
       eventBus.emit('ui:toast', {
         type: 'error',
-        message: `注入失败：${result.error}`,
+        message: t('assistant.toast.injectFailed', { error: result.error }),
         duration: 4000,
       });
     }
@@ -119,9 +121,9 @@ export function useAssistant() {
   async function rollback(): Promise<void> {
     const result = await service!.rollbackLastInject(SESSION_ID);
     if (result.ok) {
-      eventBus.emit('ui:toast', { type: 'success', message: '已撤销注入', duration: 2000 });
+      eventBus.emit('ui:toast', { type: 'success', message: t('assistant.toast.rollbackSuccess'), duration: 2000 });
     } else {
-      eventBus.emit('ui:toast', { type: 'warning', message: result.error ?? '撤销失败', duration: 2500 });
+      eventBus.emit('ui:toast', { type: 'warning', message: result.error ?? t('assistant.toast.rollbackFailed'), duration: 2500 });
     }
     await refreshSession();
   }

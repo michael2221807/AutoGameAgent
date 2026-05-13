@@ -7,7 +7,15 @@
  * 不允许低于 0 或超过上限，也不允许总分配超出预算。
  */
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { CreationStep } from '@/engine/types';
+
+const { t } = useI18n();
+function attrLabel(attr: string): string {
+  const key = `creation.attributes.labels.${attr}`;
+  const result = t(key);
+  return result === key ? attr : result;
+}
 
 const props = defineProps<{
   step: CreationStep;
@@ -129,27 +137,27 @@ function emitCurrent(): void {
         class="points-badge"
         :class="{ empty: remaining === 0, negative: remaining < 0 }"
       >
-        剩余点数: <strong>{{ remaining }}</strong> / {{ totalPoints }}
+        {{ $t('creation.attributes.pointsBadge', { remaining, total: totalPoints }) }}
       </span>
     </div>
 
     <!-- 辅助操作按钮组 -->
     <div class="helper-actions">
-      <button class="helper-btn" @click="resetAttributes" title="所有属性归零">
-        重置
+      <button class="helper-btn" @click="resetAttributes" :title="$t('creation.attributes.reset')">
+        {{ $t('creation.attributes.reset') }}
       </button>
-      <button class="helper-btn" @click="balanceAttributes" title="均等分配所有点数">
-        均等
+      <button class="helper-btn" @click="balanceAttributes" :title="$t('creation.attributes.balance')">
+        {{ $t('creation.attributes.balance') }}
       </button>
-      <button class="helper-btn" @click="randomizeAttributes" title="随机分配所有点数">
-        随机
+      <button class="helper-btn" @click="randomizeAttributes" :title="$t('creation.attributes.randomize')">
+        {{ $t('creation.attributes.randomize') }}
       </button>
     </div>
 
     <div class="attr-list">
       <div v-for="attr in attributes" :key="attr" class="attr-row">
         <div class="attr-name-col">
-          <span class="attr-name">{{ attr }}</span>
+          <span class="attr-name">{{ attrLabel(attr) }}</span>
           <span
             v-if="step.attributeDescriptions && step.attributeDescriptions[attr]"
             class="attr-desc"

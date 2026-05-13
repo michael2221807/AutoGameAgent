@@ -15,10 +15,13 @@
  * - 单击 detail panel（保留原有设计）
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, nextTick, toRaw } from 'vue';
+import { useI18n } from 'vue-i18n';
 import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
 import type { Core as CyCore, NodeSingular, EventObject } from 'cytoscape';
 import { useGameState } from '@/ui/composables/useGameState';
+
+const { t } = useI18n();
 
 cytoscape.use(fcose);
 import { useMobile } from '@/ui/composables/useMobile';
@@ -622,7 +625,7 @@ function showTooltip(node: NodeSingular): void {
   const name = node.id();
   const loc = validLocations.value.find((l) => l.名称 === name);
   const stateMap: Record<string, string> = {
-    explored: '已探索', partial: '部分探索', unexplored: '未探索',
+    explored: t('map.tooltip.explored'), partial: t('map.tooltip.partial'), unexplored: t('map.tooltip.unexplored'),
   };
 
   tooltip.value = {
@@ -631,7 +634,7 @@ function showTooltip(node: NodeSingular): void {
     name: shortLabel(name),
     desc: loc?.描述 ?? '',
     npcs: Array.isArray(loc?.NPC) ? loc!.NPC! : [],
-    state: stateMap[node.data('explState') as string] ?? '未知',
+    state: stateMap[node.data('explState') as string] ?? t('map.tooltip.unknown'),
   };
 }
 
@@ -810,11 +813,11 @@ onActivated(() => {
     <template v-if="isLoaded">
       <!-- Header -->
       <header class="panel-header">
-        <h2 class="panel-title">世界地图</h2>
+        <h2 class="panel-title">{{ $t('map.title') }}</h2>
         <div class="header-actions">
-          <button class="btn-secondary" title="适应视图" @click="fitView">适应视图</button>
-          <button class="btn-secondary" title="刷新布局" @click="refreshGraph">刷新</button>
-          <button class="btn-help" aria-label="操作说明" title="操作说明" @click="showHelp = true">?</button>
+          <button class="btn-secondary" :title="$t('map.fitView')" @click="fitView">{{ $t('map.fitView') }}</button>
+          <button class="btn-secondary" :title="$t('map.refresh')" @click="refreshGraph">{{ $t('map.refresh') }}</button>
+          <button class="btn-help" :aria-label="$t('map.helpBtn')" :title="$t('map.helpBtn')" @click="showHelp = true">?</button>
         </div>
       </header>
 
@@ -825,8 +828,8 @@ onActivated(() => {
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
             <circle cx="12" cy="9" r="2.5" />
           </svg>
-          <p class="empty-title">暂无地点记录</p>
-          <p class="empty-hint">游戏中到达新地点后将自动显示于此</p>
+          <p class="empty-title">{{ $t('map.empty.title') }}</p>
+          <p class="empty-hint">{{ $t('map.empty.hint') }}</p>
         </div>
 
         <div v-else ref="cyContainer" class="cy-viewport" />
@@ -846,28 +849,28 @@ onActivated(() => {
         </div>
 
         <!-- Legend -->
-        <div v-if="hasLocations" class="map-legend" role="list" aria-label="地图图例">
+        <div v-if="hasLocations" class="map-legend" role="list" :aria-label="$t('map.legend.ariaLabel')">
           <div class="legend-item" role="listitem">
             <span class="legend-dot legend-dot--player" aria-hidden="true" />
-            <span class="legend-label">当前位置</span>
+            <span class="legend-label">{{ $t('map.legend.player') }}</span>
           </div>
           <div class="legend-item" role="listitem">
             <span class="legend-dot legend-dot--explored" aria-hidden="true" />
-            <span class="legend-label">已探索</span>
+            <span class="legend-label">{{ $t('map.legend.explored') }}</span>
           </div>
           <div class="legend-item" role="listitem">
             <span class="legend-dot legend-dot--partial" aria-hidden="true" />
-            <span class="legend-label">部分探索</span>
+            <span class="legend-label">{{ $t('map.legend.partial') }}</span>
           </div>
           <div class="legend-item" role="listitem">
             <span class="legend-dot legend-dot--unknown" aria-hidden="true" />
-            <span class="legend-label">未探索</span>
+            <span class="legend-label">{{ $t('map.legend.unexplored') }}</span>
           </div>
         </div>
 
         <!-- Drill breadcrumb -->
         <div v-if="focusStack.length" class="drill-breadcrumb">
-          <button class="drill-back" @click="fitView">全图</button>
+          <button class="drill-back" @click="fitView">{{ $t('map.drill.all') }}</button>
           <span v-for="(id, i) in focusStack" :key="id" class="drill-seg">
             <span class="drill-sep">/</span>
             <button class="drill-link" @click="focusStack.splice(i + 1); navigateToChild(id)">
@@ -879,31 +882,31 @@ onActivated(() => {
 
       <!-- Location detail panel -->
       <Transition name="detail-slide">
-        <div v-if="selectedEntry" class="location-detail" role="region" aria-label="地点详情">
+        <div v-if="selectedEntry" class="location-detail" role="region" :aria-label="$t('map.detail.ariaLabel')">
           <div class="detail-header">
             <h3 class="detail-name">{{ selectedEntry.名称 }}</h3>
-            <button class="btn-icon" aria-label="关闭" title="关闭" @click="clearSelection">✕</button>
+            <button class="btn-icon" :aria-label="$t('map.detail.close')" :title="$t('map.detail.close')" @click="clearSelection">✕</button>
           </div>
 
           <div class="exploration-badge">
-            <span v-if="exploredSet.has(selectedEntry.名称)" class="badge badge--explored">已探索</span>
-            <span v-else class="badge badge--unknown">未探索</span>
-            <span v-if="selectedEntry.名称 === playerLocation" class="badge badge--here">📍 你在这里</span>
+            <span v-if="exploredSet.has(selectedEntry.名称)" class="badge badge--explored">{{ $t('map.detail.explored') }}</span>
+            <span v-else class="badge badge--unknown">{{ $t('map.detail.unexplored') }}</span>
+            <span v-if="selectedEntry.名称 === playerLocation" class="badge badge--here">📍 {{ $t('map.detail.youAreHere') }}</span>
           </div>
 
           <p v-if="selectedEntry.描述" class="detail-desc">{{ selectedEntry.描述 }}</p>
-          <p v-else class="detail-no-desc">暂无描述</p>
+          <p v-else class="detail-no-desc">{{ $t('map.detail.noDesc') }}</p>
 
           <div v-if="selectedEntry.类型" class="detail-row">
-            <span class="detail-label">类型</span>
+            <span class="detail-label">{{ $t('map.detail.type') }}</span>
             <span class="detail-value">{{ selectedEntry.类型 }}</span>
           </div>
           <div v-if="selectedEntry.上级" class="detail-row">
-            <span class="detail-label">上级</span>
+            <span class="detail-label">{{ $t('map.detail.parent') }}</span>
             <button class="detail-link" @click="navigateToChild(selectedEntry.上级!)">{{ selectedEntry.上级 }}</button>
           </div>
           <div v-if="selectedEntry.NPC?.length" class="detail-row">
-            <span class="detail-label">NPC</span>
+            <span class="detail-label">{{ $t('map.detail.npc') }}</span>
             <div class="npc-tags">
               <span v-for="npc in selectedEntry.NPC" :key="npc" class="npc-tag">{{ npc }}</span>
             </div>
@@ -911,7 +914,7 @@ onActivated(() => {
 
           <!-- Child locations (navigable) -->
           <div v-if="selectedChildren.length" class="detail-row">
-            <span class="detail-label">内部</span>
+            <span class="detail-label">{{ $t('map.detail.children') }}</span>
             <div class="child-links">
               <button
                 v-for="child in selectedChildren"
@@ -925,22 +928,22 @@ onActivated(() => {
       </Transition>
     </template>
 
-    <div v-else class="empty-state"><p>尚未加载游戏数据</p></div>
+    <div v-else class="empty-state"><p>{{ $t('map.notLoaded') }}</p></div>
 
     <!-- Help modal -->
-    <Modal v-model="showHelp" title="地图操作说明">
+    <Modal v-model="showHelp" :title="$t('map.helpTitle')">
       <ul class="help-list" role="list">
-        <li><span class="help-icon">🖱</span><span><strong>滚轮 / 双指</strong>：缩放地图</span></li>
-        <li><span class="help-icon">🖱</span><span><strong>拖拽空白处</strong>：平移画布</span></li>
-        <li><span class="help-icon">🖱</span><span><strong>单击节点</strong>：查看地点详情</span></li>
-        <li><span class="help-icon">🖱</span><span><strong>双击区域</strong>：聚焦进入该区域（查看内部地点）</span></li>
-        <li><span class="help-icon">🖱</span><span><strong>双击空白</strong>：退回上一层</span></li>
-        <li><span class="help-icon">🔴</span><span><strong>红色光晕</strong>：你当前所在位置</span></li>
-        <li><span class="help-icon">🟢</span><span><strong>绿色边框</strong>：已探索地点</span></li>
-        <li><span class="help-icon">🟡</span><span><strong>黄色虚线</strong>：部分探索（内部有已探索子地点）</span></li>
-        <li><span class="help-icon">🔲</span><span><strong>矩形容器</strong>：包含子地点的区域</span></li>
-        <li><span class="help-icon">⚪</span><span><strong>圆形节点</strong>：最终地点（无子地点）</span></li>
-        <li><span class="help-icon">🎨</span><span><strong>色系</strong>：同颜色节点属于同一区域树</span></li>
+        <li><span class="help-icon">🖱</span><span><strong>{{ $t('map.help.zoomWheel') }}</strong>：{{ $t('map.help.zoomDesc') }}</span></li>
+        <li><span class="help-icon">🖱</span><span><strong>{{ $t('map.help.panDrag') }}</strong>：{{ $t('map.help.panDesc') }}</span></li>
+        <li><span class="help-icon">🖱</span><span><strong>{{ $t('map.help.tapNode') }}</strong>：{{ $t('map.help.tapDesc') }}</span></li>
+        <li><span class="help-icon">🖱</span><span><strong>{{ $t('map.help.dblRegion') }}</strong>：{{ $t('map.help.dblRegionDesc') }}</span></li>
+        <li><span class="help-icon">🖱</span><span><strong>{{ $t('map.help.dblBg') }}</strong>：{{ $t('map.help.dblBgDesc') }}</span></li>
+        <li><span class="help-icon">🔴</span><span><strong>{{ $t('map.help.redGlow') }}</strong>：{{ $t('map.help.redGlowDesc') }}</span></li>
+        <li><span class="help-icon">🟢</span><span><strong>{{ $t('map.help.greenBorder') }}</strong>：{{ $t('map.help.greenBorderDesc') }}</span></li>
+        <li><span class="help-icon">🟡</span><span><strong>{{ $t('map.help.yellowDash') }}</strong>：{{ $t('map.help.yellowDashDesc') }}</span></li>
+        <li><span class="help-icon">🔲</span><span><strong>{{ $t('map.help.rectContainer') }}</strong>：{{ $t('map.help.rectContainerDesc') }}</span></li>
+        <li><span class="help-icon">⚪</span><span><strong>{{ $t('map.help.circleNode') }}</strong>：{{ $t('map.help.circleNodeDesc') }}</span></li>
+        <li><span class="help-icon">🎨</span><span><strong>{{ $t('map.help.colorFamily') }}</strong>：{{ $t('map.help.colorFamilyDesc') }}</span></li>
       </ul>
     </Modal>
   </div>

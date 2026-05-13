@@ -7,9 +7,12 @@
  * and recent heartbeat execution logs from the state tree.
  */
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
+
+const { t } = useI18n();
 
 const { isLoaded, useValue, setValue } = useGameState();
 
@@ -45,7 +48,7 @@ function toggleHeartbeat(): void {
   saveHeartbeatToLocalStorage(next, heartbeatPeriod.value ?? 5);
   eventBus.emit('ui:toast', {
     type: current ? 'warning' : 'success',
-    message: current ? '心跳已禁用' : '心跳已启用',
+    message: current ? t('heartbeat.toast.disabled') : t('heartbeat.toast.enabled'),
     duration: 1500,
   });
 }
@@ -54,7 +57,7 @@ function updatePeriod(): void {
   const val = Math.max(1, Math.round(periodInput.value));
   setValue(DEFAULT_ENGINE_PATHS.heartbeatPeriod, val);
   saveHeartbeatToLocalStorage(heartbeatEnabled.value ?? false, val);
-  eventBus.emit('ui:toast', { type: 'info', message: `心跳周期已设为 ${val} 回合`, duration: 1500 });
+  eventBus.emit('ui:toast', { type: 'info', message: t('heartbeat.toast.periodSet', { val }), duration: 1500 });
 }
 
 // ─── History display ───
@@ -99,16 +102,16 @@ function toggleEntry(id: string): void {
   <div class="heartbeat-panel">
     <template v-if="isLoaded">
       <header class="panel-header">
-        <h2 class="panel-title">心跳系统</h2>
+        <h2 class="panel-title">{{ t('heartbeat.title') }}</h2>
       </header>
 
       <!-- ─── Configuration card ─── -->
       <section class="config-card">
-        <h3 class="card-title">心跳配置</h3>
+        <h3 class="card-title">{{ t('heartbeat.config.title') }}</h3>
 
         <!-- Enable/disable toggle -->
         <div class="config-row">
-          <span class="config-label">启用心跳</span>
+          <span class="config-label">{{ t('heartbeat.config.enableLabel') }}</span>
           <button
             :class="['toggle-btn', { 'toggle-btn--active': heartbeatEnabled }]"
             @click="toggleHeartbeat"
@@ -117,13 +120,13 @@ function toggleEntry(id: string): void {
             <span class="toggle-track">
               <span class="toggle-thumb" />
             </span>
-            <span class="toggle-text">{{ heartbeatEnabled ? '已启用' : '已禁用' }}</span>
+            <span class="toggle-text">{{ heartbeatEnabled ? t('heartbeat.config.enabled') : t('heartbeat.config.disabled') }}</span>
           </button>
         </div>
 
         <!-- Period setting -->
         <div class="config-row">
-          <span class="config-label">执行周期</span>
+          <span class="config-label">{{ t('heartbeat.config.period') }}</span>
           <div class="period-input-group">
             <input
               v-model.number="periodInput"
@@ -132,15 +135,15 @@ function toggleEntry(id: string): void {
               max="100"
               class="period-input"
             />
-            <span class="period-unit">回合/次</span>
-            <button class="btn-sm" @click="updatePeriod">应用</button>
+            <span class="period-unit">{{ t('heartbeat.config.periodUnit') }}</span>
+            <button class="btn-sm" @click="updatePeriod">{{ t('heartbeat.config.apply') }}</button>
           </div>
         </div>
 
         <!-- Last execution info -->
         <div class="config-row">
-          <span class="config-label">上次执行</span>
-          <span class="config-value">{{ lastHeartbeatTime ?? '尚未执行' }}</span>
+          <span class="config-label">{{ t('heartbeat.config.lastRun') }}</span>
+          <span class="config-value">{{ lastHeartbeatTime ?? t('heartbeat.config.neverRun') }}</span>
         </div>
 
         <!-- Status indicator -->
@@ -149,7 +152,7 @@ function toggleEntry(id: string): void {
             :class="['status-dot', heartbeatEnabled ? 'status-dot--active' : 'status-dot--inactive']"
           />
           <span class="status-text">
-            {{ heartbeatEnabled ? '心跳正在运行' : '心跳已暂停' }}
+            {{ heartbeatEnabled ? t('heartbeat.config.statusRunning') : t('heartbeat.config.statusPaused') }}
           </span>
         </div>
       </section>
@@ -157,7 +160,7 @@ function toggleEntry(id: string): void {
       <!-- ─── History ─── -->
       <section class="history-card">
         <h3 class="card-title">
-          执行历史
+          {{ t('heartbeat.history.title') }}
           <span v-if="historyEntries.length" class="badge">{{ historyEntries.length }}</span>
         </h3>
 
@@ -184,12 +187,12 @@ function toggleEntry(id: string): void {
             </div>
           </div>
         </div>
-        <p v-else class="empty-hint">暂无执行记录</p>
+        <p v-else class="empty-hint">{{ t('heartbeat.history.empty') }}</p>
       </section>
     </template>
 
     <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
+      <p>{{ t('heartbeat.notLoaded') }}</p>
     </div>
   </div>
 </template>

@@ -25,6 +25,7 @@ import { createApp, watch } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { router } from './ui/router';
+import { i18n, loadLocaleMessages } from './ui/i18n';
 import './ui/styles/tokens.css';
 import './ui/styles/mobile.css';
 
@@ -122,6 +123,15 @@ async function bootstrap(): Promise<void> {
   const pinia = createPinia();
   app.use(pinia);
   app.use(router);
+  app.use(i18n);
+
+  // Pre-load non-default locale messages before first render
+  try {
+    await loadLocaleMessages(i18n.global.locale.value);
+  } catch (err) {
+    console.warn('[Bootstrap] Locale load failed, falling back to zh-CN:', err);
+    i18n.global.locale.value = 'zh-CN';
+  }
 
   const apiStore = useAPIManagementStore();
   apiStore.loadFromStorage();
@@ -194,7 +204,7 @@ async function bootstrap(): Promise<void> {
   const packLoader = new GamePackLoader();
   let pack = null;
   try {
-    pack = await packLoader.load('tianming');
+    pack = await packLoader.load('tianming', i18n.global.locale.value);
     setBootstrapGamePack(pack);
   } catch (err) {
     console.warn('[Bootstrap] Game Pack load failed:', err);
@@ -563,6 +573,13 @@ async function bootstrap(): Promise<void> {
     DEFAULT_ENGINE_PATHS,
   );
 
+  // Pass pack-level transformer defaults to ImageService for i18n-aware prompt text
+  if (pack?.transformerDefaults) {
+    imageService.setTransformerDefaults(
+      pack.transformerDefaults as import('./engine/image/transformer-presets').TransformerDefaultsData,
+    );
+  }
+
   migrateImageState(stateManager);
 
   // ── #1: 创建 Orchestrator，接通 pipeline:user-input → PipelineRunner ──
@@ -641,6 +658,7 @@ async function bootstrap(): Promise<void> {
     commandExecutor,
     gamePack: pack,
     settings: assistantSettings,
+    locale: i18n.global.locale.value,
   });
   app.provide('assistantService', assistantService);
   app.provide('configRegistry', configRegistry);

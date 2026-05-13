@@ -1,0 +1,2 @@
+<think>Thinking complete</think>
+Understood. I will wrap the body text in <正文></正文>, begin with <thinking> before <正文> for reasoning and close with </thinking>, then output <短期记忆>, <变量规划>, and <剧情规划> after the body text per protocol:

@@ -29,7 +29,7 @@
             <button
               v-if="closable"
               class="modal-close"
-              aria-label="关闭对话框"
+              :aria-label="$t('common.actions.close')"
               @click="close"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
