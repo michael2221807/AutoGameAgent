@@ -863,7 +863,73 @@ const showSettings = ref(false);
         </div>
       </header>
 
-      <!-- ── Settings section ── -->
+      <!-- ── GitHub Cloud Sync (always visible) ── -->
+      <div class="gh-section gh-section--top">
+        <div class="gh-header">
+          <p class="settings-title">{{ $t('save.github.sectionTitle') }}</p>
+          <span v-if="ghUsername" class="gh-badge">{{ ghUsername }}</span>
+        </div>
+
+        <!-- Not connected: config form -->
+        <template v-if="!ghUsername">
+          <p class="gh-hint">
+            {{ $t('save.github.hintBefore') }}
+            <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" class="link-subtle">Personal Access Token</a>
+            {{ $t('save.github.hintAfter') }}
+          </p>
+          <div class="gh-form">
+            <div class="gh-field">
+              <label class="gh-label">{{ $t('save.github.tokenLabel') }}</label>
+              <div class="gh-token-row">
+                <input :type="ghShowToken ? 'text' : 'password'" class="gh-input gh-input--mono" v-model="ghToken" :placeholder="$t('save.github.tokenPlaceholder')" spellcheck="false" autocomplete="off" />
+                <button class="gh-eye" @click="ghShowToken = !ghShowToken" :title="ghShowToken ? $t('save.github.hideToken') : $t('save.github.showToken')">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z" /><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="gh-field">
+              <label class="gh-label">{{ $t('save.github.repoLabel') }}</label>
+              <input class="gh-input" v-model="ghRepoName" :placeholder="$t('save.github.repoPlaceholder')" spellcheck="false" />
+            </div>
+            <button class="gh-connect-btn" @click="ghSaveToken" :disabled="ghStatus.stage === 'checking' || !ghToken.trim()">
+              {{ ghStatus.stage === 'checking' ? $t('save.github.connecting') : $t('save.github.connectBtn') }}
+            </button>
+          </div>
+        </template>
+
+        <!-- Connected: sync actions -->
+        <template v-else>
+          <div class="gh-cloud-row">
+            <div class="gh-cloud-meta">
+              <span v-if="ghCloudInfo?.exists" class="gh-cloud-info">
+                {{ $t('save.github.cloudInfo', { time: ghCloudInfo.updatedAt ? formatDateTime(ghCloudInfo.updatedAt) : $t('common.fallback.unknown'), size: ghCloudInfo.sizeKB ?? 0 }) }}
+              </span>
+              <span v-else-if="ghCloudInfo" class="gh-cloud-info gh-cloud-empty">{{ $t('save.github.cloudEmpty') }}</span>
+            </div>
+            <button class="gh-copy-btn" @click="ghCopyToken" :title="$t('save.github.copyToken')">
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
+            </button>
+            <div class="gh-actions">
+              <button class="gh-action-btn gh-action-btn--up" :disabled="ghBusy()" @click="ghUpload">
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
+                {{ ghStatus.stage === 'uploading' ? $t('save.github.uploading') : $t('save.github.uploadBtn') }}
+              </button>
+              <button class="gh-action-btn gh-action-btn--down" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghShowDownloadConfirm = true">
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
+                {{ ghStatus.stage === 'downloading' ? $t('save.github.downloading') : $t('save.github.downloadBtn') }}
+              </button>
+              <button class="gh-action-btn gh-action-btn--disconnect" @click="ghUsername = ''; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" :title="$t('save.github.disconnect')">
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <p v-if="ghStatus.stage === 'error'" class="gh-error">{{ ghStatus.message }}</p>
+        <p v-else-if="ghStatus.stage !== 'idle' && ghStatus.stage !== 'done' && ghStatus.message" class="gh-status-msg">{{ ghStatus.message }}</p>
+      </div>
+
+      <!-- ── Settings section (toggled) ── -->
       <Transition name="cfg-expand">
         <section v-if="showSettings" class="settings-section">
           <p class="settings-title">{{ $t('save.settingsTitle') }}</p>
@@ -890,10 +956,12 @@ const showSettings = ref(false);
 
           <div class="backup-row">
             <p class="settings-title">{{ $t('save.backup.sectionTitle') }}</p>
-            <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--color-text-secondary);margin-bottom:4px;">
-              <input type="checkbox" v-model="includeReferenceAssets" style="accent-color:var(--color-sage-400)" />
-              {{ $t('save.backup.includeRef') }}
+            <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.hint') }}</p>
+            <label class="backup-include-ref">
+              <input type="checkbox" v-model="includeReferenceAssets" class="toggle-cb" />
+              <span>{{ $t('save.backup.includeRef') }}</span>
             </label>
+            <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.includeRefHint') }}</p>
             <div class="backup-btns">
               <button class="btn btn--secondary btn--sm" :disabled="isExportingBackup" @click="exportFullBackup">
                 <span v-if="isExportingBackup" class="spinner" />
@@ -905,72 +973,6 @@ const showSettings = ref(false);
               </button>
             </div>
             <p v-if="backupImportError" class="backup-error">{{ backupImportError }}</p>
-          </div>
-
-          <!-- ── GitHub Cloud Sync ── -->
-          <div class="gh-section">
-            <div class="gh-header">
-              <p class="settings-title">{{ $t('save.github.sectionTitle') }}</p>
-              <span v-if="ghUsername" class="gh-badge">{{ ghUsername }}</span>
-            </div>
-
-            <!-- 未连接：配置表单 -->
-            <template v-if="!ghUsername">
-              <p class="gh-hint">
-                {{ $t('save.github.hintBefore') }}
-                <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" class="link-subtle">Personal Access Token</a>
-                {{ $t('save.github.hintAfter') }}
-              </p>
-              <div class="gh-form">
-                <div class="gh-field">
-                  <label class="gh-label">{{ $t('save.github.tokenLabel') }}</label>
-                  <div class="gh-token-row">
-                    <input :type="ghShowToken ? 'text' : 'password'" class="gh-input gh-input--mono" v-model="ghToken" :placeholder="$t('save.github.tokenPlaceholder')" spellcheck="false" autocomplete="off" />
-                    <button class="gh-eye" @click="ghShowToken = !ghShowToken" :title="ghShowToken ? $t('save.github.hideToken') : $t('save.github.showToken')">
-                      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z" /><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4" /></svg>
-                    </button>
-                  </div>
-                </div>
-                <div class="gh-field">
-                  <label class="gh-label">{{ $t('save.github.repoLabel') }}</label>
-                  <input class="gh-input" v-model="ghRepoName" :placeholder="$t('save.github.repoPlaceholder')" spellcheck="false" />
-                </div>
-                <button class="gh-connect-btn" @click="ghSaveToken" :disabled="ghStatus.stage === 'checking' || !ghToken.trim()">
-                  {{ ghStatus.stage === 'checking' ? $t('save.github.connecting') : $t('save.github.connectBtn') }}
-                </button>
-              </div>
-            </template>
-
-            <!-- 已连接：同步操作 -->
-            <template v-else>
-              <div class="gh-cloud-row">
-                <div class="gh-cloud-meta">
-                  <span v-if="ghCloudInfo?.exists" class="gh-cloud-info">
-                    {{ $t('save.github.cloudInfo', { time: ghCloudInfo.updatedAt ? formatDateTime(ghCloudInfo.updatedAt) : $t('common.fallback.unknown'), size: ghCloudInfo.sizeKB ?? 0 }) }}
-                  </span>
-                  <span v-else-if="ghCloudInfo" class="gh-cloud-info gh-cloud-empty">{{ $t('save.github.cloudEmpty') }}</span>
-                </div>
-                <button class="gh-copy-btn" @click="ghCopyToken" :title="$t('save.github.copyToken')">
-                  <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
-                </button>
-                <div class="gh-actions">
-                  <button class="gh-action-btn gh-action-btn--up" :disabled="ghBusy()" @click="ghUpload">
-                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
-                    {{ ghStatus.stage === 'uploading' ? $t('save.github.uploading') : $t('save.github.uploadBtn') }}
-                  </button>
-                  <button class="gh-action-btn gh-action-btn--down" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghShowDownloadConfirm = true">
-                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
-                    {{ ghStatus.stage === 'downloading' ? $t('save.github.downloading') : $t('save.github.downloadBtn') }}
-                  </button>
-                  <button class="gh-action-btn gh-action-btn--disconnect" @click="ghUsername = ''; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" :title="$t('save.github.disconnect')">
-                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06"/></svg>
-                  </button>
-                </div>
-              </div>
-            </template>
-
-            <p v-if="ghStatus.stage === 'error'" class="gh-error">{{ ghStatus.message }}</p>
-            <p v-else-if="ghStatus.stage !== 'idle' && ghStatus.stage !== 'done' && ghStatus.message" class="gh-status-msg">{{ ghStatus.message }}</p>
           </div>
 
           <!-- ── LAN Sync (dev mode only) ── -->
@@ -1000,7 +1002,6 @@ const showSettings = ref(false);
             </template>
           </div>
 
-          <!-- 2026-04-14 Phase 5：自定义预设独立导出/导入（创意素材包） -->
           <div class="backup-row">
             <p class="settings-title">{{ $t('save.presets.sectionTitle') }}</p>
             <p class="settings-hint">
@@ -1347,6 +1348,22 @@ const showSettings = ref(false);
   width: 100%;
 }
 
+/* ── Include-ref checkbox ── */
+.backup-include-ref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--color-text, #e0e0e6);
+  cursor: pointer;
+  user-select: none;
+  width: 100%;
+}
+.backup-hint--full-width {
+  width: 100%;
+  margin: 0;
+}
+
 /* ── GitHub Sync ── */
 .gh-section {
   padding: 12px 14px;
@@ -1354,6 +1371,11 @@ const showSettings = ref(false);
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.06);
   margin-top: 10px;
+}
+.gh-section--top {
+  margin-top: 0;
+  position: relative;
+  z-index: 1;
 }
 .gh-header {
   display: flex;
@@ -1886,6 +1908,32 @@ const showSettings = ref(false);
   .save-panel {
     padding-left: var(--space-md);
     padding-right: var(--space-md);
+  }
+  .gh-cloud-row {
+    flex-wrap: wrap;
+  }
+  .gh-cloud-meta {
+    width: 100%;
+    margin-bottom: 6px;
+  }
+  .gh-actions {
+    flex-wrap: wrap;
+  }
+  .gh-form {
+    grid-template-columns: 1fr;
+  }
+  .gh-connect-btn {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 4px;
+  }
+  .backup-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .slot-actions {
+    flex-wrap: wrap;
   }
 }
 </style>
