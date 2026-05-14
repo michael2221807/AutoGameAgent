@@ -128,7 +128,7 @@
   "image.lora.label.air": "AIR",
   "image.lora.label.notes": "Notes",
   "image.lora.placeholder.name": "LoRA name",
-  "image.lora.placeholder.air": "urn:air:sdxl:lora:civitai:123@456",
+  "image.lora.placeholder.air": "urn:air:sdxl:lora:civitai:123{'@'}456",
   "image.lora.placeholder.notes": "Optional notes",
   "image.lora.addSubmit": "Add",
   "image.lora.emptyHint": "Paste a Civitai LoRA AIR to save to shelf; triggers can be imported from metadata or added manually.",

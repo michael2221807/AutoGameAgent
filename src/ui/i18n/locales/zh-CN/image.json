@@ -128,7 +128,7 @@
   "image.lora.label.air": "AIR",
   "image.lora.label.notes": "备注",
   "image.lora.placeholder.name": "LoRA 名称",
-  "image.lora.placeholder.air": "urn:air:sdxl:lora:civitai:123@456",
+  "image.lora.placeholder.air": "urn:air:sdxl:lora:civitai:123{'@'}456",
   "image.lora.placeholder.notes": "可选备注",
   "image.lora.addSubmit": "加入",
   "image.lora.emptyHint": "粘贴 Civitai LoRA AIR 后可保存到书架；触发词可从元数据导入，也可手动添加。",
