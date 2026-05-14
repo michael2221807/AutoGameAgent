@@ -318,6 +318,7 @@ const normalizedEffects = computed<NormalizedEffect[]>(() => {
   // Deduplicate by name (last occurrence wins — newest from AI)
   const seen = new Map<string, NormalizedEffect>();
   for (const e of raw as Record<string, unknown>[]) {
+    if (e == null || typeof e !== 'object') continue;
     const name = String(e['状态名称'] ?? e['名称'] ?? e['name'] ?? t('common.fallback.unknownEffect'));
     seen.set(name, {
       name,

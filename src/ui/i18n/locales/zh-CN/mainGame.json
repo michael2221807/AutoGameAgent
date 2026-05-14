@@ -142,5 +142,15 @@
   "mainGame.env.environment.popoverTitle": "周遭环境",
   "mainGame.env.environment.emptyState": "风平浪静，并无特殊环境。",
   "mainGame.env.environment.overflowTooltip": "共 {n} 个环境标签，点击查看全部",
-  "mainGame.env.environment.defaultTooltip": "点击查看详情"
+  "mainGame.env.environment.defaultTooltip": "点击查看详情",
+
+  "mainGame.fold.loadMore": "加载更早的回合（还有 {n} 回合）",
+  "mainGame.fold.loadAll": "全部展开",
+  "mainGame.fold.jumpToLatest": "跳到最新回合",
+
+  "mainGame.search.toggleTitle": "搜索回合内容",
+  "mainGame.search.placeholder": "搜索关键字…",
+  "mainGame.search.close": "关闭搜索",
+  "mainGame.search.noResults": "未找到匹配内容",
+  "mainGame.search.roundLabel": "第{n}回合"
 }

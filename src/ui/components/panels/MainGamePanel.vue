@@ -301,6 +301,192 @@ const displayMessages = computed<ChatMessage[]>(() => {
   return history.filter((msg) => msg.role !== 'system');
 });
 
+// ─── Round folding (performance: only render recent N rounds) ──
+// Two modes:
+//   'tail'   — show the latest N rounds (default, scrolled to bottom)
+//   'pinned' — show ±2 rounds around a search target (5-round window)
+
+const VISIBLE_ROUND_WINDOW = 5;
+const VISIBLE_ROUND_HALF = 2;
+const LOAD_MORE_INCREMENT = 5;
+
+const windowMode = ref<'tail' | 'pinned'>('tail');
+const tailVisibleRounds = ref(VISIBLE_ROUND_WINDOW);
+const pinnedTargetIdx = ref(0);
+
+const assistantPositions = computed<number[]>(() => {
+  const msgs = displayMessages.value;
+  const pos: number[] = [];
+  for (let i = 0; i < msgs.length; i++) {
+    if (msgs[i].role === 'assistant') pos.push(i);
+  }
+  return pos;
+});
+
+const visibleRange = computed<{ start: number; end: number }>(() => {
+  const msgs = displayMessages.value;
+  if (msgs.length === 0) return { start: 0, end: 0 };
+  const aPos = assistantPositions.value;
+  if (aPos.length === 0) return { start: 0, end: msgs.length };
+
+  if (windowMode.value === 'tail') {
+    const count = tailVisibleRounds.value;
+    if (aPos.length <= count) return { start: 0, end: msgs.length };
+    const startAssistantPos = aPos.length - count;
+    const startMsgIdx = aPos[startAssistantPos];
+    const start = startMsgIdx > 0 && msgs[startMsgIdx - 1].role === 'user'
+      ? startMsgIdx - 1 : startMsgIdx;
+    return { start, end: msgs.length };
+  }
+
+  // Pinned: show ±HALF rounds around target
+  let centerPos = aPos.length - 1;
+  for (let j = 0; j < aPos.length; j++) {
+    if (aPos[j] >= pinnedTargetIdx.value) { centerPos = j; break; }
+  }
+
+  const wStart = Math.max(0, centerPos - VISIBLE_ROUND_HALF);
+  const wEnd = Math.min(aPos.length - 1, centerPos + VISIBLE_ROUND_HALF);
+
+  const startMsgIdx = aPos[wStart];
+  const start = startMsgIdx > 0 && msgs[startMsgIdx - 1].role === 'user'
+    ? startMsgIdx - 1 : startMsgIdx;
+
+  const end = wEnd < aPos.length - 1
+    ? aPos[wEnd] + 1
+    : msgs.length;
+
+  return { start, end };
+});
+
+const visibleStartIndex = computed(() => visibleRange.value.start);
+
+const visibleMessages = computed<ChatMessage[]>(() => {
+  const { start, end } = visibleRange.value;
+  return displayMessages.value.slice(start, end);
+});
+
+const foldedBeforeCount = computed<number>(() => {
+  const { start } = visibleRange.value;
+  let count = 0;
+  for (const pos of assistantPositions.value) {
+    if (pos < start) count++; else break;
+  }
+  return count;
+});
+
+const hasFoldedBefore = computed(() => foldedBeforeCount.value > 0);
+const isPinnedMode = computed(() => windowMode.value === 'pinned');
+
+function loadMoreRounds(): void {
+  if (windowMode.value !== 'tail') return;
+  const container = messagesContainer.value;
+  const prevScrollHeight = container?.scrollHeight ?? 0;
+  tailVisibleRounds.value += LOAD_MORE_INCREMENT;
+  nextTick(() => {
+    if (!container) return;
+    const delta = container.scrollHeight - prevScrollHeight;
+    container.scrollTop += delta;
+  });
+}
+
+function expandAllRounds(): void {
+  windowMode.value = 'tail';
+  tailVisibleRounds.value = Infinity;
+}
+
+function jumpToLatest(): void {
+  windowMode.value = 'tail';
+  tailVisibleRounds.value = VISIBLE_ROUND_WINDOW;
+  nextTick(() => scrollToBottom(true, true));
+}
+
+// ─── Round search ────────────────────────────────────────────
+
+function roundForMessageAt(msgs: ReadonlyArray<ChatMessage>, idx: number): number {
+  const msg = msgs[idx];
+  if (msg?._metrics?.roundNumber) return msg._metrics.roundNumber;
+  for (let i = idx + 1; i < msgs.length; i++) {
+    if (msgs[i]._metrics?.roundNumber) return msgs[i]._metrics!.roundNumber;
+  }
+  let count = 0;
+  for (let i = 0; i <= idx; i++) {
+    if (msgs[i].role === 'assistant') count++;
+  }
+  return count || 1;
+}
+
+interface SearchHit {
+  roundNumber: number;
+  role: ChatMessage['role'];
+  snippet: string;
+  globalIndex: number;
+}
+
+const showSearch = ref(false);
+const searchFocused = ref(false);
+const searchQuery = ref('');
+const debouncedSearchQuery = ref('');
+let _searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(searchQuery, (val) => {
+  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  _searchDebounceTimer = setTimeout(() => {
+    debouncedSearchQuery.value = val;
+  }, 200);
+});
+
+const searchResults = computed<SearchHit[]>(() => {
+  const q = debouncedSearchQuery.value.trim();
+  if (!q || q.length < 2) return [];
+  const msgs = displayMessages.value;
+  const results: SearchHit[] = [];
+  const qLower = q.toLowerCase();
+  for (let i = 0; i < msgs.length; i++) {
+    const msg = msgs[i];
+    if (!msg.content) continue;
+    const contentLower = msg.content.toLowerCase();
+    const matchIdx = contentLower.indexOf(qLower);
+    if (matchIdx === -1) continue;
+
+    const round = roundForMessageAt(msgs, i);
+    const start = Math.max(0, matchIdx - 30);
+    const end = Math.min(msg.content.length, matchIdx + q.length + 30);
+    const snippet =
+      (start > 0 ? '…' : '') +
+      msg.content.slice(start, end) +
+      (end < msg.content.length ? '…' : '');
+
+    results.push({ roundNumber: round, role: msg.role, snippet, globalIndex: i });
+    if (results.length >= 50) break;
+  }
+  return results;
+});
+
+function jumpToSearchResult(hit: SearchHit): void {
+  windowMode.value = 'pinned';
+  pinnedTargetIdx.value = hit.globalIndex;
+  nextTick(() => {
+    const container = messagesContainer.value;
+    if (!container) return;
+    const el = container.querySelector(`[data-global-idx="${hit.globalIndex}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('search-highlight-flash');
+      setTimeout(() => el.classList.remove('search-highlight-flash'), 2000);
+    }
+  });
+}
+
+function toggleSearch(): void {
+  showSearch.value = !showSearch.value;
+  if (!showSearch.value) {
+    searchQuery.value = '';
+    debouncedSearchQuery.value = '';
+    if (windowMode.value === 'pinned') jumpToLatest();
+  }
+}
+
 // ─── Round divider placement (Phase 2, 2026-04-19) ─────────────
 // Logic delegated to round-divider-helpers.ts so it can be unit-tested
 // without Vue test utils.
@@ -498,19 +684,20 @@ const unsubscribers: Array<() => void> = [];
 
 // KeepAlive: when user returns from another panel
 onActivated(() => {
-  // 2026-04-14：必须先把 scroll-behavior 暂时置 auto 再设 scrollTop，
-  // 否则 CSS `scroll-behavior: smooth` 会让"瞬间定位到底"变成动画播放一段（晃眼）。
+  // Reset fold state — returning to this tab should show latest 5 rounds
+  windowMode.value = 'tail';
+  tailVisibleRounds.value = VISIBLE_ROUND_WINDOW;
+
   const el = messagesContainer.value;
   if (el) {
     const prev = el.style.scrollBehavior;
     el.style.scrollBehavior = 'auto';
     el.scrollTop = el.scrollHeight;
-    // 下一帧再恢复，确保这一次写入是 instant 的；之后的流式滚动等仍可走 smooth
     requestAnimationFrame(() => {
       if (el) el.style.scrollBehavior = prev;
     });
   }
-  isUserScrolledUp.value = false; // 切回来一定在底部
+  isUserScrolledUp.value = false;
 
   // Restore action options from module-level cache
   if (_savedActionOptions.length > 0 && actionOptions.value.length === 0) {
@@ -530,6 +717,7 @@ onMounted(() => {
    */
   unsubscribers.push(
     eventBus.on('engine:round-start', () => {
+      if (windowMode.value === 'pinned') jumpToLatest();
       isGenerating.value = true;
       streamingText.value = '';
       actionOptions.value = [];
@@ -638,6 +826,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopTimer();
+  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
   for (const unsub of unsubscribers) {
     unsub();
   }
@@ -649,11 +838,11 @@ onBeforeUnmount(() => {
 /* Sync action options to module-level cache for KeepAlive survival */
 watch(actionOptions, (v) => { _savedActionOptions = [...v]; }, { deep: true });
 
-/* Auto-scroll when new messages are added to the narrative history */
+/* Auto-scroll when new messages are added — only in tail mode */
 watch(
   () => narrativeHistory.value?.length,
   () => {
-    scrollToBottom();
+    if (windowMode.value === 'tail') scrollToBottom();
   },
 );
 </script>
@@ -668,6 +857,17 @@ watch(
         <EnvironmentChips :tags="environmentTags" />
       </div>
       <div class="status-bar__right">
+        <button
+          class="search-toggle-btn"
+          :class="{ 'search-toggle-btn--active': showSearch }"
+          :title="$t('mainGame.search.toggleTitle')"
+          :aria-label="$t('mainGame.search.toggleTitle')"
+          @click="toggleSearch"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+          </svg>
+        </button>
         <FestivalChip :festival="festival" />
         <span v-if="isGenerating" class="status-generating">
           {{ $t('mainGame.status.aiThinking') }}
@@ -677,24 +877,87 @@ watch(
 
     <!-- Messages area —— wrapper 提供 position:relative 以承载浮动按钮 -->
     <div class="messages-area">
+
+      <!-- Search panel — slides down from top when toggled.
+           focusin/focusout bubble from input + result buttons to control
+           whether the results dropdown is expanded or collapsed. -->
+      <Transition name="slide-down">
+        <div
+          v-if="showSearch"
+          class="search-panel"
+          @focusin="searchFocused = true"
+          @focusout="searchFocused = false"
+        >
+          <div class="search-input-row">
+            <svg class="search-input-icon" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+            </svg>
+            <input
+              v-model="searchQuery"
+              class="search-input"
+              type="text"
+              :placeholder="$t('mainGame.search.placeholder')"
+              @keydown.escape="toggleSearch"
+            />
+            <span v-if="!searchFocused && searchResults.length > 0" class="search-result-count">{{ searchResults.length }}</span>
+            <button class="search-close-btn" :aria-label="$t('mainGame.search.close')" @click="toggleSearch">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+            </button>
+          </div>
+          <template v-if="searchFocused">
+            <div v-if="searchResults.length > 0" class="search-results">
+              <button
+                v-for="(hit, si) in searchResults"
+                :key="si"
+                class="search-result-item"
+                @mousedown.prevent
+                @click="jumpToSearchResult(hit)"
+              >
+                <span class="search-result-round">{{ $t('mainGame.search.roundLabel', { n: hit.roundNumber }) }}</span>
+                <span class="search-result-snippet">{{ hit.snippet }}</span>
+              </button>
+            </div>
+            <div v-else-if="searchQuery.length >= 2" class="search-empty">
+              {{ $t('mainGame.search.noResults') }}
+            </div>
+          </template>
+        </div>
+      </Transition>
+
       <!-- Scrollable message history -->
       <div
         ref="messagesContainer"
         class="messages-container"
         @scroll="onScroll"
       >
+
+      <!-- Top bar: mode-dependent -->
+      <div v-if="isPinnedMode" class="load-more-bar">
+        <button class="load-more-btn" @click="jumpToLatest">
+          {{ $t('mainGame.fold.jumpToLatest') }}
+        </button>
+      </div>
+      <div v-else-if="hasFoldedBefore" class="load-more-bar">
+        <button class="load-more-btn" @click="loadMoreRounds">
+          {{ $t('mainGame.fold.loadMore', { n: foldedBeforeCount }) }}
+        </button>
+        <button v-if="foldedBeforeCount > LOAD_MORE_INCREMENT" class="load-all-btn" @click="expandAllRounds">
+          {{ $t('mainGame.fold.loadAll') }}
+        </button>
+      </div>
+
       <!-- Empty state when no messages exist yet -->
       <div v-if="displayMessages.length === 0 && !isGenerating" class="empty-chat">
         <p class="empty-text">{{ $t('mainGame.empty.text') }}</p>
       </div>
 
       <!-- Message bubbles (each assistant preceded by a RoundDivider, except the opening one) -->
-      <template v-for="(msg, idx) in displayMessages" :key="idx">
+      <template v-for="(msg, localIdx) in visibleMessages" :key="visibleStartIndex + localIdx">
         <RoundDivider
-          v-if="msg.role === 'assistant' && idx !== firstAssistantIdx"
-          :round-number="roundForAssistantAt(idx)"
-          :metrics="displayMetricsForAssistantAt(idx)"
-          :is-current="idx === latestAssistantIdx"
+          v-if="msg.role === 'assistant' && (visibleStartIndex + localIdx) !== firstAssistantIdx"
+          :round-number="roundForAssistantAt(visibleStartIndex + localIdx)"
+          :metrics="displayMetricsForAssistantAt(visibleStartIndex + localIdx)"
+          :is-current="(visibleStartIndex + localIdx) === latestAssistantIdx"
           :has-thinking="!!msg._thinking && msg._thinking.length > 0"
           :has-commands="(msg._commands?.length ?? 0) > 0 || (msg._delta?.length ?? 0) > 0"
           :has-raw="!!msg._rawResponse && msg._rawResponse.length > 0"
@@ -710,32 +973,15 @@ watch(
       <div
         class="message"
         :class="[`message--${msg.role}`]"
+        :data-global-idx="visibleStartIndex + localIdx"
       >
         <div class="message-bubble">
-          <!--
-            2026-04-11 fix：user 消息用纯文本渲染，assistant 才走 FormattedText。
-            原因：用户输入里的 `"对话"` 会被 FormattedText 解析为 `.ft-dialogue`
-            并用 `color: var(--color-primary)` 上色。但 `.message--user .message-bubble`
-            的背景本身就是 `var(--color-primary)`（紫色气泡）—— 紫字渲染在紫底上
-            → 用户看到自己输入带引号的内容变成"透明"。
-
-            修复策略：不把用户输入当 AI 叙事处理。用户输入是纯文本，`"` 只是
-            引号字面量，没有 dialogue 语义。只有 AI 生成的叙事才需要
-            `【环境】`/`"对话"`/`〖判定〗` 富格式解析。
-          -->
           <div
             v-if="msg.role === 'user'"
             class="message-text message-text--plain"
           >{{ msg.content }}</div>
           <div v-else class="message-text"><FormattedText :text="displayTextForAssistant(msg)" :npc-names="npcNameList" :npc-data="npcDataList" /></div>
 
-          <!--
-            Δ badge — in-bubble fast path to see state changes for this round.
-            Unified with the ☰ button on RoundDivider (Phase 3, 2026-04-19):
-            both open CommandsViewer but with different initial tabs. The Δ
-            badge jumps straight to the "生效变更" (delta) tab since that's
-            what the badge's glyph represents.
-          -->
           <button
             v-if="msg.role === 'assistant' && msg._delta && msg._delta.length > 0"
             class="delta-badge"
@@ -745,12 +991,6 @@ watch(
             Δ {{ msg._delta.length }}
           </button>
         </div>
-        <!--
-          Per-turn meta row (Phase 3, 2026-04-19) — hover-reveal footer
-          showing CJK word count + short-term memory preview. Port of
-          MRJH TurnItem.tsx:527-530; uses AGA's hover opacity transition
-          rather than tailwind group-hover.
-        -->
         <div
           v-if="msg.role === 'assistant' && (countCjkChars(msg.content) > 0 || msg._shortTermPreview)"
           class="message-meta-bottom"
@@ -793,11 +1033,11 @@ watch(
       -->
       <Transition name="fade-scale">
         <button
-          v-if="isUserScrolledUp"
+          v-if="isUserScrolledUp || isPinnedMode"
           class="scroll-to-bottom-btn"
           :aria-label="$t('mainGame.scroll.ariaLabel')"
-          :title="$t('mainGame.scroll.title')"
-          @click="scrollToBottom(true)"
+          :title="isPinnedMode ? $t('mainGame.fold.jumpToLatest') : $t('mainGame.scroll.title')"
+          @click="isPinnedMode ? jumpToLatest() : scrollToBottom(true)"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
             <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v10.586l3.293-3.293a1 1 0 111.414 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L9 14.586V4a1 1 0 011-1z" clip-rule="evenodd" />
@@ -1288,6 +1528,234 @@ watch(
   border-color: color-mix(in oklch, var(--color-danger) 60%, transparent);
 }
 
+/* ── Search toggle button (status bar) ────────────────────────── */
+
+.search-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out),
+              background-color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+}
+
+.search-toggle-btn:hover {
+  color: var(--color-sage-300);
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+}
+
+.search-toggle-btn--active {
+  color: var(--color-sage-300);
+  background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+}
+
+/* ── Search panel ─────────────────────────────────────────────── */
+
+.search-panel {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  padding: 0.5rem var(--sidebar-right-reserve, 40px) 0.5rem var(--sidebar-left-reserve, 40px);
+  transition: padding-left var(--duration-open) var(--ease-droplet),
+              padding-right var(--duration-open) var(--ease-droplet);
+}
+
+.search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: color-mix(in oklch, var(--color-surface-elevated) 60%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.6rem;
+}
+
+.search-input-icon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  color: var(--color-text);
+}
+
+.search-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.search-result-count {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--color-sage-300);
+  background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.04em;
+}
+
+.search-close-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out),
+              background-color var(--duration-fast) var(--ease-out);
+}
+
+.search-close-btn:hover {
+  color: var(--color-text);
+  background: color-mix(in oklch, var(--color-text) 8%, transparent);
+}
+
+.search-results {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.search-result-item:hover {
+  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+}
+
+.search-result-round {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-sage-300);
+  letter-spacing: 0.04em;
+}
+
+.search-result-snippet {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-serif-cjk);
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-empty {
+  padding: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: opacity var(--duration-normal) var(--ease-out),
+              max-height var(--duration-normal) var(--ease-out);
+  overflow: hidden;
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+.slide-down-enter-to,
+.slide-down-leave-from {
+  max-height: 300px;
+}
+
+/* ── Load-more bar (folded rounds) ───────────────────────────── */
+
+.load-more-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.load-more-btn,
+.load-all-btn {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out),
+              background-color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.load-more-btn {
+  color: var(--color-sage-300);
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 22%, transparent);
+}
+
+.load-more-btn:hover {
+  color: var(--color-sage-100);
+  background: color-mix(in oklch, var(--color-sage-400) 16%, transparent);
+  border-color: color-mix(in oklch, var(--color-sage-400) 35%, transparent);
+  box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+}
+
+.load-all-btn {
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+}
+
+.load-all-btn:hover {
+  color: var(--color-text-secondary);
+  background: color-mix(in oklch, var(--color-text) 4%, transparent);
+  border-color: var(--color-border);
+}
+
 /* ── Responsive — wider breakpoint first, narrower overrides after ── */
 
 /* Mobile baseline: replace 0px sidebar-reserve with minimum padding */
@@ -1300,6 +1768,10 @@ watch(
     padding-left: var(--space-sm);
     padding-right: var(--space-sm);
   }
+  .search-panel {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+  }
 }
 
 /* Small phone refinements — overrides 767px block above */
@@ -1310,5 +1782,20 @@ watch(
   .message--user {
     max-width: 82%;
   }
+  .search-panel {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+</style>
+
+<!-- Unscoped: classList.add('search-highlight-flash') won't match scoped selectors -->
+<style>
+.search-highlight-flash {
+  animation: search-flash 2s ease-out;
+}
+@keyframes search-flash {
+  0%   { background: color-mix(in oklch, var(--color-sage-400) 18%, transparent); }
+  100% { background: transparent; }
 }
 </style>

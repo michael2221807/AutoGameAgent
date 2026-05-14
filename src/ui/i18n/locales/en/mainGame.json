@@ -142,5 +142,15 @@
   "mainGame.env.environment.popoverTitle": "Surroundings",
   "mainGame.env.environment.emptyState": "All is calm — no special environmental conditions.",
   "mainGame.env.environment.overflowTooltip": "{n} environment tags total — click to view all",
-  "mainGame.env.environment.defaultTooltip": "Click for details"
+  "mainGame.env.environment.defaultTooltip": "Click for details",
+
+  "mainGame.fold.loadMore": "Load earlier rounds ({n} more)",
+  "mainGame.fold.loadAll": "Show all",
+  "mainGame.fold.jumpToLatest": "Jump to latest",
+
+  "mainGame.search.toggleTitle": "Search round content",
+  "mainGame.search.placeholder": "Search keyword…",
+  "mainGame.search.close": "Close search",
+  "mainGame.search.noResults": "No matches found",
+  "mainGame.search.roundLabel": "Round {n}"
 }
