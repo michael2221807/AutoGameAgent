@@ -1033,11 +1033,11 @@ watch(
       -->
       <Transition name="fade-scale">
         <button
-          v-if="isUserScrolledUp || isPinnedMode"
+          v-if="isUserScrolledUp || isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW"
           class="scroll-to-bottom-btn"
           :aria-label="$t('mainGame.scroll.ariaLabel')"
-          :title="isPinnedMode ? $t('mainGame.fold.jumpToLatest') : $t('mainGame.scroll.title')"
-          @click="isPinnedMode ? jumpToLatest() : scrollToBottom(true)"
+          :title="(isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW) ? $t('mainGame.fold.jumpToLatest') : $t('mainGame.scroll.title')"
+          @click="(isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW) ? jumpToLatest() : scrollToBottom(true)"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
             <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v10.586l3.293-3.293a1 1 0 111.414 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L9 14.586V4a1 1 0 011-1z" clip-rule="evenodd" />
