@@ -595,14 +595,18 @@ export class ImageService {
 
       const isNovelAI = params.backend === 'novelai';
 
+      const resolvedEntry = this.resolveSecretPartEntry(params.characterName, params.part);
       const resolvedDescription = params.partDescription
-        ?? this.resolveSecretPartDescription(params.characterName, params.part)
-        ?? '';
+        ?? (resolvedEntry ? (String(resolvedEntry['特征描述'] ?? '') || '') : '');
+
+      const resolvedBodyDesc = this.resolveBodyDescription(params.characterName, params.part);
 
       const tokenResult = await this.tokenizer.tokenizeSecretPart({
         characterName: params.characterName,
         part: params.part,
         partDescription: resolvedDescription,
+        bodyPartEntry: resolvedEntry,
+        bodyDescription: resolvedBodyDesc,
         npcDataJson: params.npcDataJson,
         anchor: params.anchorPositive
           ? { positive: params.anchorPositive, negative: params.anchorNegative, structuredFeatures: params.anchorStructuredFeatures }
@@ -924,10 +928,14 @@ export class ImageService {
    * Returns undefined if NPC not found / body-parts missing / part not listed.
    * Callers fall back to their own string when this returns undefined.
    */
-  private resolveSecretPartDescription(
+  /**
+   * Resolve the full body-part entry from 身体部位[] for a given part.
+   * Returns the raw entry object with 特征描述, 特殊印记, 敏感度, 开发度, etc.
+   */
+  private resolveSecretPartEntry(
     characterName: string,
     part: import('./types').SecretPartType,
-  ): string | undefined {
+  ): Record<string, unknown> | undefined {
     const PART_TO_CN: Record<import('./types').SecretPartType, string> = {
       breast: '胸部',
       vagina: '小穴',
@@ -936,18 +944,14 @@ export class ImageService {
     const targetName = PART_TO_CN[part];
     if (!targetName) return undefined;
 
-    // Player branch: read from 角色.身体.身体部位 instead of NPC relationships
     if (characterName === PLAYER_PSEUDO_NPC_ID) {
       const bodyData = this.stateManager.get<Record<string, unknown>>('角色.身体');
       if (!bodyData || typeof bodyData !== 'object') return undefined;
       const parts = (bodyData as Record<string, unknown>)['身体部位'];
       if (!Array.isArray(parts)) return undefined;
-      const entry = parts.find(
+      return parts.find(
         (p) => p && typeof p === 'object' && (p as Record<string, unknown>)['部位名称'] === targetName,
       ) as Record<string, unknown> | undefined;
-      if (!entry) return undefined;
-      const desc = entry['特征描述'];
-      return typeof desc === 'string' && desc.trim() ? desc : undefined;
     }
 
     const relationships = this.stateManager.get<Array<Record<string, unknown>>>(
@@ -966,13 +970,48 @@ export class ImageService {
     const parts = (privacy as Record<string, unknown>)['身体部位'];
     if (!Array.isArray(parts)) return undefined;
 
-    const entry = parts.find(
+    return parts.find(
       (p) => p && typeof p === 'object' && (p as Record<string, unknown>)['部位名称'] === targetName,
     ) as Record<string, unknown> | undefined;
-    if (!entry) return undefined;
+  }
 
-    const desc = entry['特征描述'];
-    return typeof desc === 'string' && desc.trim() ? desc : undefined;
+  /**
+   * Resolve the broader body description for a character (not per-part feature desc).
+   * - Player: reads top-level fields from 角色.身体 (胸部描述/私处描述/生殖器描述)
+   * - NPC: reads 身材描写 from the relationship record
+   */
+  private resolveBodyDescription(
+    characterName: string,
+    part: import('./types').SecretPartType,
+  ): string | undefined {
+    if (characterName === PLAYER_PSEUDO_NPC_ID) {
+      const bodyData = this.stateManager.get<Record<string, unknown>>('角色.身体');
+      if (!bodyData || typeof bodyData !== 'object') return undefined;
+      const fields: string[] = [];
+      if (part === 'breast') {
+        const v = (bodyData as Record<string, unknown>)['胸部描述'];
+        if (typeof v === 'string' && v.trim()) fields.push(v.trim());
+      } else {
+        const priv = (bodyData as Record<string, unknown>)['私处描述'];
+        if (typeof priv === 'string' && priv.trim()) fields.push(priv.trim());
+        if (part === 'vagina') {
+          const gen = (bodyData as Record<string, unknown>)['生殖器描述'];
+          if (typeof gen === 'string' && gen.trim()) fields.push(gen.trim());
+        }
+      }
+      return fields.length > 0 ? fields.join('；') : undefined;
+    }
+
+    const relationships = this.stateManager.get<Array<Record<string, unknown>>>(
+      this.paths.relationships,
+    );
+    if (!Array.isArray(relationships)) return undefined;
+    const npc = relationships.find(
+      (r) => r && typeof r === 'object' && r[this.paths.npcFieldNames.name] === characterName,
+    );
+    if (!npc) return undefined;
+    const bodyDesc = npc[this.paths.npcFieldNames.bodyDescription];
+    return typeof bodyDesc === 'string' && bodyDesc.trim() ? bodyDesc.trim() : undefined;
   }
 
   // ── Legacy delegations to ImageStateManager ──

@@ -369,8 +369,12 @@ export class ImageTokenizer {
    */
   async tokenizeSecretPart(context: {
     characterName: string;
-    /** Raw description of the target body part */
+    /** Raw description of the target body part (per-part 特征描述) */
     partDescription: string;
+    /** Full body-part entry from 身体部位[] (特征描述 + 特殊印记 + 敏感度 + 开发度) */
+    bodyPartEntry?: Record<string, unknown>;
+    /** Broader body description (NPC 身材描写 / Player 胸部描述·私处描述·生殖器描述) */
+    bodyDescription?: string;
     /** Which body part to generate */
     part: SecretPartType;
     /** Full NPC data JSON (for AI context) */
@@ -403,11 +407,19 @@ export class ImageTokenizer {
     });
 
     // Build task data as assistant message
-    const rawDescription = JSON.stringify({
+    const descObj: Record<string, unknown> = {
       部位: context.part === 'breast' ? '胸部' : context.part === 'vagina' ? '小穴' : '屁穴',
-      描述文本: context.partDescription,
-      角色资料: context.npcDataJson ? JSON.parse(context.npcDataJson) : { 姓名: context.characterName },
-    }, null, 2);
+    };
+    if (context.bodyPartEntry) {
+      descObj['身体部位'] = context.bodyPartEntry;
+    } else if (context.partDescription) {
+      descObj['描述文本'] = context.partDescription;
+    }
+    if (context.bodyDescription) {
+      descObj['身体描写'] = context.bodyDescription;
+    }
+    descObj['角色资料'] = context.npcDataJson ? JSON.parse(context.npcDataJson) : { 姓名: context.characterName };
+    const rawDescription = JSON.stringify(descObj, null, 2);
 
     const taskData = buildSecretPartTaskData({
       part: context.part,

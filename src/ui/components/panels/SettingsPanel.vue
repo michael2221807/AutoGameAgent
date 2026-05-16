@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/home.md §1.3.2
 /**
  * SettingsPanel — game settings UI.
  *
@@ -14,6 +15,7 @@ import { useGameState } from '@/ui/composables/useGameState';
 import type { ProfileManager } from '@/engine/persistence/profile-manager';
 import type { SaveManager } from '@/engine/persistence/save-manager';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
 import { useLocale } from '@/ui/composables/useLocale';
 import { useI18n } from 'vue-i18n';
 
@@ -1142,15 +1144,12 @@ onBeforeUnmount(() => {
             {{ $t('settings.nsfw.genderFilter.desc') }}
           </span>
         </div>
-        <select
-          v-model="nsfwSettings.nsfwGenderFilter"
-          class="setting-select"
+        <AgaSelect
+          :model-value="nsfwSettings.nsfwGenderFilter"
+          :options="nsfwGenderOptions"
           :disabled="!nsfwSettings.nsfwMode"
-        >
-          <option v-for="opt in nsfwGenderOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
+          @update:model-value="nsfwSettings.nsfwGenderFilter = $event as typeof nsfwSettings.nsfwGenderFilter"
+        />
       </div>
     </section>
 
@@ -1446,11 +1445,11 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.game.language.label') }}</span>
           <span class="setting-desc">{{ $t('settings.game.language.desc') }}</span>
         </div>
-        <select v-model="settings.language" class="setting-select">
-          <option v-for="opt in languageOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
+        <AgaSelect
+          :model-value="settings.language"
+          :options="languageOptions"
+          @update:model-value="settings.language = $event"
+        />
       </div>
     </section>
 
@@ -1926,14 +1925,14 @@ onBeforeUnmount(() => {
             {{ $t('settings.memory.injectionStyle.desc') }}
           </span>
         </div>
-        <select
-          v-model="memorySettings.shortTermInjectionStyle"
-          class="select-input"
-          :aria-label="$t('settings.memory.injectionStyle.label')"
-        >
-          <option value="few_shot_pairs">{{ $t('settings.memory.injectionStyle.fewShot') }}</option>
-          <option value="single_assistant_block">{{ $t('settings.memory.injectionStyle.singleBlock') }}</option>
-        </select>
+        <AgaSelect
+          :model-value="memorySettings.shortTermInjectionStyle"
+          :options="[
+            { value: 'few_shot_pairs', label: $t('settings.memory.injectionStyle.fewShot') },
+            { value: 'single_assistant_block', label: $t('settings.memory.injectionStyle.singleBlock') },
+          ]"
+          @update:model-value="memorySettings.shortTermInjectionStyle = $event as typeof memorySettings.shortTermInjectionStyle"
+        />
       </div>
 
       <div

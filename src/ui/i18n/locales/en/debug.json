@@ -130,7 +130,7 @@
   "variable.jsonEditor.formatError": "Format error",
 
   "variable.preview.emptyArray": "[ ] (empty array)",
-  "variable.preview.emptyObject": "{ } (empty object)",
+  "variable.preview.emptyObject": "{'{ }'} (empty object)",
   "variable.preview.empty": "(empty)",
   "variable.preview.itemCount": "{count} items",
   "variable.preview.fieldCount": "{count} fields",

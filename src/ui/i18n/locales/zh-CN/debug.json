@@ -130,7 +130,7 @@
   "variable.jsonEditor.formatError": "格式错误",
 
   "variable.preview.emptyArray": "[ ] (空数组)",
-  "variable.preview.emptyObject": "{ } (空对象)",
+  "variable.preview.emptyObject": "{'{ }'} (空对象)",
   "variable.preview.empty": "(空)",
   "variable.preview.itemCount": "{count} 项",
   "variable.preview.fieldCount": "{count} 字段",

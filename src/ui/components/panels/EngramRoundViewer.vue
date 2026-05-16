@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-engram-debug.md
 /**
  * EngramRoundViewer — per-round Engram visualization showing write path
  * (what was extracted) and read path (what was recalled and why).
@@ -171,15 +172,15 @@ function fmtScore(n: number): string {
         <template v-if="props.write.reviewResult.invalidatedEdges?.length">
           <div v-for="ie in props.write.reviewResult.invalidatedEdges" :key="ie.edgeId" class="erv__review-detail erv__review-detail--invalidated">
             <span class="erv__review-badge erv__review-badge--invalidated">{{ $t('mainGame.engram.badgeInvalidated') }}</span>
-            <span class="erv__review-fact">{{ ie.fact }}</span>
-            <span v-if="ie.reason" class="erv__review-reason">{{ ie.reason }}</span>
+            <span class="erv__review-fact" :title="ie.fact">{{ ie.fact }}</span>
+            <span v-if="ie.reason" class="erv__review-reason" :title="ie.reason">{{ ie.reason }}</span>
           </div>
         </template>
         <template v-if="props.write.reviewResult.keptEdges?.length">
           <div v-for="ke in props.write.reviewResult.keptEdges" :key="ke.edgeId" class="erv__review-detail erv__review-detail--kept">
             <span class="erv__review-badge erv__review-badge--kept">{{ $t('mainGame.engram.badgeKept') }}</span>
-            <span class="erv__review-fact">{{ ke.fact }}</span>
-            <span v-if="ke.reason" class="erv__review-reason">{{ ke.reason }}</span>
+            <span class="erv__review-fact" :title="ke.fact">{{ ke.fact }}</span>
+            <span v-if="ke.reason" class="erv__review-reason" :title="ke.reason">{{ ke.reason }}</span>
           </div>
         </template>
       </section>

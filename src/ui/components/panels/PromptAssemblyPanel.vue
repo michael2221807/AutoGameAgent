@@ -438,8 +438,8 @@ function memorySegmentsFor(index: number): MemorySegment[] {
     </header>
 
     <template v-if="hasData">
-      <!-- ─── Snapshot tabs ─── -->
-      <div class="snapshot-tabs">
+      <!-- ─── Snapshot tabs (only visible when multiple) ─── -->
+      <div v-if="snapshots.length > 1" class="snapshot-tabs">
         <button
           v-for="(_, idx) in snapshots"
           :key="idx"

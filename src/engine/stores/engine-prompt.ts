@@ -15,7 +15,7 @@ import { ref, computed } from 'vue';
 import type { AIMessage } from '../ai/types';
 import type { MessageSourceTag } from '../prompt/prompt-assembler';
 
-const MAX_SNAPSHOTS = 10;
+const MAX_SNAPSHOTS = 1;
 
 export interface PromptSnapshot {
   flowId: string;

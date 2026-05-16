@@ -43,7 +43,7 @@ export async function loadLocaleMessages(locale: string): Promise<void> {
   if (!isSupportedLocale(locale)) return;
   if (i18n.global.availableLocales.includes(locale)) return;
 
-  const mod = await import(`./locales/${locale}/index`) as { default: MessageSchema };
+  const mod = await import(`./locales/${locale}/index.ts`) as { default: MessageSchema };
   i18n.global.setLocaleMessage(locale, mod.default);
 }
 
