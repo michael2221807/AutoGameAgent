@@ -33,10 +33,30 @@ interface UserSettings {
   language: string;
 }
 
+interface AccentPreset {
+  id: string;
+  hue1: number;
+  hue2: number;
+  labelKey: string;
+}
+
+const ACCENT_PRESETS: AccentPreset[] = [
+  { id: 'sage-amber',      hue1: 150, hue2: 75,  labelKey: 'settings.ui.themeAccent.presets.sage' },
+  { id: 'ocean-coral',     hue1: 220, hue2: 15,  labelKey: 'settings.ui.themeAccent.presets.ocean' },
+  { id: 'lavender-gold',   hue1: 280, hue2: 55,  labelKey: 'settings.ui.themeAccent.presets.lavender' },
+  { id: 'rose-teal',       hue1: 345, hue2: 175, labelKey: 'settings.ui.themeAccent.presets.rose' },
+  { id: 'mint-peach',      hue1: 165, hue2: 40,  labelKey: 'settings.ui.themeAccent.presets.mint' },
+  { id: 'indigo-amber',    hue1: 255, hue2: 70,  labelKey: 'settings.ui.themeAccent.presets.indigo' },
+  { id: 'emerald-ruby',    hue1: 145, hue2: 5,   labelKey: 'settings.ui.themeAccent.presets.emerald' },
+  { id: 'cyan-magenta',    hue1: 200, hue2: 330, labelKey: 'settings.ui.themeAccent.presets.cyan' },
+  { id: 'copper-slate',    hue1: 35,  hue2: 240, labelKey: 'settings.ui.themeAccent.presets.copper' },
+  { id: 'twilight-dawn',   hue1: 290, hue2: 25,  labelKey: 'settings.ui.themeAccent.presets.twilight' },
+];
+
 const defaultSettings: UserSettings = {
   fontSize: 14,
   showActionOptions: true,
-  themeAccent: '#91c49b',
+  themeAccent: 'sage-amber',
   enableAnimations: true,
   autoSaveInterval: 5,
   language: 'zh-CN',
@@ -87,6 +107,8 @@ watch(() => settings.value.language, (newLang) => {
 function resetAll(): void {
   settings.value = { ...defaultSettings };
   saveSettings();
+  document.documentElement.style.removeProperty('--hue-1');
+  document.documentElement.style.removeProperty('--hue-2');
   actionOptions.value = { ...defaultActionOptions };
   localStorage.setItem(ACTION_OPTIONS_KEY, JSON.stringify(actionOptions.value));
   debugSettings.value = { ...defaultDebug };
@@ -114,8 +136,24 @@ function applyRootMetrics(fontPx: number, scalePct: number): void {
 }
 
 function applyThemeColor(): void {
-  document.documentElement.style.setProperty('--color-primary', settings.value.themeAccent);
+  const preset = ACCENT_PRESETS.find(p => p.id === settings.value.themeAccent);
+  if (!preset) return;
+  const root = document.documentElement;
+  root.style.setProperty('--hue-1', String(preset.hue1));
+  root.style.setProperty('--hue-2', String(preset.hue2));
   eventBus.emit('ui:toast', { type: 'success', message: t('settings.ui.themeAccent.toast'), duration: 1200 });
+}
+
+function selectPreset(presetId: string): void {
+  settings.value.themeAccent = presetId;
+  applyThemeColor();
+}
+
+function presetSwatches(preset: AccentPreset): { primary: string; secondary: string } {
+  return {
+    primary: `oklch(0.78 0.08 ${preset.hue1})`,
+    secondary: `oklch(0.80 0.09 ${preset.hue2})`,
+  };
 }
 
 import { SUPPORTED_LOCALES } from '@/ui/i18n';
@@ -776,6 +814,13 @@ onMounted(() => {
   }
   // fontSize × uiScale are coupled — apply together so rem units scale correctly
   applyRootMetrics(settings.value.fontSize, uiScale.value);
+  // Migrate legacy hex/old ID values to new dual-hue preset IDs
+  if (settings.value.themeAccent.startsWith('#') || settings.value.themeAccent === 'sage') {
+    settings.value.themeAccent = 'sage-amber';
+  }
+  if (settings.value.themeAccent !== 'sage-amber') {
+    applyThemeColor();
+  }
 });
 
 // ─── Feature toggles ─────────────────────────────────────────
@@ -1371,20 +1416,32 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="setting-row">
+      <div class="setting-row setting-row--col">
         <div class="setting-info">
           <span class="setting-label">{{ $t('settings.ui.themeAccent.label') }}</span>
           <span class="setting-desc">{{ $t('settings.ui.themeAccent.desc') }}</span>
         </div>
-        <div class="color-control">
-          <input
-            v-model="settings.themeAccent"
-            type="color"
-            class="color-picker"
-          />
-          <span class="color-value">{{ settings.themeAccent }}</span>
-          <button class="btn-sm" @click="applyThemeColor">{{ $t('settings.ui.themeAccent.apply') }}</button>
-          <button class="btn-sm btn-sm--muted" @click="settings.themeAccent = '#91c49b'; applyThemeColor()">{{ $t('settings.ui.themeAccent.reset') }}</button>
+        <div class="accent-presets">
+          <button
+            v-for="preset in ACCENT_PRESETS"
+            :key="preset.id"
+            class="accent-swatch"
+            :class="{ 'accent-swatch--active': settings.themeAccent === preset.id }"
+            :title="$t(preset.labelKey)"
+            :aria-label="$t(preset.labelKey)"
+            :aria-pressed="settings.themeAccent === preset.id"
+            :style="{
+              '--swatch-primary': presetSwatches(preset).primary,
+              '--swatch-secondary': presetSwatches(preset).secondary,
+            }"
+            @click="selectPreset(preset.id)"
+          >
+            <span class="accent-swatch__dots">
+              <span class="accent-swatch__dot accent-swatch__dot--1" />
+              <span class="accent-swatch__dot accent-swatch__dot--2" />
+            </span>
+            <span class="accent-swatch__label">{{ $t(preset.labelKey) }}</span>
+          </button>
         </div>
       </div>
 
@@ -2352,33 +2409,69 @@ onBeforeUnmount(() => {
 }
 
 /* ── Color picker ── */
-.color-control {
+.setting-row--col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.accent-presets {
   display: flex;
-  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
-
-.color-picker {
-  width: 32px;
-  height: 32px;
-  border: 2px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
+.accent-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
   cursor: pointer;
-  padding: 0;
-  background: none;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
 }
-.color-picker::-webkit-color-swatch-wrapper {
-  padding: 2px;
+.accent-swatch:hover {
+  border-color: var(--swatch-primary);
 }
-.color-picker::-webkit-color-swatch {
-  border: none;
-  border-radius: 3px;
+.accent-swatch--active {
+  border-color: var(--swatch-primary);
+  box-shadow:
+    0 0 10px color-mix(in oklch, var(--swatch-primary) 25%, transparent),
+    inset 0 0 8px color-mix(in oklch, var(--swatch-primary) 10%, transparent);
 }
-
-.color-value {
-  font-size: 0.75rem;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--color-text-secondary, #8888a0);
+.accent-swatch__dots {
+  display: flex;
+  gap: 4px;
+}
+.accent-swatch__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+.accent-swatch__dot--1 {
+  background: var(--swatch-primary);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--swatch-primary) 40%, transparent);
+}
+.accent-swatch__dot--2 {
+  background: var(--swatch-secondary);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--swatch-secondary) 40%, transparent);
+}
+.accent-swatch--active .accent-swatch__dot--1 {
+  box-shadow: 0 0 8px color-mix(in oklch, var(--swatch-primary) 55%, transparent);
+}
+.accent-swatch--active .accent-swatch__dot--2 {
+  box-shadow: 0 0 8px color-mix(in oklch, var(--swatch-secondary) 55%, transparent);
+}
+.accent-swatch__label {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.accent-swatch--active .accent-swatch__label {
+  color: var(--color-text);
 }
 
 /* ── Number control ── */

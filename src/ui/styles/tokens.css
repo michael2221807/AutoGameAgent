@@ -53,25 +53,33 @@
   --color-text-bone:        var(--color-text);
 
   /* ─────────────────────────────────────────────────────────────
-     SAGE FAMILY — phosphorescent moss / firefly / instrument glow
-     Role: everyday state (nav-active, focus, buttons, send, AI-thinking)
+     ACCENT HUE PIVOTS — the two numbers that drive the entire palette.
+     Theme switching only changes these; all families cascade automatically.
+     Default: sage (150°) + amber (75°).
      ───────────────────────────────────────────────────────────── */
-  --color-sage-100:         oklch(0.92 0.025 150);
-  --color-sage-300:         oklch(0.80 0.065 150);
-  --color-sage-400:         oklch(0.78 0.08  150);  /* ★ primary sage */
-  --color-sage-500:         oklch(0.72 0.085 150);  /* pressed / active */
-  --color-sage-600:         oklch(0.64 0.075 150);  /* border / icon */
-  --color-sage-700:         oklch(0.52 0.06  150);  /* resting icon */
+  --hue-1: 150;
+  --hue-2: 75;
 
   /* ─────────────────────────────────────────────────────────────
-     AMBER FAMILY — low-kelvin honey / thermostat glow
+     SAGE FAMILY — primary accent (hue-1)
+     Role: everyday state (nav-active, focus, buttons, send, AI-thinking)
+     ───────────────────────────────────────────────────────────── */
+  --color-sage-100:         oklch(0.92 0.025 var(--hue-1));
+  --color-sage-300:         oklch(0.80 0.065 var(--hue-1));
+  --color-sage-400:         oklch(0.78 0.08  var(--hue-1));  /* ★ primary */
+  --color-sage-500:         oklch(0.72 0.085 var(--hue-1));  /* pressed / active */
+  --color-sage-600:         oklch(0.64 0.075 var(--hue-1));  /* border / icon */
+  --color-sage-700:         oklch(0.52 0.06  var(--hue-1));  /* resting icon */
+
+  /* ─────────────────────────────────────────────────────────────
+     AMBER FAMILY — secondary accent (hue-2)
      Role: rare warmth (save-done, confirmation, "continue game", accents)
      ───────────────────────────────────────────────────────────── */
-  --color-amber-100:        oklch(0.93 0.03  75);
-  --color-amber-300:        oklch(0.83 0.07  75);
-  --color-amber-400:        oklch(0.80 0.09  75);   /* ★ primary amber */
-  --color-amber-500:        oklch(0.74 0.09  75);
-  --color-amber-600:        oklch(0.66 0.085 75);
+  --color-amber-100:        oklch(0.93 0.03  var(--hue-2));
+  --color-amber-300:        oklch(0.83 0.07  var(--hue-2));
+  --color-amber-400:        oklch(0.80 0.09  var(--hue-2));   /* ★ secondary */
+  --color-amber-500:        oklch(0.74 0.09  var(--hue-2));
+  --color-amber-600:        oklch(0.66 0.085 var(--hue-2));
 
   /* ─────────────────────────────────────────────────────────────
      SEMANTIC — all desaturated + warm-tinted. No Tailwind defaults.
@@ -80,14 +88,14 @@
   --color-danger-hover:     oklch(0.68 0.12  30);
   --color-danger-muted:     color-mix(in oklch, var(--color-danger) 15%, transparent);
 
-  --color-success:          oklch(0.76 0.09  150);  /* sage-aligned green */
-  --color-success-hover:    oklch(0.80 0.09  150);
+  --color-success:          oklch(0.76 0.09  var(--hue-1));
+  --color-success-hover:    oklch(0.80 0.09  var(--hue-1));
   --color-success-muted:    color-mix(in oklch, var(--color-success) 15%, transparent);
 
   --color-warning:          var(--color-amber-400); /* warning IS the amber beacon */
   --color-warning-muted:    color-mix(in oklch, var(--color-warning) 15%, transparent);
 
-  --color-info:             oklch(0.74 0.07  150);  /* sage-dim — no cold blue */
+  --color-info:             oklch(0.74 0.07  var(--hue-1));
 
   /* ─────────────────────────────────────────────────────────────
      BACKWARD-COMPAT ALIASES — every legacy `var(--color-primary)` etc.
@@ -300,16 +308,16 @@ html, body {
   margin-left: -100%;
   background: conic-gradient(
     from 0deg,
-    oklch(0.84 0.13 150 / 1)       0deg,
-    oklch(0.68 0.10 150 / 0.55)   30deg,
-    oklch(0.42 0.04 150 / 0.12)   60deg,
-    transparent                    90deg,
-    transparent                   180deg,
-    oklch(0.86 0.13  75 / 0.95)  210deg,
-    oklch(0.68 0.10  75 / 0.45)  240deg,
-    oklch(0.42 0.04  75 / 0.10)  270deg,
-    transparent                   295deg,
-    oklch(0.84 0.13 150 / 1)     360deg
+    oklch(0.84 0.13 var(--hue-1) / 1)       0deg,
+    oklch(0.68 0.10 var(--hue-1) / 0.55)   30deg,
+    oklch(0.42 0.04 var(--hue-1) / 0.12)   60deg,
+    transparent                              90deg,
+    transparent                             180deg,
+    oklch(0.86 0.13 var(--hue-2) / 0.95)  210deg,
+    oklch(0.68 0.10 var(--hue-2) / 0.45)  240deg,
+    oklch(0.42 0.04 var(--hue-2) / 0.10)  270deg,
+    transparent                             295deg,
+    oklch(0.84 0.13 var(--hue-1) / 1)     360deg
   );
   animation: glow-rotate 20s linear infinite;
   filter: blur(6px);
@@ -345,16 +353,16 @@ html, body {
   margin-left: -100%;
   background: conic-gradient(
     from 0deg,
-    oklch(0.68 0.14 150 / 0.85)    0deg,
-    oklch(0.50 0.10 150 / 0.35)   35deg,
-    oklch(0.30 0.05 150 / 0.08)   65deg,
-    transparent                    90deg,
-    transparent                   180deg,
-    oklch(0.70 0.14  75 / 0.70)  210deg,
-    oklch(0.50 0.10  75 / 0.28)  245deg,
-    oklch(0.30 0.05  75 / 0.06)  275deg,
-    transparent                   300deg,
-    oklch(0.68 0.14 150 / 0.85)  360deg
+    oklch(0.68 0.14 var(--hue-1) / 0.85)    0deg,
+    oklch(0.50 0.10 var(--hue-1) / 0.35)   35deg,
+    oklch(0.30 0.05 var(--hue-1) / 0.08)   65deg,
+    transparent                              90deg,
+    transparent                             180deg,
+    oklch(0.70 0.14 var(--hue-2) / 0.70)  210deg,
+    oklch(0.50 0.10 var(--hue-2) / 0.28)  245deg,
+    oklch(0.30 0.05 var(--hue-2) / 0.06)  275deg,
+    transparent                             300deg,
+    oklch(0.68 0.14 var(--hue-1) / 0.85)  360deg
   );
   animation: glow-rotate 20s linear infinite;
   filter: blur(22px);
@@ -429,12 +437,12 @@ html, body {
      Used for streaming message breathing, hover warmth, vignettes.
      ───────────────────────────────────────────────────────────── */
   --diffuse-sage:       radial-gradient(ellipse 80% 60% at 50% 100%,
-                          oklch(0.78 0.10 150 / 0.25) 0%,
-                          oklch(0.72 0.08 150 / 0.12) 35%,
+                          oklch(0.78 0.10 var(--hue-1) / 0.25) 0%,
+                          oklch(0.72 0.08 var(--hue-1) / 0.12) 35%,
                           transparent 70%);
   --diffuse-amber:      radial-gradient(ellipse 70% 55% at 50% 100%,
-                          oklch(0.82 0.12 75 / 0.28) 0%,
-                          oklch(0.75 0.10 75 / 0.12) 35%,
+                          oklch(0.82 0.12 var(--hue-2) / 0.28) 0%,
+                          oklch(0.75 0.10 var(--hue-2) / 0.12) 35%,
                           transparent 65%);
   --diffuse-blur:       blur(35px);
   --diffuse-breathe:    6s;
@@ -444,10 +452,10 @@ html, body {
      to emit warmth from within. Multi-layer inset box-shadows.
      ───────────────────────────────────────────────────────────── */
   /* Compose with --glass-shadow: `box-shadow: var(--glass-shadow), var(--lumi-sage)` */
-  --lumi-sage:            inset 0 0 50px oklch(0.78 0.08 150 / 0.05),
-                          inset 0 0 100px oklch(0.78 0.06 150 / 0.02);
-  --lumi-amber:           inset 0 0 50px oklch(0.80 0.09 75 / 0.04),
-                          inset 0 0 100px oklch(0.80 0.06 75 / 0.02);
+  --lumi-sage:            inset 0 0 50px oklch(0.78 0.08 var(--hue-1) / 0.05),
+                          inset 0 0 100px oklch(0.78 0.06 var(--hue-1) / 0.02);
+  --lumi-amber:           inset 0 0 50px oklch(0.80 0.09 var(--hue-2) / 0.04),
+                          inset 0 0 100px oklch(0.80 0.06 var(--hue-2) / 0.02);
   --lumi-inset-highlight: inset 0 1px 2px rgba(255, 255, 255, 0.08);
   --lumi-pulse:           5s;
 
@@ -465,15 +473,15 @@ html, body {
      ───────────────────────────────────────────────────────────── */
   --accent-sage:  linear-gradient(90deg,
                     transparent 0%,
-                    oklch(0.80 0.10 150 / 0.7) 35%,
-                    oklch(0.78 0.08 150 / 0.9) 50%,
-                    oklch(0.80 0.10 150 / 0.7) 65%,
+                    oklch(0.80 0.10 var(--hue-1) / 0.7) 35%,
+                    oklch(0.78 0.08 var(--hue-1) / 0.9) 50%,
+                    oklch(0.80 0.10 var(--hue-1) / 0.7) 65%,
                     transparent 100%);
   --accent-amber: linear-gradient(90deg,
                     transparent 0%,
-                    oklch(0.82 0.10 75 / 0.6) 35%,
-                    oklch(0.80 0.09 75 / 0.8) 50%,
-                    oklch(0.82 0.10 75 / 0.6) 65%,
+                    oklch(0.82 0.10 var(--hue-2) / 0.6) 35%,
+                    oklch(0.80 0.09 var(--hue-2) / 0.8) 50%,
+                    oklch(0.82 0.10 var(--hue-2) / 0.6) 65%,
                     transparent 100%);
   --accent-flow:  4.5s;
 }
