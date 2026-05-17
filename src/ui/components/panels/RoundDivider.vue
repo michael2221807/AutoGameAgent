@@ -221,12 +221,13 @@ function onBadgeClick(): void {
   gap: var(--space-sm);
 }
 
-/* Horizontal rules — soft gradient fade, warm-tinted */
+/* Horizontal rules — sage accent gradient with slow breath */
 .round-divider__line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(to right, transparent, var(--color-border), transparent);
-  opacity: 0.6;
+  background: var(--accent-sage);
+  opacity: 0.5;
+  animation: lumi-pulse calc(var(--lumi-pulse) * 1.6) ease-in-out infinite;
 }
 
 .round-divider__actions {
@@ -262,7 +263,11 @@ function onBadgeClick(): void {
 .round-divider__icon-btn:hover {
   color: var(--color-sage-400);
   border-color: color-mix(in oklch, var(--color-sage-400) 35%, var(--color-border));
-  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 8%, transparent),
+    color-mix(in oklch, var(--color-sage-400) 4%, transparent));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .round-divider__icon-btn:focus-visible {
@@ -302,8 +307,9 @@ function onBadgeClick(): void {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   background: color-mix(in oklch, var(--color-surface-elevated) 60%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  box-shadow: var(--lumi-inset-highlight);
   color: var(--color-text-umber);
   font-family: var(--font-serif-cjk);
   font-size: var(--font-size-xs);
@@ -342,13 +348,15 @@ function onBadgeClick(): void {
   opacity: 0.72;
 }
 
-/* Current round: sage inner ring + faint glow */
+/* Current round: sage double inset ring + enhanced glow + breathing pulse */
 .round-divider--current .round-divider__badge {
   border-color: color-mix(in oklch, var(--color-sage-400) 40%, var(--color-border));
   color: var(--color-text);
   box-shadow:
     inset 0 0 0 1px color-mix(in oklch, var(--color-sage-400) 15%, transparent),
-    0 0 14px color-mix(in oklch, var(--color-sage-400) 22%, transparent);
+    inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 8%, transparent),
+    0 0 18px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+  animation: lumi-pulse var(--lumi-pulse) ease-in-out infinite;
 }
 
 /* Token / duration pill below the badge — warm, translucent */
@@ -359,9 +367,10 @@ function onBadgeClick(): void {
   padding: 3px var(--space-md);
   border-radius: var(--radius-full);
   background: color-mix(in oklch, var(--color-surface-elevated) 45%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px) saturate(1.1);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
   border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--lumi-inset-highlight);
   font-family: var(--font-mono);
   font-size: 10px;
   opacity: 0.72;
@@ -396,6 +405,7 @@ function onBadgeClick(): void {
 
 .round-divider__stat-value {
   font-weight: 600;
+  text-shadow: 0 0 6px currentColor;
 }
 
 /* Thin vertical separator between stat segments — warm umber */

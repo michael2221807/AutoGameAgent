@@ -1000,7 +1000,7 @@ function previewContent(content: string, maxLen = 100): string {
   font-size: 13px; cursor: pointer; transition: all 0.15s;
 }
 .tab-btn:hover { background: var(--color-primary-muted, rgba(99,102,241,.1)); }
-.tab-btn--active { background: var(--color-primary, #6366f1); color: var(--color-text-bone); border-color: var(--color-primary, #6366f1); }
+.tab-btn--active { background: var(--color-primary, #6366f1); color: var(--color-text-bone); border-color: var(--color-primary, #6366f1); box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
 
 .prompts-header-actions { display: flex; justify-content: flex-end; }
 
@@ -1215,7 +1215,7 @@ function previewContent(content: string, maxLen = 100): string {
   background: rgba(255, 255, 255, 0.01);
   transition: background 0.15s ease;
 }
-.prompt-card:hover { background: rgba(255, 255, 255, 0.03); }
+.prompt-card:hover { background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02) 60%); }
 .prompt-card--disabled { opacity: 0.45; }
 
 .prompt-header {
@@ -1252,6 +1252,7 @@ function previewContent(content: string, maxLen = 100): string {
   background: color-mix(in oklch, var(--color-amber-400) 10%, transparent);
   border-radius: 8px;
   flex-shrink: 0;
+  text-shadow: 0 0 4px color-mix(in oklch, var(--color-amber-400) 30%, transparent);
 }
 
 /* ── Prompt controls ── */
@@ -1290,7 +1291,7 @@ function previewContent(content: string, maxLen = 100): string {
 }
 .weight-input::-webkit-inner-spin-button,
 .weight-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.weight-input:focus { border-color: var(--color-primary, #6366f1); }
+.weight-input:focus { border-color: var(--color-primary, #6366f1); text-shadow: 0 0 4px currentColor; }
 
 .icon-btn {
   width: 24px;
@@ -1322,6 +1323,7 @@ function previewContent(content: string, maxLen = 100): string {
 .enable-toggle--on {
   color: var(--color-success, #22c55e);
   border-color: color-mix(in oklch, var(--color-success) 25%, transparent);
+  text-shadow: 0 0 4px color-mix(in oklch, var(--color-success) 35%, transparent);
   background: color-mix(in oklch, var(--color-success) 8%, transparent);
 }
 

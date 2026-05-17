@@ -430,7 +430,7 @@ function affinityColor(value: number | undefined): string {
   justify-content: center;
   background: var(--color-surface-elevated);
   color: var(--color-text-secondary);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-sage-400) 25%, transparent), inset 0 0 6px color-mix(in oklch, var(--color-sage-400) 8%, transparent);
   font-weight: 700;
   font-size: 1.1rem;
   flex-shrink: 0;
@@ -546,6 +546,8 @@ function affinityColor(value: number | undefined): string {
   line-height: 1.6;
   word-break: break-word;
   font-size: 0.88rem;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .chat-message--user .chat-bubble {

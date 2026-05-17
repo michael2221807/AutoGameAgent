@@ -1142,11 +1142,11 @@ watch(
   padding: 0;
   border-radius: 50%;
   background: color-mix(in oklch, var(--color-surface-elevated) 80%, transparent);
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
   color: var(--color-text-secondary);
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--lumi-inset-highlight);
   cursor: pointer;
   transition: right var(--duration-open) var(--ease-droplet),
               color var(--duration-fast) var(--ease-out),
@@ -1314,7 +1314,10 @@ watch(
   padding: 0.6rem 0.9rem;
   border-radius: 14px 14px 4px 14px;
   background: color-mix(in oklch, var(--color-sage-400) 10%, var(--color-surface-elevated));
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 22%, var(--color-border));
+  box-shadow: var(--lumi-inset-highlight);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 0.85rem;
@@ -1350,6 +1353,18 @@ watch(
     transparent);
   border-radius: var(--radius-full);
   animation: sage-pulse var(--duration-breath) var(--ease-out) infinite;
+}
+.message--streaming .message-bubble::after {
+  content: '';
+  position: absolute;
+  inset: -8px -12px;
+  background: var(--diffuse-sage);
+  filter: var(--diffuse-blur);
+  opacity: 0.6;
+  border-radius: 16px;
+  animation: lumi-pulse var(--diffuse-breathe) ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
 }
 
 /* Per-turn meta row (Phase 3): hover-reveal footer below assistant
@@ -1562,7 +1577,8 @@ watch(
 
 .search-panel {
   flex-shrink: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: none;
+  box-shadow: 0 4px 12px -4px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
   background: color-mix(in oklch, var(--color-surface) 92%, transparent);
   backdrop-filter: blur(12px) saturate(1.1);
   -webkit-backdrop-filter: blur(12px) saturate(1.1);
@@ -1739,7 +1755,9 @@ watch(
 
 .load-more-btn:hover {
   color: var(--color-sage-100);
-  background: color-mix(in oklch, var(--color-sage-400) 16%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 18%, transparent),
+    color-mix(in oklch, var(--color-sage-400) 10%, transparent));
   border-color: color-mix(in oklch, var(--color-sage-400) 35%, transparent);
   box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
 }

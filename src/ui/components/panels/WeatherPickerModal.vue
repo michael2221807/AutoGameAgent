@@ -130,8 +130,9 @@ function onCancel(): void {
   font-size: 0.9rem;
 }
 .picker-input:focus {
-  outline: 1px solid var(--color-primary);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--color-amber-400);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-amber-400) 12%, transparent);
 }
 .picker-presets {
   display: flex;
@@ -158,9 +159,12 @@ function onCancel(): void {
   border-color: var(--color-primary);
 }
 .preset-btn.is-active {
-  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-amber-400) 12%, transparent),
+    color-mix(in oklch, var(--color-amber-400) 6%, transparent));
   border-color: var(--color-primary);
   color: var(--color-primary);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--color-amber-400) 15%, transparent);
 }
 .picker-error {
   color: #ef4444;

@@ -607,6 +607,18 @@ function exportNarrative(): void {
   -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow);
 }
+.memory-tier::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain-texture);
+  background-repeat: repeat;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
+}
 
 /* Gradient edge (replaces hard 1px border) */
 .memory-tier::before {
@@ -659,11 +671,11 @@ function exportNarrative(): void {
 .tier-indicator::after {
   content: '';
   position: absolute;
-  inset: -3px;
+  inset: -4px;
   border-radius: var(--radius-full);
   background: inherit;
-  opacity: 0.3;
-  filter: blur(4px);
+  opacity: 0.4;
+  filter: blur(5px);
 }
 
 .tier-indicator--short    { background: var(--color-success); }
@@ -725,6 +737,7 @@ function exportNarrative(): void {
 }
 .mem-entry:hover {
   background: rgba(255, 255, 255, 0.045);
+  box-shadow: var(--lumi-inset-highlight);
 }
 
 /* Left accent bar (tier-colored) */
@@ -740,7 +753,7 @@ function exportNarrative(): void {
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 .mem-entry:hover::before {
-  opacity: 0.7;
+  opacity: 0.8;
 }
 .tier--short .mem-entry::before    { background: var(--color-success); }
 .tier--implicit .mem-entry::before { background: var(--color-info); }
@@ -974,11 +987,11 @@ function exportNarrative(): void {
 .flow-dot::after {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: -5px;
   border-radius: var(--radius-full);
   background: inherit;
-  opacity: 0.15;
-  filter: blur(6px);
+  opacity: 0.25;
+  filter: blur(7px);
 }
 .flow-dot--short    { background: var(--color-success); }
 .flow-dot--implicit { background: var(--color-info); }
@@ -1086,6 +1099,7 @@ function exportNarrative(): void {
 .config-value--number {
   color: var(--color-amber-400);
   background: color-mix(in oklch, var(--color-amber-400) 6%, transparent);
+  text-shadow: 0 0 6px color-mix(in oklch, var(--color-amber-400) 30%, transparent);
 }
 
 /* Footer hint */

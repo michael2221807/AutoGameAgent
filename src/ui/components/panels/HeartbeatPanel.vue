@@ -373,7 +373,7 @@ function toggleEntry(id: string): void {
 }
 .status-dot--active {
   background: var(--color-success, #22c55e);
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5), 0 0 16px rgba(34, 197, 94, 0.2);
   animation: pulse 2s infinite;
 }
 .status-dot--inactive {
@@ -428,10 +428,12 @@ function toggleEntry(id: string): void {
 .history-status--ok {
   color: var(--color-success, #22c55e);
   background: color-mix(in oklch, var(--color-success) 10%, transparent);
+  text-shadow: 0 0 4px color-mix(in oklch, var(--color-success) 30%, transparent);
 }
 .history-status--fail {
   color: var(--color-danger, #ef4444);
   background: color-mix(in oklch, var(--color-danger) 10%, transparent);
+  text-shadow: 0 0 4px color-mix(in oklch, var(--color-danger) 25%, transparent);
 }
 
 .history-info {

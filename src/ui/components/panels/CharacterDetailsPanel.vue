@@ -1848,7 +1848,9 @@ const avatarInitial = computed<string>(() => {
   align-items: flex-start;
   gap: 14px;
   padding: 16px;
-  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+  background: radial-gradient(ellipse 80% 60% at 20% 50%,
+    color-mix(in oklch, var(--color-sage-400) 8%, transparent),
+    color-mix(in oklch, var(--color-sage-400) 4%, transparent));
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 18%, transparent);
   border-radius: 12px;
   position: relative;
@@ -1875,7 +1877,7 @@ const avatarInitial = computed<string>(() => {
 }
 .hero-avatar:hover {
   border-color: var(--color-sage-400);
-  box-shadow: var(--shadow-glow);
+  box-shadow: var(--shadow-glow), 0 0 20px color-mix(in oklch, var(--color-sage-400) 18%, transparent);
 }
 .hero-avatar-img :deep(.img-display) { border-radius: var(--radius-lg); }
 .hero-avatar-img :deep(.img-display--fill .img-display__img) { width: 100%; height: 100%; object-fit: cover; }
@@ -2014,6 +2016,7 @@ const avatarInitial = computed<string>(() => {
   color: var(--color-text-bone);
   background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
   font-weight: 600;
+  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 .tab-count {
@@ -2080,6 +2083,7 @@ const avatarInitial = computed<string>(() => {
   border-radius: 4px;
   padding-left: 4px;
   padding-right: 4px;
+  box-shadow: var(--lumi-inset-highlight);
 }
 
 .info-label {
@@ -2253,6 +2257,7 @@ const avatarInitial = computed<string>(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  box-shadow: var(--lumi-inset-highlight);
 }
 
 .relation-header {
@@ -2321,6 +2326,7 @@ const avatarInitial = computed<string>(() => {
   border-radius: 2px;
   transition: width 0.4s ease;
   opacity: 0.6;
+  box-shadow: 0 0 6px currentColor;
 }
 
 .relation-thought {
@@ -2440,7 +2446,7 @@ const avatarInitial = computed<string>(() => {
 .section-desc { font-size: var(--font-size-xs, 12px); color: var(--color-text-muted, #55556a); }
 .pi-backend-status { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--color-text-secondary, #8888a0); margin-top: 4px; }
 .pi-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.pi-status-dot--ok { background: #4ade80; box-shadow: 0 0 4px #4ade8066; }
+.pi-status-dot--ok { background: #4ade80; box-shadow: 0 0 6px #4ade8066, 0 0 12px #4ade8033; }
 .pi-status-dot--off { background: #666; }
 .pi-status-label { font-weight: 600; color: var(--color-text, #e0e0e6); }
 .pi-status-model { color: var(--color-text-secondary, #8888a0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
@@ -2466,7 +2472,7 @@ const avatarInitial = computed<string>(() => {
 .pi-empty { color: var(--color-text-muted, #55556a); font-size: 13px; text-align: center; padding: 24px; }
 .player-archive { }
 .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-md, 12px); }
-.player-img-card { background: var(--color-surface, #1a1a24); border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px; overflow: hidden; }
+.player-img-card { background: var(--color-surface, #1a1a24); border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px; overflow: hidden; box-shadow: var(--lumi-inset-highlight); }
 .player-img-preview { position: relative; }
 .player-img-preview :deep(.img-display) { width: 100%; height: auto; aspect-ratio: 3/4; border-radius: 0; }
 .player-img-badges {
@@ -2507,6 +2513,8 @@ const avatarInitial = computed<string>(() => {
   border: 1px solid var(--color-border, #2a2a3a);
   border-radius: 8px;
   background: var(--color-surface-elevated, #22222e);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .anchor-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-bottom: 8px; }
 .anchor-status--active { background: color-mix(in oklch, var(--color-success) 12%, transparent); color: var(--color-success); }
@@ -2524,7 +2532,7 @@ const avatarInitial = computed<string>(() => {
 .body-nsfw-card {
   padding: 14px;
   border-radius: var(--radius-lg, 12px);
-  background: rgba(232, 121, 160, 0.03);
+  background: linear-gradient(135deg, rgba(232, 121, 160, 0.04), rgba(232, 121, 160, 0.02) 60%);
   border: 1px solid rgba(232, 121, 160, 0.08);
   display: flex;
   flex-direction: column;
@@ -2674,6 +2682,7 @@ const avatarInitial = computed<string>(() => {
 }
 .bp-card:hover {
   border-color: rgba(232, 121, 160, 0.2);
+  box-shadow: inset 0 0 10px rgba(232, 121, 160, 0.06);
 }
 .bp-head {
   font-size: 0.8rem;
@@ -2857,6 +2866,9 @@ const avatarInitial = computed<string>(() => {
   border-radius: 10px;
   padding: var(--space-sm, 8px);
   border: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: var(--lumi-inset-highlight), inset 0 0 12px rgba(232, 121, 160, 0.03);
 }
 
 .secret-card-header {

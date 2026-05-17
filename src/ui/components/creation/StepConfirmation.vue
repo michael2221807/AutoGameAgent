@@ -265,7 +265,10 @@ function toggleGenerationMode(): void {
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-xl);
   width: 100%;
-  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--color-text) 4%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--color-text) 4%, transparent),
+              inset 0 0 12px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .avatar-placeholder {
@@ -282,6 +285,8 @@ function toggleGenerationMode(): void {
   letter-spacing: 0.04em;
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
   border-radius: 50%;
+  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 15%, transparent),
+              inset 0 0 16px color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 
 .character-name {

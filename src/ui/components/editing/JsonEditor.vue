@@ -175,6 +175,7 @@ function minifyJson(): void {
 
 .json-editor.has-error {
   border-color: var(--color-danger);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--color-danger) 15%, transparent);
 }
 
 /* 工具栏 */
@@ -185,6 +186,7 @@ function minifyJson(): void {
   padding: 0.45rem 0.75rem;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 
 .toolbar-label {
@@ -227,6 +229,8 @@ function minifyJson(): void {
   min-height: 200px;
   max-height: 500px;
   overflow: auto;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 
 .line-numbers {

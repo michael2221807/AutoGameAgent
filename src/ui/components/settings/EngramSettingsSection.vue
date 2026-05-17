@@ -419,7 +419,7 @@ watch(config, () => {
  */
 .engram-section {
   flex-shrink: 0;
-  background: color-mix(in oklch, var(--color-text-umber) 4%, transparent);
+  background: color-mix(in oklch, var(--color-text-umber) 4%, transparent), linear-gradient(135deg, color-mix(in oklch, var(--color-sage-400) 2%, transparent), transparent 50%);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   overflow: hidden;
@@ -457,7 +457,7 @@ watch(config, () => {
   padding: 2px 8px;
   border-radius: 10px;
 }
-.badge--on  { background: color-mix(in oklch, var(--color-success) 15%, transparent); color: var(--color-success); }
+.badge--on  { background: color-mix(in oklch, var(--color-success) 15%, transparent); color: var(--color-success); text-shadow: 0 0 4px color-mix(in oklch, var(--color-success) 35%, transparent); }
 .badge--off { background: color-mix(in oklch, var(--color-text-umber) 10%, transparent); color: var(--color-text-secondary); }
 
 .expand-icon {

@@ -77,11 +77,12 @@ function open(): void {
 .festival-chip:hover {
   opacity: 1;
   transform: translateY(-1px);
+  box-shadow: inset 0 0 6px color-mix(in oklch, var(--color-amber-400) 8%, transparent);
 }
 
 .festival-chip:focus-visible {
-  outline: 1px dashed var(--color-primary, #d9b674);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-amber-400) 20%, transparent);
   opacity: 1;
 }
 

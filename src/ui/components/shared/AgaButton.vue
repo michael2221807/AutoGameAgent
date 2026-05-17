@@ -41,6 +41,7 @@ defineProps<{
    - Spinner: 600ms → 800ms (sanctuary "slower than web default"). */
 
 .aga-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -53,11 +54,18 @@ defineProps<{
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
+  overflow: hidden;
   transition: background-color var(--duration-fast) var(--ease-out),
               border-color var(--duration-fast) var(--ease-out),
               color var(--duration-fast) var(--ease-out),
               box-shadow var(--duration-fast) var(--ease-out),
               opacity var(--duration-fast) var(--ease-out);
+}
+.aga-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--color-sage-400) 25%, transparent),
+    0 0 0 6px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 .aga-btn:disabled {
@@ -79,7 +87,20 @@ defineProps<{
 .aga-btn--primary:hover:not(:disabled) {
   background: color-mix(in oklch, var(--color-sage-400) 22%, transparent);
   border-color: var(--color-sage-400);
-  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 28%, transparent);
+  box-shadow:
+    0 0 16px color-mix(in oklch, var(--color-sage-400) 28%, transparent),
+    inset 0 0 12px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+}
+.aga-btn--primary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  border-radius: 1px;
+  pointer-events: none;
 }
 
 /* Secondary — neutral outline + bone text, warms to sage on hover */
@@ -103,6 +124,9 @@ defineProps<{
 .aga-btn--danger:hover:not(:disabled) {
   background: color-mix(in oklch, var(--color-danger) 22%, transparent);
   border-color: color-mix(in oklch, var(--color-danger) 60%, transparent);
+  box-shadow:
+    0 0 14px color-mix(in oklch, var(--color-danger) 22%, transparent),
+    inset 0 0 10px color-mix(in oklch, var(--color-danger) 10%, transparent);
 }
 
 /* Ghost — transparent, warms to sage on hover */

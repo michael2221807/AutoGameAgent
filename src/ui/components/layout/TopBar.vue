@@ -476,7 +476,9 @@ function handleQuickSave(): void {
 
 .topbar__status-badge--generating .topbar__status-dot {
   background: var(--color-sage-400);
-  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 35%, transparent);
+  box-shadow:
+    0 0 8px color-mix(in oklch, var(--color-sage-400) 45%, transparent),
+    0 0 12px color-mix(in oklch, var(--color-sage-400) 20%, transparent);
 }
 
 .topbar__status-dot--pulse {
@@ -528,7 +530,9 @@ function handleQuickSave(): void {
 @media (hover: hover) {
   .topbar__btn:hover:not(:disabled) {
     color: var(--color-sage-400);
-    background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+    background: linear-gradient(180deg,
+      color-mix(in oklch, var(--color-sage-400) 8%, transparent),
+      color-mix(in oklch, var(--color-sage-400) 4%, transparent));
   }
 }
 @media (hover: none) and (pointer: coarse) {
@@ -627,6 +631,8 @@ function handleQuickSave(): void {
 
 .topbar__spin {
   animation: topbar-spin 1.2s linear infinite;
+  filter: drop-shadow(0 0 4px color-mix(in oklch, var(--color-sage-400) 35%, transparent));
+  will-change: transform;
 }
 
 @keyframes topbar-spin {

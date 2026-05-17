@@ -150,6 +150,9 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
 .aga-select--open .aga-select__trigger,
 .aga-select__trigger:hover {
   border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
+  background: linear-gradient(180deg,
+    color-mix(in oklch, var(--color-sage-400) 5%, var(--color-surface)),
+    var(--color-surface));
 }
 .aga-select--open .aga-select__trigger {
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
@@ -183,6 +186,30 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
   list-style: none;
   padding: var(--space-2xs) 0;
   margin: 0;
+}
+.aga-select__list::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 1;
+}
+.aga-select__list::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain-texture);
+  background-repeat: repeat;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
 }
 
 .aga-select__option {

@@ -578,6 +578,7 @@ function formatAirShort(air: string): string {
   font-size: var(--font-size-xs); padding: 1px 6px;
   border: 1px solid var(--color-border); border-radius: var(--radius-sm);
   color: var(--color-text); background: transparent;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
 .lora-compact__chip small { color: var(--color-sage-300); font-family: var(--font-mono, monospace); }
 .lora-compact__chip--mature { border-color: color-mix(in oklch, var(--color-danger) 40%, transparent); }
@@ -635,7 +636,7 @@ function formatAirShort(air: string): string {
   background: color-mix(in oklch, var(--color-surface) 80%, transparent);
   overflow: hidden; transition: border-color var(--duration-fast);
 }
-.lora-item--selected { border-color: color-mix(in oklch, var(--color-sage-400) 50%, transparent); }
+.lora-item--selected { border-color: color-mix(in oklch, var(--color-sage-400) 50%, transparent); box-shadow: 0 0 8px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
 .lora-item--inactive { opacity: 0.65; }
 
 .lora-item__head {
@@ -728,6 +729,7 @@ function formatAirShort(air: string): string {
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 35%, transparent);
   border-radius: 999px; color: var(--color-text);
   background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  box-shadow: var(--lumi-inset-highlight);
 }
 .lora-editor__trigger-chip--off {
   text-decoration: line-through; opacity: 0.5;
@@ -758,6 +760,7 @@ function formatAirShort(air: string): string {
 .lora-editor__scope-chip--on {
   color: var(--color-text); border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
   background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+  box-shadow: inset 0 0 6px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .lora-editor__danger { margin-top: auto; padding-top: var(--space-sm); border-top: 1px solid var(--color-border); }
 
@@ -773,6 +776,7 @@ function formatAirShort(air: string): string {
   border: 1px solid var(--color-border); border-radius: var(--radius-sm);
   white-space: pre-wrap; word-break: break-word;
   max-height: 180px; overflow-y: auto;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 .lora-shelf__preview-warn {
   font-size: var(--font-size-xs);

@@ -41,7 +41,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.92);
+  background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,0,0,0.85), rgba(0,0,0,0.95));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   cursor: zoom-out;
 }
 
@@ -65,5 +67,6 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   object-fit: contain;
   border-radius: var(--radius-md);
   cursor: default;
+  box-shadow: 0 0 20px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
 }
 </style>

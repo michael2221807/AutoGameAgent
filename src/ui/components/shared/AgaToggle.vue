@@ -58,9 +58,26 @@ function toggle() {
 
 .aga-toggle--on {
   background: color-mix(in oklch, var(--color-sage-400) 70%, var(--color-border));
-  box-shadow: 0 0 8px color-mix(in oklch, var(--color-sage-400) 35%, transparent);
+  box-shadow:
+    0 0 8px color-mix(in oklch, var(--color-sage-400) 35%, transparent),
+    inset 0 0 6px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+}
+.aga-toggle--on::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  border-radius: 1px;
+  pointer-events: none;
 }
 .aga-toggle--disabled { opacity: 0.4; cursor: not-allowed; }
+.aga-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+}
 
 .aga-toggle__thumb {
   display: block;

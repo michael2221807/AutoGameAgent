@@ -42,6 +42,7 @@ const display = computed(() => normalizeWeather(props.weather));
 
 .weather-badge:hover {
   opacity: 1;
+  text-shadow: 0 0 6px color-mix(in oklch, var(--color-amber-400) 20%, transparent);
 }
 
 .weather-badge__label {

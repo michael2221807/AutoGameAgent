@@ -188,7 +188,9 @@ function fmt(v: unknown): string {
   text-transform: uppercase;
   color: var(--group-accent, var(--color-text-muted));
   border-radius: var(--radius-sm);
-  background: color-mix(in oklch, var(--group-accent, var(--color-text-muted)) 8%, transparent);
+  background: linear-gradient(90deg,
+    color-mix(in oklch, var(--group-accent, var(--color-text-muted)) 10%, transparent),
+    color-mix(in oklch, var(--group-accent, var(--color-text-muted)) 4%, transparent));
 }
 .delta-group:first-child .delta-group-header { margin-top: 0; }
 
@@ -198,7 +200,10 @@ function fmt(v: unknown): string {
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--group-accent, var(--color-text-muted));
-  box-shadow: 0 0 6px color-mix(in oklch, var(--group-accent, var(--color-text-muted)) 50%, transparent);
+  box-shadow:
+    0 0 6px color-mix(in oklch, var(--group-accent, var(--color-text-muted)) 55%, transparent),
+    0 0 12px color-mix(in oklch, var(--group-accent, var(--color-text-muted)) 20%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
 }
 .delta-group-label { flex: 1; }
 .delta-group-count {

@@ -1464,8 +1464,11 @@ function displayBodyPartName(name: string | undefined): string {
   background: color-mix(in oklch, var(--color-text-bone) 4%, transparent);
 }
 .rc--selected {
-  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 10%, transparent),
+    color-mix(in oklch, var(--color-sage-400) 5%, transparent));
   border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+  box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 .rc--attention {
   box-shadow: inset 3px 0 0 var(--color-sage-400);
@@ -1528,6 +1531,7 @@ function displayBodyPartName(name: string | undefined): string {
 }
 .rc-presence--on {
   color: var(--color-success);
+  text-shadow: 0 0 4px color-mix(in oklch, var(--color-success) 40%, transparent);
 }
 .rc-presence--off {
   color: var(--color-text-muted);
@@ -1673,7 +1677,7 @@ function displayBodyPartName(name: string | undefined): string {
 }
 .rd-hero-avatar-btn:hover {
   border-color: var(--color-sage-400);
-  box-shadow: var(--shadow-glow);
+  box-shadow: var(--shadow-glow), 0 0 20px color-mix(in oklch, var(--color-sage-400) 18%, transparent);
 }
 .rd-hero-avatar-img :deep(.img-display) {
   border-radius: var(--radius-lg);
@@ -1979,6 +1983,7 @@ function displayBodyPartName(name: string | undefined): string {
 .trait:hover {
   background: color-mix(in oklch, var(--color-sage-400) 14%, transparent);
   border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+  text-shadow: 0 0 4px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2050,6 +2055,8 @@ function displayBodyPartName(name: string | undefined): string {
 .chat-bubble--user {
   background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
   box-shadow: inset 2px 0 0 color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .chat-bubble--assistant {
   background: color-mix(in oklch, var(--color-success) 3%, transparent);
@@ -2116,7 +2123,7 @@ function displayBodyPartName(name: string | undefined): string {
 .nsfw-card {
   padding: 12px 14px;
   border-radius: var(--radius-lg);
-  background: rgba(232, 121, 160, 0.03);
+  background: linear-gradient(135deg, rgba(232, 121, 160, 0.04), rgba(232, 121, 160, 0.02) 60%);
   border: 1px solid rgba(232, 121, 160, 0.08);
 }
 
@@ -2160,6 +2167,7 @@ function displayBodyPartName(name: string | undefined): string {
   border-radius: 3px;
   background: linear-gradient(90deg, #e879a0, #f472b6);
   transition: width 0.4s ease;
+  box-shadow: 0 0 6px rgba(232, 121, 160, 0.35);
 }
 .desire-num {
   font-size: 0.78rem;
@@ -2210,6 +2218,7 @@ function displayBodyPartName(name: string | undefined): string {
 }
 .bp-card:hover {
   border-color: rgba(232, 121, 160, 0.2);
+  box-shadow: inset 0 0 10px rgba(232, 121, 160, 0.06);
 }
 .bp-head {
   font-size: 0.8rem;
@@ -2299,6 +2308,14 @@ function displayBodyPartName(name: string | undefined): string {
     0 4px 12px rgba(0, 0, 0, 0.4),
     0 16px 48px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: box-shadow var(--duration-normal) var(--ease-out);
+}
+.portrait-frame:hover {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 16px 48px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    var(--lumi-inset-highlight);
 }
 .portrait-image :deep(.img-display) {
   width: 100%;
@@ -2457,6 +2474,7 @@ function displayBodyPartName(name: string | undefined): string {
   border-radius: 50%;
   background: #e879a0;
   cursor: pointer;
+  box-shadow: 0 0 6px rgba(232, 121, 160, 0.4);
 }
 
 .form-hint {

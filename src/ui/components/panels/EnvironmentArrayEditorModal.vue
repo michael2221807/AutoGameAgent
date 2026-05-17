@@ -230,9 +230,12 @@ function onCancel(): void {
   gap: 0.5rem;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--color-border);
-  box-shadow: inset 3px 0 0 color-mix(in oklch, var(--color-sage-400) 35%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in oklch, var(--color-sage-400) 35%, transparent),
+              inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
   border-radius: 4px;
-  background: var(--color-surface);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 3%, var(--color-surface)),
+    var(--color-surface));
 }
 .tag-body {
   flex: 1;

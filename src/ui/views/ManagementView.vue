@@ -959,7 +959,7 @@ function triggerImportRawStateTree(): void {
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 .profile-header:hover {
-  background: color-mix(in oklch, var(--color-text) 3%, transparent);
+  background: linear-gradient(90deg, color-mix(in oklch, var(--color-sage-400) 4%, transparent), transparent 60%);
 }
 
 .profile-avatar {
@@ -1047,6 +1047,7 @@ function triggerImportRawStateTree(): void {
 }
 .slot-row:hover {
   border-color: color-mix(in oklch, var(--color-sage-400) 32%, var(--color-border));
+  background: linear-gradient(135deg, color-mix(in oklch, var(--color-sage-400) 3%, transparent), transparent 50%);
 }
 
 .slot-info {
@@ -1133,6 +1134,7 @@ function triggerImportRawStateTree(): void {
 }
 
 .modal-card {
+  position: relative;
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -1145,6 +1147,17 @@ function triggerImportRawStateTree(): void {
   flex-direction: column;
   gap: 1rem;
   box-shadow: var(--glass-shadow);
+}
+.modal-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: var(--accent-sage);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .modal-title {

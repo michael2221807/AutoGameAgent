@@ -1082,6 +1082,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   border: 1px solid var(--color-border, #2a2a3a);
   border-radius: 10px;
   transition: opacity 0.15s ease;
+  box-shadow: var(--lumi-inset-highlight);
 }
 .api-card--disabled {
   opacity: 0.5;
@@ -1109,9 +1110,9 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   flex-shrink: 0;
 }
 .status-dot--idle    { background: var(--color-text-secondary, #6b7280); }
-.status-dot--testing { background: var(--color-amber-400); animation: pulse 1s infinite; }
-.status-dot--ok      { background: var(--color-success); }
-.status-dot--error   { background: var(--color-danger); }
+.status-dot--testing { background: var(--color-amber-400); animation: pulse 1s infinite; box-shadow: 0 0 6px color-mix(in oklch, var(--color-amber-400) 40%, transparent); }
+.status-dot--ok      { background: var(--color-success); box-shadow: 0 0 6px color-mix(in oklch, var(--color-success) 40%, transparent), 0 0 12px color-mix(in oklch, var(--color-success) 15%, transparent); }
+.status-dot--error   { background: var(--color-danger); box-shadow: 0 0 6px color-mix(in oklch, var(--color-danger) 40%, transparent); }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -1155,6 +1156,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   border-radius: 8px;
   flex-shrink: 0;
   letter-spacing: 0.03em;
+  text-shadow: 0 0 4px currentColor;
 }
 .api-category-badge--llm {
   color: var(--color-primary, #6366f1);
@@ -1469,6 +1471,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 .category-segment__btn--active {
   background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
   color: var(--color-primary, #6366f1);
+  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .category-segment__btn--active:hover {
   background: color-mix(in oklch, var(--color-sage-400) 20%, transparent);

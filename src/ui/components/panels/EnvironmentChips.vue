@@ -81,11 +81,12 @@ function open(): void {
 .env-chips:hover {
   opacity: 1;
   transform: translateY(-1px);
+  box-shadow: inset 0 0 6px color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 
 .env-chips:focus-visible {
-  outline: 1px dashed var(--color-primary, #d9b674);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 20%, transparent);
   opacity: 1;
 }
 

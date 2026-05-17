@@ -121,6 +121,7 @@ onBeforeUnmount(() => {
 }
 
 .modal-panel {
+  position: relative;
   width: 90%;
   max-height: 85vh;
   display: flex;
@@ -133,13 +134,36 @@ onBeforeUnmount(() => {
   box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
+.modal-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain-texture);
+  background-repeat: repeat;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
+}
 
 .modal-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: none;
+}
+.modal-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: var(--accent-sage);
+  opacity: 0.6;
 }
 
 .modal-title {
@@ -168,8 +192,10 @@ onBeforeUnmount(() => {
 }
 
 .modal-close-btn:hover {
-  color: var(--color-text);
-  background: color-mix(in oklch, var(--color-text) 4%, transparent);
+  color: var(--color-amber-400);
+  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--color-amber-400) 25%, transparent),
+              0 0 24px color-mix(in oklch, var(--color-amber-400) 10%, transparent);
 }
 
 .modal-body {

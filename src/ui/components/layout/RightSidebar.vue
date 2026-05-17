@@ -728,7 +728,7 @@ onUnmounted(() => {
 .vital-bar__fill {
   height: 100%;
   border-radius: 999px;
-  transition: width 0.4s var(--ease-out), background 0.3s var(--ease-out);
+  transition: width 0.4s var(--ease-out), background 0.3s var(--ease-out), box-shadow var(--duration-normal) var(--ease-out);
 }
 
 /*
@@ -741,7 +741,9 @@ onUnmounted(() => {
 .vital-bar__fill--health.vital-bar__fill--warning { background: var(--color-vital-health); }
 .vital-bar__fill--health.vital-bar__fill--danger  {
   background: var(--color-danger);
-  box-shadow: 0 0 6px color-mix(in oklch, var(--color-danger) 40%, transparent);
+  box-shadow:
+    0 0 6px color-mix(in oklch, var(--color-danger) 40%, transparent),
+    inset 0 0 4px color-mix(in oklch, var(--color-danger) 25%, transparent);
 }
 
 .vital-bar__fill--energy.vital-bar__fill--normal  { background: var(--color-vital-energy); opacity: 0.78; }
@@ -890,7 +892,13 @@ onUnmounted(() => {
 }
 .attr-bar__fill {
   height: 100%;
-  background: var(--color-sage-500);
+  background:
+    repeating-linear-gradient(90deg,
+      transparent 0px,
+      transparent 2px,
+      rgba(255, 255, 255, 0.04) 2px,
+      rgba(255, 255, 255, 0.04) 3px),
+    var(--color-sage-500);
   border-radius: 999px;
   transition: width 0.3s var(--ease-out);
   opacity: 0.8;
@@ -902,6 +910,7 @@ onUnmounted(() => {
   color: var(--color-text);
   text-align: right;
   font-family: var(--font-mono);
+  text-shadow: 0 0 4px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
 }
 
 /* ─── Talents ─── */

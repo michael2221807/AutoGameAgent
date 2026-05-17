@@ -23,9 +23,11 @@ defineProps<{
 
 .aga-loader__dot {
   border-radius: var(--radius-full);
-  /* Sage with soft halo — instrument-LED glow, not Tailwind primary. */
   background: var(--color-sage-400);
-  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+  box-shadow:
+    0 0 6px color-mix(in oklch, var(--color-sage-400) 50%, transparent),
+    0 0 14px color-mix(in oklch, var(--color-sage-400) 20%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
   animation: aga-loader-breath var(--duration-breath) var(--ease-out) infinite;
 }
 /* 220ms cascade matches MainGamePanel's typing dots — unified tempo. */

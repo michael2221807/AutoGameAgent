@@ -80,6 +80,17 @@ const { isMobile, leftOpen, rightOpen, closeAll } = useSidebarDrawer();
   min-height: 0;
   overflow: hidden;
 }
+.game-layout__body::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain-texture);
+  background-repeat: repeat;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  pointer-events: none;
+  z-index: 0;
+}
 
 /*
  * Main canvas: fills the full body; sidebars float over its edges.
@@ -106,6 +117,10 @@ const { isMobile, leftOpen, rightOpen, closeAll } = useSidebarDrawer();
   inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  z-index: 1;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    color-mix(in oklch, var(--color-bg) 97%, oklch(0.10 0.005 95)) 100%);
 }
 
 /* ─── Mobile layout ─── */

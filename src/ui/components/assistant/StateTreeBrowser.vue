@@ -290,7 +290,7 @@ watch(() => props.selectedPaths, () => { /* trigger reactivity */ }, { deep: tru
 
 .child-row.selected {
   background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
-  box-shadow: inset 3px 0 0 var(--color-sage-400);
+  box-shadow: inset 3px 0 0 var(--color-sage-400), 0 0 10px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 .child-row.is-target {
@@ -323,6 +323,7 @@ watch(() => props.selectedPaths, () => { /* trigger reactivity */ }, { deep: tru
   border-radius: 3px;
   background: color-mix(in oklch, var(--color-text-umber) 10%, transparent);
   color: var(--color-text-secondary);
+  text-shadow: 0 0 3px currentColor;
 }
 .child-type[data-type="string"]   { color: var(--color-success); }
 .child-type[data-type="number"]   { color: var(--color-sage-300); }

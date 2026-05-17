@@ -179,6 +179,8 @@ function formatVal(v: unknown): string {
   min-height: 220px;
   height: 100%;
   overflow-y: auto;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* ── Empty state ── */

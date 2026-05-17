@@ -598,6 +598,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
 .qa-chip:hover:not(:disabled) {
   border-color: var(--color-primary);
   transform: translateY(-1px);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
 }
 .qa-chip:disabled {
   opacity: 0.45;
@@ -625,6 +626,8 @@ function payloadButtonLabel(draft: PayloadDraft): string {
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent);
   border-radius: 14px;
   font-size: 0.78rem;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .att-chip.is-target {
   background: color-mix(in oklch, var(--color-success) 10%, transparent);
@@ -684,7 +687,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--color-border, #2a2a3a);
 }
-.msg-user { align-self: flex-end; background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent); }
+.msg-user { align-self: flex-end; background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent); }
 .msg-assistant { align-self: flex-start; }
 .msg-system {
   align-self: center;
@@ -693,6 +696,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
   font-size: 0.82rem;
   max-width: 70%;
   text-align: center;
+  box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-amber-400) 5%, transparent);
 }
 .msg.streaming { opacity: 0.85; }
 .msg.sys-inject-success { background: color-mix(in oklch, var(--color-success) 8%, transparent); border-color: color-mix(in oklch, var(--color-success) 25%, transparent); }
@@ -754,7 +758,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
   font-weight: 500;
   transition: background 0.15s;
 }
-.payload-btn:hover { background: color-mix(in oklch, var(--color-sage-400) 18%, transparent); }
+.payload-btn:hover { background: color-mix(in oklch, var(--color-sage-400) 18%, transparent); box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
 .payload-summary {
   font-size: 0.76rem;
   font-weight: 400;
@@ -792,7 +796,7 @@ function payloadButtonLabel(draft: PayloadDraft): string {
   outline: none;
   transition: border-color 0.15s;
 }
-.input-textarea:focus { border-color: var(--color-primary, #6366f1); }
+.input-textarea:focus { border-color: var(--color-primary, #6366f1); box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent); }
 .input-textarea:disabled { opacity: 0.6; }
 
 .send-btn {

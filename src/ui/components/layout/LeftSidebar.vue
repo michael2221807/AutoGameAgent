@@ -303,6 +303,18 @@ const panelGroups = computed<PanelGroup[]>(() => [
   pointer-events: none;
   z-index: 1;
 }
+.sidebar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain-texture);
+  background-repeat: repeat;
+  opacity: 0.02;
+  mix-blend-mode: var(--grain-blend);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
+}
 .sidebar--collapsed::before {
   display: none;
 }
@@ -489,7 +501,9 @@ const panelGroups = computed<PanelGroup[]>(() => [
 .sidebar__item--active {
   color: var(--color-text);
   background: color-mix(in oklch, var(--color-sage-400) 11%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-sage-400) 22%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-sage-400) 22%, transparent),
+    inset 0 -4px 8px -4px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
 }
 /*
  * ABSOLUTE-BAN REMOVAL: the old 3px indigo border-left stripe

@@ -927,6 +927,7 @@ onUnmounted(() => destroyGraph());
   background: rgba(255,255,255,0.02);
   border: 1px solid var(--color-border, #2a2a3a);
   border-radius: 8px;
+  box-shadow: var(--lumi-inset-highlight);
 }
 .stat-value {
   font-size: 1.1rem;
@@ -1160,6 +1161,7 @@ onUnmounted(() => destroyGraph());
   height: 100%;
   border-radius: 3px;
   transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 4px currentColor;
 }
 .embed-bar__fill--ok      { background: var(--color-success); }
 .embed-bar__fill--partial { background: var(--color-amber-400); }
@@ -1218,7 +1220,7 @@ onUnmounted(() => destroyGraph());
   transition: all 0.15s; user-select: none;
 }
 .gf-toggle:hover { border-color: var(--color-sage-400); }
-.gf-toggle--on { border-color: var(--color-sage-400); background: rgba(138,158,108,0.15); color: var(--color-text, #e0e0e6); }
+.gf-toggle--on { border-color: var(--color-sage-400); background: rgba(138,158,108,0.15); color: var(--color-text, #e0e0e6); box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
 .gf-range { width: 80px; accent-color: var(--color-sage-400); cursor: pointer; }
 .gf-group--round-range .gf-range { width: 64px; }
 .gf-val { font-family: 'JetBrains Mono',monospace; font-size: 11px; min-width: 24px; color: var(--color-text); }
@@ -1243,9 +1245,11 @@ onUnmounted(() => destroyGraph());
 /* ── Graph tooltip ── */
 .graph-tooltip {
   position: fixed; max-width: 340px; padding: 10px 14px;
-  background: rgba(30,29,26,0.95); border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--glass-bg); border: none;
   border-radius: 8px; font-size: 12px; line-height: 1.5; color: var(--color-text);
-  z-index: 100; pointer-events: none; backdrop-filter: blur(8px);
+  z-index: 100; pointer-events: none;
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 :deep(.gtt-type) { font-size: 10px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
 :deep(.gtt-title) { font-weight: 600; margin-top: 2px; }
@@ -1291,6 +1295,7 @@ onUnmounted(() => destroyGraph());
 .arch-step {
   padding: 3px 8px; border-radius: 5px; font-weight: 500;
   background: rgba(255,255,255,0.06); color: var(--color-text);
+  text-shadow: 0 0 3px currentColor;
 }
 .arch-step--vec { background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); color: var(--color-primary); border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent); }
 .arch-step--triple { background: color-mix(in oklch, var(--color-success) 12%, transparent); color: var(--color-success); border: 1px solid color-mix(in oklch, var(--color-success) 30%, transparent); }

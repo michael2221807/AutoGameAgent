@@ -67,7 +67,10 @@ withDefaults(defineProps<LoadingOverlayProps>(), {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in oklch, var(--color-bg) 65%, transparent);
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 50%,
+      color-mix(in oklch, var(--color-bg) 55%, transparent) 0%,
+      color-mix(in oklch, var(--color-bg) 72%, transparent) 100%);
   backdrop-filter: blur(8px) saturate(1.05);
   -webkit-backdrop-filter: blur(8px) saturate(1.05);
 }
@@ -75,7 +78,10 @@ withDefaults(defineProps<LoadingOverlayProps>(), {
 .loading-overlay--fullscreen {
   position: fixed;
   z-index: 9500;
-  background: color-mix(in oklch, var(--color-bg) 72%, transparent);
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 50%,
+      color-mix(in oklch, var(--color-bg) 62%, transparent) 0%,
+      color-mix(in oklch, var(--color-bg) 80%, transparent) 100%);
   backdrop-filter: blur(12px) saturate(1.05);
   -webkit-backdrop-filter: blur(12px) saturate(1.05);
 }
@@ -87,13 +93,23 @@ withDefaults(defineProps<LoadingOverlayProps>(), {
   gap: 14px;
 }
 
-/* ── Spinner: three sage dots orbiting with a breathing rhythm ── */
+/* ── Spinner: three sage dots orbiting with a breathing rhythm ─��� */
 .spinner {
+  position: relative;
   width: 48px;
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.spinner::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  animation: lumi-pulse var(--lumi-pulse, 5s) ease-in-out infinite;
 }
 
 .spinner__ring {
@@ -109,7 +125,10 @@ withDefaults(defineProps<LoadingOverlayProps>(), {
   height: 8px;
   border-radius: 50%;
   background: var(--color-sage-400);
-  box-shadow: 0 0 8px color-mix(in oklch, var(--color-sage-400) 45%, transparent);
+  box-shadow:
+    0 0 8px color-mix(in oklch, var(--color-sage-400) 50%, transparent),
+    0 0 16px color-mix(in oklch, var(--color-sage-400) 25%, transparent),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2);
 }
 
 .spinner__dot--1 {

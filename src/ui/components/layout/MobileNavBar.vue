@@ -64,6 +64,7 @@ const routeItems = computed(() => [
 
 <style scoped>
 .mobile-nav {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -71,9 +72,23 @@ const routeItems = computed(() => [
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: none;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.04),
+    inset 0 -1px 4px rgba(0, 0, 0, 0.15);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   flex-shrink: 0;
+}
+.mobile-nav::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: var(--accent-sage);
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .mobile-nav__item {
@@ -96,6 +111,7 @@ const routeItems = computed(() => [
 .mobile-nav__item--active {
   color: var(--color-text);
   background: color-mix(in oklch, var(--color-sage-400) 11%, transparent);
+  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
 }
 
 .mobile-nav__item:focus-visible {

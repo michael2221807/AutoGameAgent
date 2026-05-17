@@ -659,6 +659,7 @@ onMounted(async () => {
   font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--color-text);
+  text-shadow: 0 0 40px color-mix(in oklch, var(--color-sage-400) 15%, transparent), 0 0 40px color-mix(in oklch, var(--color-amber-400) 10%, transparent);
 }
 
 .brand-subtitle {
@@ -741,6 +742,7 @@ onMounted(async () => {
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--color-sage-300);
+  box-shadow: 0 0 14px color-mix(in oklch, var(--color-sage-400) 20%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 
 /* Accent — amber "continue game": warm "come back in". */
@@ -751,6 +753,7 @@ onMounted(async () => {
 }
 .btn-accent:hover:not(:disabled) {
   background: var(--color-amber-300);
+  box-shadow: 0 0 14px color-mix(in oklch, var(--color-amber-400) 20%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-amber-400) 8%, transparent);
 }
 
 .btn-secondary {
@@ -884,6 +887,7 @@ onMounted(async () => {
   transition: border-color var(--duration-normal) var(--ease-out),
               background-color var(--duration-normal) var(--ease-out),
               box-shadow var(--duration-normal) var(--ease-out);
+  box-shadow: var(--lumi-inset-highlight);
 }
 
 .profile-card:hover,
@@ -891,6 +895,7 @@ onMounted(async () => {
   border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
   background: color-mix(in oklch, var(--color-sage-400) 4%, var(--color-surface));
   outline: none;
+  box-shadow: 0 0 12px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .profile-card:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 20%, transparent);
@@ -1151,7 +1156,7 @@ onMounted(async () => {
   cursor: pointer;
   transition: background var(--duration-normal) var(--ease-out), transform var(--duration-fast) var(--ease-out);
 }
-.sync-connect-btn:hover:not(:disabled) { background: var(--color-sage-300); }
+.sync-connect-btn:hover:not(:disabled) { background: var(--color-sage-300); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 18%, transparent); }
 .sync-connect-btn:active:not(:disabled) { transform: scale(0.98); }
 .sync-connect-btn:disabled { opacity: 0.4; cursor: default; }
 
@@ -1164,6 +1169,9 @@ onMounted(async () => {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 10px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: var(--lumi-inset-highlight);
 }
 .sync-status-left {
   display: flex;
@@ -1294,6 +1302,9 @@ onMounted(async () => {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 10px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: var(--lumi-inset-highlight);
 }
 .sync-cloud-label {
   font-size: 0.72rem;

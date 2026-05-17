@@ -632,7 +632,8 @@ function goHome(): void {
 .progress-fill {
   height: 100%;
   background: var(--color-sage-400);
-  box-shadow: 0 0 8px color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--color-sage-400) 40%, transparent),
+              0 0 14px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
   border-radius: var(--radius-full);
   transition: width var(--duration-slow) var(--ease-out);
 }
@@ -674,7 +675,8 @@ function goHome(): void {
   background: var(--color-sage-400);
   border-color: var(--color-sage-400);
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--color-sage-400) 18%, transparent),
-              0 0 10px color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+              0 0 10px color-mix(in oklch, var(--color-sage-400) 40%, transparent),
+              0 0 16px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
 }
 
 .progress-dot.completed .dot-inner {
@@ -728,6 +730,9 @@ function goHome(): void {
   border: 1px solid color-mix(in oklch, var(--color-danger) 40%, transparent);
   border-radius: var(--radius-md);
   flex-shrink: 0;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-danger) 6%, transparent);
 }
 
 .error-text {
@@ -820,7 +825,9 @@ function goHome(): void {
   background: color-mix(in oklch, var(--color-amber-400) 24%, transparent);
   border-color: var(--color-amber-400);
   color: var(--color-amber-100);
-  box-shadow: 0 0 20px color-mix(in oklch, var(--color-amber-400) 32%, transparent);
+  box-shadow: 0 0 20px color-mix(in oklch, var(--color-amber-400) 32%, transparent),
+              inset 0 0 12px color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+  text-shadow: 0 0 6px color-mix(in oklch, var(--color-amber-400) 30%, transparent);
 }
 
 /* ── Step slide transition — sanctuary ease-out ── */

@@ -287,6 +287,7 @@ function setVal(key: string, v: string): void {
   line-height: 1.7;
   letter-spacing: 0.02em;
   list-style: '• ';
+  box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-danger) 6%, transparent);
 }
 .form-errors li { padding-left: 4px; }
 

@@ -239,7 +239,11 @@ onUnmounted(() => {
   gap: 10px;
   padding: 12px 16px 12px 20px;
   border-radius: var(--radius-md);
-  background: var(--glass-bg);
+  background:
+    linear-gradient(135deg,
+      color-mix(in oklch, var(--toast-accent, var(--color-sage-400)) 4%, transparent),
+      transparent 60%),
+    var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: none;
@@ -264,7 +268,9 @@ onUnmounted(() => {
   margin-top: -2px;
   border-radius: 50%;
   background: var(--toast-accent, var(--color-text-umber));
-  box-shadow: 0 0 6px color-mix(in oklch, var(--toast-accent, var(--color-text-umber)) 50%, transparent);
+  box-shadow:
+    0 0 12px color-mix(in oklch, var(--toast-accent, var(--color-text-umber)) 55%, transparent),
+    0 0 24px color-mix(in oklch, var(--toast-accent, var(--color-text-umber)) 25%, transparent);
 }
 
 /* Type accents — tokenized sanctuary palette, never raw hex. */
@@ -327,8 +333,10 @@ onUnmounted(() => {
   bottom: 0;
   left: 0;
   height: 2px;
-  background: var(--toast-accent, var(--color-text-umber));
-  opacity: 0.35;
+  background: linear-gradient(90deg,
+    var(--toast-accent, var(--color-text-umber)),
+    color-mix(in oklch, var(--toast-accent, var(--color-text-umber)) 40%, transparent));
+  opacity: 0.45;
   animation: toast-progress-shrink linear forwards;
 }
 

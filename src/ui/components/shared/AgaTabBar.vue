@@ -103,8 +103,9 @@ function onKeydown(e: KeyboardEvent, idx: number) {
   left: var(--space-sm);
   right: var(--space-sm);
   height: 2px;
-  background: var(--color-sage-400);
+  background: var(--accent-sage);
   border-radius: 1px;
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 35%, transparent);
 }
 
 .aga-tab__badge {
@@ -115,5 +116,10 @@ function onKeydown(e: KeyboardEvent, idx: number) {
   background: var(--color-sage-muted);
   color: var(--color-sage-300);
   border-radius: var(--radius-full);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 12%, transparent),
+    color-mix(in oklch, var(--color-sage-400) 6%, transparent));
 }
 </style>

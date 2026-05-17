@@ -308,7 +308,8 @@ defineExpose({
   transition: border-color var(--duration-fast) var(--ease-out),
               background-color var(--duration-fast) var(--ease-out),
               color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
+              box-shadow var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
   white-space: normal;
   word-break: break-word;
   text-align: left;
@@ -318,9 +319,12 @@ defineExpose({
 
 .action-btn:hover {
   border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
-  background: color-mix(in oklch, var(--color-sage-400) 8%, var(--color-surface-elevated));
+  background: linear-gradient(180deg,
+    color-mix(in oklch, var(--color-sage-400) 10%, var(--color-surface-elevated)),
+    color-mix(in oklch, var(--color-sage-400) 5%, var(--color-surface-elevated)));
   color: var(--color-sage-100);
   box-shadow: 0 0 14px color-mix(in oklch, var(--color-sage-400) 18%, transparent);
+  transform: translateY(-1px);
 }
 .action-btn--selected {
   border-color: color-mix(in oklch, var(--color-sage-400) 55%, transparent);
@@ -362,6 +366,7 @@ defineExpose({
 .cancel-btn:hover {
   background: color-mix(in oklch, var(--color-danger) 18%, transparent);
   border-color: color-mix(in oklch, var(--color-danger) 60%, transparent);
+  box-shadow: inset 0 0 12px color-mix(in oklch, var(--color-danger) 12%, transparent);
 }
 
 .input-row {
@@ -372,6 +377,7 @@ defineExpose({
 
 .message-input {
   flex: 1;
+  box-sizing: border-box;
   padding: 0.55rem 0.85rem;
   background: var(--color-surface-input);
   border: 1px solid var(--color-border);
@@ -400,7 +406,10 @@ defineExpose({
 .message-input:focus {
   border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
   background: color-mix(in oklch, var(--color-sage-400) 3%, var(--color-surface-input));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent),
+    0 0 16px color-mix(in oklch, var(--color-sage-400) 8%, transparent),
+    inset 0 0 12px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 
 .message-input:disabled {
@@ -429,9 +438,14 @@ defineExpose({
 
 .send-btn:hover:not(:disabled) {
   color: var(--color-sage-100);
-  background: var(--color-sage-muted);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 18%, transparent),
+    color-mix(in oklch, var(--color-sage-400) 10%, transparent));
   border-color: var(--color-sage-400);
-  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  box-shadow:
+    0 0 16px color-mix(in oklch, var(--color-sage-400) 30%, transparent),
+    0 0 6px color-mix(in oklch, var(--color-sage-400) 15%, transparent),
+    var(--lumi-inset-highlight);
 }
 
 .send-btn:disabled {
@@ -459,7 +473,10 @@ defineExpose({
 .rollback-btn:hover:not(:disabled) {
   color: var(--color-amber-400);
   border-color: color-mix(in oklch, var(--color-amber-400) 45%, transparent);
-  background: color-mix(in oklch, var(--color-amber-400) 6%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-amber-400) 10%, transparent),
+    color-mix(in oklch, var(--color-amber-400) 5%, transparent));
+  box-shadow: 0 0 12px color-mix(in oklch, var(--color-amber-400) 18%, transparent);
 }
 
 .rollback-btn:disabled {

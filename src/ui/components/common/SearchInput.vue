@@ -137,6 +137,7 @@ onUnmounted(() => {
 
 .search-input-wrapper:focus-within .search-input__icon {
   color: var(--color-sage-300);
+  filter: drop-shadow(0 0 4px color-mix(in oklch, var(--color-sage-400) 35%, transparent));
 }
 
 /* ── Input field ── */
@@ -165,7 +166,10 @@ onUnmounted(() => {
 .search-input__field:focus {
   border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
   background: color-mix(in oklch, var(--color-sage-400) 3%, var(--color-surface-input));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent),
+    0 0 16px color-mix(in oklch, var(--color-sage-400) 8%, transparent),
+    inset 0 0 12px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 
 /* ── Clear button (right) ── */

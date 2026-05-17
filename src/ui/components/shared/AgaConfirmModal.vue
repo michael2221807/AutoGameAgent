@@ -158,7 +158,9 @@ onUnmounted(() => {
 .aga-confirm__btn--confirm:hover {
   background: color-mix(in oklch, var(--color-sage-400) 22%, transparent);
   border-color: var(--color-sage-400);
-  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 28%, transparent);
+  box-shadow:
+    0 0 16px color-mix(in oklch, var(--color-sage-400) 28%, transparent),
+    inset 0 0 12px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
 }
 
 .aga-confirm__btn--danger {
@@ -169,5 +171,8 @@ onUnmounted(() => {
 .aga-confirm__btn--danger:hover {
   background: color-mix(in oklch, var(--color-danger) 22%, transparent);
   border-color: color-mix(in oklch, var(--color-danger) 60%, transparent);
+  box-shadow:
+    0 0 14px color-mix(in oklch, var(--color-danger) 25%, transparent),
+    inset 0 0 10px color-mix(in oklch, var(--color-danger) 12%, transparent);
 }
 </style>

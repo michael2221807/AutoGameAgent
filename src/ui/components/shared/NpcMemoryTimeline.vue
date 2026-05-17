@@ -88,7 +88,7 @@ const recentMemories = computed(() =>
   top: -4px;
   bottom: calc(100% - 8px);
   width: 1px;
-  background: var(--color-border);
+  background: linear-gradient(180deg, var(--color-border), transparent);
 }
 
 .tl-dot {
@@ -99,6 +99,7 @@ const recentMemories = computed(() =>
   background: var(--color-primary-muted);
   border: 2px solid var(--color-primary);
   margin-top: 4px;
+  box-shadow: 0 0 3px currentColor;
 }
 
 .tl-dot--summary {

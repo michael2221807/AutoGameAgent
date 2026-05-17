@@ -683,6 +683,8 @@ function memorySegmentsFor(index: number): MemorySegment[] {
   font-weight: 500;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   cursor: help;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .source-breakdown-count {
   font-weight: 400;
@@ -844,6 +846,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
   color: var(--color-primary, #6366f1);
   background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
   border-color: var(--color-primary, #6366f1);
+  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 /* ── Summary bar ── */
@@ -1045,6 +1048,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
   font-weight: 500;
   white-space: nowrap;
   cursor: help;
+  text-shadow: 0 0 3px currentColor;
 }
 
 .memory-seg-legend {

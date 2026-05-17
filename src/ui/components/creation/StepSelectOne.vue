@@ -339,13 +339,14 @@ const selectedPreset = computed<PresetEntry | null>(() =>
 
 .preset-card:hover {
   border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
-  background: color-mix(in oklch, var(--color-sage-400) 5%, var(--color-surface-elevated));
+  background: linear-gradient(180deg, color-mix(in oklch, var(--color-sage-400) 7%, var(--color-surface-elevated)), color-mix(in oklch, var(--color-sage-400) 3%, var(--color-surface-elevated)));
 }
 
 .preset-card.selected {
   border-color: color-mix(in oklch, var(--color-sage-400) 60%, transparent);
   background: color-mix(in oklch, var(--color-sage-400) 12%, var(--color-surface-elevated));
-  box-shadow: 0 0 18px color-mix(in oklch, var(--color-sage-400) 20%, transparent);
+  box-shadow: 0 0 18px color-mix(in oklch, var(--color-sage-400) 20%, transparent),
+              inset 0 0 12px color-mix(in oklch, var(--color-sage-400) 6%, transparent);
 }
 
 .preset-name {
@@ -405,7 +406,8 @@ const selectedPreset = computed<PresetEntry | null>(() =>
   background: color-mix(in oklch, var(--color-sage-400) 18%, transparent);
   border-color: var(--color-sage-400);
   color: var(--color-sage-100);
-  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 30%, transparent),
+              0 0 24px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
 }
 
 /* ── User-custom entry UI — amber palette (user warmth) ── */

@@ -2162,6 +2162,7 @@ onBeforeUnmount(() => {
   color: var(--color-primary);
   border-left-color: var(--color-primary);
   background: var(--color-primary-muted);
+  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 .settings-content {
@@ -2209,6 +2210,18 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--color-border, #2a2a3a);
   border-radius: 10px;
+  position: relative;
+}
+.settings-section + .settings-section::after {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: var(--accent-sage);
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .section-title {
@@ -2284,6 +2297,7 @@ onBeforeUnmount(() => {
 
 .toggle-switch--on .toggle-track {
   background: var(--color-primary, #91c49b);
+  box-shadow: inset 0 0 6px color-mix(in oklch, var(--color-sage-400) 20%, transparent);
 }
 
 .toggle-thumb {
@@ -2429,6 +2443,7 @@ onBeforeUnmount(() => {
 .num-input:focus {
   outline: none;
   border-color: var(--color-primary, #91c49b);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 
 /* 2026-04-14：短期记忆注入模式下拉 */
@@ -2576,7 +2591,7 @@ onBeforeUnmount(() => {
   background: color-mix(in oklch, var(--color-danger) 8%, transparent) !important;
   border-color: color-mix(in oklch, var(--color-danger) 25%, transparent) !important;
 }
-.btn-sm--danger:hover { background: var(--color-danger, #ef4444) !important; color: var(--color-text-bone) !important; }
+.btn-sm--danger:hover { background: var(--color-danger, #ef4444) !important; color: var(--color-text-bone) !important; box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-danger) 15%, transparent); }
 
 /* ── Text replace modal ── */
 .rules-header {
@@ -2611,7 +2626,7 @@ onBeforeUnmount(() => {
   color: var(--color-text-secondary, #8888a0);
   flex-shrink: 0;
 }
-.rule-toggle--on { color: var(--color-success, #22c55e); }
+.rule-toggle--on { color: var(--color-success, #22c55e); text-shadow: 0 0 4px color-mix(in oklch, var(--color-success) 35%, transparent); }
 .rule-info {
   flex: 1;
   display: flex;
@@ -2694,7 +2709,7 @@ onBeforeUnmount(() => {
   font-size: 0.84rem;
   font-family: inherit;
 }
-.form-input:focus { outline: none; border-color: var(--color-primary, #91c49b); }
+.form-input:focus { outline: none; border-color: var(--color-primary, #91c49b); box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent); }
 .form-checks { display: flex; gap: 16px; margin-bottom: 8px; }
 .form-error { font-size: 0.78rem; color: var(--color-danger, #ef4444); margin: 0 0 6px; }
 .confirm-text { font-size: 0.88rem; color: var(--color-text, #e0e0e6); line-height: 1.5; margin: 0; }
@@ -2754,6 +2769,7 @@ onBeforeUnmount(() => {
   color: var(--color-primary, #91c49b);
   background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
   border-color: color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 /* ── sr-only ── */

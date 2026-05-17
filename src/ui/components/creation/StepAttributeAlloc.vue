@@ -364,6 +364,7 @@ function emitCurrent(): void {
   font-size: 1rem;
   color: var(--color-sage-300);
   flex-shrink: 0;
+  text-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
 }
 
 .attr-bar {
@@ -377,7 +378,9 @@ function emitCurrent(): void {
 .attr-bar-fill {
   height: 100%;
   background: var(--color-sage-400);
-  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 40%, transparent),
+              0 0 14px color-mix(in oklch, var(--color-sage-400) 25%, transparent),
+              inset 0 1px 1px rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-full);
   transition: width var(--duration-normal) var(--ease-out);
 }

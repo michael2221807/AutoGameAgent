@@ -328,6 +328,7 @@ function onChildReset(childPath: string): void {
 
 .field-input:focus {
   border-color: var(--color-sage-400);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 .field-select {

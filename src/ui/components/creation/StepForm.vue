@@ -264,7 +264,8 @@ defineExpose({ hasValidationErrors });
 .form-input:focus {
   border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
   background: color-mix(in oklch, var(--color-sage-400) 3%, var(--color-surface-input));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent),
+              inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 
 /* Native select — custom chevron so it never shows the browser default.

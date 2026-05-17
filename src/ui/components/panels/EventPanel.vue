@@ -583,6 +583,7 @@ function persist(): void {
   background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
   border-color: var(--color-primary, #6366f1);
   color: var(--color-primary, #6366f1);
+  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .type-toggle:hover {
   border-color: var(--color-primary, #6366f1);
@@ -764,6 +765,10 @@ function persist(): void {
   background: rgba(255, 255, 255, 0.02);
   border-radius: 6px;
 }
+.timeline-item--expanded {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02), transparent 60%);
+  border-radius: 6px;
+}
 
 .timeline-dot {
   width: 10px;
@@ -772,6 +777,7 @@ function persist(): void {
   flex-shrink: 0;
   margin-top: 5px;
   z-index: 1;
+  box-shadow: 0 0 4px currentColor;
 }
 
 .timeline-line {

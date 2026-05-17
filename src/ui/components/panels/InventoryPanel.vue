@@ -342,6 +342,7 @@ function itemTypeIcon(type: string | undefined): string {
   background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
   border: 1px solid color-mix(in oklch, var(--color-amber-400) 20%, transparent);
   border-radius: 20px;
+  box-shadow: var(--lumi-inset-highlight);
 }
 
 .currency-icon {
@@ -437,12 +438,13 @@ function itemTypeIcon(type: string | undefined): string {
   flex-wrap: wrap;
 }
 .item-card:hover {
-  background: color-mix(in oklch, var(--color-sage-400) 4%, transparent);
+  background: linear-gradient(135deg, color-mix(in oklch, var(--color-sage-400) 6%, transparent), color-mix(in oklch, var(--color-sage-400) 3%, transparent));
   border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent);
 }
 .item-card--selected {
   background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
   border-color: var(--color-sage-600);
+  box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 .item-card--equipped {
   box-shadow: inset 3px 0 0 var(--color-success);
@@ -492,6 +494,7 @@ function itemTypeIcon(type: string | undefined): string {
   border: 1px solid currentColor;
   border-radius: 8px;
   opacity: 0.9;
+  text-shadow: 0 0 4px currentColor;
 }
 
 .item-desc {

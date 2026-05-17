@@ -717,7 +717,7 @@ function rejectAdvancement(): void {
   background: var(--glass-bg, rgba(255, 255, 255, 0.04));
   backdrop-filter: var(--glass-blur, blur(24px) saturate(1.4));
   -webkit-backdrop-filter: var(--glass-blur, blur(24px) saturate(1.4));
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--glass-shadow), var(--lumi-inset-highlight);
   border: none;
   border-radius: 10px;
   padding: 14px;
@@ -744,9 +744,9 @@ function rejectAdvancement(): void {
   letter-spacing: 0.5px;
 }
 .arc-status--draft     { background: rgba(255,255,255,0.06); color: var(--color-text-secondary); }
-.arc-status--active    { background: rgba(140,184,140,0.15); color: var(--color-sage-400, #8cb88c); }
-.arc-status--completed { background: rgba(245,158,11,0.15); color: var(--color-amber-400, #f59e0b); }
-.arc-status--abandoned { background: rgba(192,57,43,0.15); color: var(--color-danger, #c0392b); }
+.arc-status--active    { background: rgba(140,184,140,0.15); color: var(--color-sage-400, #8cb88c); text-shadow: 0 0 4px color-mix(in oklch, var(--color-sage-400) 30%, transparent); }
+.arc-status--completed { background: rgba(245,158,11,0.15); color: var(--color-amber-400, #f59e0b); text-shadow: 0 0 4px color-mix(in oklch, var(--color-amber-400) 30%, transparent); }
+.arc-status--abandoned { background: rgba(192,57,43,0.15); color: var(--color-danger, #c0392b); text-shadow: 0 0 4px color-mix(in oklch, var(--color-danger) 20%, transparent); }
 
 .arc-synopsis {
   margin: 8px 0 0;
@@ -806,6 +806,12 @@ function rejectAdvancement(): void {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.gauge-item:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02), transparent 60%);
 }
 .gauge-item > :first-child {
   flex: 1;
@@ -867,6 +873,9 @@ function rejectAdvancement(): void {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  box-shadow:
+    0 0 16px color-mix(in oklch, var(--color-sage-400) 12%, transparent),
+    inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 5%, transparent);
 }
 .confirm-gate__icon {
   font-size: 18px;

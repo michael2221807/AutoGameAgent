@@ -63,15 +63,17 @@ const barStyle = computed(() => {
   background: var(--color-surface-elevated);
   border-radius: var(--radius-full);
   overflow: hidden;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid color-mix(in oklch, var(--color-border) 40%, transparent);
 }
 .aga-progress__fill {
+  position: relative;
   height: 100%;
   border-radius: var(--radius-full);
-  /* Instrument-readout glow — currentColor mirrors backgroundColor (both
-     set inline via `barStyle`). The glow intensity stays the same across
-     all four variants because currentColor carries whichever accent was
-     selected. */
-  box-shadow: 0 0 8px color-mix(in oklch, currentColor 40%, transparent);
+  box-shadow:
+    0 0 8px color-mix(in oklch, currentColor 40%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
   transition: width var(--duration-slow) var(--ease-out);
 }
 </style>

@@ -117,6 +117,7 @@ const sizeClass = `img-display--${props.size ?? 'md'}`;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.15);
 }
 .img-display--sm { width: 32px; height: 32px; }
 .img-display--md { width: 48px; height: 48px; }

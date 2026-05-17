@@ -988,10 +988,11 @@ onActivated(() => {
 .map-tooltip {
   position: absolute; transform: translate(-50%, -100%);
   padding: 8px 12px; border-radius: 8px;
-  background: color-mix(in oklch, var(--color-bg) 92%, transparent); border: 1px solid color-mix(in oklch, var(--color-text-bone) 8%, transparent);
-  backdrop-filter: blur(6px); pointer-events: none;
+  background: var(--glass-bg); border: none;
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  pointer-events: none;
   z-index: 20; max-width: 220px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--glass-shadow), inset 0 0 10px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 .tooltip-name { font-size: 0.82rem; font-weight: 600; color: var(--color-text-bone); }
 .tooltip-state { font-size: 0.62rem; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
@@ -1011,7 +1012,7 @@ onActivated(() => {
 }
 .legend-item { display: flex; align-items: center; gap: 5px; }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.legend-dot--player { background: var(--color-surface); border: 2px solid var(--color-danger); box-shadow: 0 0 4px var(--color-danger); }
+.legend-dot--player { background: var(--color-surface); border: 2px solid var(--color-danger); box-shadow: 0 0 6px var(--color-danger), 0 0 12px color-mix(in oklch, var(--color-danger) 30%, transparent); }
 .legend-dot--explored { background: color-mix(in oklch, var(--color-success) 12%, var(--color-surface)); border: 2px solid var(--color-success); }
 .legend-dot--partial { background: var(--color-surface-elevated); border: 2px dashed var(--color-amber-400); }
 .legend-dot--unknown { background: var(--color-surface-elevated); opacity: 0.45; border: 1px solid var(--color-border); }
@@ -1039,6 +1040,8 @@ onActivated(() => {
   background: color-mix(in oklch, var(--color-text-bone) 2%, transparent);
   border: 1px solid var(--color-border); border-radius: 10px;
   max-height: 240px; overflow-y: auto;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  box-shadow: var(--lumi-inset-highlight);
 }
 .location-detail::-webkit-scrollbar { width: 3px; }
 .location-detail::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-text-umber) 35%, transparent); border-radius: 2px; }

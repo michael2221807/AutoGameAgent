@@ -479,6 +479,7 @@ const parsedParts = computed<TextPart[]>(() => {
 .ft-npc-name:hover {
   color: var(--color-sage-400);
   border-color: var(--color-sage-400);
+  text-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
 }
 
 .ft-dialogue {
@@ -510,11 +511,28 @@ const parsedParts = computed<TextPart[]>(() => {
   border: 1px solid color-mix(in oklch,
     var(--jc-accent, var(--color-text-umber)) 30%,
     var(--color-border));
-  background: var(--jc-bg, color-mix(in oklch, var(--color-text-umber) 6%, transparent));
+  background:
+    linear-gradient(135deg,
+      color-mix(in oklch, var(--jc-accent, var(--color-text-umber)) 6%, transparent),
+      transparent 60%),
+    var(--jc-bg, color-mix(in oklch, var(--color-text-umber) 6%, transparent));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   font-size: 0.82rem;
   line-height: 1.4;
   vertical-align: middle;
   transition: box-shadow var(--duration-normal, 240ms) var(--ease-out);
+  position: relative;
+}
+.judgement-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  pointer-events: none;
 }
 
 .judgement-card--success {
@@ -615,10 +633,11 @@ const parsedParts = computed<TextPart[]>(() => {
   max-width: 280px;
   padding: 10px 14px;
   border-radius: 10px;
-  background: color-mix(in oklch, var(--color-surface, #1a1a1a) 96%, transparent);
-  backdrop-filter: blur(16px) saturate(1.3);
-  border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, var(--color-border));
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.2);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: none;
+  box-shadow: var(--glass-shadow);
   pointer-events: none;
 }
 .npc-pop-row {

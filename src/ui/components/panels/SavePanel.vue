@@ -1371,6 +1371,7 @@ const showSettings = ref(false);
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.06);
   margin-top: 10px;
+  box-shadow: var(--lumi-inset-highlight);
 }
 .gh-section--top {
   margin-top: 0;
@@ -1493,8 +1494,8 @@ const showSettings = ref(false);
 }
 .gh-action-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); }
 .gh-action-btn:disabled { opacity: 0.35; cursor: default; }
-.gh-action-btn--up:hover:not(:disabled) { border-color: rgba(96,165,250,0.4); color: #93bbfc; }
-.gh-action-btn--down:hover:not(:disabled) { border-color: rgba(34,197,94,0.4); color: #6ee7a0; }
+.gh-action-btn--up:hover:not(:disabled) { border-color: rgba(96,165,250,0.4); color: #93bbfc; box-shadow: 0 0 10px rgba(96,165,250,0.15); }
+.gh-action-btn--down:hover:not(:disabled) { border-color: rgba(34,197,94,0.4); color: #6ee7a0; box-shadow: 0 0 10px rgba(34,197,94,0.15); }
 .gh-action-btn--disconnect {
   padding: 5px 6px;
   color: var(--color-text-secondary, #8888a0);
@@ -1561,10 +1562,13 @@ const showSettings = ref(false);
   border-radius: 10px;
   transition: border-color 0.15s ease;
 }
-.slot-card:hover { border-color: color-mix(in oklch, var(--color-sage-400) 30%, transparent); }
+.slot-card:hover { border-color: color-mix(in oklch, var(--color-sage-400) 30%, transparent); background: linear-gradient(135deg, color-mix(in oklch, var(--color-sage-400) 3%, transparent), transparent 60%); }
 .slot-card--active {
   border-color: var(--color-primary, #6366f1);
-  background: color-mix(in oklch, var(--color-sage-400) 4%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 6%, transparent),
+    color-mix(in oklch, var(--color-sage-400) 3%, transparent));
+  box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 
 .slot-header {
@@ -1641,9 +1645,9 @@ const showSettings = ref(false);
   gap: 4px;
 }
 .action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.action-btn--save:hover:not(:disabled)    { color: var(--color-success,#22c55e); border-color: var(--color-success,#22c55e); background: color-mix(in oklch, var(--color-success) 8%, transparent); }
-.action-btn--load:hover:not(:disabled)    { color: var(--color-primary,#6366f1); border-color: var(--color-primary,#6366f1); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); }
-.action-btn--export:hover:not(:disabled)  { color: var(--color-sage-300); border-color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-300) 8%, transparent); }
+.action-btn--save:hover:not(:disabled)    { color: var(--color-success,#22c55e); border-color: var(--color-success,#22c55e); background: color-mix(in oklch, var(--color-success) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-success) 15%, transparent); }
+.action-btn--load:hover:not(:disabled)    { color: var(--color-primary,#6366f1); border-color: var(--color-primary,#6366f1); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
+.action-btn--export:hover:not(:disabled)  { color: var(--color-sage-300); border-color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-300) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-300) 15%, transparent); }
 .action-btn--rebuild:hover:not(:disabled) { color: #a78bfa; border-color: #a78bfa; background: rgba(167,139,250,0.08); }
 .action-btn--delete:hover:not(:disabled)  { color: var(--color-danger,#ef4444); border-color: var(--color-danger,#ef4444); background: color-mix(in oklch, var(--color-danger) 8%, transparent); }
 
@@ -1791,6 +1795,7 @@ const showSettings = ref(false);
   background: color-mix(in oklch, var(--color-danger) 12%, transparent);
   color: var(--color-danger-hover);
   border: 1px solid color-mix(in oklch, var(--color-danger) 30%, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--color-danger) 15%, transparent);
 }
 .import-badge--profile {
   background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);

@@ -253,7 +253,6 @@ html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-
 /*
  * Floating shell with rotating border glow.
  *
@@ -301,16 +300,16 @@ html, body {
   margin-left: -100%;
   background: conic-gradient(
     from 0deg,
-    oklch(0.80 0.12 150 / 1)       0deg,
-    oklch(0.65 0.09 150 / 0.5)    30deg,
-    oklch(0.40 0.04 150 / 0.1)    60deg,
+    oklch(0.84 0.13 150 / 1)       0deg,
+    oklch(0.68 0.10 150 / 0.55)   30deg,
+    oklch(0.42 0.04 150 / 0.12)   60deg,
     transparent                    90deg,
     transparent                   180deg,
-    oklch(0.82 0.12  75 / 0.9)   210deg,
-    oklch(0.65 0.09  75 / 0.4)   240deg,
-    oklch(0.40 0.04  75 / 0.08)  270deg,
+    oklch(0.86 0.13  75 / 0.95)  210deg,
+    oklch(0.68 0.10  75 / 0.45)  240deg,
+    oklch(0.42 0.04  75 / 0.10)  270deg,
     transparent                   295deg,
-    oklch(0.80 0.12 150 / 1)     360deg
+    oklch(0.84 0.13 150 / 1)     360deg
   );
   animation: glow-rotate 20s linear infinite;
   filter: blur(6px);
@@ -358,7 +357,7 @@ html, body {
     oklch(0.68 0.14 150 / 0.85)  360deg
   );
   animation: glow-rotate 20s linear infinite;
-  filter: blur(18px);
+  filter: blur(22px);
   will-change: transform;
 }
 
@@ -416,5 +415,179 @@ html, body {
     --glass-blur: none;
     --glass-overlay-bg: rgba(0, 0, 0, 0.65);
     --glass-overlay-blur: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISUAL EFFECTS TOKENS — Phase 1 (2026-05-16)
+   Layered optical effects on top of the sanctuary aesthetic.
+   These tokens are ADDITIVE — no existing value is modified.
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  /* ─────────────────────────────────────────────────────────────
+     DIFFUSE GRADIENTS — soft radial color washes behind elements.
+     Used for streaming message breathing, hover warmth, vignettes.
+     ───────────────────────────────────────────────────────────── */
+  --diffuse-sage:       radial-gradient(ellipse 80% 60% at 50% 100%,
+                          oklch(0.78 0.10 150 / 0.25) 0%,
+                          oklch(0.72 0.08 150 / 0.12) 35%,
+                          transparent 70%);
+  --diffuse-amber:      radial-gradient(ellipse 70% 55% at 50% 100%,
+                          oklch(0.82 0.12 75 / 0.28) 0%,
+                          oklch(0.75 0.10 75 / 0.12) 35%,
+                          transparent 65%);
+  --diffuse-blur:       blur(35px);
+  --diffuse-breathe:    6s;
+
+  /* ─────────────────────────────────────────────────────────────
+     LUMINOSITY — inner glow / inset radiance. Components appear
+     to emit warmth from within. Multi-layer inset box-shadows.
+     ───────────────────────────────────────────────────────────── */
+  /* Compose with --glass-shadow: `box-shadow: var(--glass-shadow), var(--lumi-sage)` */
+  --lumi-sage:            inset 0 0 50px oklch(0.78 0.08 150 / 0.05),
+                          inset 0 0 100px oklch(0.78 0.06 150 / 0.02);
+  --lumi-amber:           inset 0 0 50px oklch(0.80 0.09 75 / 0.04),
+                          inset 0 0 100px oklch(0.80 0.06 75 / 0.02);
+  --lumi-inset-highlight: inset 0 1px 2px rgba(255, 255, 255, 0.08);
+  --lumi-pulse:           5s;
+
+  /* ─────────────────────────────────────────────────────────────
+     GRAIN TEXTURE — SVG feTurbulence noise overlay for physical
+     material feel. Applied via ::after pseudo with .grain class.
+     ───────────────────────────────────────────────────────────── */
+  --grain-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.02;
+  --grain-blend:   overlay;
+
+  /* ─────────────────────────────────────────────────────────────
+     ACCENT LINES — flowing light points along dividers/borders.
+     Gradient with concentrated bright center that can animate.
+     ───────────────────────────────────────────────────────────── */
+  --accent-sage:  linear-gradient(90deg,
+                    transparent 0%,
+                    oklch(0.80 0.10 150 / 0.7) 35%,
+                    oklch(0.78 0.08 150 / 0.9) 50%,
+                    oklch(0.80 0.10 150 / 0.7) 65%,
+                    transparent 100%);
+  --accent-amber: linear-gradient(90deg,
+                    transparent 0%,
+                    oklch(0.82 0.10 75 / 0.6) 35%,
+                    oklch(0.80 0.09 75 / 0.8) 50%,
+                    oklch(0.82 0.10 75 / 0.6) 65%,
+                    transparent 100%);
+  --accent-flow:  4.5s;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EFFECT KEYFRAMES
+   All use transform/opacity only for GPU compositing.
+   ═══════════════════════════════════════════════════════════════ */
+@keyframes diffuse-breathe {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.04); }
+}
+
+@keyframes lumi-pulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+
+@keyframes accent-flow {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITY CLASSES — composable effect building blocks.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Grain overlay — add to any positioned element.
+   Element must have position:relative (or absolute/fixed). */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain-texture);
+  background-repeat: repeat;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+/* Glass edge — directional light-refraction border via ::before.
+   Element must have position:relative and overflow:hidden
+   OR use border-radius + mask-composite. */
+.glass-edge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Liquid highlight — top refraction line on glass surfaces.
+   1px bright line at top edge simulating light hitting glass.
+   Host element should have overflow:hidden if border-radius > 8px. */
+.liquid-highlight::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.12) 30%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.12) 70%,
+    transparent
+  );
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PREFERS-REDUCED-MOTION — new effect animations freeze.
+   (Existing global rule at line ~399 already catches *all*
+   animations, but we add explicit token overrides for JS-driven
+   consumers that might read duration tokens directly.)
+   ═══════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --diffuse-breathe: 0s;
+    --lumi-pulse:      0s;
+    --accent-flow:     0s;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BACKDROP-FILTER FALLBACK — extended for new effect classes.
+   When backdrop-filter is unsupported, grain and glass-edge
+   utilities gracefully degrade (grain to invisible, edge to
+   a subtle solid border).
+   ═══════════════════════════════════════════════════════════════ */
+@supports not (backdrop-filter: blur(1px)) {
+  .grain::after {
+    display: none;
+  }
+  .glass-edge::before {
+    background: none;
+    -webkit-mask: none;
+    mask: none;
+    border: 1px solid rgba(255, 255, 255, 0.06);
   }
 }
