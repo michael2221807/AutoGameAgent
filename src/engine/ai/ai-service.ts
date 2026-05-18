@@ -14,7 +14,7 @@
  *
  * 对应 STEP-03B M2.3。
  */
-import type { APIConfig, GenerateOptions, UsageType, APIAssignment } from './types';
+import type { APIConfig, GenerateOptions, UsageType, APIAssignment, APIProviderType, AIMessage } from './types';
 import { API_TIMEOUT_MS } from './types';
 import type { BaseProvider } from './providers/base-provider';
 import { OpenAIProvider } from './providers/openai-provider';
@@ -156,6 +156,11 @@ export class AIService {
     const config = this.getConfigForUsage(options.usageType ?? 'main');
     if (!config) throw new Error('未配置可用的 API');
 
+    let effectiveOptions = options;
+    if (config.disablePrefill && options.messages.length > 0) {
+      effectiveOptions = { ...options, messages: this.convertPrefillToSystem(options.messages) };
+    }
+
     const provider = this.createProvider(config);
     const { signal, cleanup } = this.createTimeoutSignal();
 
@@ -165,20 +170,50 @@ export class AIService {
     });
 
     try {
-      const result = await provider.generate({ ...options, signal });
+      const result = await provider.generate({ ...effectiveOptions, signal });
       eventBus.emit('ai:response-complete', {
         usageType: options.usageType,
         length: result.length,
       });
       return result;
     } catch (err) {
-      // ai:error 不在此处发——executeWithRetry 中每次失败都会走到这里，
-      // 包括中间重试。过早发 ai:error 会导致 UI 在重试期间误认为生成结束。
-      // 最终失败由 orchestrator 统一发 ai:error。
       throw err;
     } finally {
       cleanup();
     }
+  }
+
+  /**
+   * 当 disablePrefill 启用时，将末尾的 assistant prefill 转为 system 消息
+   * 插到最后一条 user 消息之前，保留格式引导内容且不触发 prefill 限制。
+   */
+  private convertPrefillToSystem(messages: AIMessage[]): AIMessage[] {
+    const result = [...messages];
+    const collectedPrefill: string[] = [];
+
+    while (result.length > 0 && result[result.length - 1].role === 'assistant') {
+      collectedPrefill.unshift(result.pop()!.content);
+    }
+
+    if (collectedPrefill.length === 0) return messages;
+
+    const systemMsg: AIMessage = {
+      role: 'system',
+      content: collectedPrefill.join('\n'),
+    };
+
+    let lastUserIdx = -1;
+    for (let i = result.length - 1; i >= 0; i--) {
+      if (result[i].role === 'user') { lastUserIdx = i; break; }
+    }
+
+    if (lastUserIdx >= 0) {
+      result.splice(lastUserIdx, 0, systemMsg);
+    } else {
+      result.push(systemMsg);
+    }
+
+    return result;
   }
 
   /**
@@ -334,14 +369,13 @@ export class AIService {
       invalidMsg = '响应格式异常（无 results 数组）';
     } else {
       // LLM 类别（默认）
-      // max_tokens 设为 100：thinking model（如 Gemini 2.5 Pro）会消耗部分 output
-      // token 做内部推理（reasoning_tokens），10 token 根本不够输出文本，导致
-      // finish_reason: "length" + content: ""。100 token 足够 thinking + 短回复。
+      // max_tokens 设为 10000：thinking model（如 Gemini 2.5 Pro）会消耗部分 output
+      // token 做内部推理（reasoning_tokens），少量 token 不够输出文本。
       endpoint = `${baseUrl}/v1/chat/completions`;
       body = {
         model: config.model,
         messages: [{ role: 'user', content: '请仅输出数字 1' }],
-        max_tokens: 100,
+        max_tokens: 10000,
         stream: false,
       };
       validate = (d) => {
@@ -394,30 +428,64 @@ export class AIService {
   }
 
   /**
-   * 拉取指定 API 支持的模型列表 — GET /v1/models
+   * 拉取指定 API 支持的模型列表。
    * 超时：15s。不依赖现有配置，直接用传入参数。
+   * 根据 provider 类型使用不同的端点和认证方式。
    */
-  async fetchModels(config: { url: string; apiKey: string }): Promise<string[]> {
-    const baseUrl = config.url.replace(/\/+$/, '');
-    const endpoint = `${baseUrl}/v1/models`;
+  async fetchModels(config: { url: string; apiKey: string; provider?: APIProviderType }): Promise<string[]> {
+    const baseUrl = config.url.replace(/\/(v1beta|v1)\/?$/, '').replace(/\/+$/, '');
+    const provider = config.provider ?? 'openai';
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
 
     try {
+      let endpoint: string;
+      let headers: Record<string, string>;
+
+      switch (provider) {
+        case 'gemini':
+          endpoint = `${baseUrl}/v1beta/models?key=${config.apiKey}`;
+          headers = {};
+          break;
+        case 'claude':
+          endpoint = `${baseUrl}/v1/models`;
+          headers = {
+            'x-api-key': config.apiKey,
+            'anthropic-version': '2023-06-01',
+          };
+          break;
+        default:
+          endpoint = `${baseUrl}/v1/models`;
+          headers = { Authorization: `Bearer ${config.apiKey}` };
+          break;
+      }
+
       const res = await fetch(endpoint, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${config.apiKey}` },
+        headers,
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+      }
 
       const data = await res.json();
-      // OpenAI 格式: { data: [{id}] }；部分 providers 用 { models: [{id}] } 或直接 [{id}]
-      const raw = (data?.data ?? data?.models ?? data ?? []) as Array<{ id: string } | string>;
-      const ids = raw
-        .map((m) => (typeof m === 'string' ? m : m?.id))
-        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+      let ids: string[];
+      if (provider === 'gemini') {
+        const models = (data?.models ?? []) as Array<{ name?: string }>;
+        ids = models
+          .map((m) => m.name?.replace(/^models\//, '') ?? '')
+          .filter((id) => id.length > 0);
+      } else {
+        const raw = (data?.data ?? data?.models ?? data ?? []) as Array<{ id: string } | string>;
+        ids = raw
+          .map((m) => (typeof m === 'string' ? m : m?.id))
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      }
+
       return [...new Set(ids)].sort();
     } catch (err) {
       clearTimeout(timeout);

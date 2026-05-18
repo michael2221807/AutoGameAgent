@@ -116,6 +116,8 @@
   "api.form.useCustomRouting": "使用自定义端点路径",
   "api.form.customRoutingHint": "覆盖默认路径。仅在你的 provider 使用非标准路径时才需要。",
   "api.form.customRoutingPath": "自定义路径",
+  "api.form.disablePrefill": "禁用 Assistant Prefill",
+  "api.form.disablePrefillHint": "部分反代理不支持消息以 assistant 结尾（prefill）。开启后 prefill 内容会转为 user 指令发送。",
   "api.form.validationNameRequired": "请输入 API 名称",
   "api.form.validationUrlRequired": "请输入 API URL",
 

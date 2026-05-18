@@ -92,6 +92,8 @@ export interface APIConfig {
   useCustomRouting?: boolean;
   /** 自定义路由路径（如 "/rerank" 或 "/v2/embed"）— 对 embedding/rerank 类别生效 */
   customRoutingPath?: string;
+  /** 禁用 assistant prefill — 部分反代理不支持消息列表以 assistant 结尾 */
+  disablePrefill?: boolean;
 }
 
 // ─── Usage Type ───

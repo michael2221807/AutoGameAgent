@@ -239,7 +239,7 @@ async function fetchModelsForForm(): Promise<void> {
   }
   isFetchingModels.value = true;
   try {
-    const models = await aiService.fetchModels({ url: form.value.url, apiKey: form.value.apiKey });
+    const models = await aiService.fetchModels({ url: form.value.url, apiKey: form.value.apiKey, provider: form.value.provider });
     availableModels.value = models;
     if (models.length === 0) {
       eventBus.emit('ui:toast', { type: 'warning', message: t('api.fetchModels.empty'), duration: 2000 });
@@ -274,6 +274,8 @@ interface APIFormData {
   useCustomRouting: boolean;
   /** §11.3: 高级 — 自定义路径内容（如 "/v2/embeddings"） */
   customRoutingPath: string;
+  /** 禁用 assistant prefill — 部分反代理不支持 */
+  disablePrefill: boolean;
 }
 
 /**
@@ -335,6 +337,7 @@ const form = ref<APIFormData>({
   enabled: true,
   useCustomRouting: false,
   customRoutingPath: '',
+  disablePrefill: false,
 });
 
 function openAddModal(): void {
@@ -355,6 +358,7 @@ function openAddModal(): void {
     enabled: true,
     useCustomRouting: false,
     customRoutingPath: '',
+    disablePrefill: false,
   };
   imageBackend.value = 'civitai';
   showEditModal.value = true;
@@ -378,6 +382,7 @@ function openEditModal(api: APIConfig): void {
     enabled: api.enabled,
     useCustomRouting: api.useCustomRouting ?? false,
     customRoutingPath: api.customRoutingPath ?? '',
+    disablePrefill: api.disablePrefill ?? false,
   };
   if ((api.apiCategory ?? 'llm') === 'image') {
     imageBackend.value = inferImageBackend(api.url);
@@ -932,6 +937,21 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             <label class="form-label">{{ $t('api.form.maxTokens') }}</label>
             <input v-model.number="form.maxTokens" type="number" min="100" class="form-input" />
           </div>
+        </div>
+
+        <!-- Disable prefill toggle (LLM only) -->
+        <div v-if="form.apiCategory === 'llm'" class="form-group">
+          <label class="form-label">
+            <input
+              v-model="form.disablePrefill"
+              type="checkbox"
+              class="form-checkbox"
+            />
+            {{ $t('api.form.disablePrefill') }}
+          </label>
+          <span class="form-hint">
+            {{ $t('api.form.disablePrefillHint') }}
+          </span>
         </div>
 
         <!-- §11.3: Advanced — custom routing path (only for embedding/rerank) -->

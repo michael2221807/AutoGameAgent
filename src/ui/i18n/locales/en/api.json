@@ -116,6 +116,8 @@
   "api.form.useCustomRouting": "Use custom endpoint path",
   "api.form.customRoutingHint": "Override the default path. Only needed when your provider uses a non-standard path.",
   "api.form.customRoutingPath": "Custom Path",
+  "api.form.disablePrefill": "Disable Assistant Prefill",
+  "api.form.disablePrefillHint": "Some reverse proxies don't support messages ending with assistant role (prefill). When enabled, prefill content is converted to a user instruction instead.",
   "api.form.validationNameRequired": "Please enter an API name",
   "api.form.validationUrlRequired": "Please enter an API URL",
 
