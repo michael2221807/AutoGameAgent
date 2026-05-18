@@ -2,7 +2,7 @@
  * Prompt 调试 Pinia Store — 记录最近 N 次 prompt 组装的快照（环形缓冲）
  *
  * B.5 扩展：
- * - snapshots 数组保留最近 10 次，activeSnapshotIndex 指向当前查看的快照
+ * - snapshots 数组保留当前回合的所有快照（新回合到来时清除旧回合）
  * - 向后兼容：lastAssembledMessages / lastVariables / lastFlowId 指向最新快照
  *
  * 2026-04-14 扩展：快照新增 `messageSources`（平行数组，每条消息的出处标签），
@@ -15,7 +15,7 @@ import { ref, computed } from 'vue';
 import type { AIMessage } from '../ai/types';
 import type { MessageSourceTag } from '../prompt/prompt-assembler';
 
-const MAX_SNAPSHOTS = 1;
+const MAX_SNAPSHOTS_PER_ROUND = 10;
 
 export interface PromptSnapshot {
   flowId: string;
@@ -53,10 +53,12 @@ export interface PromptSnapshot {
 }
 
 export const usePromptDebugStore = defineStore('promptDebug', () => {
-  /** Ring buffer of recent assembly snapshots (newest-first) */
+  /** All snapshots belonging to the current round (newest-first) */
   const snapshots = ref<PromptSnapshot[]>([]);
   /** Index into snapshots for the panel tab view */
   const activeSnapshotIndex = ref(0);
+  /** The round number currently being tracked (undefined = pre-game or init flows) */
+  const currentRound = ref<number | undefined>(undefined);
 
   /** 向后兼容 — 指向最新快照（或空值） */
   const lastAssembledMessages = computed<AIMessage[]>(() => snapshots.value[0]?.messages ?? []);
@@ -66,10 +68,9 @@ export const usePromptDebugStore = defineStore('promptDebug', () => {
   /**
    * 记录一次组装结果（由 ContextAssemblyStage / 子管线调用）
    *
-   * 2026-04-14：新增可选 `messageSources` 参数（平行数组）。
-   * 旧调用点（子管线）未传则不记录 source，UI 显示 "—"。
-   * 2026-04-19：新增可选 `generationId` 参数——对应 AI 请求的 correlation id，
-   * 用于后续 `attachResponse` 定位并回填 thinking / rawResponse。
+   * 保留策略：同一回合（roundNumber）的所有快照均保留，新回合到来时清除旧快照。
+   * 没有 roundNumber 的子管线（field-repair / world-heartbeat / npc-chat 等）
+   * 视为当前回合的一部分，追加而非清除。
    */
   function recordAssembly(
     flowId: string,
@@ -88,9 +89,18 @@ export const usePromptDebugStore = defineStore('promptDebug', () => {
       roundNumber,
       generationId,
     };
-    // Prepend + trim to MAX_SNAPSHOTS
-    snapshots.value = [snapshot, ...snapshots.value].slice(0, MAX_SNAPSHOTS);
-    activeSnapshotIndex.value = 0; // Always show latest on new assembly
+
+    // New round detected → clear old snapshots
+    if (roundNumber != null && roundNumber !== currentRound.value) {
+      currentRound.value = roundNumber;
+      snapshots.value = [snapshot];
+      activeSnapshotIndex.value = 0;
+      return;
+    }
+
+    // Same round or sub-pipeline without roundNumber → append
+    snapshots.value = [snapshot, ...snapshots.value].slice(0, MAX_SNAPSHOTS_PER_ROUND);
+    activeSnapshotIndex.value = 0;
   }
 
   /**
