@@ -571,7 +571,12 @@ function deleteAPI(id: string): void {
 const showAssignModal = ref(false);
 
 watch(showAssignModal, (open) => {
-  if (open) featureToggles.value = loadFeatureToggles();
+  if (open) {
+    featureToggles.value = loadFeatureToggles();
+    const saved = localStorage.getItem(ACTIVE_PRESET_KEY) ?? '';
+    const exists = !saved || apiStore.assignmentPresets.some((p) => p.id === saved);
+    selectedPresetId.value = exists ? saved : '';
+  }
 });
 
 /**
@@ -590,7 +595,8 @@ const showAllInAssign = ref(false);
 
 // ─── Assignment presets ───
 
-const selectedPresetId = ref('');
+const ACTIVE_PRESET_KEY = 'aga_active_preset_id';
+const selectedPresetId = ref(localStorage.getItem(ACTIVE_PRESET_KEY) ?? '');
 const showPresetNameModal = ref(false);
 const presetNameInput = ref('');
 const staleAssignmentTypes = reactive(new Set<string>());
@@ -605,8 +611,13 @@ const presetDropdownOptions = computed<SelectOption[]>(() => {
   return opts;
 });
 
+function setActivePreset(id: string): void {
+  selectedPresetId.value = id;
+  try { localStorage.setItem(ACTIVE_PRESET_KEY, id); } catch { /* ignore */ }
+}
+
 function onPresetSelect(value: string): void {
-  selectedPresetId.value = value;
+  setActivePreset(value);
   staleAssignmentTypes.clear();
 }
 
@@ -664,7 +675,7 @@ function confirmSavePreset(): void {
     featureToggles.value,
     selectedPresetId.value || undefined,
   );
-  selectedPresetId.value = newId;
+  setActivePreset(newId);
   showPresetNameModal.value = false;
   eventBus.emit('ui:toast', { type: 'success', message: t('api.preset.saved'), duration: 1500 });
 }
@@ -672,7 +683,7 @@ function confirmSavePreset(): void {
 function onDeletePreset(): void {
   if (!selectedPresetId.value) return;
   apiStore.deletePreset(selectedPresetId.value);
-  selectedPresetId.value = '';
+  setActivePreset('');
   eventBus.emit('ui:toast', { type: 'info', message: t('api.preset.deleted'), duration: 1500 });
 }
 
