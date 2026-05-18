@@ -10,12 +10,23 @@
  * 对应 STEP-03B M2.7 engine-api.ts。
  * 参照 demo: apiManagementStore.ts（去除酒馆相关逻辑）。
  */
+// App doc: docs/user-guide/pages/home.md §1.3.1 (分配预设)
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { APIConfig, UsageType, APIAssignment, APIProviderType } from '../ai/types';
 
+/** Assignment preset — snapshot of all assignments + feature toggles */
+export interface APIAssignmentPreset {
+  id: string;
+  name: string;
+  createdAt: number;
+  assignments: APIAssignment[];
+  featureToggles: Record<string, boolean>;
+}
+
 /** localStorage key */
 const STORAGE_KEY = 'aga_api_management';
+const PRESETS_STORAGE_KEY = 'aga_assignment_presets';
 
 /** 所有支持的 UsageType — must match the union in ai/types.ts */
 const ALL_USAGE_TYPES: UsageType[] = [
@@ -42,6 +53,8 @@ export const useAPIManagementStore = defineStore('apiManagement', () => {
   const apiAssignments = ref<APIAssignment[]>(
     ALL_USAGE_TYPES.map((type) => ({ type, apiId: 'default' })),
   );
+  /** 用户保存的分配预设 */
+  const assignmentPresets = ref<APIAssignmentPreset[]>([]);
 
   // ─── Getters ───
 
@@ -82,6 +95,8 @@ export const useAPIManagementStore = defineStore('apiManagement', () => {
         if (!cfg.apiCategory) cfg.apiCategory = 'llm';
       }
 
+      loadPresets();
+
       // 确保至少有一个默认配置
       if (apiConfigs.value.length === 0) {
         apiConfigs.value.push({
@@ -113,6 +128,78 @@ export const useAPIManagementStore = defineStore('apiManagement', () => {
     } catch (err) {
       console.error('[APIStore] 保存配置失败:', err);
     }
+  }
+
+  // ─── Assignment presets ───
+
+  function isValidPreset(item: unknown): item is APIAssignmentPreset {
+    if (typeof item !== 'object' || item === null) return false;
+    const p = item as Record<string, unknown>;
+    return typeof p.id === 'string'
+      && typeof p.name === 'string'
+      && typeof p.createdAt === 'number'
+      && Array.isArray(p.assignments)
+      && typeof p.featureToggles === 'object' && p.featureToggles !== null;
+  }
+
+  function loadPresets(): void {
+    try {
+      const saved = localStorage.getItem(PRESETS_STORAGE_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (Array.isArray(data)) {
+          assignmentPresets.value = data.filter(isValidPreset);
+        }
+      }
+    } catch (err) {
+      console.error('[APIStore] 加载预设失败:', err);
+    }
+  }
+
+  function savePresetsToStorage(): void {
+    try {
+      localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(assignmentPresets.value));
+    } catch (err) {
+      console.error('[APIStore] 保存预设失败:', err);
+    }
+  }
+
+  function savePreset(
+    name: string,
+    assignments: APIAssignment[],
+    featureToggles: Record<string, boolean>,
+    existingId?: string,
+  ): string {
+    // If existingId is provided and found, overwrite it.
+    // If not found (e.g. deleted externally), fall through to create a new preset.
+    if (existingId) {
+      const idx = assignmentPresets.value.findIndex((p) => p.id === existingId);
+      if (idx !== -1) {
+        assignmentPresets.value[idx] = {
+          ...assignmentPresets.value[idx],
+          name,
+          assignments: assignments.map((a) => ({ type: a.type, apiId: a.apiId })),
+          featureToggles: { ...featureToggles },
+        };
+        savePresetsToStorage();
+        return existingId;
+      }
+    }
+    const id = `preset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    assignmentPresets.value.push({
+      id,
+      name,
+      createdAt: Date.now(),
+      assignments: assignments.map((a) => ({ type: a.type, apiId: a.apiId })),
+      featureToggles: { ...featureToggles },
+    });
+    savePresetsToStorage();
+    return id;
+  }
+
+  function deletePreset(id: string): void {
+    assignmentPresets.value = assignmentPresets.value.filter((p) => p.id !== id);
+    savePresetsToStorage();
   }
 
   /** 添加 API 配置 — 返回新配置的 ID */
@@ -215,6 +302,7 @@ export const useAPIManagementStore = defineStore('apiManagement', () => {
   return {
     apiConfigs,
     apiAssignments,
+    assignmentPresets,
     enabledAPIs,
     loadFromStorage,
     saveToStorage,
@@ -227,5 +315,7 @@ export const useAPIManagementStore = defineStore('apiManagement', () => {
     toggleAPI,
     exportConfig,
     importConfig,
+    savePreset,
+    deletePreset,
   };
 });

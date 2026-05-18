@@ -175,5 +175,17 @@
   "api.assign.featureOn": "Enabled — click to disable",
   "api.assign.featureOff": "Disabled — click to enable",
   "api.assign.on": "On",
-  "api.assign.off": "Off"
+  "api.assign.off": "Off",
+
+  "api.preset.new": "New Preset",
+  "api.preset.apply": "Apply",
+  "api.preset.save": "Save",
+  "api.preset.saveTitle": "Save Preset",
+  "api.preset.nameLabel": "Preset Name",
+  "api.preset.namePlaceholder": "Enter preset name…",
+  "api.preset.applied": "Preset applied",
+  "api.preset.saved": "Preset saved",
+  "api.preset.deleted": "Preset deleted",
+  "api.preset.staleWarning": "{count} assignment(s) reference deleted APIs — reset to default, please reassign highlighted items",
+  "api.preset.staleHint": "Referenced API no longer exists, please reassign"
 }

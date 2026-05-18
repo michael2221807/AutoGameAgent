@@ -175,5 +175,17 @@
   "api.assign.featureOn": "已启用 — 点击关闭",
   "api.assign.featureOff": "已关闭 — 点击启用",
   "api.assign.on": "开",
-  "api.assign.off": "关"
+  "api.assign.off": "关",
+
+  "api.preset.new": "新建预设",
+  "api.preset.apply": "应用",
+  "api.preset.save": "保存",
+  "api.preset.saveTitle": "保存预设",
+  "api.preset.nameLabel": "预设名称",
+  "api.preset.namePlaceholder": "输入预设名称…",
+  "api.preset.applied": "预设已应用",
+  "api.preset.saved": "预设已保存",
+  "api.preset.deleted": "预设已删除",
+  "api.preset.staleWarning": "{count} 个功能引用的 API 已被删除，已回退至默认，请重新分配高亮项",
+  "api.preset.staleHint": "该功能引用的 API 已不存在，请重新选择"
 }

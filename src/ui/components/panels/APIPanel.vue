@@ -7,10 +7,13 @@
  * B.1.3 功能分配增强：必选/可选功能分组，可选功能含开关（关闭时置灰）
  * B.1.4 AI 生成全局设置：流式输出开关 + 最大重试次数
  */
-import { ref, computed, inject, onMounted, watch } from 'vue';
+// App doc: docs/user-guide/pages/home.md §1.3.1
+import { ref, reactive, computed, inject, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { API_PROVIDER_PRESETS } from '@/engine/ai/types';
 import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
@@ -585,8 +588,97 @@ watch(showAssignModal, (open) => {
  */
 const showAllInAssign = ref(false);
 
+// ─── Assignment presets ───
+
+const selectedPresetId = ref('');
+const showPresetNameModal = ref(false);
+const presetNameInput = ref('');
+const staleAssignmentTypes = reactive(new Set<string>());
+
+const presetDropdownOptions = computed<SelectOption[]>(() => {
+  const opts: SelectOption[] = [
+    { label: t('api.preset.new'), value: '' },
+  ];
+  for (const p of apiStore.assignmentPresets) {
+    opts.push({ label: p.name, value: p.id });
+  }
+  return opts;
+});
+
+function onPresetSelect(value: string): void {
+  selectedPresetId.value = value;
+  staleAssignmentTypes.clear();
+}
+
+function onApplyPreset(): void {
+  const preset = apiStore.assignmentPresets.find((p) => p.id === selectedPresetId.value);
+  if (!preset) return;
+
+  staleAssignmentTypes.clear();
+  const existingIds = new Set(apiStore.apiConfigs.map((c) => c.id));
+
+  for (const a of preset.assignments) {
+    if (!(a.type in USAGE_TYPE_CATEGORIES)) continue;
+    const usageType = a.type as UsageType;
+    if (a.apiId === 'default' || existingIds.has(a.apiId)) {
+      apiStore.assignAPI(usageType, a.apiId);
+    } else {
+      apiStore.assignAPI(usageType, 'default');
+      staleAssignmentTypes.add(a.type);
+    }
+  }
+
+  featureToggles.value = { ...preset.featureToggles };
+  try {
+    localStorage.setItem(FEATURE_TOGGLES_KEY, JSON.stringify(featureToggles.value));
+  } catch { /* ignore */ }
+
+  if (staleAssignmentTypes.size > 0) {
+    eventBus.emit('ui:toast', {
+      type: 'warning',
+      message: t('api.preset.staleWarning', { count: staleAssignmentTypes.size }),
+      duration: 4000,
+    });
+  } else {
+    eventBus.emit('ui:toast', { type: 'success', message: t('api.preset.applied'), duration: 1500 });
+  }
+}
+
+function onSavePreset(): void {
+  if (selectedPresetId.value) {
+    const preset = apiStore.assignmentPresets.find((p) => p.id === selectedPresetId.value);
+    presetNameInput.value = preset?.name ?? '';
+  } else {
+    presetNameInput.value = '';
+  }
+  showPresetNameModal.value = true;
+}
+
+function confirmSavePreset(): void {
+  const name = presetNameInput.value.trim();
+  if (!name) return;
+
+  const newId = apiStore.savePreset(
+    name,
+    apiStore.apiAssignments,
+    featureToggles.value,
+    selectedPresetId.value || undefined,
+  );
+  selectedPresetId.value = newId;
+  showPresetNameModal.value = false;
+  eventBus.emit('ui:toast', { type: 'success', message: t('api.preset.saved'), duration: 1500 });
+}
+
+function onDeletePreset(): void {
+  if (!selectedPresetId.value) return;
+  apiStore.deletePreset(selectedPresetId.value);
+  selectedPresetId.value = '';
+  eventBus.emit('ui:toast', { type: 'info', message: t('api.preset.deleted'), duration: 1500 });
+}
+
 function assignAPI(type: UsageType, apiId: string): void {
   apiStore.assignAPI(type, apiId);
+  staleAssignmentTypes.delete(type);
   eventBus.emit('ui:toast', { type: 'info', message: t('api.assign.updated'), duration: 1000 });
 }
 
@@ -1002,6 +1094,31 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
     <!-- ─── Assignment Modal (B.1.3 → categorized) ─── -->
     <Modal v-model="showAssignModal" :title="$t('api.assign.title')" width="620px">
       <div class="assign-content">
+        <!-- Preset toolbar -->
+        <div class="preset-toolbar">
+          <AgaSelect
+            class="preset-dropdown"
+            :modelValue="selectedPresetId"
+            :options="presetDropdownOptions"
+            @update:modelValue="onPresetSelect"
+          />
+          <div class="preset-actions">
+            <button class="btn-sm btn-sm--preset" :disabled="!selectedPresetId" @click="onApplyPreset">
+              {{ $t('api.preset.apply') }}
+            </button>
+            <button class="btn-sm btn-sm--preset" @click="onSavePreset">
+              {{ $t('api.preset.save') }}
+            </button>
+            <button
+              class="btn-sm btn-sm--danger"
+              :disabled="!selectedPresetId"
+              @click="onDeletePreset"
+            >
+              {{ $t('common.actions.delete') }}
+            </button>
+          </div>
+        </div>
+
         <label class="assign-show-all">
           <input type="checkbox" v-model="showAllInAssign" />
           <span>{{ $t('api.assign.showAll') }}</span>
@@ -1016,7 +1133,12 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
           <div class="assign-group-label">{{ getAssignCategoryMeta(cat).label }}</div>
           <span v-if="getAssignCategoryMeta(cat).hint" class="assign-group-hint">{{ getAssignCategoryMeta(cat).hint }}</span>
           <div class="assign-list">
-            <div v-for="type in typesForCategory(cat)" :key="type" class="assign-row">
+            <div
+              v-for="type in typesForCategory(cat)"
+              :key="type"
+              :class="['assign-row', { 'assign-row--stale': staleAssignmentTypes.has(type) }]"
+              :title="staleAssignmentTypes.has(type) ? $t('api.preset.staleHint') : undefined"
+            >
               <div class="assign-label-with-toggle">
                 <button
                   v-if="isToggleable(type)"
@@ -1055,6 +1177,25 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
       </div>
       <template #footer>
         <button class="btn-primary" @click="showAssignModal = false">{{ $t('api.assign.done') }}</button>
+      </template>
+    </Modal>
+
+    <!-- ─── Preset name modal ─── -->
+    <Modal v-model="showPresetNameModal" :title="$t('api.preset.saveTitle')" width="380px">
+      <div class="preset-name-form">
+        <label class="form-label">{{ $t('api.preset.nameLabel') }}</label>
+        <input
+          class="form-input preset-name-input"
+          v-model="presetNameInput"
+          :placeholder="$t('api.preset.namePlaceholder')"
+          @keydown.enter="confirmSavePreset"
+        />
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="showPresetNameModal = false">{{ $t('api.modal.cancel') }}</button>
+        <button class="btn-primary" :disabled="!presetNameInput.trim()" @click="confirmSavePreset">
+          {{ $t('api.modal.save') }}
+        </button>
       </template>
     </Modal>
   </div>
@@ -1518,6 +1659,55 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 .form-checkbox {
   margin-right: 6px;
   vertical-align: middle;
+}
+
+/* ── Preset toolbar ── */
+.preset-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 8px;
+}
+.preset-dropdown {
+  flex: 1;
+  min-width: 120px;
+}
+.preset-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.btn-sm--preset {
+  color: var(--color-sage-300, #8888a0);
+}
+.btn-sm--preset:hover:not(:disabled) {
+  color: var(--color-sage-100, #e0e0e6);
+  border-color: color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+}
+
+/* Preset name modal */
+.preset-name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preset-name-input {
+  width: 100%;
+}
+
+/* ── Stale assignment row (missing API warning) ── */
+.assign-row--stale .assign-select {
+  border-color: var(--color-amber-400, #f59e0b) !important;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-amber-400) 20%, transparent);
+  animation: stale-pulse 2s ease-in-out infinite;
+}
+@keyframes stale-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-amber-400) 20%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-amber-400) 30%, transparent), 0 0 8px color-mix(in oklch, var(--color-amber-400) 10%, transparent); }
 }
 
 /* ── Assignment (B.1.3) ── */
