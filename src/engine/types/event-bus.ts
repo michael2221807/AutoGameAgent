@@ -16,6 +16,7 @@ export type EngineEventName =
   | 'engram:config-changed'
   | 'ai:request-start'
   | 'ai:stream-chunk'
+  | 'ai:polish-chunk'
   | 'ai:response-complete'
   | 'ai:error'
   | 'pipeline:user-input'

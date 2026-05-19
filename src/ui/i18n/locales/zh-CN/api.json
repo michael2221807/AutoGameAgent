@@ -155,7 +155,7 @@
 
   "api.aiSettings.title": "AI 生成设置",
   "api.aiSettings.streaming.label": "流式输出",
-  "api.aiSettings.streaming.desc": "逐字流式返回叙事内容",
+  "api.aiSettings.streaming.desc": "逐字显示 AI 生成的叙事正文（仅影响主回合叙事和润色，不影响指令/选项等结构化数据）",
   "api.aiSettings.splitGen.label": "分步生成",
   "api.aiSettings.splitGen.desc": "主回合分两次 API 调用：第1步生成正文叙事，第2步生成指令和行动选项，提高稳定性",
   "api.aiSettings.maxRetries.label": "失败重试次数",

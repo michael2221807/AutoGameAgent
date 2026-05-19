@@ -28,6 +28,7 @@
  *     extraction failure, result too short). Polish is optional — never a
  *     blocker to delivering the round.
  */
+// App doc: docs/user-guide/pages/game-main.md §流式生成状态
 import type { PipelineStage, PipelineContext } from '../types';
 import type { AIService } from '../../ai/ai-service';
 import type { PromptAssembler } from '../../prompt/prompt-assembler';
@@ -40,6 +41,7 @@ import {
   emitPromptResponseDebug,
   extractThinkingFromRaw,
 } from '../../core/prompt-debug';
+import { eventBus } from '../../core/event-bus';
 
 /**
  * Extract the polished body from the AI response.
@@ -132,12 +134,30 @@ export class BodyPolishStage implements PipelineStage {
         roundNumber: ctx.roundNumber,
       });
 
+      // Streaming: reuse the main pipeline's streaming flag so polish text
+      // progressively replaces the step1 narrative in the UI typing bubble.
+      const useStreaming = !!ctx.onStreamChunk;
+      let accumulated = '';
+      let tagFound = false;
       const raw = await this.aiService.generate({
         messages,
-        stream: false,
+        stream: useStreaming,
         usageType: 'bodyPolish',
         generationId: polishGenId,
         signal: ctx.abortSignal,
+        onStreamChunk: useStreaming
+          ? (chunk: string) => {
+              accumulated += chunk;
+              if (!tagFound) {
+                tagFound = /<\s*正文\s*>/i.test(accumulated);
+                if (!tagFound) return;
+              }
+              const partial = extractBodyFromPolishOutput(accumulated);
+              if (partial) {
+                eventBus.emit('ai:polish-chunk', { text: partial });
+              }
+            }
+          : undefined,
       });
 
       emitPromptResponseDebug({
@@ -158,6 +178,9 @@ export class BodyPolishStage implements PipelineStage {
           polished.length,
           originalText.length,
         );
+        if (useStreaming) {
+          eventBus.emit('ai:polish-chunk', { text: originalText });
+        }
         return ctx;
       }
 
@@ -178,6 +201,9 @@ export class BodyPolishStage implements PipelineStage {
       };
     } catch (err) {
       console.debug('[BodyPolish] failed, keeping original text:', err);
+      if (ctx.onStreamChunk) {
+        eventBus.emit('ai:polish-chunk', { text: originalText });
+      }
       return ctx;
     }
   }

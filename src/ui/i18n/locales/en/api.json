@@ -155,7 +155,7 @@
 
   "api.aiSettings.title": "AI Generation Settings",
   "api.aiSettings.streaming.label": "Streaming Output",
-  "api.aiSettings.streaming.desc": "Stream narrative content character by character",
+  "api.aiSettings.streaming.desc": "Display AI-generated narrative progressively (main round narrative + body polish only; structured data is always non-streaming)",
   "api.aiSettings.splitGen.label": "Split Generation",
   "api.aiSettings.splitGen.desc": "Main turn split into two API calls: Step 1 generates narrative text, Step 2 generates instructions and action options, improving stability",
   "api.aiSettings.maxRetries.label": "Failure Retry Count",

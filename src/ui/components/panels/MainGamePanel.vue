@@ -741,6 +741,15 @@ onMounted(() => {
   );
 
   unsubscribers.push(
+    eventBus.on<{ text: string }>('ai:polish-chunk', (payload) => {
+      if (payload && typeof payload === 'object' && 'text' in payload) {
+        streamingText.value = (payload as { text: string }).text;
+        scrollToBottom();
+      }
+    }),
+  );
+
+  unsubscribers.push(
     eventBus.on<{ actionOptions?: string[] }>('engine:round-complete', (payload) => {
       stopTimer();
       isGenerating.value = false;
