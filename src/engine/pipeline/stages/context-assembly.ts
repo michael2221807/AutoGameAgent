@@ -51,10 +51,10 @@ export class ContextAssemblyStage implements PipelineStage {
     private engramManager?: IEngramManager,
     /** E.2: 统一检索器，hybrid 模式时使用 */
     private unifiedRetriever?: IUnifiedRetriever,
-    /** World book: user-created world books (loaded at init) */
-    private worldBooks?: WorldBook[],
-    /** World book: user overrides of built-in prompts */
-    private builtinOverrides?: BuiltinPromptEntry[],
+    /** World book getter: returns current world books (supports live updates) */
+    private getWorldBooks?: () => WorldBook[],
+    /** Built-in prompt overrides getter */
+    private getBuiltinOverrides?: () => BuiltinPromptEntry[],
     /** Whether to use the new MRJH-style builder (default: false for backward compat) */
     private useNewBuilder?: boolean,
   ) {}
@@ -312,20 +312,25 @@ export class ContextAssemblyStage implements PipelineStage {
 
       // memoryBlock from retrieveMemory() — if hybrid mode, this is the unified retrieval result
       // We pass it as engramRetrievalBlock so the builder includes it
+      const rawHistoryForCorpus = narrativeHistory.slice(-12).map((e) => ({
+        content: typeof e.content === 'string' ? e.content : '',
+      }));
+
       const buildResult = buildSystemPrompt({
         stateManager: this.stateManager,
         paths: this.paths,
         packPrompts: this.pack.prompts,
-        builtinOverrides: this.builtinOverrides ?? [],
-        worldBooks: this.worldBooks ?? [],
+        builtinOverrides: this.getBuiltinOverrides?.() ?? [],
+        worldBooks: this.getWorldBooks?.() ?? [],
         userInput: ctx.userInput,
         playerName: this.stateManager.get<string>(this.paths.playerName) ?? '',
         cotEnabled,
         cotJudgeEnabled,
         splitGen,
         cotPseudoEnabled: cotEnabled,
-        engramRetrievalBlock: memoryBlock, // Pass the full memory retrieval result
+        engramRetrievalBlock: memoryBlock,
         implicitMidTermBlock: implicitMidBlock,
+        narrativeHistoryForCorpus: rawHistoryForCorpus,
       });
 
       // Convert MessageEntry[] → AIMessage[]

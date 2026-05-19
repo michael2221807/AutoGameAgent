@@ -26,6 +26,7 @@ export type EngineEventName =
   | 'ui:debug-prompt-response'
   | 'ui:toast'
   | 'ui:modal'
+  | 'worldbook:updated'
   | string; // allow custom events
 
 /** Payload for 'ui:toast' events */

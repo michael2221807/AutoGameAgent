@@ -193,8 +193,8 @@ export class GameOrchestrator {
         paths,
         engramManager,    // E.2: 用于读取 retrievalMode
         unifiedRetriever, // E.2: hybrid 路径使用
-        subPipelines.worldBooks ?? [],    // World book data (loaded by main.ts)
-        subPipelines.builtinOverrides ?? [], // Built-in prompt overrides
+        () => subPipelines.worldBooks ?? [],    // World book getter (supports live updates)
+        () => subPipelines.builtinOverrides ?? [], // Built-in overrides getter
         true, // useNewBuilder — enable MRJH-style prompt assembly
       ),
     );
@@ -239,6 +239,12 @@ export class GameOrchestrator {
     this.unsubscribers.push(
       eventBus.on('pipeline:cancel', () => {
         this.abortController?.abort();
+      }),
+    );
+
+    this.unsubscribers.push(
+      eventBus.on<import('../prompt/world-book').WorldBook[]>('worldbook:updated', (books) => {
+        this.subPipelines.worldBooks = books ?? [];
       }),
     );
 

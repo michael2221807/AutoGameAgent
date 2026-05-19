@@ -105,6 +105,10 @@ export interface BackupBundle {
    * Optional —— 旧 bundle 不含此字段时不影响导入。
    */
   imageAssets?: Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }>;
+  /** 2026-05-19 新增：世界书数据 */
+  worldBooks?: import('../prompt/world-book').WorldBookExportData;
+  /** 2026-05-19 新增：内置提示词覆盖 */
+  builtinPromptOverrides?: import('../prompt/world-book').BuiltinPromptExportData;
 }
 
 /**
@@ -143,6 +147,7 @@ interface PreImportSnapshot {
    * 失败回滚时整组写回；为 null 表示快照阶段未取到（视为空）。
    */
   customPresets: Record<string, Record<string, CustomPresetEntry[]>> | null;
+  worldBooksSnapshot: import('../prompt/world-book').WorldBookExportData | null;
 }
 
 /**
@@ -178,6 +183,7 @@ export class BackupService {
      */
     private customPresetStore?: CustomPresetStore,
     private imageAssetCache?: ImageAssetCache,
+    private worldBookStorage?: import('../prompt/world-book-storage').WorldBookStorage,
   ) {}
 
   // ─── 公开 API ───
@@ -254,6 +260,32 @@ export class BackupService {
     /* ── 8. 图片资产（已选用的头像/立绘/壁纸/秘档 + opt-in 参考素材） ── */
     const imageAssets = await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
 
+    // World book export — collect from all profiles
+    let worldBooksExport: BackupBundle['worldBooks'];
+    let builtinOverridesExport: BackupBundle['builtinPromptOverrides'];
+    if (this.worldBookStorage) {
+      const allProfileIds = Object.keys(profiles);
+      const allBooks: import('../prompt/world-book').WorldBook[] = [];
+      for (const pid of allProfileIds) {
+        const books = await this.worldBookStorage.loadWorldBooks(pid);
+        for (const b of books) {
+          (b as unknown as Record<string, unknown>)['_exportProfileId'] = pid;
+        }
+        allBooks.push(...books);
+      }
+      if (allBooks.length > 0) {
+        worldBooksExport = { version: 1, exportedAt: new Date().toISOString(), books: allBooks };
+      }
+      // Builtin overrides are per-pack; use the first pack found in configs or skip
+      const packIds = Object.keys(customPresets);
+      if (packIds.length > 0) {
+        const overrides = await this.worldBookStorage.loadAllBuiltinOverrides(packIds[0]);
+        if (overrides.length > 0) {
+          builtinOverridesExport = { version: 1, exportedAt: new Date().toISOString(), entries: overrides, packId: packIds[0] } as import('../prompt/world-book').BuiltinPromptExportData & { packId: string };
+        }
+      }
+    }
+
     /* ── 组装备份包 ── */
     const bundle: BackupBundle = {
       version: BACKUP_FORMAT_VERSION,
@@ -271,6 +303,8 @@ export class BackupService {
       engineSettings,
       customPresets,
       imageAssets,
+      worldBooks: worldBooksExport,
+      builtinPromptOverrides: builtinOverridesExport,
     };
 
     return new Blob([JSON.stringify(bundle, null, 2)], {
@@ -390,6 +424,9 @@ export class BackupService {
       /* ── 4b. 恢复图片资产 ── */
       await this.restoreImageAssets(bundle.imageAssets);
 
+      /* ── 4c. 恢复世界书（2026-05-19 新增） ── */
+      await this.restoreWorldBooks(bundle);
+
       /* ── 5. 恢复 activeProfile 根指针 ── */
       if (bundle.activeProfile) {
         const { profileId, slotId } = bundle.activeProfile;
@@ -496,7 +533,29 @@ export class BackupService {
     // 路径（避免依赖 idbAdapter.set 时数据格式微妙变化）。
     const customPresets = await this.collectCustomPresets();
 
-    return { idb, ls, configOverlays, promptEntries, customPresets };
+    // World book snapshot — collect from all known profiles
+    let worldBooksSnapshot: PreImportSnapshot['worldBooksSnapshot'] = null;
+    if (this.worldBookStorage) {
+      try {
+        const root = this.profileManager.getRoot();
+        const profileIds = Object.keys(root.profiles ?? {});
+        const allBooks: import('../prompt/world-book').WorldBook[] = [];
+        for (const pid of profileIds) {
+          const books = await this.worldBookStorage.loadWorldBooks(pid);
+          for (const b of books) {
+            (b as unknown as Record<string, unknown>)['_exportProfileId'] = pid;
+          }
+          allBooks.push(...books);
+        }
+        if (allBooks.length > 0) {
+          worldBooksSnapshot = { version: 1, exportedAt: new Date().toISOString(), books: allBooks };
+        }
+      } catch {
+        /* snapshot is best-effort */
+      }
+    }
+
+    return { idb, ls, configOverlays, promptEntries, customPresets, worldBooksSnapshot };
   }
 
   /**
@@ -575,6 +634,34 @@ export class BackupService {
     }
   }
 
+  /** 恢复世界书数据 — 从 BackupBundle 的 worldBooks 字段恢复 */
+  private async restoreWorldBooks(bundle: BackupBundle): Promise<void> {
+    if (!this.worldBookStorage) return;
+    if (bundle.worldBooks?.books && Array.isArray(bundle.worldBooks.books)) {
+      try {
+        const profileIds = Object.keys(bundle.profiles ?? {});
+        for (const book of bundle.worldBooks.books) {
+          const pid = (book as unknown as Record<string, unknown>)['_exportProfileId'] as string
+            ?? profileIds[0] ?? 'default';
+          await this.worldBookStorage.saveWorldBook(pid, book);
+        }
+      } catch (err) {
+        console.warn('[BackupService] restoreWorldBooks failed:', err);
+      }
+    }
+    if (bundle.builtinPromptOverrides?.entries && Array.isArray(bundle.builtinPromptOverrides.entries)) {
+      try {
+        const packId = (bundle.builtinPromptOverrides as unknown as Record<string, unknown>)['packId'] as string
+          ?? Object.keys(bundle.customPresets ?? {})[0] ?? 'default';
+        for (const entry of bundle.builtinPromptOverrides.entries) {
+          await this.worldBookStorage.saveBuiltinOverride(packId, entry);
+        }
+      } catch (err) {
+        console.warn('[BackupService] restoreBuiltinOverrides failed:', err);
+      }
+    }
+  }
+
   /** 恢复图片资产到 ImageAssetCache */
   private async restoreImageAssets(
     data: BackupBundle['imageAssets'],
@@ -609,7 +696,12 @@ export class BackupService {
       try { await this.imageAssetCache.clear(); } catch { /* best effort */ }
     }
 
-    // 5. 重置 ProfileManager 内存缓存（防止后续 getRoot 返回 stale 数据）
+    // 5. 清空世界书 IDB (aga-worldbook)
+    if (this.worldBookStorage) {
+      try { await this.worldBookStorage.clearAll(); } catch { /* best effort */ }
+    }
+
+    // 6. 重置 ProfileManager 内存缓存（防止后续 getRoot 返回 stale 数据）
     await this.profileManager.initialize();
   }
 
@@ -671,6 +763,22 @@ export class BackupService {
     // 的 replaceAll 路径能保证字段被规范化（id 前缀、source、createdAt 缺省补齐）。
     if (snapshot.customPresets) {
       await this.restoreCustomPresets(snapshot.customPresets);
+    }
+
+    // 4c. 回写世界书（2026-05-19）
+    if (this.worldBookStorage) {
+      try {
+        await this.worldBookStorage.clearAll();
+        if (snapshot.worldBooksSnapshot?.books) {
+          const root = this.profileManager.getRoot();
+          const fallbackPid = Object.keys(root.profiles ?? {})[0] ?? 'default';
+          for (const book of snapshot.worldBooksSnapshot.books) {
+            const pid = (book as unknown as Record<string, unknown>)['_exportProfileId'] as string
+              ?? fallbackPid;
+            await this.worldBookStorage.saveWorldBook(pid, book);
+          }
+        }
+      } catch { /* best effort */ }
     }
 
     // 5. 重置 ProfileManager 缓存

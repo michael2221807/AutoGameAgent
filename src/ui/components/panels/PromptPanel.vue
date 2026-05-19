@@ -24,13 +24,14 @@ import { DEFAULT_PROMPT_SETTINGS, type PromptSettings } from '@/engine/prompt/wo
 import { BUILTIN_SLOTS } from '@/engine/prompt/builtin-slots';
 import { createEmptyHeroinePlan, type HeroinePlan, type HeroineEntry, type HeroineInteractionEvent } from '@/engine/story/heroine-plan';
 import type { PromptRegistry } from '@/engine/prompt/prompt-registry';
+import WorldBookTab from './WorldBookTab.vue';
 
 const pack = inject<GamePack>('gamePack');
 const promptRegistry = inject<PromptRegistry>('promptRegistry');
 const { get, setValue } = useGameState();
 
 // ─── Tab state ──────────────────────────────────────────────
-type PanelTab = 'prompts' | 'settings' | 'heroine';
+type PanelTab = 'prompts' | 'settings' | 'heroine' | 'worldbook';
 const activeTab = ref<PanelTab>('prompts');
 
 // ─── Prompt Settings (from state tree) ──────────────────────
@@ -645,6 +646,7 @@ function previewContent(content: string, maxLen = 100): string {
           <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'prompts' }]" @click="activeTab = 'prompts'">{{ $t('prompt.tab.prompts') }}</button>
           <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'settings' }]" @click="activeTab = 'settings'">{{ $t('prompt.tab.settings') }}</button>
           <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'heroine' }]" @click="activeTab = 'heroine'">{{ $t('prompt.tab.heroine') }}</button>
+          <button :class="['tab-btn', { 'tab-btn--active': activeTab === 'worldbook' }]" @click="activeTab = 'worldbook'">{{ $t('prompt.tab.worldbook') }}</button>
         </div>
       </header>
 
@@ -695,6 +697,17 @@ function previewContent(content: string, maxLen = 100): string {
               {{ $t('prompt.settings.enableNoControl') }}
             </label>
           </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 class="settings-group-title">{{ $t('prompt.settings.worldBookTitle') }}</h3>
+          <div class="settings-row">
+            <label class="settings-label">
+              <input type="checkbox" :checked="promptSettings.enableWorldBook !== false" @change="updatePromptSetting('enableWorldBook', ($event.target as HTMLInputElement).checked)" />
+              {{ $t('prompt.settings.enableWorldBook') }}
+            </label>
+          </div>
+          <p class="settings-desc">{{ $t('prompt.settings.enableWorldBookDesc') }}</p>
         </div>
 
         <div class="settings-group">
@@ -803,6 +816,9 @@ function previewContent(content: string, maxLen = 100): string {
           <div v-if="heroinePlan.stageProgression.length === 0" class="heroine-empty">{{ $t('prompt.heroine.noStages') }}</div>
         </div>
       </div>
+
+      <!-- ═══ Tab: 世界书 ═══ -->
+      <WorldBookTab v-if="activeTab === 'worldbook'" />
 
       <!-- ═══ Tab: 内置提示词 ═══ -->
       <template v-if="activeTab === 'prompts'">

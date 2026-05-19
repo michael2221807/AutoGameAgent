@@ -22,6 +22,12 @@ import { formatHeroinePlanForContext, type HeroinePlan } from '../story/heroine-
 import { DEFAULT_PROMPT_SETTINGS } from './world-book';
 import { BUILTIN_SLOTS } from './builtin-slots';
 import type { EnginePathConfig } from '../pipeline/types';
+import {
+  buildCorpus,
+  selectActiveEntries,
+  buildWorldBookInjectionText,
+  type WorldBookInjectionResult,
+} from './world-book-selector';
 
 /** Parameters for building the system prompt */
 export interface SystemPromptBuildParams {
@@ -49,6 +55,8 @@ export interface SystemPromptBuildParams {
   engramRetrievalBlock?: string;
   /** Implicit mid-term memory entries (from MemoryRetriever) */
   implicitMidTermBlock?: string;
+  /** Raw narrative history (last 12 entries, NO XML wrapping) for world book corpus */
+  narrativeHistoryForCorpus?: Array<{ content: string }>;
 }
 
 /**
@@ -198,8 +206,6 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
     wordCount: String(params.stateManager.get<number>('系统.设置.prompt.wordCountRequirement') ?? 650),
   };
 
-  console.debug('[SystemPromptBuilder] Pack prompts available:', Object.keys(packPrompts).length, Object.keys(packPrompts));
-
   // Read prompt settings from state tree
   const rawSettings = stateManager.get<Partial<PromptSettings>>('系统.设置.prompt');
   const settings: PromptSettings = { ...DEFAULT_PROMPT_SETTINGS, ...rawSettings };
@@ -232,37 +238,75 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
   push('ai_role', 'AI角色声明', '系统', 'system', slot('narrator_role'));
 
   // ── 2. World Prompt (world info + world book lore) ──
-  // AGA stores the creation-flow world selection at root `world` (no statePath),
-  // while the AI-generated description goes to `世界.描述`. Check both.
   const worldSelection = stateManager.get<Record<string, unknown>>('world');
   const worldInfo = stateManager.get<Record<string, unknown>>('世界.信息');
   const worldName = (worldSelection?.['name'] ?? worldInfo?.['世界名称'] ?? '') as string;
   const aiWorldDesc = stateManager.get<string>(paths.worldDescription) ?? '';
   const selectionDesc = (worldSelection?.['description'] ?? worldInfo?.['世界背景'] ?? worldInfo?.['描述'] ?? '') as string;
   const worldDesc = aiWorldDesc || selectionDesc;
-  const worldLore = worldBooks
-    .filter((b) => b.enabled !== false)
-    .flatMap((b) => b.entries.filter((e) => e.enabled !== false && e.type === 'world_lore' && e.injectionMode === 'always'))
-    .map((e) => e.content)
-    .join('\n\n');
+
+  // Shared state reads (used by world book corpus + NPC sections + environment)
+  const relationships = stateManager.get<Array<Record<string, unknown>>>(paths.relationships) ?? [];
+  const currentLocation = stateManager.get<string>(paths.playerLocation) ?? '';
+  const npcNameKey = paths.npcFieldNames?.name ?? '名称';
+
+  // World Book injection (all 4 types) — gated by enableWorldBook
+  const worldBookEnabled = settings.enableWorldBook !== false && worldBooks.length > 0;
+  let wbResult: WorldBookInjectionResult | undefined;
+  let worldBookHits: SystemPromptBuildResult['worldBookHits'];
+
+  if (worldBookEnabled) {
+    const worldEvents = stateManager.get<unknown[]>(paths.worldEvents) ?? [];
+    const gameTime = stateManager.get<unknown>(paths.gameTime);
+
+    const corpus = buildCorpus({
+      environment: {
+        location: currentLocation,
+        weather: stateManager.get<unknown>(paths.weather),
+        time: gameTime,
+      },
+      socialNpcs: relationships,
+      npcFieldKeys: {
+        name: paths.npcFieldNames?.name,
+        identity: paths.npcFieldNames?.description,
+        relation: paths.npcFieldNames?.type,
+        location: paths.npcFieldNames?.location,
+      },
+      narrativeHistory: params.narrativeHistoryForCorpus,
+      worldEvents,
+    });
+
+    const selected = selectActiveEntries({
+      books: worldBooks,
+      activeScopes: ['main'],
+      corpus,
+      currentGameTime: typeof gameTime === 'string' ? gameTime : '',
+    });
+
+    wbResult = buildWorldBookInjectionText(selected);
+    worldBookHits = selected.map((e) => ({
+      entryId: e.id,
+      title: e.title,
+      type: e.type,
+      matchedKeywords: e.injectionMode === 'match_any' ? e.keywords : undefined,
+    }));
+  }
+
   const worldPrompt = [
     worldName ? `世界名称：${worldName}` : '',
     worldDesc ? `\n世界总览\n${worldDesc}` : '',
-    worldLore,
+    wbResult?.worldLoreText ?? '',
   ].filter(Boolean).join('\n\n');
   push('world_prompt', '世界观提示词', '系统', 'system', worldPrompt);
 
   // ── 3. Map & Buildings ──
   const locationInfo = stateManager.get<unknown[]>('世界.地点信息');
-  const currentLocation = stateManager.get<string>(paths.playerLocation) ?? '';
   if (Array.isArray(locationInfo) && locationInfo.length > 0) {
     const mapText = `【地图与建筑】\n当前具体地点: ${currentLocation}\n地图列表:\n${locationInfo.map((l) => `- ${JSON.stringify(l)}`).join('\n')}`;
     push('world_map', '地图与建筑', '系统', 'system', mapText);
   }
 
   // ── 4. Off-scene NPCs ──
-  const relationships = stateManager.get<Array<Record<string, unknown>>>(paths.relationships) ?? [];
-  const npcNameKey = paths.npcFieldNames?.name ?? '名称';
   const offSceneNpcs = relationships.filter((npc) => npc['是否在场'] !== true);
   if (offSceneNpcs.length > 0) {
     const offSceneText = `【以下为不在场角色】(源于社交)\n${offSceneNpcs.map((npc, i) => {
@@ -277,19 +321,13 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
     push('npc_away', '以下为不在场角色', '系统', 'system', offSceneText);
   }
 
-  // ── 5. Other Prompts (world book system_rule entries with scope=main) ──
-  const otherPrompts = worldBooks
-    .filter((b) => b.enabled !== false)
-    .flatMap((b) => b.entries.filter((e) =>
-      e.enabled !== false &&
-      e.type === 'system_rule' &&
-      e.injectionMode === 'always' &&
-      (e.scope.includes('main') || e.scope.includes('all'))
-    ))
-    .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
-    .map((e) => renderPromptPipeline(e.id, e.content, templateVars, settings))
-    .join('\n\n');
-  push('other_prompts', '叙事/规则提示词', '系统', 'system', otherPrompts);
+  // ── 5. Other Prompts (world book system_rule / command_rule / output_rule) ──
+  if (wbResult?.systemRuleText) {
+    push('wb_system_rules', '世界书系统规则', '系统', 'system', wbResult.systemRuleText);
+  }
+  if (wbResult?.commandRuleText) {
+    push('wb_command_rules', '世界书命令规则', '系统', 'system', wbResult.commandRuleText);
+  }
 
   // ── 5b. Writing prompts (style, emotion guard, noControl) ──
   push('write_style', '写作文风', '系统', 'system', slot('write_style'));
@@ -462,6 +500,11 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
   // ── 22. Format/Output Protocol ──
   push('format_prompt', '输出格式提示词', '系统', 'system', slot('format_prompt'));
 
+  // ── 22b. World Book Output Rules (after format prompt) ──
+  if (wbResult?.outputRuleText) {
+    push('wb_output_rules', '世界书输出规则', '系统', 'system', wbResult.outputRuleText);
+  }
+
   // ── 23. CoT ──
   if (cotEnabled) {
     push('cot_core', 'COT提示词', '系统', 'system', slot('main_cot'));
@@ -494,5 +537,6 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
     messageEntries: entries,
     shortMemoryContext,
     runtimePromptStates,
+    worldBookHits,
   };
 }

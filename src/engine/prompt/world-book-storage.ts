@@ -47,7 +47,8 @@ export class WorldBookStorage {
 
   async saveWorldBook(profileId: string, book: WorldBook): Promise<void> {
     const db = await this.getDB();
-    await db.put('worldbooks', book, `${profileId}:${book.id}`);
+    const plain = JSON.parse(JSON.stringify(book)) as WorldBook;
+    await db.put('worldbooks', plain, `${profileId}:${book.id}`);
   }
 
   async loadWorldBooks(profileId: string): Promise<WorldBook[]> {

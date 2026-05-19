@@ -109,6 +109,7 @@ import { LanSyncService } from './engine/sync/lan-sync';
 import { PromptStorage } from './engine/prompt/prompt-storage';
 import { VectorStore } from './engine/memory/engram/vector-store';
 import { CustomPresetStore } from './engine/persistence/custom-preset-store';
+import { WorldBookStorage } from './engine/prompt/world-book-storage';
 import { AssistantService } from './engine/services/assistant/assistant-service';
 import { UnifiedRetriever } from './engine/memory/engram/unified-retriever';
 import { Embedder } from './engine/memory/engram/embedder';
@@ -191,6 +192,7 @@ async function bootstrap(): Promise<void> {
   // 2026-04-14：用户自定义创角预设仓库（按 packId 隔离）
   const customPresetStore = new CustomPresetStore();
   const imageAssetCacheForBackup = new ImageAssetCache();
+  const worldBookStorage = new WorldBookStorage();
   const backupService = new BackupService(
     profileManager,
     saveManager,
@@ -199,6 +201,7 @@ async function bootstrap(): Promise<void> {
     vectorStore,
     customPresetStore,
     imageAssetCacheForBackup,
+    worldBookStorage,
   );
 
   const packLoader = new GamePackLoader();
@@ -628,6 +631,7 @@ async function bootstrap(): Promise<void> {
   app.provide('embedder', embedder);
   app.provide('backupService', backupService);
   app.provide('customPresetStore', customPresetStore);
+  app.provide('worldBookStorage', worldBookStorage);
 
   const githubSync = new GitHubSyncService(backupService);
   app.provide('githubSync', githubSync);
@@ -697,6 +701,19 @@ async function bootstrap(): Promise<void> {
 
   app.mount('#app');
   eventBus.emit('engine:initialized', { packId: pack?.manifest.id ?? null });
+
+  // Load world books when a game profile becomes active (fixes: first round with empty books)
+  const engineState = useEngineStateStore();
+  let lastWorldBookPid: string | null = null;
+  engineState.$subscribe(async () => {
+    const pid = engineState.activeProfileId;
+    if (!pid || pid === lastWorldBookPid) return;
+    lastWorldBookPid = pid;
+    try {
+      const loadedBooks = await worldBookStorage.loadWorldBooks(pid);
+      eventBus.emit('worldbook:updated', loadedBooks.filter((b) => b.enabled !== false));
+    } catch { /* best-effort */ }
+  });
 }
 
 bootstrap().catch(console.error);

@@ -173,6 +173,8 @@ export interface SystemPromptBuildResult {
   shortMemoryContext: string;
   /** Runtime prompt enable/disable states for tracking */
   runtimePromptStates: Record<string, boolean>;
+  /** World book entries that were injected (for debug panel) */
+  worldBookHits?: Array<{ entryId: string; title: string; type: string; matchedKeywords?: string[] }>;
 }
 
 // ─── Prompt Settings (stored in state tree at 系统.设置.prompt) ──
@@ -196,6 +198,8 @@ export interface PromptSettings {
   actionPace: 'fast' | 'slow';
   /** Custom additional system prompt */
   customSystemPrompt: string;
+  /** Master switch for world book injection */
+  enableWorldBook: boolean;
 }
 
 export const DEFAULT_PROMPT_SETTINGS: PromptSettings = {
@@ -207,4 +211,5 @@ export const DEFAULT_PROMPT_SETTINGS: PromptSettings = {
   actionOptionsMode: 'action',
   actionPace: 'fast',
   customSystemPrompt: '',
+  enableWorldBook: true,
 };
