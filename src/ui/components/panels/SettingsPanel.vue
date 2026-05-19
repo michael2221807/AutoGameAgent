@@ -1171,15 +1171,11 @@ onBeforeUnmount(() => {
             {{ $t('settings.nsfw.desc') }}
           </span>
         </div>
-        <button
-          :class="['toggle-switch', { 'toggle-switch--on': nsfwSettings.nsfwMode }]"
-          role="switch"
-          :aria-checked="nsfwSettings.nsfwMode"
-          :aria-label="$t('settings.nsfw.ariaLabel')"
-          @click="nsfwSettings.nsfwMode = !nsfwSettings.nsfwMode"
-        >
-          <span class="toggle-track"><span class="toggle-thumb" /></span>
-        </button>
+        <AgaToggle
+          :model-value="nsfwSettings.nsfwMode"
+          :label="$t('settings.nsfw.ariaLabel')"
+          @update:model-value="nsfwSettings.nsfwMode = $event"
+        />
       </div>
 
       <div class="setting-row" :class="{ 'setting-row--disabled': !nsfwSettings.nsfwMode }">
@@ -1450,14 +1446,10 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.ui.showActions.label') }}</span>
           <span class="setting-desc">{{ $t('settings.ui.showActions.desc') }}</span>
         </div>
-        <button
-          :class="['toggle-switch', { 'toggle-switch--on': settings.showActionOptions }]"
-          @click="settings.showActionOptions = !settings.showActionOptions"
-        >
-          <span class="toggle-track">
-            <span class="toggle-thumb" />
-          </span>
-        </button>
+        <AgaToggle
+          :model-value="settings.showActionOptions"
+          @update:model-value="settings.showActionOptions = $event"
+        />
       </div>
 
       <div class="setting-row">
@@ -1465,14 +1457,10 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.ui.enableAnimations.label') }}</span>
           <span class="setting-desc">{{ $t('settings.ui.enableAnimations.desc') }}</span>
         </div>
-        <button
-          :class="['toggle-switch', { 'toggle-switch--on': settings.enableAnimations }]"
-          @click="settings.enableAnimations = !settings.enableAnimations"
-        >
-          <span class="toggle-track">
-            <span class="toggle-thumb" />
-          </span>
-        </button>
+        <AgaToggle
+          :model-value="settings.enableAnimations"
+          @update:model-value="settings.enableAnimations = $event"
+        />
       </div>
     </section>
 
@@ -1650,12 +1638,10 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.plot.enabled.label') }}</span>
           <span class="setting-desc">{{ $t('settings.plot.enabled.desc') }}</span>
         </div>
-        <button
-          :class="['toggle-switch', { 'toggle-switch--on': plotSettings.enabled }]"
-          role="switch"
-          :aria-checked="plotSettings.enabled"
-          @click="plotSettings.enabled = !plotSettings.enabled"
-        ><span class="toggle-track"><span class="toggle-thumb" /></span></button>
+        <AgaToggle
+          :model-value="plotSettings.enabled"
+          @update:model-value="plotSettings.enabled = $event"
+        />
       </div>
 
       <template v-if="plotSettings.enabled">
@@ -1664,12 +1650,10 @@ onBeforeUnmount(() => {
             <span class="setting-label">{{ $t('settings.plot.criticalConfirm.label') }}</span>
             <span class="setting-desc">{{ $t('settings.plot.criticalConfirm.desc') }}</span>
           </div>
-          <button
-            :class="['toggle-switch', { 'toggle-switch--on': plotSettings.criticalConfirmGate }]"
-            role="switch"
-            :aria-checked="plotSettings.criticalConfirmGate"
-            @click="plotSettings.criticalConfirmGate = !plotSettings.criticalConfirmGate"
-          ><span class="toggle-track"><span class="toggle-thumb" /></span></button>
+          <AgaToggle
+            :model-value="plotSettings.criticalConfirmGate"
+            @update:model-value="plotSettings.criticalConfirmGate = $event"
+          />
         </div>
 
         <div class="setting-row">
@@ -1705,12 +1689,10 @@ onBeforeUnmount(() => {
             <span class="setting-label">{{ $t('settings.plot.showGauges.label') }}</span>
             <span class="setting-desc">{{ $t('settings.plot.showGauges.desc') }}</span>
           </div>
-          <button
-            :class="['toggle-switch', { 'toggle-switch--on': plotSettings.showGaugesInMainPanel }]"
-            role="switch"
-            :aria-checked="plotSettings.showGaugesInMainPanel"
-            @click="plotSettings.showGaugesInMainPanel = !plotSettings.showGaugesInMainPanel"
-          ><span class="toggle-track"><span class="toggle-thumb" /></span></button>
+          <AgaToggle
+            :model-value="plotSettings.showGaugesInMainPanel"
+            @update:model-value="plotSettings.showGaugesInMainPanel = $event"
+          />
         </div>
 
         <div class="setting-row">
@@ -1718,12 +1700,10 @@ onBeforeUnmount(() => {
             <span class="setting-label">{{ $t('settings.plot.showEvalLog.label') }}</span>
             <span class="setting-desc">{{ $t('settings.plot.showEvalLog.desc') }}</span>
           </div>
-          <button
-            :class="['toggle-switch', { 'toggle-switch--on': plotSettings.showEvalLog }]"
-            role="switch"
-            :aria-checked="plotSettings.showEvalLog"
-            @click="plotSettings.showEvalLog = !plotSettings.showEvalLog"
-          ><span class="toggle-track"><span class="toggle-thumb" /></span></button>
+          <AgaToggle
+            :model-value="plotSettings.showEvalLog"
+            @update:model-value="plotSettings.showEvalLog = $event"
+          />
         </div>
       </template>
     </section>
@@ -1738,12 +1718,10 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.advanced.debugMode.label') }}</span>
           <span class="setting-desc">{{ $t('settings.advanced.debugMode.desc') }}</span>
         </div>
-        <button
-          :class="['toggle-switch', { 'toggle-switch--on': debugSettings.debugMode }]"
-          @click="debugSettings.debugMode = !debugSettings.debugMode"
-        >
-          <span class="toggle-track"><span class="toggle-thumb" /></span>
-        </button>
+        <AgaToggle
+          :model-value="debugSettings.debugMode"
+          @update:model-value="debugSettings.debugMode = $event"
+        />
       </div>
 
       <Transition name="fade-row">
@@ -2331,45 +2309,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border, #2a2a3a);
   border-radius: 6px;
   max-width: 200px;
-}
-
-/* ── Toggle switch ── */
-.toggle-switch {
-  display: flex;
-  align-items: center;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.toggle-track {
-  position: relative;
-  width: 40px;
-  height: 22px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 11px;
-  transition: background 0.2s ease;
-}
-
-.toggle-switch--on .toggle-track {
-  background: var(--color-primary, #91c49b);
-  box-shadow: inset 0 0 6px color-mix(in oklch, var(--color-sage-400) 20%, transparent);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  background: var(--color-text-bone);
-  border-radius: 50%;
-  transition: transform 0.2s ease;
-}
-
-.toggle-switch--on .toggle-thumb {
-  transform: translateX(18px);
 }
 
 /* ── Font size control ── */
