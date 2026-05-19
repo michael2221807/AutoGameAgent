@@ -162,18 +162,13 @@ export class PrivacyProfileRepairPipeline {
 
     const assembled = this.promptAssembler.assemble(flow, variables);
 
-    // 2026-04-11 fix: post-history 追加 user message 带反截断 + 输出完整性要求。
-    //
-    // 之前 privacy-repair 只送 system prompt，messages 没以 user 结尾：
-    //   1. Claude 会把最后一条 system 当 prefill 继续写 —— 不标准
-    //   2. 没有反截断强化，NSFW 结构化 JSON 经常被截
-    //   3. 没有"完整输出所有 NPC 的完整 私密信息字段"的明确要求
-    //
-    // 修复：在 assembled.messages 后 push 一条 user role 消息，内容是
-    // narratorEnforcement 的执行铁律 + privacy-repair 特定的完整性要求。
-    // 这样 privacy-repair 的 messages 以 user 结尾，模型按标准多轮模式生成。
+    // Task data (NPC list + attempt metadata) + enforcement + anti-truncation
+    // as a single user message. The flow only has a system module (instructions/format),
+    // so this user message also prevents the assembler's placeholder injection.
+    const taskData = this.promptAssembler.renderSingle('privacyRepairInput', variables) ?? '';
     const enforcement = this.promptAssembler.renderSingle('narratorEnforcement', variables);
     const finalUserContent =
+      (taskData ? `${taskData}\n\n` : '') +
       (enforcement ? `${enforcement}\n\n` : '') +
       `<修复任务>\n` +
       `请立即输出完整的 privacy profile 补齐 commands。要求：\n` +
@@ -184,11 +179,15 @@ export class PrivacyProfileRepairPipeline {
       `5. **直接 JSON**：输出一个合法 JSON 对象，包含 commands 数组，无代码围栏、无解释文字、无 \`<thinking>\` 标签。\n` +
       `</修复任务>\n\n` +
       `现在请输出 commands JSON。`;
+    const filteredMessages = assembled.messages.filter(
+      (m) => !(m.role === 'user' && m.content === '请根据以上设定开始。'),
+    );
+    const filteredSources = assembled.messageSources.filter((s) => s !== 'placeholder');
     const finalMessages: AIMessage[] = [
-      ...assembled.messages,
+      ...filteredMessages,
       { role: 'user', content: finalUserContent },
     ];
-    const finalSources = [...assembled.messageSources, 'current_input'];
+    const finalSources = [...filteredSources, 'current_input'];
     const generationId = `privacyProfileRepair_${attempt}_${Date.now()}`;
 
     // §G3: 修复管线的组装对 PromptAssemblyPanel 可见

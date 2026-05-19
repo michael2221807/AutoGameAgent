@@ -1,6 +1,7 @@
 {
   "id": "memorySummary",
   "modules": [
-    { "promptId": "memorySummary", "role": "system", "order": 0, "depth": 0 }
+    { "promptId": "memorySummary", "role": "system", "order": 0, "depth": 0 },
+    { "promptId": "memorySummaryInput", "role": "user", "order": 1, "depth": 0 }
   ]
 }

@@ -26,8 +26,10 @@
   "prompts": [
     "narratorFrame", "narratorEnforcement", "creationGenJailbreak", "assistantJailbreak",
     "assistantInjectionContract", "historyFraming", "core", "worldGen", "opening", "mainRound",
-    "memorySummary", "midTermRefine", "longTermCompact", "splitGenStep1", "splitGenStep2",
-    "splitGenContext", "worldHeartbeat", "actionOptions", "actionOptionsStory", "privacyRepair",
+    "memorySummary", "memorySummaryInput", "midTermRefine", "midTermRefineInput",
+    "longTermCompact", "longTermCompactInput", "splitGenStep1", "splitGenStep2",
+    "splitGenContext", "worldHeartbeat", "worldHeartbeatInput",
+    "actionOptions", "actionOptionsStory", "privacyRepair", "privacyRepairInput",
     "npcChat",
     "cot-preamble", "cot-masquerade", "cot-judge", "cot-opening", "cot-no-thinking-guard",
     "bodyPolish", "npcMemorySummary", "presencePartition",
