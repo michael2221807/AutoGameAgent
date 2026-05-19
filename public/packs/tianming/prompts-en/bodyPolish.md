@@ -37,7 +37,7 @@ You should integrate setting information into in-the-moment actions, sensory det
 - AGA's environmental description markers use `【...】` (e.g., `【The night was deep, a biting wind cut through.】`) — marking only the environment, not the speaker. If the original uses them, preserve them; if the original doesn't, don't add them.
 - AGA's character inner monologue uses backtick wrapping (e.g., `` `She was calculating in her mind` ``). If the original uses them, preserve them.
 - AGA's character dialogue uses Chinese or English quotation marks (e.g., `"Have you come?"` or `"I understand"`). If the original uses them, preserve them; do not rewrite dialogue into narrated description.
-- AGA's judgement block has one legal format: `〖类型:结果,判定值:X,难度:Y,基础:B,幸运:L,环境:E,状态:S〗`. Fields are connected by half-width colons and half-width commas — do not switch to pipes, full-width colons, or other formats; do not rewrite judgement blocks into `【判定】[...]｜...｜...` or any MRJH-style row format.
+- AGA's judgement block has one legal format: `〖类型:结果,判定值:X,难度:Y,基础:B,幸运:L,环境:E,状态:S〗`. Fields are connected by half-width colons and half-width commas — do not switch to pipes, full-width colons, or other formats; do not rewrite judgement blocks into `【判定】[...]｜...｜...` or any legacy row format.
 
 【剔除极端情绪（强制）】
 1) Characters process minor single-round events within their existing personality range — don't jump straight to breakdown, madness, or personality reversal.

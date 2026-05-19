@@ -34,7 +34,7 @@ export function isValidTag(obj: unknown): obj is EnvironmentTag {
  *
  * - `cap` controls how many tag names are shown before overflow.
  * - Overflow suffix is `…+N` (three-char ellipsis + count).
- * - Separator is `、` (CJK enumeration comma, matching MRJH).
+ * - Separator is `、` (CJK enumeration comma).
  * - Malformed tags are skipped (so a stray half-typed tag mid-round doesn't
  *   poison the whole display).
  * - Empty input → empty string (caller uses that to hide the chip entirely).

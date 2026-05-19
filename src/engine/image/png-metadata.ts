@@ -1,5 +1,5 @@
 /**
- * PNG Metadata Extractor — MRJH imageTasks.ts:173-1028 (full feature set)
+ * PNG Metadata Extractor — ported (full feature set)
  *
  * Extracts image generation parameters from PNG files via multiple strategies:
  * 1. Standard tEXt/zTXt/iTXt chunks (SD-WebUI, ComfyUI, etc.)
@@ -16,7 +16,7 @@
  * │ PNG metadata extraction is consumed by the PNG style preset     │
  * │ import flow. User uploads a PNG → metadata extracted → AI      │
  * │ refines style → preset saved. Needs Presets tab UI.             │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §M "PNG Style Import Flow"  │
+ * │ See original design doc §M "PNG Style Import Flow"             │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import { inflateSync } from 'fflate';
@@ -83,7 +83,7 @@ function decompressZlib(bytes: Uint8Array): Uint8Array {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §3 — PNG chunk iteration (MRJH imageTasks.ts:243-271)
+// §3 — PNG chunk iteration
 // ═══════════════════════════════════════════════════════════
 
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -111,7 +111,7 @@ function iteratePngChunks(
 }
 
 // ═══════════════════════════════════════════════════════════
-// §4 — Text chunk parsing (MRJH imageTasks.ts:205-283)
+// §4 — Text chunk parsing
 // ═══════════════════════════════════════════════════════════
 
 function parseTextChunk(type: string, data: Uint8Array): { key: string; value: string } | null {
@@ -158,7 +158,7 @@ function extractTextMetadata(pngBytes: Uint8Array): Record<string, string> {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §5 — EXIF parsing (MRJH imageTasks.ts:305-440)
+// §5 — EXIF parsing
 // ═══════════════════════════════════════════════════════════
 
 const TIFF_TYPE_SIZES: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
@@ -232,7 +232,7 @@ function extractExifMetadata(pngBytes: Uint8Array): Record<string, string> {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §6 — NovelAI stealth alpha (MRJH imageTasks.ts:484-558)
+// §6 — NovelAI stealth alpha
 // ═══════════════════════════════════════════════════════════
 
 const STEALTH_MAGIC = 'stealth_pngcomp';
@@ -291,7 +291,7 @@ export async function extractNovelAIStealthText(blob: Blob): Promise<string> {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §7 — NovelAI JSON + raw byte search (MRJH imageTasks.ts:560-954)
+// §7 — NovelAI JSON + raw byte search
 // ═══════════════════════════════════════════════════════════
 
 function extractBalancedJSON(text: string, start: number): string {
@@ -398,7 +398,7 @@ function searchNovelAIRawBytes(pngBytes: Uint8Array): { positive: string; negati
 }
 
 // ═══════════════════════════════════════════════════════════
-// §8 — SD-WebUI parameter text parsing (MRJH imageTasks.ts:809-890)
+// §8 — SD-WebUI parameter text parsing
 // ═══════════════════════════════════════════════════════════
 
 function parseSDParameterText(rawText: string): { positive: string; negative: string; params?: PngParsedParams } {
@@ -428,7 +428,7 @@ function parseSDParameterText(rawText: string): { positive: string; negative: st
 }
 
 // ═══════════════════════════════════════════════════════════
-// §9 — Main entry points (MRJH imageTasks.ts:965-1028)
+// §9 — Main entry points
 // ═══════════════════════════════════════════════════════════
 
 function readMetadataField(map: Record<string, string>, keys: string[]): string {
@@ -443,7 +443,7 @@ function readMetadataField(map: Record<string, string>, keys: string[]): string 
 
 /**
  * Extract metadata from raw PNG bytes.
- * MRJH 解析PNG字节元数据 (imageTasks.ts:965-1021)
+ * Extract metadata from raw PNG bytes — ported
  */
 export function extractPngBytesMetadata(pngBytes: Uint8Array, extraNovelAIText = ''): PngMetadataResult {
   const tags = { ...extractExifMetadata(pngBytes), ...extractTextMetadata(pngBytes) };
@@ -506,7 +506,7 @@ export function extractPngBytesMetadata(pngBytes: Uint8Array, extraNovelAIText =
 
 /**
  * Extract metadata from a PNG File/Blob (async — includes stealth alpha extraction).
- * MRJH 解析PNG文件元数据 (imageTasks.ts:1023-1028)
+ * Extract metadata from a PNG File/Blob — ported
  */
 export async function extractPngMetadata(file: File | Blob): Promise<PngMetadataResult> {
   const buffer = await file.arrayBuffer();

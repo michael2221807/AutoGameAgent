@@ -16,13 +16,13 @@ export type ImageTaskStatus = 'pending' | 'tokenizing' | 'generating' | 'complet
 /** What kind of subject is being generated */
 export type ImageSubjectType = 'scene' | 'character' | 'secret_part';
 
-/** Secret part sub-type — matches MRJH 香闺秘档部位类型 */
+/** Secret part sub-type — secret-part body-part types */
 export type SecretPartType = 'breast' | 'vagina' | 'anus';
 
 /**
  * Structured feature tags extracted from an anchor by the AI.
  * Each field is an optional array of English image-gen tags.
- * Mirrors MRJH 角色锚点特征结构 (models/system.ts:60-71).
+ * Structured feature tags for character anchor — ported.
  */
 export interface AnchorStructuredFeatures {
   appearance?: string[];

@@ -4,7 +4,7 @@
  * Each slot represents an overridable prompt component. World book entries
  * with a matching `builtinSlotId` will replace the default content.
  *
- * Mapped from MRJH 世界书本体槽位 — adapted to AGA's scope
+ * Mapped from the original 世界书本体槽位 — adapted to AGA's scope
  * (no battle, no fandom, no realm system).
  */
 

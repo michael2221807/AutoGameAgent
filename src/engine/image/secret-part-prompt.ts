@@ -1,5 +1,5 @@
 /**
- * Secret Part Prompt Utilities — MRJH imageTasks.ts:1985-2005 + 2932-3051
+ * Secret Part Prompt Utilities — ported
  *
  * Per-body-part close-up descriptions and post-processing for
  * private/NSFW image generation (胸部/小穴/屁穴).
@@ -10,22 +10,22 @@
  * │ FRONTEND TODO (Phase 3-4: Manual Tab Secret Part Panel)        │
  * │                                                                 │
  * │ This is NOT user-accessible until the Manual tab adds the      │
- * │ fuchsia-themed secret part panel (MRJH §F).                    │
+ * │ fuchsia-themed secret part panel.                              │
  * │ Needs: art style grid, resolution, artist preset, per-part     │
  * │ generate buttons, "全部生成" button.                            │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §F                          │
+ * │ See original design doc §F                                    │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import type { SecretPartType } from './types';
 import { cleanPromptOutput } from './output-processor';
 
 // ═══════════════════════════════════════════════════════════
-// §1 — Part descriptions (MRJH imageTasks.ts:1985-1993)
+// §1 — Part descriptions
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Build the macro focus description for a specific body part.
- * MRJH 构建香闺秘档部位特写说明 (imageTasks.ts:1985-1993) — verbatim
+ * Build secret-part macro description — ported verbatim
  */
 export function buildSecretPartDescription(part: SecretPartType): string {
   if (part === 'breast') {
@@ -38,12 +38,12 @@ export function buildSecretPartDescription(part: SecretPartType): string {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §2 — System prompt builders (MRJH imageTasks.ts:2968-2996)
+// §2 — System prompt builders
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Build NovelAI-specific system prompt for secret part generation.
- * MRJH imageTasks.ts:2968-2980 — verbatim, wuxia terms generalized
+ * Build secret part system prompt — ported verbatim, wuxia terms generalized
  */
 export function buildSecretPartSystemPrompt(params: {
   part: SecretPartType;
@@ -88,12 +88,12 @@ export function buildSecretPartSystemPrompt(params: {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §3 — Task data builder (MRJH imageTasks.ts:2997-3031)
+// §3 — Task data builder
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Build task data for secret part generation (goes as assistant message).
- * MRJH imageTasks.ts:2997-3031 — verbatim structure, wuxia terms generalized
+ * Build task data for secret part generation — ported verbatim, wuxia terms generalized
  */
 export function buildSecretPartTaskData(params: {
   part: SecretPartType;
@@ -148,7 +148,7 @@ export function buildSecretPartTaskData(params: {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §4 — Post-processing (MRJH imageTasks.ts:1995-2005)
+// §4 — Post-processing
 // ═══════════════════════════════════════════════════════════
 
 /** Tags that would pull the image back to portrait/body — must strip for close-ups */
@@ -156,7 +156,7 @@ const COMPOSITION_DENY_RE = /^(?:portrait|headshot|upper body|half body|waist-?u
 
 /**
  * Strip composition/body tags that would pull a close-up back to portrait/full-body.
- * MRJH 强化香闺秘档特写词组 (imageTasks.ts:1995-2005) — verbatim regex
+ * Reinforce secret-part close-up tags — ported verbatim regex
  */
 export function reinforceSecretPartPrompt(prompt: string): string {
   const source = cleanPromptOutput(prompt);

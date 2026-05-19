@@ -99,7 +99,7 @@ export class ComfyUIImageProvider extends BaseImageProvider {
    * Substitute runtime values into a user-provided workflow JSON template.
    *
    * Supports three placeholder styles so users can paste templates from any
-   * source (MRJH-style `%prompt%`, ComfyUI-plugin-style `{{prompt}}`,
+   * source (percent-style `%prompt%`, ComfyUI-plugin-style `{{prompt}}`,
    * script-style `__PROMPT__`). Placeholder matching is case-insensitive for
    * the token part. Substitution happens on the raw string before JSON.parse
    * so placeholders can sit inside quoted strings OR unquoted numeric fields

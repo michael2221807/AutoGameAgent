@@ -116,7 +116,7 @@ export function buildReplaceEnvironmentAttachment(tags: unknown): BuilderResult<
   };
 }
 
-/** Common weather presets for the picker modal. Order matches MRJH convention. */
+/** Common weather presets for the picker modal. */
 export const WEATHER_PRESETS: readonly string[] = [
   '晴',
   '阴',

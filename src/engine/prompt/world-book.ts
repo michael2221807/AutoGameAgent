@@ -1,5 +1,5 @@
 /**
- * World Book data model — ported from MRJH models/worldbook.ts
+ * World Book data model — ported from original worldbook model
  *
  * The world book system allows users to manage prompt entries that get
  * injected into the AI context. Entries can override built-in prompts

@@ -1,5 +1,5 @@
 /**
- * Image Size Options — MRJH imageSizeOptions.ts
+ * Image Size Options — ported
  *
  * Predefined image resolution presets for manual and automatic generation.
  * Exports:
@@ -49,7 +49,7 @@ function indexByValue(options: ImageSizeOption[]): Map<string, ImageSizeOption> 
 }
 
 // ═══════════════════════════════════════════════════════════
-// §1 — Common size presets (MRJH: 常用文生图尺寸选项)
+// §1 — Common size presets (常用文生图尺寸选项)
 // ═══════════════════════════════════════════════════════════
 
 export const COMMON_SIZE_OPTIONS: ImageSizeOption[] = [
@@ -63,7 +63,7 @@ export const COMMON_SIZE_OPTIONS: ImageSizeOption[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════
-// §2 — Scene size presets (MRJH: 自动场景竖屏/横屏尺寸选项)
+// §2 — Scene size presets (自动场景竖屏/横屏尺寸选项)
 // ═══════════════════════════════════════════════════════════
 
 const SCENE_EXTRA_SIZE_OPTIONS: ImageSizeOption[] = [

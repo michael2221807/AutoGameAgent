@@ -55,7 +55,7 @@ export class ContextAssemblyStage implements PipelineStage {
     private getWorldBooks?: () => WorldBook[],
     /** Built-in prompt overrides getter */
     private getBuiltinOverrides?: () => BuiltinPromptEntry[],
-    /** Whether to use the new MRJH-style builder (default: false for backward compat) */
+    /** Whether to use the new context-piece builder (default: false for backward compat) */
     private useNewBuilder?: boolean,
   ) {}
 
@@ -297,7 +297,7 @@ export class ContextAssemblyStage implements PipelineStage {
     let splitStep2Sources: string[] | undefined;
 
     if (this.useNewBuilder) {
-      // ═══ NEW PATH: MRJH-style SystemPromptBuilder ═══
+      // ═══ NEW PATH: SystemPromptBuilder (context-piece architecture) ═══
       // Produces ~26 individually named system messages + user input + masquerade
       // Read implicit mid-term for the builder
       const implicitMidRaw = this.stateManager.get<unknown[]>('记忆.隐式中期') ?? [];

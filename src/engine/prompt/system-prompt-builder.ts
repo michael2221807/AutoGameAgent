@@ -1,11 +1,11 @@
 /**
- * SystemPromptBuilder — replaces PromptAssembler with MRJH-style context piece architecture.
+ * SystemPromptBuilder — replaces PromptAssembler with context-piece architecture.
  *
  * Builds named context pieces from game state + prompts + world book,
  * then assembles them into ordered message entries for the API call.
  *
- * Reference: MRJH hooks/useGame/systemPromptBuilder.ts (1598 lines)
- *            MRJH hooks/useGame/mainStoryRequest.ts (message assembly)
+ * Ported from the original systemPromptBuilder (1598 lines)
+ * and mainStoryRequest (message assembly).
  *
  * Phase 1: Skeleton with piece definitions and build interface.
  * Phase 2 (Sprint 2): Full implementation of all formatters.
@@ -95,7 +95,7 @@ function resolveSlotContent(
  */
 function renderTemplateVars(content: string, vars: Record<string, string>): string {
   let rendered = content;
-  // ${var} syntax (MRJH style)
+  // ${var} syntax
   rendered = rendered.replace(/\$\{(\w+)\}/g, (_, key) => vars[key] ?? '');
   // {{VAR}} syntax (AGA style)
   rendered = rendered.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? '');
@@ -108,7 +108,7 @@ function renderTemplateVars(content: string, vars: Record<string, string>): stri
  */
 /**
  * Step 3: Apply writing settings — inject word count into write_req prompts.
- * Matches MRJH 应用写作设置.
+ * Applies writing settings (word count injection).
  */
 function applyWritingSettings(promptId: string, content: string, wordCount: number): string {
   if (promptId !== 'write_req' && promptId !== 'wordCountReq') return content;
@@ -122,7 +122,7 @@ function applyWritingSettings(promptId: string, content: string, wordCount: numb
 
 /**
  * Step 5: Filter by feature toggles — strip PROMPT_FEATURE blocks based on settings.
- * Matches MRJH 按功能开关过滤提示词内容 + 解析功能附加块.
+ * Filters prompt content by feature toggles (按功能开关过滤提示词内容 + 解析功能附加块).
  *
  * Feature blocks are HTML comments: <!-- PROMPT_FEATURE:xxx:START -->...<!-- PROMPT_FEATURE:xxx:END -->
  * If the feature is disabled, the block is removed entirely.
@@ -152,7 +152,7 @@ function filterByFeatureToggles(content: string, settings: PromptSettings): stri
 }
 
 /**
- * Full rendering pipeline for a prompt — matches MRJH's 5-step chain:
+ * Full rendering pipeline for a prompt — 5-step chain:
  * 1. Slot override resolution (done by resolveSlotContent)
  * 2. Template variable replacement
  * 3. Writing settings application (word count)
@@ -185,7 +185,7 @@ export function estimateTokens(text: string): number {
  * 1. Resolves all built-in slot content (with world book overrides)
  * 2. Reads game state to build dynamic context pieces (NPC, world, player, etc.)
  * 3. Applies prompt settings (perspective, word count)
- * 4. Assembles into ordered MessageEntry[] matching MRJH's message structure
+ * 4. Assembles into ordered MessageEntry[]
  */
 export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPromptBuildResult {
   const {
@@ -210,7 +210,7 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
   const rawSettings = stateManager.get<Partial<PromptSettings>>('系统.设置.prompt');
   const settings: PromptSettings = { ...DEFAULT_PROMPT_SETTINGS, ...rawSettings };
 
-  // Helper to resolve + render a slot through the full MRJH-style 5-step pipeline
+  // Helper to resolve + render a slot through the full 5-step pipeline
   const slot = (slotId: string): string => {
     const raw = resolveSlotContent(slotId, builtinOverrides, packPrompts);
     return renderPromptPipeline(slotId, raw, templateVars, settings);
@@ -513,7 +513,7 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
     }
   }
 
-  // ── 24. Player Input (as assistant message, MRJH style) ──
+  // ── 24. Player Input (as assistant message) ──
   push('player_input', '最新用户输入', '助手', 'assistant',
     `以下是用户最新输入内容：\n<用户输入>${userInput}</用户输入>`,
     { isUserInput: true });

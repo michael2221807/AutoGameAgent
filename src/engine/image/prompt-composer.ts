@@ -1,30 +1,30 @@
 /**
- * Image Prompt Composer — aligned with MRJH 构建最终图片提示词
+ * Image Prompt Composer — final image prompt assembly
  *
  * Assembles final positive/negative prompts from tokenized tags + style presets
  * + character anchors. Handles:
- * - Composition-aware default sizing (MRJH imageTasks.ts:1397-1407)
+ * - Composition-aware default sizing
  * - Artist preset injection as prefix
  * - Negative prompt merging (custom + composition-specific + auto watermark)
  * - NAI character segment (| separator) support
  * - Inline negative for backends without separate negative field
  */
 
-/** MRJH imageTasks.ts:78 — always appended to final negative */
+/** Always appended to final negative — ported */
 const DEFAULT_NEGATIVE_WATERMARK = 'text, watermark, signature, username, logo, artist name, web address, url, copyright, subtitle';
 
-/** MRJH imageTasks.ts:79 — NovelAI backend default negative */
+/** NovelAI backend default negative — ported */
 export const DEFAULT_NOVELAI_NEGATIVE = 'photorealistic, realistic, 3d, rendering, unreal engine, octane render, real life, photography, bokeh, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, artist name, border, out of frame';
 
-/** MRJH npcSecretImageWorkflow.ts:67 — secret part close-up exclusion */
+/** Secret part close-up exclusion — ported */
 export const DEFAULT_SECRET_PART_NEGATIVE = 'face, eyes, portrait, headshot, upper body, half body, full body, torso, abdomen, legs, arm, feet, hands, multiple people, extra legs, extra arms, extra breasts, extra nipples, extra fingers, three legs, three breasts, merged body parts, room focus, scenery focus, environment focus, background focus, wide shot, mid shot, text, watermark, speech bubble, dialogue box, blurry, low quality, bad anatomy';
 
-/** MRJH imageTasks.ts:1379-1381 — composition-specific negative */
+/** Composition-specific negative — ported */
 const COMPOSITION_NEGATIVE: Partial<Record<string, string>> = {
   secret_part: 'multiple views, split screen, panel layout, comic panel, comic page, collage, contact sheet, reference sheet, character sheet, turnaround, comparison sheet, montage, triptych, diptych, quadriptych, grid layout, tiled composition',
 };
 
-/** Composition → default size fallback (MRJH imageTasks.ts:1397-1407) */
+/** Composition → default size fallback */
 const COMPOSITION_SIZE: Record<string, { w: number; h: number }> = {
   portrait: { w: 1024, h: 1024 },
   'half-body': { w: 768, h: 1024 },
@@ -78,12 +78,12 @@ export class ImagePromptComposer {
   compose(input: ComposeInput): ComposedPrompt {
     const comp = input.composition ?? 'portrait';
 
-    // ── Size resolution (MRJH: explicit → composition default → 1024²) ──
+    // ── Size resolution (explicit → composition default → 1024²) ──
     const defaultSize = COMPOSITION_SIZE[comp] ?? COMPOSITION_SIZE.portrait;
     let w = input.width && input.width > 0 ? input.width : defaultSize.w;
     let h = input.height && input.height > 0 ? input.height : defaultSize.h;
 
-    // Portrait (头像) forces square (MRJH imageTasks.ts:1409-1413)
+    // Portrait (头像) forces square
     if (comp === 'portrait' && w !== h) {
       w = 1024;
       h = 1024;

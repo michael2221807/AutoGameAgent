@@ -752,7 +752,7 @@
   "image.settings.transformerApiKeyPlaceholder": "留空则沿用主剧情 API Key",
   "image.settings.transformerModel": "转化器模型名称",
   "image.settings.transformerModelPlaceholder": "例如：gpt-4o-mini / gemini-2.5-flash",
-  "image.settings.forceNude": "香闺秘档特写强制裸体语义",
+  "image.settings.forceNude": "私密特写强制裸体语义",
   "image.settings.forceNudeHint": "关闭后不再额外强塞 nude/naked/unclothed，仅按原始描述和转化器生成。",
   "image.settings.badgeAuto": "自动任务",
   "image.settings.autoScene": "场景生图模式",

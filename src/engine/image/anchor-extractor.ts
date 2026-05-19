@@ -1,5 +1,5 @@
 /**
- * Character Anchor Extractor — MRJH imageTasks.ts:1285-1371
+ * Character Anchor Extractor — ported
  *
  * Creates/updates CharacterAnchor records and extracts structured visual
  * features via AI. The AI analyzes NPC data and produces:
@@ -16,7 +16,7 @@
  * │ management section. Needs: "AI提取锚点" button, NPC dropdown,  │
  * │ anchor editor (positive/negative textareas, structured feature │
  * │ display, 3 toggles: 启用/默认附加/场景联动).                     │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §D + §J                     │
+ * │ See original design doc §D + §J                               │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import type { CharacterAnchor, AnchorStructuredFeatures } from './types';
@@ -67,7 +67,7 @@ export function updateAnchorTokens(
 }
 
 // ═══════════════════════════════════════════════════════════
-// AI-powered anchor extraction (MRJH imageTasks.ts:1285-1371)
+// AI-powered anchor extraction — ported
 // ═══════════════════════════════════════════════════════════
 
 export interface AnchorExtractionResult {
@@ -78,7 +78,7 @@ export interface AnchorExtractionResult {
   notes?: string;
 }
 
-/** System prompt for anchor extraction — verbatim from MRJH (no wuxia terms present) */
+/** System prompt for anchor extraction — verbatim from original (no wuxia terms present) */
 const ANCHOR_EXTRACTION_SYSTEM_PROMPT = [
   '你是角色视觉锚点提取器。',
   '你的任务是从角色资料中提取可长期复用的稳定外观锚点，用于后续保持角色一致性。',
@@ -143,7 +143,7 @@ function parseFeatureArray(value: unknown): string[] | undefined {
 /**
  * Extract character anchor via AI.
  *
- * MRJH 提取角色锚点提示词 (imageTasks.ts:1285-1371)
+ * Extract character anchor prompt tags — ported
  *
  * Calls an LLM with temperature 0.5 and JSON response format to extract
  * stable visual features from NPC data into a reusable anchor record.

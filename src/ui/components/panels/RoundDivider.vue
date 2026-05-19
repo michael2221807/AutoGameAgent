@@ -9,9 +9,8 @@
  * Phase 3 will populate the `actions-left` / `actions-right` slots with
  * satellite buttons (thinking / commands / raw-view).
  *
- * Layout reference: MRJH TurnItem's outer wrapper
- * (h:/MoRanJiangHu/MoRanJiangHu/components/features/Chat/TurnItem.tsx:277-386).
- * AGA port uses its own design tokens — no Tailwind.
+ * Layout reference: TurnItem's outer wrapper pattern.
+ * AGA uses its own design tokens — no Tailwind.
  *
  * Data contract: `metrics` maps to `narrativeHistory[i]._metrics` on the
  * assistant entry. `_metrics` is UI-private; it never reaches the AI prompt
@@ -35,7 +34,7 @@ interface Props {
   metrics?: DisplayMetrics;
   /**
    * Whether this divider sits above the latest assistant message.
-   * Controls satellite-button visibility asymmetry (MRJH convention):
+   * Controls satellite-button visibility asymmetry:
    *   - Commands button: shown iff `isCurrent && hasCommands`
    *   - Thinking / Raw buttons: always shown when their data is present
    */
@@ -143,7 +142,7 @@ function onBadgeClick(): void {
       </component>
 
       <div class="round-divider__actions round-divider__actions--right">
-        <!-- ☰ Commands button — current round only (MRJH TurnItem.tsx:337 convention). -->
+        <!-- ☰ Commands button — current round only. -->
         <button
           v-if="props.isCurrent && props.hasCommands"
           type="button"

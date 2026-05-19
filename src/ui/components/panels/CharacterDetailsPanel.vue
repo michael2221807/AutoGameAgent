@@ -392,7 +392,7 @@ async function generatePlayerImage() {
       [playerArtistPreset.value, playerPngPreset.value],
     );
 
-    // Build NPC-format data JSON (MRJH: player mapped to NPC format)
+    // Build NPC-format data JSON (player mapped to NPC format)
     const npcData: Record<string, unknown> = { 姓名: playerName };
     const tryGet = (path: string) => { const v = get(path); return typeof v === 'string' && v.trim() ? v.trim() : undefined; };
     if (gender.value) npcData['性别'] = gender.value;
@@ -1477,7 +1477,7 @@ const avatarInitial = computed<string>(() => {
 
       <!-- ─── Tab: 主角生图 ─── -->
       <template v-else-if="activeTab === 'playerImage'">
-        <!-- Stats card (MRJH §C) -->
+        <!-- Stats card -->
         <div class="player-stats-bar">
           <div class="player-stat-card"><span class="player-stat-val">{{ $t('character.image.statsTotal', { n: playerImageStats.total }) }}</span><span class="player-stat-lbl">{{ $t('character.image.statsLabel.total') }}</span></div>
           <div class="player-stat-card"><span class="player-stat-val" :style="{ color: playerImageStats.avatarBound ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted, #888)' }">{{ playerImageStats.avatarBound ? $t('character.image.bound') : $t('character.image.unbound') }}</span><span class="player-stat-lbl">{{ $t('character.image.statsLabel.avatar') }}</span></div>

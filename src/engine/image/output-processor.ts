@@ -1,7 +1,7 @@
 /**
  * Output Processor — processes raw AI transformer output into clean image prompts.
  *
- * MRJH imageTasks.ts:2053-2764 — full processing pipeline including:
+ * Ported — full processing pipeline including:
  * - Thinking block removal
  * - Code fence / label stripping
  * - Structured output parsing (<基础><角色> or 【基础】【角色】 formats)
@@ -26,14 +26,14 @@ export interface StructuredOutput {
   roles: Array<{ name: string; content: string }>;
 }
 
-/** Serialization strategy — matches MRJH 图片词组序列化策略类型 */
+/** Serialization strategy — image prompt serialization strategy type */
 export type SerializationStrategy = 'flat' | 'nai_character_segments' | 'gemini_structured' | 'grok_structured';
 
 // ═══════════════════════════════════════════════════════════
 // §2 — Leaf utilities (no internal dependencies)
 // ═══════════════════════════════════════════════════════════
 
-/** MRJH imageTasks.ts:2290-2295 — strip <thinking> and <think> blocks */
+/** Strip <thinking> and <think> blocks — ported */
 export function stripThinkingBlocks(rawText: string): string {
   let text = rawText || '';
   // Pass 1: paired <thinking>...</thinking> / <think>...</think>
@@ -79,7 +79,7 @@ export function stripThinkingBlocks(rawText: string): string {
   return text.trim();
 }
 
-/** MRJH imageTasks.ts:2053-2059 — strip code fences + label prefixes */
+/** Strip code fences + label prefixes — ported */
 export function cleanPromptOutput(rawText: string): string {
   return (rawText || '')
     .replace(/^```(?:text|markdown|json)?\s*/i, '')
@@ -88,12 +88,12 @@ export function cleanPromptOutput(rawText: string): string {
     .trim();
 }
 
-/** MRJH imageTasks.ts:2272-2274 — normalize "Artist:" → "artist:" */
+/** Normalize "Artist:" → "artist:" — ported */
 export function normalizeArtistCase(rawText: string): string {
   return (rawText || '').replace(/\bArtist\s*:/g, 'artist:');
 }
 
-/** MRJH imageTasks.ts:2276-2282 — strip all XML-like structural tags */
+/** Strip all XML-like structural tags — ported */
 export function stripAllStructuralTags(rawText: string): string {
   return (rawText || '')
     .replace(/<[^>]+>/g, ' ')
@@ -102,7 +102,7 @@ export function stripAllStructuralTags(rawText: string): string {
     .trim();
 }
 
-/** MRJH imageTasks.ts:2284-2288 — remove [1] Name | prefix lines */
+/** Remove [1] Name | prefix lines — ported */
 export function removeRolePrefixes(rawText: string): string {
   return (rawText || '')
     .replace(/(^|\n)\s*\[\d+\]\s*[^|\n<>]{1,80}\|/g, '$1')
@@ -110,10 +110,10 @@ export function removeRolePrefixes(rawText: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §3 — Tag extraction (MRJH imageTasks.ts:2246-2270)
+// §3 — Tag extraction
 // ═══════════════════════════════════════════════════════════
 
-/** MRJH imageTasks.ts:2246-2252 — extract last occurrence of <tagName>...</tagName> */
+/** Extract last occurrence of <tagName>...</tagName> — ported */
 export function extractLastTagBlock(rawText: string, tagName: string): string {
   const source = (rawText || '').trim();
   if (!source) return '';
@@ -124,7 +124,7 @@ export function extractLastTagBlock(rawText: string, tagName: string): string {
   return Array.isArray(matches) && matches.length > 0 ? (matches[matches.length - 1] || '').trim() : '';
 }
 
-/** MRJH imageTasks.ts:2254-2262 — extract text inside the last <tagName> block */
+/** Extract text inside the last <tagName> block — ported */
 export function extractLastTagContent(rawText: string, tagName: string): string {
   const block = extractLastTagBlock(rawText, tagName);
   if (!block) return '';
@@ -134,7 +134,7 @@ export function extractLastTagContent(rawText: string, tagName: string): string 
     .trim();
 }
 
-/** MRJH imageTasks.ts:2264-2270 — try multiple tag names, return first match.
+/** Try multiple tag names, return first match — ported.
  *
  *  Candidates that resolve to placeholder-only content (e.g. `...`, `…`,
  *  whitespace, or Chinese/English template markers) are skipped. This matters
@@ -176,7 +176,7 @@ function isPlaceholderContent(text: string): boolean {
   return false;
 }
 
-/** MRJH imageTasks.ts:2415-2425 — parse XML-like attributes from tag opening */
+/** Parse XML-like attributes from tag opening — ported */
 function parseTagAttributes(raw: string): Record<string, string> {
   const attrs: Record<string, string> = {};
   const regex = /([^\s=]+)\s*=\s*["']([^"']+)["']/g;
@@ -190,7 +190,7 @@ function parseTagAttributes(raw: string): Record<string, string> {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §4 — Indexed role list parsing (MRJH imageTasks.ts:2427-2449)
+// §4 — Indexed role list parsing
 // ═══════════════════════════════════════════════════════════
 
 /** Parse [1] Name | content format into role list */
@@ -216,7 +216,7 @@ function parseIndexedRoleList(rawText: string): Array<{ name: string; content: s
 }
 
 // ═══════════════════════════════════════════════════════════
-// §5 — Structured output parsing (MRJH imageTasks.ts:2451-2521)
+// §5 — Structured output parsing
 // ═══════════════════════════════════════════════════════════
 
 /**
@@ -288,13 +288,13 @@ export function parseStructuredOutput(rawText: string): StructuredOutput | null 
 }
 
 // ═══════════════════════════════════════════════════════════
-// §6 — NAI weight syntax normalization (MRJH imageTasks.ts:2297-2764)
+// §6 — NAI weight syntax normalization
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Convert SD-style (content:weight) → NAI weight::content:: syntax.
  * Iterates up to 8 times for nested groups.
- * MRJH 转换NAI括号权重语法 (imageTasks.ts:2297-2320)
+ * Convert SD-style bracket weight to NAI syntax — ported
  */
 function convertBracketWeightSyntax(rawText: string): string {
   let output = rawText || '';
@@ -325,7 +325,7 @@ function convertBracketWeightSyntax(rawText: string): string {
 
 /**
  * Fix malformed NAI weight groups (stray commas inside groups, etc.)
- * MRJH 清洗NAI脏权重语法 (imageTasks.ts:2322-2379)
+ * Fix malformed NAI weight groups — ported
  */
 function cleanDirtyWeightSyntax(rawText: string): string {
   let output = rawText || '';
@@ -392,7 +392,7 @@ function cleanDirtyWeightSyntax(rawText: string): string {
 
 /**
  * Full NAI weight syntax normalization pipeline.
- * MRJH 保守补全NAI权重语法 (imageTasks.ts:2754-2764)
+ * Full NAI weight syntax normalization pipeline — ported
  */
 export function normalizeNaiWeightSyntax(rawText: string): string {
   const cleaned = cleanPromptOutput(
@@ -406,13 +406,13 @@ export function normalizeNaiWeightSyntax(rawText: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §7 — Subject prompt cleanup (MRJH imageTasks.ts:2381-2413)
+// §7 — Subject prompt cleanup
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Clean the final subject prompt from raw AI output.
  * Tries structured extraction first, then falls back to tag-based extraction.
- * MRJH 清洗最终主体提示词 (imageTasks.ts:2381-2413)
+ * Clean final subject prompt — ported
  */
 export function cleanSubjectPrompt(rawText: string, options?: { isNovelAI?: boolean }): string {
   const withoutThinking = stripThinkingBlocks(rawText);
@@ -462,7 +462,7 @@ export function cleanSubjectPrompt(rawText: string, options?: { isNovelAI?: bool
 
 /**
  * Strip role placeholder prefixes from NAI character segment text.
- * MRJH 清理NAI角色段占位词 (imageTasks.ts:2568-2578)
+ * Strip NAI role placeholder prefixes — ported
  */
 function stripRolePlaceholders(text: string): string {
   const source = cleanPromptOutput(text)
@@ -476,7 +476,7 @@ function stripRolePlaceholders(text: string): string {
     .join(', ');
 }
 
-/** MRJH 按逗号拆分提示词 (imageTasks.ts:2061-2067) */
+/** Split prompt by commas */
 function splitByComma(text: string): string[] {
   return (text || '')
     .replace(/\r?\n+/g, ', ')
@@ -500,7 +500,7 @@ function dedupTokens(tokens: string[]): string[] {
   return result;
 }
 
-/** Merge and deduplicate prompt parts (MRJH 合并并去重提示词单元 simplified) */
+/** Merge and deduplicate prompt parts (simplified) */
 function mergeAndDedup(...parts: Array<string | undefined>): string {
   const allTokens = parts
     .filter(Boolean)
@@ -511,7 +511,7 @@ function mergeAndDedup(...parts: Array<string | undefined>): string {
 /**
  * Normalize single-character transformer output.
  * Used for NPC portraits and secret parts (single subject, no multi-character segments).
- * MRJH 归一化单段词组转化器输出 (imageTasks.ts:2737-2752)
+ * Normalize single-character transformer output — ported
  */
 export function normalizeSingleCharacterOutput(
   rawText: string,
@@ -523,7 +523,7 @@ export function normalizeSingleCharacterOutput(
   let merged: string;
   if (structured) {
     // Flatten structured output: strip role placeholders + dedup
-    // MRJH uses 清理NAI角色段占位词 + 合并正向提示词片段 (which deduplicates)
+    // Strip role placeholders + merge positive prompt fragments (which deduplicates)
     const roleParts = (structured.roles || [])
       .map((role) => stripRolePlaceholders(role.content || ''))
       .filter(Boolean);
@@ -542,7 +542,7 @@ export function normalizeSingleCharacterOutput(
  * Core path: parses structured output → routes by strategy.
  * Full scene-specific serialization (anchor matching, NAI segment helpers)
  * will be completed in Phase 1.6.
- * MRJH 序列化词组转化器输出 (imageTasks.ts:2712-2735)
+ * Serialize transformer output — ported
  */
 export function processTransformerOutput(
   rawText: string,

@@ -1,5 +1,5 @@
 /**
- * Image Localization — MRJH imageTasks.ts:3524-3572
+ * Image Localization — ported
  *
  * Persists a remote or data-URL image to local IndexedDB storage.
  * Three input cases:
@@ -15,7 +15,7 @@
  * │                                                                 │
  * │ "保存到本地" button on each gallery image card.                  │
  * │ "设为常驻壁纸" also triggers localization.                       │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §B + §E                     │
+ * │ See original design doc §B + §E                               │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import type { ImageAssetCache } from './asset-cache';
@@ -28,7 +28,7 @@ export interface LocalizationResult {
 /**
  * Persist an image from URL to local IndexedDB storage.
  *
- * MRJH persistImageAssetLocally (imageTasks.ts:3524-3572)
+ * Persist image asset locally — ported
  */
 export async function persistImageLocally(
   imageUrl: string,

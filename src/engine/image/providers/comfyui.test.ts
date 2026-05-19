@@ -73,7 +73,7 @@ describe('ComfyUI workflow template rendering', () => {
     expect(node4.width).toBe(1024);
   });
 
-  it('substitutes %prompt% / %WIDTH% style (matches user-exported MRJH workflows)', () => {
+  it('substitutes %prompt% / %WIDTH% style (matches user-exported workflows)', () => {
     // Mirrors the shape of the real workflow the user reported: StringLiteral
     // nodes hold %WIDTH% / %HEIGHT% strings, feed into StringToInt for the
     // EmptyLatentImage. %prompt% lives inside a quoted prompt field.

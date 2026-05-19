@@ -1,5 +1,5 @@
 {
-  "$comment": "AutoGameAgent Game Pack Schema Contract v3.1 — 字段名是引擎契约，不可随意重命名。v3.0：六维属性（体质/直觉/悟性/气运/魅力/心性）、角色.身份节、角色.效果、背包货币对象化、世界.地点信息数组化、游戏时间增加小时/分钟。v3.1：世界.天气/节日/环境 env-tags 字段（2026-04-19 MRJH port），无 expiry，每回合 AI 强制 re-emit set 命令。",
+  "$comment": "AutoGameAgent Game Pack Schema Contract v3.1 — 字段名是引擎契约，不可随意重命名。v3.0：六维属性（体质/直觉/悟性/气运/魅力/心性）、角色.身份节、角色.效果、背包货币对象化、世界.地点信息数组化、游戏时间增加小时/分钟。v3.1：世界.天气/节日/环境 env-tags 字段（2026-04-19 ported），无 expiry，每回合 AI 强制 re-emit set 命令。",
   "schemaVersion": "3.1",
   "type": "object",
   "properties": {
@@ -286,7 +286,7 @@
           "default": [],
           "x-assistant-editable": true,
           "x-assistant-label": "环境标签",
-          "$comment": "2026-04-19 env-tags port. 每回合 AI 用 set 命令整体替换数组；无 push/delete 使用约定。上限 3 条标签；形状与 MRJH 环境变量 byte-for-byte 对齐（名称/描述/效果）。DEFAULT_ENGINE_PATHS.environmentTags = '世界.环境'。",
+          "$comment": "2026-04-19 env-tags port. 每回合 AI 用 set 命令整体替换数组；无 push/delete 使用约定。上限 3 条标签；形状为（名称/描述/效果）。DEFAULT_ENGINE_PATHS.environmentTags = '世界.环境'。",
           "items": {
             "type": "object",
             "required": ["名称", "描述", "效果"],

@@ -24,7 +24,7 @@ Important current state as of this Codex handoff:
 - **Engram V2 / Graphiti alignment is recently completed.** Recent work added KnowledgeEdge, unified retrieval scoring traces, and per-round Engram visualization.
 - **Plot Direction System has an MVP feedback loop and several audit fixes.** Active docs: `docs/design/plot-direction-system.md` and `docs/status/plot-sprint1-gap-audit.md`.
 - **Sanctuary UI migration is documented as shipped.** Active docs: `docs/status/ui-migration-plan.md` and `docs/status/ui-migration-changelog.md`.
-- **MRJH migration gap analysis is older but still useful for missing feature areas.** The biggest historical gaps were image generation UX, Settings UX, CoT visualization, and shared primitive adoption. Verify against current code and changelog before treating a gap as still open.
+- **Legacy migration gap analysis is older but still useful for missing feature areas.** The biggest historical gaps were image generation UX, Settings UX, CoT visualization, and shared primitive adoption. Verify against current code and changelog before treating a gap as still open.
 - **There is currently a dirty worktree entry in** `src/ui/components/panels/SavePanel.vue`. Do not overwrite or revert it unless the user explicitly asks.
 
 ---

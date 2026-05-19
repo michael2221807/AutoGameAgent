@@ -2,7 +2,7 @@
 /**
  * Scene Context Builder — constructs scene generation context from game state.
  *
- * MRJH's scene system uses explicit 大地点/中地点/小地点/具体地点 fields.
+ * The original scene system uses explicit 大地点/中地点/小地点/具体地点 fields.
  * AGA stores locations as `·`-separated hierarchical paths (e.g., "东荒大陆·青云城·客栈").
  *
  * This module:
@@ -16,7 +16,7 @@
  * │ Scene context is currently auto-built from game state. The      │
  * │ Scene Tab will let users manually trigger scene generation      │
  * │ with composition choice (纯场景/故事快照) and extra requirements.│
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §E "Scene/Wallpaper"         │
+ * │ See original design doc §E "Scene/Wallpaper"                   │
  * └─────────────────────────────────────────────────────────────────┘
  */
 
@@ -25,11 +25,11 @@
 // ═══════════════════════════════════════════════════════════
 
 export interface LocationHierarchy {
-  /** Broad region (background/distant — MRJH 大地点) */
+  /** Broad region (background/distant — 大地点) */
   broad: string;
-  /** Mid-level area (midground — no direct MRJH equivalent, AGA's middle layer) */
+  /** Mid-level area (midground — AGA's middle layer) */
   mid: string;
-  /** Specific place (foreground/stage — MRJH 具体地点) */
+  /** Specific place (foreground/stage — 具体地点) */
   specific: string;
   /** Full original path */
   fullPath: string;
@@ -273,7 +273,7 @@ export function deriveEnvironmentSummary(environment: unknown): string {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §4 — Scene response parsing (MRJH imageTasks.ts:2797-2827)
+// §4 — Scene response parsing
 // ═══════════════════════════════════════════════════════════
 
 import {
@@ -293,7 +293,7 @@ export interface ParsedSceneResponse {
 /**
  * Parse the scene transformer's AI response to extract scene type + prompt content.
  *
- * MRJH 解析场景词组响应 (imageTasks.ts:2797-2827)
+ * Parse scene transformer AI response — ported
  *
  * The AI outputs structured tags:
  * - <场景判定>适合场景快照 / 不适合场景快照</场景判定>
@@ -335,7 +335,7 @@ export function parseSceneResponse(rawText: string): ParsedSceneResponse {
   };
 }
 
-/** MRJH 截取最后场景判定之后 (imageTasks.ts:2766-2781) */
+/** Extract text after the last scene judgment tag — ported */
 function extractAfterLastSceneJudgment(rawText: string): string {
   const source = rawText || '';
   const regex = /<\s*场景判定\s*>/gi;

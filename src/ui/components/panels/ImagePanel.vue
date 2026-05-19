@@ -416,7 +416,7 @@ const selectedNpcAnchor = computed(() => {
   return (anchors as CharacterAnchor[]).find((a) => a.npcName === selectedNpc.value) ?? null;
 });
 
-// Per-NPC task status (MRJH: 最近状态 card + active task display)
+// Per-NPC task status (最近状態 card + active task display)
 const selectedNpcActiveTask = computed(() => {
   void imageUpdateTick.value; // reactive dependency
   if (!selectedNpc.value || !imageService) return null;
@@ -490,7 +490,7 @@ async function submitGenerate() {
   errorMsg.value = '';
   lastTask.value = null;
 
-  // Background mode: NO overlay — just inline status text (MRJH behavior)
+  // Background mode: NO overlay — just inline status text
   // Foreground mode: show overlay with progress tracking
   if (backgroundMode.value) {
     manualFlowStage.value = 'idle';
@@ -515,7 +515,7 @@ async function submitGenerate() {
       selectedPngPreset.value,
     ]);
 
-    // Extract rich NPC data as JSON (matching MRJH's 提取NPC生图基础数据)
+    // Extract rich NPC data as JSON (提取NPC生图基础数据)
     const npcBaseData: Record<string, unknown> = {};
     if (npc) {
       const tryField = (keys: string[]): string => {
@@ -541,7 +541,7 @@ async function submitGenerate() {
       setIfPresent('外貌描述', tryField(['外貌描述', '外貌描写', '外貌', '外貌要点']));
       setIfPresent('身材描写', tryField(['身材描写', '身材', '身材要点']));
       setIfPresent('衣着风格', tryField(['衣着风格', '衣着', '衣着要点']));
-      // MRJH key aliases — direct-prompt-builder order expects these names when
+      // Legacy key aliases — direct-prompt-builder order expects these names when
       // the transformer is disabled. Mirror the AGA values into them.
       setIfPresent('外貌', tryField(['外貌描述', '外貌描写', '外貌', '外貌要点']));
       setIfPresent('身材', tryField(['身材描写', '身材', '身材要点']));
@@ -602,7 +602,7 @@ async function submitGenerate() {
       // Background: update inline status, no overlay
       manualStatusText.value = t('image.manual.submitDoneStatus');
     } else {
-      // Foreground: auto-close overlay after 450ms (MRJH behavior)
+      // Foreground: auto-close overlay after 450ms
       manualStatusText.value = t('image.manual.taskSubmitted');
       setTimeout(() => {
         manualFlowStage.value = 'idle';
@@ -622,7 +622,7 @@ function removeTask(taskId: string) {
   imageService?.getTaskQueue().remove(taskId);
 }
 
-// MRJH: 4 clear buttons — NPC completed/all + scene completed/all
+// 4 clear buttons — NPC completed/all + scene completed/all
 function clearNpcQueueCompleted() {
   const queue = imageService?.getTaskQueue();
   if (!queue) return;
@@ -1334,7 +1334,7 @@ function deselectAllNpcs() {
   selectedNpcNames.value = new Set();
 }
 
-// Scene archive from state tree (MRJH sceneImageArchiveWorkflow)
+// Scene archive from state tree (sceneImageArchiveWorkflow)
 const sceneArchiveRaw = useValue<Record<string, unknown>>('系统.扩展.image.sceneArchive');
 const sceneArchive = computed(() => {
   const raw = sceneArchiveRaw.value;
@@ -1357,7 +1357,7 @@ const sceneQueueTasks = computed(() => {
   return imageService?.getTaskQueue().getAll().filter((t) => t.subjectType === 'scene') ?? [];
 });
 
-// Scene stats (MRJH: 6 stat cards)
+// Scene stats (6 stat cards)
 const sceneStats = computed(() => {
   const history = sceneArchiveHistory.value;
   const queue = sceneQueueTasks.value;
@@ -1982,7 +1982,7 @@ function toggleReplicateParams(value: boolean) {
   setValue('系统.扩展.image.artistPresets', list);
 }
 
-// Character anchor management (MRJH §J Sec 2)
+// Character anchor management
 interface CharacterAnchor {
   id: string;
   name: string;
@@ -2177,7 +2177,7 @@ function deleteTransformerPreset() {
   editTransformerPrompt.value = '';
 }
 
-// Model rulesets — MRJH §J-2 Sub-section 1
+// Model rulesets
 interface ModelRuleset {
   id: string;
   name: string;
@@ -2328,7 +2328,7 @@ function importModelRulesets(event: Event) {
   reader.readAsText(file);
 }
 
-// Rules state — full CRUD per MRJH §J-2
+// Rules state — full CRUD
 interface RuleTemplate {
   id: string;
   name: string;
@@ -2516,7 +2516,7 @@ function importRules(event: Event) {
   reader.readAsText(file);
 }
 
-// Combined history: NPC archives + scene archives + task queue, sorted by time (MRJH: combinedHistoryRecords)
+// Combined history: NPC archives + scene archives + task queue, sorted by time
 interface CombinedHistoryEntry {
   key: string;
   type: 'character' | 'scene';
@@ -2751,7 +2751,7 @@ interface GalleryImage {
   providerMeta?: { civitai?: CivitaiLoraSnapshot; reference?: { mode: string; sourceAssetId?: string; denoiseStrength?: number; provider?: string } };
 }
 
-// Player archive for Gallery/History integration (MRJH: __player__ pseudo-NPC)
+// Player archive for Gallery/History integration (__player__ pseudo-NPC)
 const PLAYER_ID = '__player__';
 const playerArchiveRaw = useValue<Record<string, unknown>>('角色.图片档案');
 const playerName = useValue<string>(DEFAULT_ENGINE_PATHS.playerName);
@@ -3179,7 +3179,7 @@ function clearNpcImages() {
               <div v-if="manualStatusText && manualFlowStage === 'idle'" class="status-text">{{ manualStatusText }}</div>
             </div>
 
-            <!-- Per-NPC task status (MRJH §A: 最近状态 + active task display) -->
+            <!-- Per-NPC task status (最近状態 + active task display) -->
             <div v-if="selectedNpcActiveTask" class="npc-task-status npc-task-status--active">
               <div class="task-status-header">
                 <span :class="['task-status-badge', `task-status-badge--${taskStatusVariant(selectedNpcActiveTask.status)}`]">
@@ -3323,7 +3323,13 @@ function clearNpcImages() {
                 <ImageDisplay :asset-id="lastTask.resultAssetId" fallback-letter="?" size="fill" />
               </div>
               <div v-else class="npc-preview-empty">
-                <div class="npc-preview-empty-icon">☯</div>
+                <div class="npc-preview-empty-icon">
+                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="4" y="8" width="40" height="32" rx="4" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+                    <circle cx="16" cy="20" r="3" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+                    <path d="M4 32 l12-10 6 5 8-8 14 13" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity="0.4"/>
+                  </svg>
+                </div>
                 <div>{{ $t('image.manual.previewEmpty') }}</div>
               </div>
             </div>
@@ -3335,7 +3341,7 @@ function clearNpcImages() {
             <div class="npc-preview-data">
               <!--
                 角色资料 grid — 增量接口说明：
-                后续对标 MRJH SocialModal 时，此区域应扩展显示：
+                后续此区域应扩展显示：
                 - 境界/身份（如 pack schema 支持）
                 - 外貌特征 grid（外貌/身材/衣着/生日/称呼）
                 - 共同记忆时间线
@@ -3582,7 +3588,7 @@ function clearNpcImages() {
               </div>
             </div>
 
-            <!-- Scene stats (MRJH: 6 stat cards) -->
+            <!-- Scene stats (6 stat cards) -->
             <div class="scene-section">
               <h3 class="section-label">{{ $t('image.scene.statsTitle') }}</h3>
               <div class="scene-stats-grid">
@@ -4122,7 +4128,7 @@ function clearNpcImages() {
 
       <!-- ═══ Presets Tab ═══ -->
       <div v-if="activeTab === 'presets'" class="tab-content">
-        <!-- Auto preset bindings (MRJH §J Section 1 — 4 dropdowns in 2x2) -->
+        <!-- Auto preset bindings (4 dropdowns in 2x2) -->
         <div class="preset-card">
           <span class="preset-card-badge">{{ $t('image.presets.badgeAuto') }}</span>
           <h3 class="section-label">{{ $t('image.presets.autoTitle') }}</h3>
@@ -4163,7 +4169,7 @@ function clearNpcImages() {
           </div>
         </div>
 
-        <!-- Section: Character Anchor Management (MRJH §J Sec 2) -->
+        <!-- Section: Character Anchor Management -->
         <div class="preset-card">
           <span class="preset-card-badge">{{ $t('image.presets.badgeAnchor') }}</span>
           <h3 class="section-label">{{ $t('image.presets.anchorTitle') }}</h3>
@@ -4213,7 +4219,7 @@ function clearNpcImages() {
                 <AgaButton v-if="selectedAnchor" variant="danger" size="sm" @click="deleteAnchor">{{ $t('image.presets.anchorDelete') }}</AgaButton>
               </div>
 
-              <!-- Extract status message (MRJH: 3-state colored box) -->
+              <!-- Extract status message (3-state colored box) -->
               <div
                 v-if="anchorExtractMessage"
                 :class="['anchor-extract-msg',
@@ -4530,7 +4536,7 @@ function clearNpcImages() {
           </div>
         </div>
 
-        <!-- Section: 画师串预设管理 (MRJH: separate section) -->
+        <!-- Section: 画师串预设管理 -->
         <div class="preset-card">
           <span class="preset-card-badge">{{ $t('image.presets.badgeArtistMgmt') }}</span>
           <div class="preset-card-header">
@@ -4659,7 +4665,7 @@ function clearNpcImages() {
         </div>
       </div>
 
-      <!-- ═══ Rules Tab — full CRUD per MRJH §J-2 ═══ -->
+      <!-- ═══ Rules Tab — full CRUD ═══ -->
       <div v-if="activeTab === 'rules'" class="tab-content">
         <div class="rules-layout">
           <div class="rules-header">
@@ -4768,7 +4774,7 @@ function clearNpcImages() {
               </div>
             </div>
 
-            <!-- Scope description (MRJH: per-tab hint) -->
+            <!-- Scope description (per-tab hint) -->
             <p class="form-hint" style="margin-bottom:var(--space-sm)">
               {{ ruleScope === 'npc' ? $t('image.rules.npcScopeHint') :
                  ruleScope === 'scene' ? $t('image.rules.sceneScopeHint') :
@@ -4879,7 +4885,7 @@ function clearNpcImages() {
         </div>
       </div>
 
-      <!-- ═══ Settings Tab (8th tab — MRJH ImageGenerationSettings) ═══ -->
+      <!-- ═══ Settings Tab (8th tab) ═══ -->
       <div v-if="activeTab === 'settings'" class="tab-content settings-tab">
 
         <!-- §7.1 Basic -->
@@ -5352,7 +5358,7 @@ function clearNpcImages() {
     <Transition name="fade">
       <div v-if="manualFlowStage !== 'idle'" class="confirm-overlay" @click.self="cancelConfirm">
         <!--
-          MRJH-style confirm modal — shows a portrait thumbnail, character vitals,
+          Confirm modal — shows a portrait thumbnail, character vitals,
           visual archive preview, and every active generation parameter so the
           user can double-check before paying for an API call.
         -->
@@ -5467,7 +5473,7 @@ function clearNpcImages() {
                 </div>
               </section>
 
-              <!-- submitting 状态：real-time progress (MRJH: tracks task phases) -->
+              <!-- submitting 状态：real-time progress (tracks task phases) -->
               <div v-if="manualFlowStage === 'submitting'" class="confirm-progress">
                 <div class="confirm-spinner" />
                 <div class="confirm-progress-text">
@@ -6415,7 +6421,7 @@ function clearNpcImages() {
 .transformer-scope-toggle { display: flex; gap: var(--space-2xs); }
 .transformer-empty { padding: var(--space-sm); text-align: center; }
 
-/* Preset card sections (MRJH bordered card pattern with corner badge) */
+/* Preset card sections (bordered card pattern with corner badge) */
 .preset-card {
   position: relative; margin-bottom: var(--space-lg); padding: var(--space-md);
   padding-top: calc(var(--space-md) + 4px);

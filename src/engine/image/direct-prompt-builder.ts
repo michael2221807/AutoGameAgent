@@ -1,7 +1,7 @@
 /**
  * Direct Prompt Builder — bypasses AI transformer for NPC → prompt conversion.
  *
- * MRJH imageTasks.ts:2007-2051 — `buildNpcDirectImagePrompt`
+ * Ported from `buildNpcDirectImagePrompt`
  *
  * Used when:
  * - User disables transformer in Settings (toggle OFF)
@@ -16,11 +16,11 @@
  * │ FRONTEND TODO (Phase 7: Settings Tab)                          │
  * │                                                                 │
  * │ This function is NOT user-accessible until the Settings tab     │
- * │ adds a "使用词组转化器" toggle (MRJH: ImageGenerationSettings   │
+ * │ adds a "使用词组转化器" toggle (ImageGenerationSettings          │
  * │ Tab 1 基础). That toggle controls `useTransformer` in           │
  * │ image-service.generateCharacterImage.                           │
  * │                                                                 │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §K "Tab 1: 基础"             │
+ * │ See original design doc §K "Tab 1: 基础"                       │
  * │   - "NPC生图使用词组转化器" toggle                                │
  * │   - Forced ON for NovelAI backend                               │
  * │   - Default ON for other backends                               │
@@ -45,9 +45,9 @@ export interface DirectPromptResult {
   prompt: string;
 }
 
-// ── NPC data field reading (MRJH imageTasks.ts:1939-1977) ──
+// ── NPC data field reading — ported ──
 
-/** MRJH 读取NPC字段文本 */
+/** Read NPC text field */
 function readTextField(data: Record<string, unknown>, key: string): string {
   const value = data?.[key];
   if (typeof value === 'string') return value.trim();
@@ -55,7 +55,7 @@ function readTextField(data: Record<string, unknown>, key: string): string {
   return '';
 }
 
-/** MRJH 读取NPC对象片段 — flatten object to "key:value" pairs */
+/** Read NPC object fragment — flatten object to "key:value" pairs */
 function readObjectFragment(data: Record<string, unknown>, key: string): string {
   const source = data?.[key];
   if (!source || typeof source !== 'object' || Array.isArray(source)) return '';
@@ -69,7 +69,7 @@ function readObjectFragment(data: Record<string, unknown>, key: string): string 
     .join('，');
 }
 
-/** MRJH 读取NPC数组片段 — flatten array to comma-separated names */
+/** Read NPC array fragment — flatten array to comma-separated names */
 function readArrayFragment(data: Record<string, unknown>, key: string): string {
   const source = data?.[key];
   if (!Array.isArray(source)) return '';
@@ -85,7 +85,7 @@ function readArrayFragment(data: Record<string, unknown>, key: string): string {
     .join('，');
 }
 
-/** MRJH 生成NovelAI人物数量标签 (imageTasks.ts:1972-1977) */
+/** Generate NovelAI character count tag — ported */
 function inferNaiGenderTag(data: Record<string, unknown>): string {
   const gender = readTextField(data, '性别');
   if (gender === '女') return '1girl';
@@ -96,9 +96,9 @@ function inferNaiGenderTag(data: Record<string, unknown>): string {
 /**
  * Build an image prompt directly from NPC data without AI transformer.
  *
- * MRJH buildNpcDirectImagePrompt (imageTasks.ts:2007-2051)
+ * Build NPC direct image prompt — ported
  *
- * Field reading order follows MRJH: 性别 → 年龄 → 身份 → 境界 → 简介 →
+ * Field reading order: 性别 → 年龄 → 身份 → 境界 → 简介 →
  * 核心性格特征 → 性格 → 外貌 → 身材 → 衣着, then complex fields
  * (当前装备, 背包, 补充视觉设定), then composition/gender tags.
  */
@@ -118,9 +118,9 @@ export function buildDirectCharacterPrompt(
 
   const isNovelAI = options?.isNovelAI === true;
 
-  // Core visual fields — MRJH imageTasks.ts:2013-2024 (verbatim field order).
+  // Core visual fields (verbatim field order from original).
   // AGA NPC records use `外貌描述 / 身材描写 / 衣着风格` (longer, self-documenting);
-  // MRJH uses `外貌 / 身材 / 衣着`. image-service serializes both key sets, but
+  // the original codebase uses `外貌 / 身材 / 衣着`. image-service serializes both key sets, but
   // when callers hand-roll npcDataJson (assistant, legacy paths) we fall back
   // to the AGA names so no visual field silently drops out.
   const fragments = [
@@ -136,7 +136,7 @@ export function buildDirectCharacterPrompt(
     readTextField(source, '衣着') || readTextField(source, '衣着风格'),
   ];
 
-  // Complex fields — MRJH imageTasks.ts:2026-2031
+  // Complex fields
   const equipment = readObjectFragment(source, '当前装备');
   if (equipment) fragments.push(`装备：${equipment}`);
   const inventory = readArrayFragment(source, '背包');
@@ -144,7 +144,7 @@ export function buildDirectCharacterPrompt(
   const visualOverrides = readObjectFragment(source, '补充视觉设定');
   if (visualOverrides) fragments.push(`补充设定：${visualOverrides}`);
 
-  // Composition + backend-specific tags — MRJH imageTasks.ts:2033-2042
+  // Composition + backend-specific tags
   const comp = options?.composition ?? 'portrait';
   if (isNovelAI) {
     const genderTag = inferNaiGenderTag(source);
@@ -157,12 +157,12 @@ export function buildDirectCharacterPrompt(
     if (comp === 'full-length') fragments.push('全身角色，站姿，角色主体');
   }
 
-  // Extra requirements — MRJH imageTasks.ts:2043
+  // Extra requirements
   if (options?.extraRequirements?.trim()) {
     fragments.push(options.extraRequirements.trim());
   }
 
-  // Join and normalize — MRJH imageTasks.ts:2045-2046
+  // Join and normalize
   const rawPrompt = fragments.filter(Boolean).join(isNovelAI ? ', ' : '，');
   const prompt = isNovelAI ? normalizeNaiWeightSyntax(rawPrompt) : rawPrompt;
 

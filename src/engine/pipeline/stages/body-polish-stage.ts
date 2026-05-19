@@ -3,7 +3,7 @@
  *
  * Runs AFTER AICallStage and BEFORE ReasoningIngestStage. When enabled via
  * `系统.设置.bodyPolish`, sends the main narrative text to a separate AI call
- * with the MRJH-style polish prompt (DEFAULT_BODY_POLISH_PROMPT + BODY_POLISH_COT,
+ * with the polish prompt (DEFAULT_BODY_POLISH_PROMPT + BODY_POLISH_COT,
  * with wuxia content removed per docs §8.1) and replaces `parsedResponse.text`
  * with the polished output.
  *
@@ -15,8 +15,7 @@
  * ensures polish happens before PostProcess persists the round.
  *
  * Design references:
- *   - MRJH polish flow: `h:/MoRanJiangHu/MoRanJiangHu/hooks/useGame/bodyPolish.ts`
- *   - MRJH extract function: same file, `剥离首尾思考区段` + `提取正文标签内容`
+ *   - Ported polish flow: `剥离首尾思考区段` + `提取正文标签内容`
  *   - AGA plan: docs/research/mrjh-migration/06-round-divider-plan.md §8.2
  *
  * Design constraints:
@@ -46,8 +45,7 @@ import { eventBus } from '../../core/event-bus';
 /**
  * Extract the polished body from the AI response.
  *
- * Port of MRJH `剥离首尾思考区段` + `提取正文标签内容`
- * (h:/MoRanJiangHu/MoRanJiangHu/hooks/useGame/bodyPolish.ts:34-60).
+ * Ported from `剥离首尾思考区段` + `提取正文标签内容`.
  *
  * Strategy:
  *   1. Find the LAST `<正文>` open tag (skips any thinking blocks that
@@ -169,7 +167,7 @@ export class BodyPolishStage implements PipelineStage {
 
       const polished = extractBodyFromPolishOutput(raw);
 
-      // Guard rails (MRJH bodyPolish.ts:301 — "polishedLogs.length === 0" fallback).
+      // Guard rails — "polishedLogs.length === 0" fallback.
       // If extraction failed OR the result is suspiciously shorter than the input,
       // keep the original — never deliver a truncated polish to the user.
       if (!polished || polished.length < originalText.length * 0.3) {

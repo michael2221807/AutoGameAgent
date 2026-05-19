@@ -9,8 +9,8 @@
  * The block is ALSO echoed inside `GAME_STATE_JSON` (the sanitizer passes
  * these paths through — guaranteed by the P0 snapshot-sanitizer tests), but
  * having an explicit section with plain-language formatting raises AI
- * attention dramatically compared to JSON walking. MRJH does the same —
- * see `systemPromptBuilder.ts:324-380` `构建环境状态文本`.
+ * attention dramatically compared to JSON walking. The original codebase
+ * does the same in `构建环境状态文本`.
  *
  * All inputs are treated as `unknown` — the AI occasionally emits partial
  * data mid-round (especially during the first few rounds after enabling

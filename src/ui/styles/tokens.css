@@ -26,7 +26,7 @@
  *   font:     --font-sans, --font-serif-cjk, --font-mono, --font-size-xs ... --font-size-2xl
  *   z-index:  --z-panel, --z-modal, --z-toast
  *
- * DO NOT add game-specific or MRJH-derived tokens here (CLAUDE.md §5).
+ * DO NOT add game-specific tokens here (CLAUDE.md §5).
  * AGA defines its own visual identity.
  */
 :root {

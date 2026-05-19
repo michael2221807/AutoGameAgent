@@ -2,7 +2,7 @@
  * NovelAI Image Provider — Sprint Image-5
  *
  * Real implementation against NovelAI's /ai/generate-image endpoint.
- * Reference: MRJH `imageTasks.ts` (verified working implementation).
+ * Reference: verified working implementation from original codebase.
  * Per PRINCIPLES §3.13: implemented from verified API behavior, not blindly copied.
  * Per PRINCIPLES §3.12: no Vite proxy; user configures endpoint directly.
  *
@@ -20,7 +20,7 @@ import type { ImageToImageProvider } from '../provider-capabilities';
 import type { ImageReferenceInput } from '../reference-types';
 import { unzipSync } from 'fflate';
 
-/** MRJH imageTasks.ts:79 — 默认NovelAI负面提示词 (verbatim) */
+/** Default NovelAI negative prompt (verbatim from original) */
 const DEFAULT_NEGATIVE = 'photorealistic, realistic, 3d, rendering, unreal engine, octane render, real life, photography, bokeh, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, artist name, border, out of frame';
 
 const V4_MODEL_RE = /^nai-diffusion-4(?:-|$)/i;

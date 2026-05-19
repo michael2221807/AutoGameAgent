@@ -1,7 +1,7 @@
 /**
  * World Book entry selector and injection text builder.
  *
- * Ported from MRJH utils/worldbook.ts (选择生效世界书条目 + 构建世界书注入文本),
+ * Ported from original worldbook utils (选择生效世界书条目 + 构建世界书注入文本),
  * adapted to AGA's English naming and EnginePathConfig-based field access.
  *
  * Engine-layer code: no hardcoded Chinese field names.

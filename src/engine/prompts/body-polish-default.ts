@@ -1,6 +1,5 @@
 /**
- * 默认正文优化提示词 — ported from MRJH
- * (h:/MoRanJiangHu/MoRanJiangHu/prompts/runtime/defaults.ts 默认文章优化提示词).
+ * 默认正文优化提示词 — ported from original 默认文章优化提示词.
  *
  * Migration policy (docs/research/mrjh-migration/06-round-divider-plan.md §8.1):
  * - **Delete-or-replace only**. No paraphrasing or rewriting.
@@ -11,14 +10,14 @@
  *   reverse-zone rules preserved where applicable.
  *
  * Fix (2026-04-19, post-Phase-4):
- * AGA does NOT use MRJH's `【旁白】` / `【角色名】` line-prefix convention —
+ * AGA does NOT use the legacy `【旁白】` / `【角色名】` line-prefix convention —
  * those tags render as environment text (italic gray) in AGA's FormattedText.
  * AGA's judgement format is also different: `〖类型:结果,判定值:X,...〗`
- * (lenticular brackets, `key:value,` pairs) NOT MRJH's
+ * (lenticular brackets, `key:value,` pairs) NOT the legacy
  * `【判定】[类型]...｜结果｜...｜X/Y...` (pipe-separated).
  *
  * Accordingly, all rules referencing `【旁白】` / `【角色名】` / `【判定】` line
- * structure are deleted. A short "AGA 正文格式" section replaces MRJH's
+ * structure are deleted. A short "AGA 正文格式" section replaces the legacy
  * 【格式附加】 to tell the model (a) don't add row-type tags, (b) preserve
  * existing `〖...〗` blocks verbatim — byte-identical — so they keep rendering
  * as judgement cards.
@@ -26,7 +25,7 @@
  * Sections removed entirely (too wuxia-specific to preserve without rewrite):
  * - 【参考文脉】 section (cited wuxia novels)
  * - 【扩展示例库】 items #1, #3, #6, #10, #15 (wuxia combat/weapon imagery)
- * - 【扩展示例库】 items #4, #7, #14, #17, #18 (reference MRJH row tags)
+ * - 【扩展示例库】 items #4, #7, #14, #17, #18 (reference legacy row tags)
  */
 export const DEFAULT_BODY_POLISH_PROMPT = `【角色设定】
 你是资深叙事小说主编，负责把“毛坯正文”整理为“可发表正文”。你的工作是稳定保留原文事实，并在同等信息量下提升语言质感。
@@ -67,7 +66,7 @@ export const DEFAULT_BODY_POLISH_PROMPT = `【角色设定】
 - AGA 的环境描写标记用 \`【...】\`（如 \`【夜色深沉，寒风刺骨。】\`）—— 只标环境，不标说话者。若原文已用，就保留；原文没有就不主动添加。
 - AGA 的角色内心独白用反引号包裹（如 \`她心里在盘算\`）。若原文已用，就保留。
 - AGA 的角色台词用中文或英文引号（如 \`"你来了吗？"\` 或 \`"我明白了"\`）。若原文已用，就保留；不要把台词改写成旁白叙述。
-- AGA 的判定块唯一合法格式：\`〖类型:结果,判定值:X,难度:Y,基础:B,幸运:L,环境:E,状态:S〗\`。字段用半角冒号与半角逗号连接，不得换成竖线、中文冒号或其他格式；不得把判定块转写为 \`【判定】[...]｜...｜...\` 等 MRJH 式行格式。
+- AGA 的判定块唯一合法格式：\`〖类型:结果,判定值:X,难度:Y,基础:B,幸运:L,环境:E,状态:S〗\`。字段用半角冒号与半角逗号连接，不得换成竖线、中文冒号或其他格式；不得把判定块转写为 \`【判定】[...]｜...｜...\` 等旧式行格式。
 
 【剔除极端情绪（强制）】
 1) 角色把单次小事承接在既有性格范围内，不直接跳到崩溃、疯癫或人格反转。

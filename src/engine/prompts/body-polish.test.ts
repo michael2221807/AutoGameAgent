@@ -11,8 +11,8 @@ const packPath = fileURLToPath(
 );
 
 /**
- * Phase 4 migration verification (2026-04-19) — proves the MRJH polish prompt
- * port obeys the wuxia-removal policy while preserving the NSFW vocabulary
+ * Phase 4 migration verification (2026-04-19) — proves the ported polish prompt
+ * obeys the wuxia-removal policy while preserving the NSFW vocabulary
  * clause (explicit user directive).
  *
  * Design doc: docs/research/mrjh-migration/06-round-divider-plan.md §8.1.
@@ -39,14 +39,14 @@ describe('DEFAULT_BODY_POLISH_PROMPT — migration constraints', () => {
       expect(DEFAULT_BODY_POLISH_PROMPT).toContain('<正文>...</正文>');
     });
 
-    it('teaches AGA judgement format (〖...〗 with key:value,) and forbids MRJH 【判定】 line format', () => {
+    it('teaches AGA judgement format (〖...〗 with key:value,) and forbids legacy 【判定】 line format', () => {
       // AGA format must be documented.
       expect(DEFAULT_BODY_POLISH_PROMPT).toContain('〖类型:结果,判定值:X,难度:Y,基础:B,幸运:L,环境:E,状态:S〗');
       // Explicit rule: preserve byte-for-byte.
       expect(DEFAULT_BODY_POLISH_PROMPT).toMatch(/byte-identical|字面保留/);
     });
 
-    it('retains <judge> handling rules (MRJH thinking-block, AGA-compatible)', () => {
+    it('retains <judge> handling rules (thinking-block, AGA-compatible)', () => {
       expect(DEFAULT_BODY_POLISH_PROMPT).toContain('<judge>');
     });
 
@@ -97,7 +97,7 @@ describe('DEFAULT_BODY_POLISH_PROMPT — migration constraints', () => {
     });
   });
 
-  describe('AGA format — no MRJH row-type tags', () => {
+  describe('AGA format — no legacy row-type tags', () => {
     /**
      * AGA does not split narrative by 旁白/角色名 line-prefix tags. The prompt
      * must NOT instruct the model to produce those — they'd render as
@@ -130,13 +130,13 @@ describe('DEFAULT_BODY_POLISH_PROMPT — migration constraints', () => {
       expect(DEFAULT_BODY_POLISH_PROMPT).toContain('不改写、不合并');
     });
 
-    it('forbids rewriting judgement blocks into MRJH pipe-separated format', () => {
-      expect(DEFAULT_BODY_POLISH_PROMPT).toMatch(/不得.*MRJH|不得.*【判定】/);
+    it('forbids rewriting judgement blocks into legacy pipe-separated format', () => {
+      expect(DEFAULT_BODY_POLISH_PROMPT).toMatch(/不得.*旧式|不得.*【判定】/);
     });
   });
 
   describe('integrity', () => {
-    it('is a non-trivial prompt (post-MRJH-format-removal ~3.8KB; MRJH ~7KB)', () => {
+    it('is a non-trivial prompt (post-format-cleanup ~3.8KB)', () => {
       expect(DEFAULT_BODY_POLISH_PROMPT.length).toBeGreaterThan(3500);
     });
 

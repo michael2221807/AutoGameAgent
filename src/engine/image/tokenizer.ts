@@ -87,7 +87,7 @@ export class ImageTokenizer {
    *
    * Context includes character data plus rendering parameters (composition,
    * art style, anchor) so the pack prompt template can produce backend-aware,
-   * composition-aware output — matching MRJH's layered prompt pipeline.
+   * composition-aware output — matching the original layered prompt pipeline.
    */
   async tokenizeCharacter(context: {
     characterName: string;
@@ -119,7 +119,7 @@ export class ImageTokenizer {
           ? '构图重点：环境氛围、景深层次、人物与场景的位置关系和光影融合。'
           : '构图重点：头部与领口区域、五官辨识、目光、发丝与衣领细节。';
 
-    // Filter anchor through composition-aware injector (MRJH imageTasks.ts:2161-2239)
+    // Filter anchor through composition-aware injector
     const filteredAnchor = context.anchor?.positive
       ? injectAnchorByComposition(
           { positive: context.anchor.positive, structuredFeatures: context.anchor.structuredFeatures },
@@ -160,7 +160,7 @@ export class ImageTokenizer {
   /**
    * Tokenize a scene into image-gen tags with scene-type classification.
    *
-   * MRJH imageTasks.ts:3182-3371 — full scene generation with:
+   * Full scene generation — ported. Includes:
    * - Hierarchical location (broad/mid/specific from ·-separated paths)
    * - Spatial logic (Background→Midground→Foreground + L/C/R placement)
    * - Two modes: forced composition (pure_landscape/story_snapshot) and auto-judge
@@ -183,7 +183,7 @@ export class ImageTokenizer {
     const hasAnchors = (context.roleAnchors?.length ?? 0) > 0;
     const isNovelAI = context.isNovelAI === true;
 
-    // ── Build scene system prompt (MRJH imageTasks.ts:3222-3278) ──
+    // ── Build scene system prompt ──
     // Wuxia terms generalized: 武侠/仙侠 → generic, 气机 → energy effects
     const systemPrompt = isForcedMode ? [
       '你是场景提示词转换器。',
@@ -246,7 +246,7 @@ export class ImageTokenizer {
       '5) 若为风景场景，将场景 tags 放入 <基础> 和 </基础> 之间；若为场景快照，将场景 tags 放入 <基础> 和 </基础>，角色 tags 放入 <角色> 和 </角色>。示例（场景快照）：<提示词结构><基础>palace night, lanterns</基础><角色>[1]李明阳|handsome man, black robe</角色></提示词结构>',
     ];
 
-    // ── Build task prompt (MRJH imageTasks.ts:3279-3319) ──
+    // ── Build task prompt ──
     const anchorsText = hasAnchors
       ? `角色锚点：\n${context.roleAnchors!
           .map((a, i) => `[${i + 1}]${a.name || `角色${i + 1}`}|${a.positive}`)
@@ -311,7 +311,7 @@ export class ImageTokenizer {
       '要求：词组应以英文 tags 为主，包含具体的光影描述（如 God rays, Twilight glow）和材质细节（如 Weathered moss, Reflected water）。',
     ].filter(Boolean).join('\n');
 
-    // ── Assemble message chain (matching MRJH structure) ──
+    // ── Assemble message chain ──
     // [0] system: AI role (from pack template — generic 分词器大师)
     // [1] system: model bundle prompt (from presetContext.aiRolePrompt)
     // [2] system: scene preset prompt (from presetContext.taskPrompt)
@@ -324,7 +324,7 @@ export class ImageTokenizer {
       : undefined;
 
     const result = await this.callTokenizer(
-      'imageCharacterTokenizer', // AI role: generic 分词器大师 (same as MRJH)
+      'imageCharacterTokenizer', // AI role: generic 分词器大师
       'imageSceneCot',
       'imageSceneTokenizer',
       {}, // No template variables needed — scene content goes via overrides
@@ -336,7 +336,7 @@ export class ImageTokenizer {
       },
     );
 
-    // Parse scene type from AI response (MRJH 解析场景词组响应)
+    // Parse scene type from AI response
     if (isForcedMode) {
       return {
         ...result,
@@ -358,9 +358,9 @@ export class ImageTokenizer {
   /**
    * Tokenize a private/secret body part for NSFW image generation.
    *
-   * MRJH imageTasks.ts:2932-3051 — `generateNpcSecretPartImagePrompt`
+   * Ported from `generateNpcSecretPartImagePrompt`.
    *
-   * Key MRJH behaviors preserved:
+   * Key behaviors preserved:
    * - NovelAI path: macro focus, subsurface scattering, NAI weight syntax
    * - Non-NovelAI path: 90%+ target fill, descriptive phrases
    * - Intentionally SKIPS regular NPC preset (would pull to full body)
@@ -430,7 +430,7 @@ export class ImageTokenizer {
       extraRequirements: context.extraRequirements,
     });
 
-    // Message chain (matching MRJH):
+    // Message chain:
     // [0] system: AI role (分词器大师)
     // [1] system: model bundle prompt ONLY (no regular NPC preset — would pull to full body)
     // [2] system: secret part system prompt (macro focus + anatomy)

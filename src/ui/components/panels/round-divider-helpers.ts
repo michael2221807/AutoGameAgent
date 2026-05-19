@@ -35,7 +35,7 @@ export interface DisplayMetrics {
 
 /**
  * Count CJK (Chinese/Japanese/Korean) characters in a string.
- * Matches MRJH TurnItem.tsx:161 regex — covers CJK Unified Ideographs
+ * Covers CJK Unified Ideographs
  * (U+4E00–U+9FFF), Extension A (U+3400–U+4DBF), and Compatibility
  * Ideographs (U+F900–U+FAFF). Used for the per-turn hover word-count.
  */
@@ -65,7 +65,7 @@ export function formatDuration(ms: number | 'unknown'): string {
 }
 
 /**
- * en-US thousands separator; matches MRJH's `toLocaleString('en-US')`.
+ * en-US thousands separator via `toLocaleString('en-US')`.
  * `'unknown'` → `—` (em-dash).
  */
 export function formatTokens(n: number | 'unknown'): string {
@@ -83,7 +83,7 @@ export function formatTokens(n: number | 'unknown'): string {
  *   - `inputTokens` and `durationMs` flagged `'unknown'` (not recoverable)
  *   - `roundNumber` from the fallback counter
  *
- * This gives old saves parity with MRJH: they still show a pill with the
+ * This gives old saves parity: they still show a pill with the
  * output-tokens stat populated, with em-dash placeholders for the two
  * genuinely-missing fields.
  */
@@ -134,7 +134,7 @@ export function findFirstAssistantIdx(msgs: ReadonlyArray<DividerMsg>): number {
 /**
  * Index of the latest assistant message. Drives the `isCurrent` prop —
  * Phase 3 uses this for current-vs-non-current asymmetry (commands button
- * is current-only per MRJH TurnItem convention).
+ * is current-only per TurnItem convention).
  */
 export function findLatestAssistantIdx(msgs: ReadonlyArray<DividerMsg>): number {
   for (let i = msgs.length - 1; i >= 0; i--) {

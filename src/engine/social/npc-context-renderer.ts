@@ -9,7 +9,7 @@
  * `{{NPC_ABSENT_BLOCK}}` template variables (wired in Social-2; consumed by
  * pack prompts when `presenceEnabled` flag is ON).
  *
- * Design: inspired by MRJH's `构建NPC上下文` (`npcContext.ts:129-668`), but
+ * Design: inspired by the original `构建NPC上下文`, but
  * redesigned as AGA-native — reads all field names via `paths.npcFieldNames`,
  * no hardcoded Chinese field literals (PRINCIPLES §3.3, §3.8).
  */

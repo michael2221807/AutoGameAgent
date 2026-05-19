@@ -3,14 +3,14 @@
  * Environment-tag popover — modal-backed detail view.
  *
  * Binds a list of tags (already sanitized) and renders each with the
- * MRJH-byte-for-byte layout:
+ * Tag card layout:
  *
  *   [border-left gold accent]
  *   **名称** (bold, gold)
  *   描述    (muted, smaller)
  *   效果    (italic, green, smallest)  — only if non-empty
  *
- * When tag list is empty, shows the MRJH empty-state text
+ * When tag list is empty, shows the empty-state text
  * "风平浪静，并无特殊环境。" for consistency with the reference UX.
  *
  * ESC / backdrop click close (inherited from Modal.vue).

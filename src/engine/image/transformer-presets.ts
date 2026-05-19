@@ -1,5 +1,5 @@
 /**
- * Transformer Preset System — MRJH apiConfig.ts:87-419
+ * Transformer Preset System — ported
  *
  * Provides default transformer prompt presets for 3 backends (NAI, Gemini, Grok)
  * × 3 scopes (NPC, Scene, SceneJudge) = 9 presets, plus 3 model bundles
@@ -9,7 +9,7 @@
  * the assembled prompt context (AI role prompt + task-specific prompt +
  * serialization strategy) for the active model bundle.
  *
- * Prompt text is verbatim from MRJH with wuxia-specific terms generalized:
+ * Prompt text is verbatim from the original codebase with wuxia-specific terms generalized:
  *   境界 → 等级, 武侠/仙侠 → 特定风格/奇幻, 气机 → 能量效果
  *
  * ┌─────────────────────────────────────────────────────────────────┐
@@ -19,7 +19,7 @@
  * │ - Settings Tab 4 "转化器": edit/add/delete presets + bundles    │
  * │ - Rules Center: select active model ruleset, edit rule fields   │
  * │ - State persistence: save customized presets to state tree      │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §J-2 + §K Tab 4             │
+ * │ See original design doc §J-2 + §K Tab 4                       │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import type { SerializationStrategy } from './output-processor';
@@ -109,7 +109,7 @@ export interface TransformerPresetContext {
 }
 
 // ═══════════════════════════════════════════════════════════
-// §2 — Structured output format hint builder (MRJH apiConfig.ts:60-85)
+// §2 — Structured output format hint builder
 // ═══════════════════════════════════════════════════════════
 
 function buildStructuredOutputFormatHint(
@@ -121,7 +121,7 @@ function buildStructuredOutputFormatHint(
 
   if (scope === 'npc') {
     const hints = fmt?.npc;
-    // NPC single-character: use <提示词> wrapper, NOT <提示词结构> (MRJH apiConfig.ts:48-62)
+    // NPC single-character: use <提示词> wrapper, NOT <提示词结构>
     const npcHint = strategy === 'nai_character_segments'
       ? (hints?.nai_character_segments ?? 'NovelAI 最终会直接使用这一条单角色 tags；如需要人数标签或权重分组，可直接写在同一个 <提示词> 中。')
       : strategy === 'gemini_structured'
@@ -146,7 +146,7 @@ function buildStructuredOutputFormatHint(
     return parts.filter(Boolean).join('\n');
   }
 
-  // Scene: use <提示词结构><基础><角色> structure (MRJH apiConfig.ts:64-85)
+  // Scene: use <提示词结构><基础><角色> structure
   const hints = fmt?.scene;
   const sceneHint = strategy === 'nai_character_segments'
     ? (hints?.nai_character_segments ?? 'NovelAI 多角色会按基础段 + 角色段序列化，并使用 | 连接。<基础> 负责全局环境、镜头、天气、布局和光影；<角色> 内每条 [序号] 内容负责该角色当前镜头需要的最小必要 tags。')
@@ -180,7 +180,7 @@ function buildStructuredOutputFormatHint(
 }
 
 // ═══════════════════════════════════════════════════════════
-// §3 — Default presets (verbatim from MRJH, wuxia terms generalized)
+// §3 — Default presets (verbatim from original, wuxia terms generalized)
 // ═══════════════════════════════════════════════════════════
 
 /**
@@ -194,7 +194,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     (packData?.presets?.[presetId] as Record<string, string> | undefined)?.[field] ?? fallback;
 
   return [
-  // ── NAI · NPC (MRJH apiConfig.ts:87-126) ──
+  // ── NAI · NPC ──
   {
     id: 'transformer_nai_npc',
     name: p('transformer_nai_npc', 'name', 'NAI · NPC角色生成'),
@@ -235,7 +235,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n'),
   },
 
-  // ── NAI · Scene (MRJH apiConfig.ts:127-161) ──
+  // ── NAI · Scene ──
   {
     id: 'transformer_nai_scene',
     name: p('transformer_nai_scene', 'name', 'NAI · 场景生成'),
@@ -272,7 +272,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n'),
   },
 
-  // ── NAI · Scene Judge (MRJH apiConfig.ts:162-179) ──
+  // ── NAI · Scene Judge ──
   {
     id: 'transformer_nai_scene_judge',
     name: p('transformer_nai_scene_judge', 'name', 'NAI · 场景判定'),
@@ -290,7 +290,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n')),
   },
 
-  // ── Gemini · NPC (MRJH apiConfig.ts:180-212) ──
+  // ── Gemini · NPC ──
   {
     id: 'transformer_gemini_npc',
     name: p('transformer_gemini_npc', 'name', 'Gemini · NPC角色生成'),
@@ -325,7 +325,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n'),
   },
 
-  // ── Gemini · Scene (MRJH apiConfig.ts:213-242) ──
+  // ── Gemini · Scene ──
   {
     id: 'transformer_gemini_scene',
     name: p('transformer_gemini_scene', 'name', 'Gemini · 场景生成'),
@@ -357,7 +357,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n'),
   },
 
-  // ── Gemini · Scene Judge (MRJH apiConfig.ts:243-257) ──
+  // ── Gemini · Scene Judge ──
   {
     id: 'transformer_gemini_scene_judge',
     name: p('transformer_gemini_scene_judge', 'name', 'Gemini · 场景判定'),
@@ -372,7 +372,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n')),
   },
 
-  // ── Grok · NPC (MRJH apiConfig.ts:258-291) ──
+  // ── Grok · NPC ──
   {
     id: 'transformer_grok_npc',
     name: p('transformer_grok_npc', 'name', 'Grok · NPC角色生成'),
@@ -408,7 +408,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n'),
   },
 
-  // ── Grok · Scene (MRJH apiConfig.ts:292-323) ──
+  // ── Grok · Scene ──
   {
     id: 'transformer_grok_scene',
     name: p('transformer_grok_scene', 'name', 'Grok · 场景生成'),
@@ -442,7 +442,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
     ].join('\n'),
   },
 
-  // ── Grok · Scene Judge (MRJH apiConfig.ts:324-338) ──
+  // ── Grok · Scene Judge ──
   {
     id: 'transformer_grok_scene_judge',
     name: p('transformer_grok_scene_judge', 'name', 'Grok · 场景判定'),
@@ -463,7 +463,7 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
 const DEFAULT_PRESETS: TransformerPromptPreset[] = buildDefaultPresets();
 
 // ═══════════════════════════════════════════════════════════
-// §4 — Default model bundles (MRJH apiConfig.ts:341-418)
+// §4 — Default model bundles
 // ═══════════════════════════════════════════════════════════
 
 /**
@@ -552,13 +552,13 @@ function buildDefaultModelBundles(packData?: TransformerDefaultsData): ModelTran
 const DEFAULT_MODEL_BUNDLES: ModelTransformerBundle[] = buildDefaultModelBundles();
 
 // ═══════════════════════════════════════════════════════════
-// §5 — Preset resolution (MRJH apiConfig.ts:1289-1339)
+// §5 — Preset resolution
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Resolve the transformer preset context for a given scope and mode.
  *
- * MRJH 获取词组转化器预设上下文 (apiConfig.ts:1289-1339)
+ * Resolve transformer preset context — ported
  *
  * @param scope - 'npc' | 'scene' | 'scene_judge'
  * @param mode - 'default' (no anchor) or 'anchor' (anchor active)

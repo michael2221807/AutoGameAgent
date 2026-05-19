@@ -1,5 +1,5 @@
 /**
- * Heroine Plan system — ported from MRJH models/heroinePlan.ts
+ * Heroine Plan system — ported from original heroinePlan model
  *
  * Provides structured data models for managing heroine-related storylines,
  * including stage progression, individual heroine entries, interaction events,
@@ -125,7 +125,7 @@ export interface HeroinePlan {
 
 /**
  * Format a HeroinePlan into a text block for AI context injection.
- * Matches MRJH's format for the 女主剧情规划 context piece.
+ * Formats the 女主剧情规划 context piece for AI injection.
  */
 export function formatHeroinePlanForContext(plan: HeroinePlan): string {
   const sections: string[] = [];

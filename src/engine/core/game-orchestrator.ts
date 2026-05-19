@@ -195,7 +195,7 @@ export class GameOrchestrator {
         unifiedRetriever, // E.2: hybrid 路径使用
         () => subPipelines.worldBooks ?? [],    // World book getter (supports live updates)
         () => subPipelines.builtinOverrides ?? [], // Built-in overrides getter
-        true, // useNewBuilder — enable MRJH-style prompt assembly
+        true, // useNewBuilder — enable context-piece prompt assembly
       ),
     );
     this.runner.addStage(new AICallStage(aiService, responseParser));

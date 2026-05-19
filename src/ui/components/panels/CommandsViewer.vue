@@ -5,7 +5,7 @@
  *   - "生效变更"    : the changes actually applied (narrativeHistory[i]._delta)
  *
  * Phase 3 (2026-04-19): unified entry point for both the ☰ button on the
- * RoundDivider (new, current-round only per MRJH convention) and the existing
+ * RoundDivider (new, current-round only) and the existing
  * Δ badge on assistant bubbles (all rounds). Both triggers open this modal —
  * see MainGamePanel.vue handlers.
  *

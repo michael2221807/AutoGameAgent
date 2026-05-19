@@ -1,6 +1,6 @@
 // App doc: docs/user-guide/pages/game-image.md §后台生成保护机制
 /**
- * Image State Manager — MRJH npcImageStateWorkflow.ts + sceneImageArchiveWorkflow.ts
+ * Image State Manager — ported from npcImageStateWorkflow + sceneImageArchiveWorkflow
  *
  * Centralized state mutations for the image subsystem:
  * - NPC archive: history CRUD, avatar/portrait/background selection, auto-fallback
@@ -18,7 +18,7 @@
  * │ - Scene: set/clear wallpaper, persistent wallpaper              │
  * │ - Manual: concurrent lock, task management                      │
  * │ - Presets: anchor save, preset CRUD                             │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §B §E §F §G                 │
+ * │ See original design doc §B §E §F §G                           │
  * └─────────────────────────────────────────────────────────────────┘
  */
 import type { StateManager } from '../core/state-manager';
@@ -26,7 +26,7 @@ import type { EnginePathConfig } from '../pipeline/types';
 import type { SecretPartType, ReferenceLibraryEntry } from './types';
 import { eventBus } from '../core/event-bus';
 
-/** Player pseudo-NPC identifier (MRJH: 主角角色锚点标识) */
+/** Player pseudo-NPC identifier (主角角色锚点标识) */
 export const PLAYER_PSEUDO_NPC_ID = '__player__';
 
 /** State path for the player character's image archive */
@@ -45,7 +45,7 @@ export class ImageStateManager {
   ) {}
 
   // ═══════════════════════════════════════════════════════════
-  // §1 — Concurrent generation lock (MRJH NPC生图进行中集合)
+  // §1 — Concurrent generation lock (NPC生图进行中集合)
   // ═══════════════════════════════════════════════════════════
 
   isGenerating(key: string): boolean {
@@ -83,12 +83,12 @@ export class ImageStateManager {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // §3 — NPC archive writes (MRJH npcImageStateWorkflow.ts)
+  // §3 — NPC archive writes
   // ═══════════════════════════════════════════════════════════
 
   /**
    * Write an image record to NPC history with dedup + auto-selection.
-   * MRJH 写入NPC图片历史记录 (npcImageStateWorkflow.ts:198-253)
+   * Write NPC image history record — ported
    */
   writeNpcImageRecord(npcName: string, record: Record<string, unknown>): string[] {
     const trimmedIds: string[] = [];
@@ -114,7 +114,7 @@ export class ImageStateManager {
           ?? '')
         : currentAvatar;
 
-      // Enforce per-NPC history limit (MRJH: 按NPC上限裁剪档案)
+      // Enforce per-NPC history limit (按NPC上限裁剪档案)
       const limit = this.stateManager.get<number>('系统.扩展.image.config.auto.historyLimit') ?? 100;
       if (nextHistory.length > limit) {
         for (let i = limit; i < nextHistory.length; i++) {
@@ -198,7 +198,7 @@ export class ImageStateManager {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // §4 — Secret part results (MRJH npcImageStateWorkflow.ts:255+)
+  // §4 — Secret part results
   // ═══════════════════════════════════════════════════════════
 
   setSecretPartResult(npcName: string, part: SecretPartType, result: Record<string, unknown>): void {
@@ -223,7 +223,7 @@ export class ImageStateManager {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // §5 — Scene wallpaper (MRJH sceneImageArchiveWorkflow.ts)
+  // §5 — Scene wallpaper
   // ═══════════════════════════════════════════════════════════
 
   setSceneWallpaper(imageId: string): void {

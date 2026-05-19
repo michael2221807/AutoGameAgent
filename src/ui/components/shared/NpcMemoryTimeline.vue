@@ -7,7 +7,7 @@
  * `parseMemoryEntry` from the shared helper.
  *
  * Design: vertical timeline with connector line + dots (layout concept from
- * MRJH SocialModal — but rendered in AGA tokens, no wuxia borders).
+ * rendered in AGA tokens, no wuxia borders).
  */
 import { computed } from 'vue';
 import { parseMemoryEntry } from '@/engine/social/npc-memory-format';

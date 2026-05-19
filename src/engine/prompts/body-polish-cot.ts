@@ -1,15 +1,14 @@
 /**
- * 正文优化思维链 — ported from MRJH
- * (h:/MoRanJiangHu/MoRanJiangHu/prompts/core/cotPolish.ts 核心_文章优化思维链.内容).
+ * 正文优化思维链 — ported from original 核心_文章优化思维链.
  *
  * Migration policy (docs/research/mrjh-migration/06-round-divider-plan.md §8.1):
  * - Delete-or-replace only; no paraphrasing.
  * - Step 7 NSFW anatomical vocabulary line KEPT VERBATIM per explicit user directive.
  *
  * Fix (2026-04-19, post-Phase-4):
- * AGA does not use MRJH's `【旁白】` / `【角色名】` / `【判定】` line-prefix
+ * AGA does not use the legacy `【旁白】` / `【角色名】` / `【判定】` line-prefix
  * convention. AGA's judgement format is `〖类型:结果,判定值:X,...〗`
- * (lenticular brackets, `key:value,` pairs). All Steps that assumed MRJH's
+ * (lenticular brackets, `key:value,` pairs). All Steps that assumed the legacy
  * row-type convention (Step 1 人名保真、Step 2 结构与格式、Step 6 括号清洗、
  * Step 11 标签与版式复核) are rewritten to instead enforce:
  *   - Never emit row-prefix tags (`【旁白】` / `【角色名】`).

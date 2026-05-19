@@ -1,5 +1,5 @@
 /**
- * ComfyUI Workflow Template System — MRJH imageTasks.ts:1488-1571
+ * ComfyUI Workflow Template System — ported
  *
  * Parses a user-provided ComfyUI workflow JSON and injects generation
  * parameters via placeholder replacement. Supports two placeholder formats:
@@ -14,7 +14,7 @@
  * │                                                                 │
  * │ ComfyUI settings need a workflow JSON textarea where the user  │
  * │ pastes their workflow with placeholder variables.               │
- * │ MRJH ref: MRJH-USER-EXPERIENCE.md §K "Tab 3: Backend Settings"│
+ * │ See original design doc §K "Tab 3: Backend Settings"           │
  * └─────────────────────────────────────────────────────────────────┘
  */
 
@@ -35,7 +35,7 @@ export interface ComfyUIWorkflowParams {
 
 /**
  * Parse a ComfyUI workflow JSON string.
- * MRJH 解析ComfyUI工作流 (imageTasks.ts:1488-1503)
+ * Parse ComfyUI workflow JSON — ported
  */
 function parseWorkflowJSON(workflowText: string): Record<string, unknown> {
   const trimmed = (workflowText || '').trim();
@@ -51,7 +51,7 @@ function parseWorkflowJSON(workflowText: string): Record<string, unknown> {
 
 /**
  * Recursively replace placeholders in a JSON value tree.
- * MRJH 注入ComfyUI工作流占位符 (imageTasks.ts:1505-1527)
+ * Inject placeholders into ComfyUI workflow — ported
  */
 function injectPlaceholders(value: unknown, replacements: Record<string, string | number>): unknown {
   if (typeof value === 'string') {
@@ -82,7 +82,7 @@ function appendInlineNegative(prompt: string, negative: string): string {
 /**
  * Build a ComfyUI workflow from a template + generation parameters.
  *
- * MRJH 构建ComfyUI工作流 (imageTasks.ts:1529-1571)
+ * Build ComfyUI workflow from template — ported
  *
  * Replaces all supported placeholders in the workflow JSON:
  * - `__PROMPT__` / `{{prompt}}` — positive prompt

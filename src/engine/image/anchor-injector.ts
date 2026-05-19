@@ -1,5 +1,5 @@
 /**
- * Composition-aware anchor injection — MRJH imageTasks.ts:2161-2239
+ * Composition-aware anchor injection — ported
  *
  * Filters a character anchor's positive prompt based on composition type.
  * Portrait crops to face/hair tags; secret parts allow only body-relevant
@@ -9,7 +9,7 @@
  * 1. Structured features — pick from categorized tag arrays
  * 2. Raw prompt parsing — regex allow/deny on comma-split tokens
  *
- * All regex patterns are verbatim from MRJH.
+ * All regex patterns are verbatim from the original codebase.
  */
 import type { AnchorStructuredFeatures, SecretPartType } from './types';
 
@@ -25,12 +25,12 @@ export interface AnchorInjectionOptions {
   secretPartType?: SecretPartType;
 }
 
-// ── MRJH imageTasks.ts:2169-2172 — camera/composition words to always strip ──
+// ── Camera/composition words to always strip ──
 const CAMERA_WORDS_RE = /(headshot|portrait|upper body|waist-?up|full body|cowboy shot|close-?up|extreme close-?up|wide shot|mid shot|low angle|high angle|standing|sitting|kneeling|running|framing|character sheet|composition|depth of field|rule of thirds|feet included|floor contact|avatar)/i;
 
-// ── Helpers matching MRJH utility functions ──
+// ── Helper utility functions ──
 
-/** MRJH 按逗号拆分提示词 (imageTasks.ts:2061-2067) */
+/** Split prompt by commas */
 function splitByComma(text: string): string[] {
   return (text || '')
     .replace(/\r?\n+/g, ', ')
@@ -39,7 +39,7 @@ function splitByComma(text: string): string[] {
     .filter(Boolean);
 }
 
-/** MRJH 去重提示词片段 (imageTasks.ts:2120-2132) */
+/** Deduplicate prompt fragments */
 function dedupTokens(tokens: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -54,14 +54,13 @@ function dedupTokens(tokens: string[]): string[] {
   return result;
 }
 
-/** MRJH 去除镜头构图词 (imageTasks.ts:2169-2172) */
+/** Remove camera/composition words */
 function removeCameraWords(tokens: string[]): string[] {
   return tokens.filter((token) => !CAMERA_WORDS_RE.test(token));
 }
 
 /**
- * Pick tags from structured feature arrays by key.
- * MRJH 从结构化特征挑选 (imageTasks.ts:2174-2184)
+ * Pick tags from structured feature arrays by key — ported
  */
 function pickFromFeatures(
   features: AnchorStructuredFeatures | undefined,
@@ -77,8 +76,7 @@ function pickFromFeatures(
 }
 
 /**
- * Pick tags from raw positive prompt via allow/deny regex.
- * MRJH 从原始提示词挑选 (imageTasks.ts:2186-2193)
+ * Pick tags from raw positive prompt via allow/deny regex — ported
  */
 function pickFromRawPrompt(
   positive: string,
@@ -99,7 +97,7 @@ function pickFromRawPrompt(
  * or the full anchor positive prompt for compositions that need
  * the complete visual DNA (half-body, full-length, scene, custom).
  *
- * MRJH 构建角色锚点注入提示词 (imageTasks.ts:2161-2239)
+ * Build composition-aware anchor injection prompt — ported
  */
 export function injectAnchorByComposition(
   anchor: AnchorInput | null | undefined,
@@ -110,7 +108,6 @@ export function injectAnchorByComposition(
   const composition = options.composition;
 
   // ── Portrait (头像): face/hair/eye/skin/age only ──
-  // MRJH imageTasks.ts:2195-2209
   if (composition === 'portrait') {
     const tokensFromFeatures = pickFromFeatures(
       features,
@@ -119,20 +116,18 @@ export function injectAnchorByComposition(
     );
     if (tokensFromFeatures.length > 0) return tokensFromFeatures.join(', ');
 
-    // MRJH imageTasks.ts:2207 — allow regex (verbatim)
+    // Allow regex (verbatim from original)
     const allow = /(1girl|1boy|girl|boy|woman|man|female|male|young|adult|teen|hair|eyes?|iris|pupil|eyebrow|eyelash|face|lips?|mouth|nose|skin|complexion|freckle|mole|beauty mark|scar|tattoo|makeup|ear|neck)/i;
-    // MRJH imageTasks.ts:2208 — deny regex (verbatim)
+    // Deny regex (verbatim from original)
     const deny = /(breast|bust|cleavage|waist|hip|thigh|leg|feet|nude|dress|robe|hanfu|armor|outfit|clothing|sleeve|glove|stocking|boots|pants|skirt|kimono|cape|cloak|weapon|sword|background|scenery|environment|landscape)/i;
     return pickFromRawPrompt(positive, { allow, deny, limit: 16 }).join(', ');
   }
 
   // ── Secret part (部位特写) ──
-  // MRJH imageTasks.ts:2212-2234
   if (composition === 'secret_part') {
     const part = options.secretPartType;
 
     // Breast close-up: allow breast/skin/age tags
-    // MRJH imageTasks.ts:2214-2223
     if (part === 'breast') {
       const allow = /(breast|breasts|bust|cup|cleavage|nipple|nipples|areola|chest|skin|complexion|pale|fair|tan|young|adult|teen)/i;
       const deny = /(face|eyes?|hair|lips?|mouth|nose|dress|robe|hanfu|armor|outfit|clothing|upper body|waist|portrait|full body)/i;
@@ -145,7 +140,6 @@ export function injectAnchorByComposition(
     }
 
     // Other secret parts (vagina/anus): only safe skin/age tags
-    // MRJH imageTasks.ts:2226-2234
     const allow = /(skin|complexion|pale|fair|tan|young|adult|teen)/i;
     const deny = /(face|eyes?|hair|dress|robe|hanfu|armor|outfit|clothing|upper body|waist|portrait|full body|standing|sitting|kneeling|feet)/i;
 
@@ -157,6 +151,5 @@ export function injectAnchorByComposition(
   }
 
   // ── Half-body / Full-length / Scene / Custom: full anchor unchanged ──
-  // MRJH imageTasks.ts:2237-2238
   return positive;
 }

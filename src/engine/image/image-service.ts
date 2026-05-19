@@ -399,7 +399,7 @@ export class ImageService {
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
 
-    // Concurrent generation lock (MRJH: NPC生图进行中集合)
+    // Concurrent generation lock (NPC生图进行中集合)
     const lockKey = params.characterName;
     if (this.state.isGenerating(lockKey)) {
       throw new Error(`[ImageService] Already generating for "${params.characterName}"`);
@@ -421,7 +421,7 @@ export class ImageService {
       eventBus.emit('image:task-update', { taskId: task.id, status: 'tokenizing' });
 
       const isNovelAI = params.backend === 'novelai';
-      // NovelAI always uses transformer (MRJH: forced ON)
+      // NovelAI always uses transformer (forced ON)
       const shouldUseTransformer = isNovelAI || params.useTransformer !== false;
       const npcDataJson = params.npcDataJson ?? JSON.stringify({
         姓名: params.characterName,
@@ -429,7 +429,7 @@ export class ImageService {
         外貌描述: params.appearance,
         身材描写: params.bodyDescription,
         衣着风格: params.outfitStyle ?? params.outfit,
-        // MRJH 字段别名 —— direct-prompt-builder 读 '外貌' / '身材' / '衣着'，这里重复键名保证 direct mode 和 transformer mode 都看到完整数据。
+        // Field aliases — direct-prompt-builder reads '外貌' / '身材' / '衣着'; duplicate keys ensure both direct and transformer mode see full data.
         外貌: params.appearance,
         身材: params.bodyDescription,
         衣着: params.outfitStyle ?? params.outfit,
@@ -547,7 +547,7 @@ export class ImageService {
 
   /**
    * Generate a secret part close-up image (NSFW).
-   * MRJH: npcSecretImageWorkflow.ts:83-461
+   * Secret part image generation — ported
    */
   async generateSecretPartImage(params: {
     characterName: string;
@@ -572,7 +572,7 @@ export class ImageService {
   }): Promise<ImageTask> {
     if (!this.enabled) throw new Error('[ImageService] Image generation is disabled');
 
-    // Composite lock key: NPC::part (MRJH: npcKey::part)
+    // Composite lock key: NPC::part
     const lockKey = `${params.characterName}::${params.part}`;
     if (this.state.isGenerating(lockKey)) {
       throw new Error(`[ImageService] Already generating "${params.part}" for "${params.characterName}"`);
@@ -1346,7 +1346,7 @@ export class ImageService {
 
   /**
    * Write a completed scene image to the scene archive in the state tree.
-   * Enforces history limit and auto-saves. (MRJH: sceneImageArchiveWorkflow.ts:91-103)
+   * Enforces history limit and auto-saves.
    */
   writeToSceneArchive(assetId: string, task: ImageTask): void {
     const archivePath = ImageService.SCENE_ARCHIVE_PATH;
@@ -1370,7 +1370,7 @@ export class ImageService {
 
     history.unshift(record);
 
-    // Enforce history limit (MRJH: 按场景图上限裁剪档案)
+    // Enforce history limit (按场景图上限裁剪档案)
     const limit = this.stateManager.get<number>('系统.扩展.image.config.sceneHistoryLimit') ?? 10;
     if (history.length > limit) history.length = limit;
 
