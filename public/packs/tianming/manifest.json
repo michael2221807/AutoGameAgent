@@ -21,7 +21,13 @@
     "openingSceneStep2": "prompt-flows/opening-scene-step2.json",
     "privacyProfileRepair": "prompt-flows/privacy-profile-repair.json",
     "npcChat": "prompt-flows/npc-chat.json",
-    "fieldRepair": "prompt-flows/field-repair.json"
+    "fieldRepair": "prompt-flows/field-repair.json",
+    "openingEnhancedA": "prompt-flows/opening-enhanced-A.json",
+    "openingEnhancedB": "prompt-flows/opening-enhanced-B.json",
+    "openingEnhancedC": "prompt-flows/opening-enhanced-C.json",
+    "openingEnhancedD": "prompt-flows/opening-enhanced-D.json",
+    "openingEnhancedStep1": "prompt-flows/opening-enhanced-step1.json",
+    "openingEnhancedStep2": "prompt-flows/opening-enhanced-step2.json"
   },
   "prompts": [
     "narratorFrame", "narratorEnforcement", "creationGenJailbreak", "assistantJailbreak",
@@ -42,6 +48,8 @@
     "imageCharacterCot", "imageSceneCot", "imageSecretPartCot", "imageAnchorCot",
     "imageNaiTransformerPreset",
     "fieldRepair",
+    "openingEnhancedA", "openingEnhancedB", "openingEnhancedC", "openingEnhancedD",
+    "openingEnhancedStep1", "openingEnhancedStep2",
     "plotDirective", "plotEvaluationStep2", "plotDecompose",
     "edgeReview", "entityEnrich"
   ],

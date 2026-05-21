@@ -6,12 +6,31 @@
  * 以摘要卡片形式展示角色预览信息（名称、特征、属性等），
  * 并提供 "开始游戏" 按钮。
  */
-import { computed, ref } from 'vue';
+import { computed, ref, inject, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { CreationStep } from '@/engine/types';
+import type { ConfigResolver } from '@/engine/core/config-system';
+import type { GamePack } from '@/engine/types/game-pack';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 
 const { t } = useI18n();
+
+const configResolver = inject<ConfigResolver>('configResolver')!;
+const gamePack = inject<GamePack>('gamePack')!;
+
+const ENHANCED_OPENING_DOMAIN = 'enhancedOpening';
+
+const ENHANCED_OPENING_DEFAULTS: Record<string, unknown> = {
+  enabled: true,
+  npcRange: [5, 15],
+  locationRange: [10, 20],
+  edgeRange: [5, 15],
+  inventoryRange: [3, 8],
+  relationDensity: 'medium',
+  bypassRateLimitDuringOpening: false,
+};
 
 /** 单条摘要 — 步骤 ID + 显示标签 + 选择内容 */
 interface SummaryItem {
@@ -121,6 +140,20 @@ const streamingEnabled = ref(true);
 /** 生成模式：分步（step）或一次性（single） */
 const generationMode = ref<'step' | 'single'>('single');
 
+/** 增强开局（Story 0）：默认开启 */
+const enhancedOpening = ref(true);
+
+/** 高级设置展开状态 */
+const advancedExpanded = ref(false);
+
+/** 高级设置值 */
+const npcRange = ref<[number, number]>([5, 15]);
+const locationRange = ref<[number, number]>([10, 20]);
+const edgeRange = ref<[number, number]>([5, 15]);
+const inventoryRange = ref<[number, number]>([3, 8]);
+const relationDensity = ref<'sparse' | 'medium' | 'dense'>('medium');
+const bypassRateLimit = ref(false);
+
 /**
  * §4.1c: toggle 改变时立即 emit，让 CreationView 持续同步 generationMode
  *
@@ -131,14 +164,60 @@ const generationMode = ref<'step' | 'single'>('single');
  * 解决方案：每次 toggle 变化都主动 emit，CreationView 的 onStepSelect
  * confirmation 分支会持续捕获最新值到 `splitGenOpening` ref。
  */
+function clampRange(range: [number, number], min: number, max: number): [number, number] {
+  let [lo, hi] = range;
+  lo = Math.max(min, Math.min(max, Math.round(lo) || min));
+  hi = Math.max(min, Math.min(max, Math.round(hi) || min));
+  if (lo > hi) [lo, hi] = [hi, lo];
+  return [lo, hi];
+}
+
 function emitCurrentOptions(): void {
+  const clampedNpc = clampRange(npcRange.value, 3, 30);
+  const clampedLoc = clampRange(locationRange.value, 5, 40);
+  const clampedEdge = clampRange(edgeRange.value, 3, 30);
+  const clampedInv = clampRange(inventoryRange.value, 1, 15);
+
+  npcRange.value = clampedNpc;
+  locationRange.value = clampedLoc;
+  edgeRange.value = clampedEdge;
+  inventoryRange.value = clampedInv;
+
+  saveSettings();
+
   emit('select', {
-    __confirm: false, // 非最终确认，仅同步当前 toggle
+    __confirm: false,
     options: {
       streaming: streamingEnabled.value,
       generationMode: generationMode.value,
+      enhancedOpening: enhancedOpening.value,
+      enhancedOpeningSettings: {
+        enabled: enhancedOpening.value,
+        npcRange: clampedNpc,
+        locationRange: clampedLoc,
+        edgeRange: clampedEdge,
+        inventoryRange: clampedInv,
+        relationDensity: relationDensity.value,
+        bypassRateLimitDuringOpening: bypassRateLimit.value,
+      },
     },
   });
+}
+
+const densityOptions = computed<SelectOption[]>(() => [
+  { label: t('creation.confirm.options.densitySparse'), value: 'sparse' },
+  { label: t('creation.confirm.options.densityMedium'), value: 'medium' },
+  { label: t('creation.confirm.options.densityDense'), value: 'dense' },
+]);
+
+function onDensityChange(val: string): void {
+  relationDensity.value = val as 'sparse' | 'medium' | 'dense';
+  emitCurrentOptions();
+}
+
+function toggleEnhancedOpening(): void {
+  enhancedOpening.value = !enhancedOpening.value;
+  emitCurrentOptions();
 }
 
 function toggleStreaming(): void {
@@ -150,6 +229,45 @@ function toggleGenerationMode(): void {
   generationMode.value = generationMode.value === 'step' ? 'single' : 'step';
   emitCurrentOptions();
 }
+
+function saveSettings(): void {
+  const packId = gamePack.manifest.id;
+  const patches: Record<string, unknown> = {
+    enabled: enhancedOpening.value,
+    npcRange: npcRange.value,
+    locationRange: locationRange.value,
+    edgeRange: edgeRange.value,
+    inventoryRange: inventoryRange.value,
+    relationDensity: relationDensity.value,
+    bypassRateLimitDuringOpening: bypassRateLimit.value,
+  };
+  configResolver.saveUserPatch(packId, ENHANCED_OPENING_DOMAIN, patches).catch(() => {});
+}
+
+async function loadSettings(): Promise<void> {
+  try {
+    const packId = gamePack.manifest.id;
+    const resolved = await configResolver.resolve(packId, ENHANCED_OPENING_DOMAIN, ENHANCED_OPENING_DEFAULTS);
+    if (!resolved.isModified) return;
+    const saved = resolved.data;
+    const isNumPair = (v: unknown): v is [number, number] =>
+      Array.isArray(v) && v.length === 2 && typeof v[0] === 'number' && typeof v[1] === 'number';
+    if (typeof saved.enabled === 'boolean') enhancedOpening.value = saved.enabled;
+    if (isNumPair(saved.npcRange)) npcRange.value = saved.npcRange;
+    if (isNumPair(saved.locationRange)) locationRange.value = saved.locationRange;
+    if (isNumPair(saved.edgeRange)) edgeRange.value = saved.edgeRange;
+    if (isNumPair(saved.inventoryRange)) inventoryRange.value = saved.inventoryRange;
+    if (saved.relationDensity === 'sparse' || saved.relationDensity === 'medium' || saved.relationDensity === 'dense') {
+      relationDensity.value = saved.relationDensity as 'sparse' | 'medium' | 'dense';
+    }
+    if (typeof saved.bypassRateLimitDuringOpening === 'boolean') bypassRateLimit.value = saved.bypassRateLimitDuringOpening;
+    emitCurrentOptions();
+  } catch { /* IndexedDB unavailable — start with defaults */ }
+}
+
+onMounted(() => {
+  loadSettings();
+});
 
 // 2026-04-11：移除了内部 "开始游戏" 按钮 —— 原本这里有一个冗余的 `startGame()`
 // 触发 `__confirm: true` emit，但 CreationView 底栏已经有唯一的 "开始游戏" 按钮
@@ -202,7 +320,7 @@ function toggleGenerationMode(): void {
         </button>
       </div>
 
-      <div class="toggle-row">
+      <div v-if="!enhancedOpening" class="toggle-row">
         <div class="toggle-info">
           <span class="toggle-label">{{ $t('creation.confirm.options.stepGen') }}</span>
           <span class="toggle-desc">{{ $t('creation.confirm.options.stepGenDesc') }}</span>
@@ -217,6 +335,84 @@ function toggleGenerationMode(): void {
         >
           <span class="toggle-thumb" />
         </button>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-label">{{ $t('creation.confirm.options.enhancedOpening') }}</span>
+          <span class="toggle-desc">{{ $t('creation.confirm.options.enhancedOpeningDesc') }}</span>
+        </div>
+        <button
+          class="toggle-switch"
+          :class="{ active: enhancedOpening }"
+          role="switch"
+          :aria-checked="enhancedOpening"
+          :aria-label="$t('creation.confirm.options.enhancedOpeningToggle')"
+          @click="toggleEnhancedOpening"
+        >
+          <span class="toggle-thumb" />
+        </button>
+      </div>
+
+      <!-- Advanced settings (collapsible, only when enhanced opening is on) -->
+      <div v-if="enhancedOpening" class="advanced-section">
+        <button class="advanced-toggle" @click="advancedExpanded = !advancedExpanded">
+          {{ $t('creation.confirm.options.advancedSettings') }}
+          <span class="advanced-chevron" :class="{ expanded: advancedExpanded }">&#9662;</span>
+        </button>
+
+        <div v-if="advancedExpanded" class="advanced-fields">
+          <div class="range-row">
+            <span class="range-label">{{ $t('creation.confirm.options.npcRange') }}</span>
+            <input v-model.number="npcRange[0]" type="number" min="3" max="20" class="range-input" @change="emitCurrentOptions">
+            <span class="range-sep">-</span>
+            <input v-model.number="npcRange[1]" type="number" min="5" max="30" class="range-input" @change="emitCurrentOptions">
+          </div>
+          <div class="range-row">
+            <span class="range-label">{{ $t('creation.confirm.options.locationRange') }}</span>
+            <input v-model.number="locationRange[0]" type="number" min="5" max="30" class="range-input" @change="emitCurrentOptions">
+            <span class="range-sep">-</span>
+            <input v-model.number="locationRange[1]" type="number" min="8" max="40" class="range-input" @change="emitCurrentOptions">
+          </div>
+          <div class="range-row">
+            <span class="range-label">{{ $t('creation.confirm.options.edgeRange') }}</span>
+            <input v-model.number="edgeRange[0]" type="number" min="3" max="20" class="range-input" @change="emitCurrentOptions">
+            <span class="range-sep">-</span>
+            <input v-model.number="edgeRange[1]" type="number" min="5" max="30" class="range-input" @change="emitCurrentOptions">
+          </div>
+          <div class="range-row">
+            <span class="range-label">{{ $t('creation.confirm.options.inventoryRange') }}</span>
+            <input v-model.number="inventoryRange[0]" type="number" min="1" max="10" class="range-input" @change="emitCurrentOptions">
+            <span class="range-sep">-</span>
+            <input v-model.number="inventoryRange[1]" type="number" min="3" max="15" class="range-input" @change="emitCurrentOptions">
+          </div>
+
+          <div class="range-row density-row">
+            <span class="range-label">{{ $t('creation.confirm.options.relationDensity') }}</span>
+            <AgaSelect
+              :model-value="relationDensity"
+              :options="densityOptions"
+              @update:model-value="onDensityChange"
+            />
+          </div>
+
+          <div class="toggle-row compact">
+            <div class="toggle-info">
+              <span class="toggle-label small">{{ $t('creation.confirm.options.bypassRateLimit') }}</span>
+              <span class="toggle-desc">{{ $t('creation.confirm.options.bypassRateLimitWarning') }}</span>
+            </div>
+            <button
+              class="toggle-switch"
+              :class="{ active: bypassRateLimit }"
+              role="switch"
+              :aria-checked="bypassRateLimit"
+              :aria-label="$t('creation.confirm.options.bypassRateLimit')"
+              @click="bypassRateLimit = !bypassRateLimit; emitCurrentOptions()"
+            >
+              <span class="toggle-thumb" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -433,5 +629,100 @@ function toggleGenerationMode(): void {
 
 .toggle-switch.active .toggle-thumb {
   transform: translateX(18px);
+}
+
+/* ── Advanced settings ── */
+.advanced-section {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.advanced-toggle {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-serif-cjk);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.advanced-toggle:hover {
+  color: var(--color-text);
+}
+
+.advanced-chevron {
+  font-size: 0.65rem;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.advanced-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.advanced-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.range-label {
+  flex: 1;
+  font-family: var(--font-serif-cjk);
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+}
+
+.range-input {
+  width: 52px;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  text-align: center;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.range-input:focus {
+  outline: none;
+  border-color: var(--color-sage-400);
+}
+
+.range-sep {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.density-row :deep(.aga-select) {
+  min-width: 100px;
+}
+
+.toggle-row.compact {
+  padding: 0.5rem 0.875rem;
+}
+
+.toggle-label.small {
+  font-size: 0.8rem;
 }
 </style>

@@ -134,6 +134,10 @@ export class AIService {
     this.rateLimiter.configure(opts);
   }
 
+  get rateLimiterEnabled(): boolean {
+    return this.rateLimiter.enabled;
+  }
+
   /** 取消当前请求（包括重试中的） */
   cancel(): void {
     this.isAborted = true;

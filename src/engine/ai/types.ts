@@ -231,5 +231,5 @@ export interface AIResponse {
 
 // ─── API 请求超时 ───
 
-/** API 请求超时时间（5 分钟），与 demo 一致 */
-export const API_TIMEOUT_MS = 300_000;
+/** API 请求超时时间（10 分钟） */
+export const API_TIMEOUT_MS = 600_000;

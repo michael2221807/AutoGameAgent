@@ -66,6 +66,9 @@
   "creation.confirm.options.stepGen": "分步生成开局",
   "creation.confirm.options.stepGenDesc": "分两次 API 调用：先产出开场正文，再生成初始指令。减少单次生成的复杂度，提高稳定性，但耗时加倍。",
   "creation.confirm.options.stepGenToggle": "分步生成开关",
+  "creation.confirm.options.enhancedOpening": "增强开局",
+  "creation.confirm.options.enhancedOpeningDesc": "丰富的世界初始状态：更多 NPC、地点和关系网（约需 5-10 分钟额外时间）",
+  "creation.confirm.options.enhancedOpeningToggle": "增强开局开关",
 
   "creation.presetDetail.empty": "悬停或选择一个选项查看详情",
   "creation.presetDetail.cost": "花费 {value} 点",
@@ -96,5 +99,33 @@
   "creation.aiGen.toast.generating": "正在 AI 推演自定义{label}…",
   "creation.aiGen.toast.success": "AI 推演完成 —— 请审阅后保存",
   "creation.aiGen.toast.error": "AI 推演失败：{msg}",
-  "creation.aiGen.error.serviceNotInit": "AI 服务未初始化"
+  "creation.aiGen.error.serviceNotInit": "AI 服务未初始化",
+
+  "progress.enhancedOpening.title": "增强开局中...",
+  "progress.enhancedOpening.phaseA": "正在生成世界设定...",
+  "progress.enhancedOpening.phaseB": "正在构建地图...",
+  "progress.enhancedOpening.phaseC": "正在创建角色...",
+  "progress.enhancedOpening.phaseD": "正在编织关系网...",
+  "progress.enhancedOpening.phaseE": "正在生成开场...",
+  "progress.enhancedOpening.phaseF": "正在固化记忆...",
+  "progress.enhancedOpening.phaseG": "正在补全细节...",
+  "progress.enhancedOpening.rateLimitWait": "等待配额（约 {seconds} 秒）",
+  "progress.enhancedOpening.cancel": "取消",
+
+  "creation.confirm.options.advancedSettings": "高级设置",
+  "creation.confirm.options.npcRange": "NPC 数量",
+  "creation.confirm.options.locationRange": "地点数量",
+  "creation.confirm.options.edgeRange": "关系边数量",
+  "creation.confirm.options.inventoryRange": "背包物品数量",
+  "creation.confirm.options.relationDensity": "关系网密度",
+  "creation.confirm.options.densitySparse": "稀疏",
+  "creation.confirm.options.densityMedium": "中等",
+  "creation.confirm.options.densityDense": "密集",
+  "creation.confirm.options.bypassRateLimit": "开局期间临时关闭限流",
+  "creation.confirm.options.bypassRateLimitWarning": "开局会连续发送 7+ 个请求，关闭限流可能快速消耗 API 配额",
+
+  "creation.enhancedOpening.failDialog.title": "增强开局失败",
+  "creation.enhancedOpening.failDialog.retry": "重试当前步骤",
+  "creation.enhancedOpening.failDialog.rollback": "退回上一步",
+  "creation.enhancedOpening.failDialog.exit": "退出增强开局"
 }

@@ -187,6 +187,15 @@ async function bootstrap(): Promise<void> {
   const configStore = new ConfigStore();
   const configResolver = new ConfigResolver(configRegistry, configStore);
 
+  configRegistry.register({
+    id: 'enhancedOpening',
+    name: 'Enhanced Opening Settings',
+    description: 'Story 0 enhanced opening pipeline user preferences',
+    schema: {},
+    version: 1,
+    defaultSource: 'ui/creation',
+  });
+
   const promptStorage = new PromptStorage();
   const vectorStore = new VectorStore();
   // 2026-04-14：用户自定义创角预设仓库（按 packId 隔离）
@@ -417,22 +426,9 @@ async function bootstrap(): Promise<void> {
     getActiveSlot,
   );
 
+  // CharacterInitPipeline is created after GameOrchestrator (below) to enable
+  // EnhancedOpeningPipeline injection which requires orchestrator.createStagesForOpening().
   let characterInitPipeline: CharacterInitPipeline | null = null;
-  if (pack) {
-    characterInitPipeline = new CharacterInitPipeline(
-      stateManager,
-      commandExecutor,
-      aiService,
-      responseParser,
-      promptAssembler,
-      saveManager,
-      profileManager,
-      behaviorRunner,
-      pack,
-      DEFAULT_ENGINE_PATHS,
-      memoryManager, // §C1: 开场叙事写入短期记忆 → 第一回合 MEMORY_BLOCK 非空
-    );
-  }
 
   // ── GAP_AUDIT §G2: 实例化 4 个后置子管线 ──
   // 这些管线由 GameOrchestrator.runRound 在主回合结束后按条件触发：
@@ -616,6 +612,39 @@ async function bootstrap(): Promise<void> {
         paths: DEFAULT_ENGINE_PATHS,
         plotEvaluation: plotEvaluationPipeline,
       },
+    );
+  }
+
+  // ── CharacterInitPipeline + EnhancedOpeningPipeline (Story 0) ──
+  // Created after GameOrchestrator so enhanced opening can access orchestrator.createStagesForOpening()
+  if (pack) {
+    let enhancedOpeningPipeline: import('./engine/pipeline/sub-pipelines/enhanced-opening').EnhancedOpeningPipeline | undefined;
+    if (orchestrator) {
+      const { EnhancedOpeningPipeline } = await import('./engine/pipeline/sub-pipelines/enhanced-opening');
+      const openingStages = orchestrator.createStagesForOpening();
+      enhancedOpeningPipeline = new EnhancedOpeningPipeline(
+        stateManager,
+        aiService,
+        promptAssembler,
+        pack,
+        orchestrator,
+        openingStages,
+        DEFAULT_ENGINE_PATHS,
+      );
+    }
+    characterInitPipeline = new CharacterInitPipeline(
+      stateManager,
+      commandExecutor,
+      aiService,
+      responseParser,
+      promptAssembler,
+      saveManager,
+      profileManager,
+      behaviorRunner,
+      pack,
+      DEFAULT_ENGINE_PATHS,
+      memoryManager,
+      enhancedOpeningPipeline,
     );
   }
 

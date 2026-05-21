@@ -110,6 +110,14 @@ export interface PipelineContext {
    * 例如：pendingSummary（标记需要执行记忆总结子管线）、
    * pendingHeartbeat（标记需要执行世界心跳）、worldEventContext（事件上下文文本）、
    * splitGen（分步生成开关）、splitStep2Messages（第2步预组装消息列表）
+   *
+   * Enhanced Opening 新增字段（Story 0）：
+   * - isEnhancedOpening?: boolean — 增强开局标记；ImageService 跳过（Impl-Phase 1 已实现）；
+   *   PostProcess user entry 跳过 + ContextAssembly flow override 属于 Impl-Phase 2
+   * - openingFacts?: Array<{fact: string; sourceEntity: string; targetEntity: string}> — Phase D 知识边，
+   *   由编排器 Phase F 注入到合成 parsedResponse.knowledgeFacts（Impl-Phase 2）
+   * - step1FlowOverride?: string — splitGen step1 的 flow 注册键覆盖（camelCase，Impl-Phase 2）
+   * - step2FlowOverride?: string — splitGen step2 的 flow 注册键覆盖（camelCase，Impl-Phase 2）
    */
   meta: Record<string, unknown>;
 }

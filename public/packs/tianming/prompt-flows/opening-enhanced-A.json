@@ -1,0 +1,8 @@
+{
+  "id": "openingEnhancedA",
+  "$comment": "Phase A: world description generation — pure text output (500-1500 chars). narratorFrame provides narrator identity; openingEnhancedA provides task instructions.",
+  "modules": [
+    { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
+    { "promptId": "openingEnhancedA", "role": "user", "order": 0, "depth": 0 }
+  ]
+}

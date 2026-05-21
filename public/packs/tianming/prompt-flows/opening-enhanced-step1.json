@@ -1,0 +1,11 @@
+{
+  "id": "openingEnhancedStep1",
+  "$comment": "Phase E1: enhanced opening narrative (text only). splitGenContext injects GAME_STATE_JSON so AI sees Phase B/C/D world data.",
+  "modules": [
+    { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
+    { "promptId": "splitGenStep1", "role": "system", "order": 0, "depth": 0 },
+    { "promptId": "core", "role": "system", "order": 1, "depth": 0 },
+    { "promptId": "splitGenContext", "role": "system", "order": 2, "depth": 0 },
+    { "promptId": "openingEnhancedStep1", "role": "system", "order": 3, "depth": 0 }
+  ]
+}

@@ -1,0 +1,817 @@
+/**
+ * Enhanced Opening Pipeline — orchestrates Phase A-G of Story 0.
+ *
+ * Replaces character-init steps 3-5 when enhancedOpening=true.
+ * Phase A: world description (LLM, pure text)
+ * Phase B: locations + inventory (LLM, JSON)
+ * Phase C: NPC profiles (LLM, JSON)
+ * Phase D: Engram knowledge edges (LLM, JSON → stashed for Phase F)
+ * Phase E: opening narrative via splitGen (LLM ×2, reuses pipeline stages)
+ * Phase F: PostProcess equivalent (no LLM, reuses CommandExecution + PostProcess stages)
+ * Phase G: post-round sub-pipelines (reuses runPostRoundSubPipelines)
+ *
+ * Design doc: docs/plans/story-0-enhanced-opening-implementation.md
+ */
+import type { StateManager } from '../../core/state-manager';
+import type { AIService } from '../../ai/ai-service';
+import type { PromptAssembler } from '../../prompt/prompt-assembler';
+import type { GamePack } from '../../types';
+import type { EnginePathConfig, PipelineContext } from '../types';
+import type { AIMessage } from '../../ai/types';
+import type { ContextAssemblyStage } from '../stages/context-assembly';
+import type { AICallStage } from '../stages/ai-call';
+import type { BodyPolishStage } from '../stages/body-polish-stage';
+import type { CommandExecutionStage } from '../stages/command-execution';
+import type { PostProcessStage } from '../stages/post-process';
+import type { CreationChoices } from './character-init';
+import {
+  emitPromptAssemblyDebug,
+  emitPromptResponseDebug,
+  extractThinkingFromRaw,
+} from '../../core/prompt-debug';
+import { eventBus } from '../../core/event-bus';
+
+// ═══════════════════════════════════════════════════════════════
+//  Public types
+// ═══════════════════════════════════════════════════════════════
+
+export interface OpeningStages {
+  contextAssembly: ContextAssemblyStage;
+  aiCall: AICallStage;
+  bodyPolish: BodyPolishStage;
+  commandExecution: CommandExecutionStage;
+  postProcess: PostProcessStage;
+}
+
+export interface EnhancedOpeningSettings {
+  enabled: boolean;
+  locationRange: [number, number];
+  npcRange: [number, number];
+  edgeRange: [number, number];
+  inventoryRange: [number, number];
+  relationDensity: 'sparse' | 'medium' | 'dense';
+  bypassRateLimitDuringOpening: boolean;
+}
+
+export const DEFAULT_ENHANCED_OPENING_SETTINGS: EnhancedOpeningSettings = {
+  enabled: true,
+  locationRange: [10, 20],
+  npcRange: [5, 15],
+  edgeRange: [5, 15],
+  inventoryRange: [3, 8],
+  relationDensity: 'medium',
+  bypassRateLimitDuringOpening: false,
+};
+
+export type PhaseErrorAction = 'retry' | 'rollback' | 'exit';
+
+export interface PhaseErrorInfo {
+  phase: string;
+  reason: string;
+  availableActions: PhaseErrorAction[];
+}
+
+export interface EnhancedOpeningOptions {
+  settings: EnhancedOpeningSettings;
+  nsfwMode: boolean;
+  choices: CreationChoices;
+  abortSignal: AbortSignal;
+  onProgress: (phase: string, progress: number) => void;
+  onStreamChunk?: (chunk: string) => void;
+  onPhaseError?: (info: PhaseErrorInfo) => Promise<PhaseErrorAction>;
+  onRateLimitWait?: (seconds: number | null) => void;
+}
+
+export interface EnhancedOpeningResult {
+  success: boolean;
+  cancelled?: boolean;
+  phasesCompleted: string[];
+  phasesFailed?: string;
+  failureReason?: string;
+  actionOptions: string[];
+}
+
+/** Knowledge fact from Phase D — snake_case as output by LLM */
+interface RawKnowledgeFact {
+  fact: string;
+  source_entity: string;
+  target_entity: string;
+}
+
+/** Normalized knowledge fact — camelCase matching AIResponse.knowledgeFacts */
+export interface NormalizedKnowledgeFact {
+  fact: string;
+  sourceEntity: string;
+  targetEntity: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Internal context passed between phases
+// ═══════════════════════════════════════════════════════════════
+
+interface PhaseContext {
+  stateManager: StateManager;
+  aiService: AIService;
+  promptAssembler: PromptAssembler;
+  gamePack: GamePack;
+  paths: EnginePathConfig;
+  options: EnhancedOpeningOptions;
+  worldDescription: string;
+  locationNames: string[];
+  npcSummaryList: string;
+  openingFacts: NormalizedKnowledgeFact[];
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  JSON validation helpers
+// ═══════════════════════════════════════════════════════════════
+
+function extractJSON(raw: string, phaseLabel: string): unknown {
+  const cleaned = raw.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+  const fenced = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  const jsonStr = fenced ? fenced[1].trim() : cleaned;
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    throw new Error(`${phaseLabel}: JSON parse failed — ${e instanceof Error ? e.message : 'unknown error'}. Input starts with: ${jsonStr.slice(0, 200)}`);
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    if (msg.includes('取消') || msg.includes('abort') || msg.includes('cancelled')) return true;
+  }
+  return false;
+}
+
+function validateLocations(
+  data: unknown,
+): { locations: Array<Record<string, unknown>>; inventory: Array<Record<string, unknown>> } {
+  if (!data || typeof data !== 'object') throw new Error('Phase B: response is not an object');
+  const obj = data as Record<string, unknown>;
+
+  const locations = obj.locations;
+  if (!Array.isArray(locations) || locations.length === 0) {
+    throw new Error('Phase B: "locations" must be a non-empty array');
+  }
+  for (const loc of locations) {
+    if (!loc || typeof loc !== 'object') throw new Error('Phase B: location entry is not an object');
+    const l = loc as Record<string, unknown>;
+    if (typeof l['名称'] !== 'string' || !l['名称']) {
+      throw new Error('Phase B: location missing required field "名称"');
+    }
+  }
+
+  const inventory = Array.isArray(obj.inventory) ? obj.inventory : [];
+  for (const item of inventory) {
+    if (!item || typeof item !== 'object') continue;
+    const it = item as Record<string, unknown>;
+    if (typeof it['名称'] !== 'string' || !it['名称']) {
+      throw new Error('Phase B: inventory item missing required field "名称"');
+    }
+  }
+
+  return {
+    locations: locations as Array<Record<string, unknown>>,
+    inventory: inventory as Array<Record<string, unknown>>,
+  };
+}
+
+function validateNpcs(data: unknown): Array<Record<string, unknown>> {
+  if (!data || typeof data !== 'object') throw new Error('Phase C: response is not an object');
+  const obj = data as Record<string, unknown>;
+
+  const npcs = obj.npcs;
+  if (!Array.isArray(npcs) || npcs.length === 0) {
+    throw new Error('Phase C: "npcs" must be a non-empty array');
+  }
+  for (const npc of npcs) {
+    if (!npc || typeof npc !== 'object') throw new Error('Phase C: NPC entry is not an object');
+    const n = npc as Record<string, unknown>;
+    if (typeof n['名称'] !== 'string' || !n['名称']) {
+      throw new Error('Phase C: NPC missing required field "名称"');
+    }
+  }
+  return npcs as Array<Record<string, unknown>>;
+}
+
+function validateKnowledgeFacts(data: unknown): RawKnowledgeFact[] {
+  if (!data || typeof data !== 'object') throw new Error('Phase D: response is not an object');
+  const obj = data as Record<string, unknown>;
+
+  const facts = obj.knowledge_facts;
+  if (!Array.isArray(facts) || facts.length === 0) {
+    throw new Error('Phase D: "knowledge_facts" must be a non-empty array');
+  }
+
+  const result: RawKnowledgeFact[] = [];
+  for (const f of facts) {
+    if (!f || typeof f !== 'object') continue;
+    const item = f as Record<string, unknown>;
+    const fact = typeof item.fact === 'string' ? item.fact.trim() : '';
+    const src = typeof item.source_entity === 'string' ? item.source_entity.trim() : '';
+    const tgt = typeof item.target_entity === 'string' ? item.target_entity.trim() : '';
+    if (fact && src && tgt) {
+      result.push({ fact, source_entity: src, target_entity: tgt });
+    }
+  }
+  const dropped = facts.length - result.length;
+  if (dropped > 0) {
+    console.warn(`[EnhancedOpening] Phase D: ${dropped}/${facts.length} knowledge_facts dropped (missing fact/source_entity/target_entity)`);
+  }
+  if (result.length === 0) {
+    throw new Error('Phase D: no valid knowledge_facts after validation');
+  }
+  return result;
+}
+
+function normalizeKnowledgeFacts(raw: RawKnowledgeFact[]): NormalizedKnowledgeFact[] {
+  return raw.map((f) => ({
+    fact: f.fact,
+    sourceEntity: f.source_entity,
+    targetEntity: f.target_entity,
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Prompt assembly helper
+// ═══════════════════════════════════════════════════════════════
+
+function assembleFlowMessages(
+  flowId: string,
+  gamePack: GamePack,
+  promptAssembler: PromptAssembler,
+  variables: Record<string, string>,
+): { messages: AIMessage[]; generationId: string } {
+  const flow = gamePack.promptFlows[flowId];
+  if (!flow) throw new Error(`Enhanced Opening: prompt flow "${flowId}" not found in Game Pack`);
+
+  const assembled = promptAssembler.assemble(flow, variables);
+  const generationId = `enhancedOpening_${flowId}_${Date.now()}`;
+
+  emitPromptAssemblyDebug({
+    flow: flowId,
+    variables,
+    messages: assembled.messages,
+    messageSources: assembled.messageSources,
+    generationId,
+  });
+
+  return { messages: assembled.messages, generationId };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Phase execution functions
+// ═══════════════════════════════════════════════════════════════
+
+async function executePhaseA(ctx: PhaseContext): Promise<string> {
+  ctx.options.onProgress('phaseA', 0);
+
+  const playerProfile = buildPlayerProfileString(ctx);
+  const worldSelection = buildWorldSelectionString(ctx);
+
+  const variables: Record<string, string> = {
+    WORLD_SELECTION: worldSelection,
+    PLAYER_PROFILE: playerProfile,
+  };
+
+  const { messages, generationId } = assembleFlowMessages(
+    'openingEnhancedA', ctx.gamePack, ctx.promptAssembler, variables,
+  );
+
+  const rawResponse = await ctx.aiService.generate({
+    messages,
+    stream: false,
+    usageType: 'world_generation',
+    signal: ctx.options.abortSignal,
+    generationId,
+  });
+
+  emitPromptResponseDebug({
+    flow: 'openingEnhancedA',
+    generationId,
+    thinking: extractThinkingFromRaw(rawResponse),
+    rawResponse,
+  });
+
+  const worldDescription = rawResponse
+    .replace(/<thinking>[\s\S]*?<\/thinking>/g, '')
+    .trim();
+
+  if (!worldDescription) throw new Error('Phase A: empty world description');
+
+  ctx.stateManager.set(ctx.paths.worldDescription, worldDescription, 'system');
+  ctx.options.onProgress('phaseA', 100);
+
+  return worldDescription;
+}
+
+async function executePhaseB(ctx: PhaseContext): Promise<string[]> {
+  ctx.options.onProgress('phaseB', 0);
+
+  const playerProfile = buildPlayerProfileString(ctx);
+  const variables: Record<string, string> = {
+    WORLD_DESCRIPTION: ctx.worldDescription,
+    PLAYER_PROFILE: playerProfile,
+    LOCATION_MIN: String(ctx.options.settings.locationRange[0]),
+    LOCATION_MAX: String(ctx.options.settings.locationRange[1]),
+    INVENTORY_MIN: String(ctx.options.settings.inventoryRange[0]),
+    INVENTORY_MAX: String(ctx.options.settings.inventoryRange[1]),
+  };
+
+  const { messages, generationId } = assembleFlowMessages(
+    'openingEnhancedB', ctx.gamePack, ctx.promptAssembler, variables,
+  );
+
+  const rawResponse = await ctx.aiService.generate({
+    messages,
+    stream: false,
+    usageType: 'world_generation',
+    signal: ctx.options.abortSignal,
+    generationId,
+  });
+
+  emitPromptResponseDebug({
+    flow: 'openingEnhancedB',
+    generationId,
+    thinking: extractThinkingFromRaw(rawResponse),
+    rawResponse,
+  });
+
+  const parsed = extractJSON(rawResponse, 'Phase B');
+  const { locations, inventory } = validateLocations(parsed);
+
+  for (const loc of locations) {
+    ctx.stateManager.push(ctx.paths.locations, loc, 'system');
+  }
+  for (const item of inventory) {
+    ctx.stateManager.push(ctx.paths.inventoryItems, item, 'system');
+  }
+
+  const locationNames = locations.map((l) => String(l['名称']));
+  ctx.options.onProgress('phaseB', 100);
+
+  return locationNames;
+}
+
+async function executePhaseC(ctx: PhaseContext): Promise<string> {
+  ctx.options.onProgress('phaseC', 0);
+
+  const playerProfile = buildPlayerProfileString(ctx);
+  const variables: Record<string, string> = {
+    WORLD_DESCRIPTION: ctx.worldDescription,
+    LOCATIONS_LIST: ctx.locationNames.join('、'),
+    PLAYER_PROFILE: playerProfile,
+    NPC_MIN: String(ctx.options.settings.npcRange[0]),
+    NPC_MAX: String(ctx.options.settings.npcRange[1]),
+    NSFW_SECTION: ctx.options.nsfwMode
+      ? `   - 私密信息（完整对象），JSON 结构如下：
+     \`\`\`json
+     "私密信息": {
+       "是否为处女/处男": true,
+       "身体部位": [
+         { "部位名称": "嘴", "敏感度": 30, "开发度": 0, "特征描述": "...", "特殊印记": "" },
+         { "部位名称": "胸部", "敏感度": 50, "开发度": 0, "特征描述": "...", "特殊印记": "" },
+         { "部位名称": "小穴", "敏感度": 70, "开发度": 0, "特征描述": "...", "特殊印记": "" },
+         { "部位名称": "屁穴", "敏感度": 20, "开发度": 0, "特征描述": "...", "特殊印记": "" }
+       ],
+       "性格倾向": "...",
+       "性取向": "...",
+       "性癖好": ["标签1", "标签2"],
+       "性渴望程度": 50,
+       "性交总次数": 0,
+       "性伴侣名单": []
+     }
+     \`\`\`
+     - 身体部位必须至少包含 4 个固定部位：嘴/胸部/小穴/屁穴，可追加更多
+     - 敏感度/开发度：0-100 数字
+     - 性渴望程度：0-100 数字
+     - 性癖好：字符串数组
+     - 如果「是否为处女/处男」= false，则必须补全：初夜夺取者（字符串）、初夜时间（字符串）、初夜描述（50-200字）`
+      : '',
+  };
+
+  const { messages, generationId } = assembleFlowMessages(
+    'openingEnhancedC', ctx.gamePack, ctx.promptAssembler, variables,
+  );
+
+  const rawResponse = await ctx.aiService.generate({
+    messages,
+    stream: false,
+    usageType: 'world_generation',
+    signal: ctx.options.abortSignal,
+    generationId,
+  });
+
+  emitPromptResponseDebug({
+    flow: 'openingEnhancedC',
+    generationId,
+    thinking: extractThinkingFromRaw(rawResponse),
+    rawResponse,
+  });
+
+  const parsed = extractJSON(rawResponse, 'Phase C');
+  const npcs = validateNpcs(parsed);
+
+  for (const npc of npcs) {
+    if (!ctx.options.nsfwMode) {
+      delete npc['私密信息'];
+    }
+    if (!Array.isArray(npc['记忆'])) npc['记忆'] = [];
+    if (!Array.isArray(npc['关系网变量'])) npc['关系网变量'] = [];
+
+    ctx.stateManager.push(ctx.paths.relationships, npc, 'system');
+  }
+
+  const npcSummaryList = npcs
+    .map((n) => `${n['名称']}（${n['描述'] ?? ''}）`)
+    .join('、');
+
+  ctx.options.onProgress('phaseC', 100);
+  return npcSummaryList;
+}
+
+async function executePhaseD(ctx: PhaseContext): Promise<NormalizedKnowledgeFact[]> {
+  ctx.options.onProgress('phaseD', 0);
+
+  const playerName = ctx.stateManager.get<string>(ctx.paths.playerName) ?? '';
+  const playerDesc = ctx.stateManager.get<string>(ctx.paths.characterDescription) ?? '';
+
+  const variables: Record<string, string> = {
+    WORLD_DESCRIPTION: ctx.worldDescription,
+    NPC_SUMMARY_LIST: ctx.npcSummaryList,
+    LOCATIONS_LIST: ctx.locationNames.join('、'),
+    PLAYER_NAME: playerName,
+    PLAYER_DESCRIPTION: playerDesc,
+    EDGE_MIN: String(ctx.options.settings.edgeRange[0]),
+    EDGE_MAX: String(ctx.options.settings.edgeRange[1]),
+  };
+
+  const { messages, generationId } = assembleFlowMessages(
+    'openingEnhancedD', ctx.gamePack, ctx.promptAssembler, variables,
+  );
+
+  const rawResponse = await ctx.aiService.generate({
+    messages,
+    stream: false,
+    usageType: 'world_generation',
+    signal: ctx.options.abortSignal,
+    generationId,
+  });
+
+  emitPromptResponseDebug({
+    flow: 'openingEnhancedD',
+    generationId,
+    thinking: extractThinkingFromRaw(rawResponse),
+    rawResponse,
+  });
+
+  const parsed = extractJSON(rawResponse, 'Phase D');
+  const rawFacts = validateKnowledgeFacts(parsed);
+  const normalized = normalizeKnowledgeFacts(rawFacts);
+
+  ctx.options.onProgress('phaseD', 100);
+  return normalized;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Player profile string builder
+// ═══════════════════════════════════════════════════════════════
+
+function buildPlayerProfileString(ctx: PhaseContext): string {
+  const sm = ctx.stateManager;
+  const p = ctx.paths;
+  const name = sm.get<string>(p.playerName) ?? '';
+  const gender = sm.get<string>(p.characterGender) ?? '';
+  const age = sm.get<number>(p.characterAge) ?? 0;
+  const occupation = sm.get<string>(p.characterOccupation) ?? '';
+  const desc = sm.get<string>(p.characterDescription) ?? '';
+  const traits = sm.get<string>(p.characterTraits) ?? '';
+  const origin = sm.get<string>(p.characterOrigin) ?? '';
+
+  const parts = [`姓名：${name}`];
+  if (gender) parts.push(`性别：${gender}`);
+  if (age) parts.push(`年龄：${age}`);
+  if (occupation) parts.push(`身份：${occupation}`);
+  if (origin) parts.push(`出身：${origin}`);
+  if (traits) parts.push(`特质：${traits}`);
+  if (desc) parts.push(`描述：${desc}`);
+
+  return parts.join('\n');
+}
+
+function buildWorldSelectionString(ctx: PhaseContext): string {
+  const choices = ctx.options.choices;
+  const payload: Record<string, unknown> = {
+    选择项: choices.selections,
+  };
+  if (choices.attributes) payload['先天六维分配'] = choices.attributes;
+  if (choices.formValues) payload['身份信息'] = choices.formValues;
+  return JSON.stringify(payload, null, 2);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Main orchestrator class
+// ═══════════════════════════════════════════════════════════════
+
+export class EnhancedOpeningPipeline {
+  // Impl-Phase 2: will become private once Phase E/F/G code uses them internally
+  readonly gameOrchestrator: { runPostRoundForOpening: (ctx: PipelineContext, sm: StateManager) => Promise<void> };
+  readonly stages: OpeningStages;
+
+  constructor(
+    private stateManager: StateManager,
+    private aiService: AIService,
+    private promptAssembler: PromptAssembler,
+    private gamePack: GamePack,
+    gameOrchestrator: { runPostRoundForOpening: (ctx: PipelineContext, sm: StateManager) => Promise<void> },
+    stages: OpeningStages,
+    private paths: EnginePathConfig,
+  ) {
+    this.gameOrchestrator = gameOrchestrator;
+    this.stages = stages;
+  }
+
+  async execute(options: EnhancedOpeningOptions): Promise<EnhancedOpeningResult> {
+    const baselineSnapshot = this.stateManager.toSnapshot();
+    const phasesCompleted: string[] = [];
+
+    // CR-3.2: Bypass rate limiting during opening if configured
+    const savedRlEnabled = this.aiService.rateLimiterEnabled;
+    if (options.settings.bypassRateLimitDuringOpening && savedRlEnabled) {
+      this.aiService.configureRateLimiter({ enabled: false });
+    }
+
+    // CR-3.3: Wire rate-limit toast events to progress UI
+    let rateLimitCleanup: (() => void) | null = null;
+    if (options.onRateLimitWait) {
+      const handler = (payload: unknown) => {
+        if (!payload || typeof payload !== 'object') return;
+        const p = payload as Record<string, unknown>;
+        if (p.id !== 'rate-limiter-queue') return;
+        const params = p.i18nParams as Record<string, unknown> | undefined;
+        const seconds = typeof params?.seconds === 'number' ? params.seconds : null;
+        rateLimitActive = true;
+        options.onRateLimitWait?.(seconds);
+      };
+      eventBus.on('ui:toast', handler);
+      rateLimitCleanup = () => eventBus.off('ui:toast', handler);
+    }
+
+    // Wrap onProgress to clear rate-limit wait state on phase transitions.
+    // Note: rateLimitCleanup in the finally block depends on all error paths exiting
+    // through execute()'s try/catch — if runPhase is ever extracted, this must be revisited.
+    let rateLimitActive = false;
+    const originalOnProgress = options.onProgress;
+    const wrappedOnProgress = (phase: string, progress: number) => {
+      if (rateLimitActive) {
+        rateLimitActive = false;
+        options.onRateLimitWait?.(null);
+      }
+      originalOnProgress(phase, progress);
+    };
+    const effectiveOptions: EnhancedOpeningOptions = { ...options, onProgress: wrappedOnProgress };
+
+    const phaseCtx: PhaseContext = {
+      stateManager: this.stateManager,
+      aiService: this.aiService,
+      promptAssembler: this.promptAssembler,
+      gamePack: this.gamePack,
+      paths: this.paths,
+      options: effectiveOptions,
+      worldDescription: '',
+      locationNames: [],
+      npcSummaryList: '',
+      openingFacts: [],
+    };
+
+    const phaseActions: Record<string, PhaseErrorAction[]> = {
+      A: ['retry', 'exit'],
+      B: ['retry', 'rollback', 'exit'],
+      C: ['retry', 'rollback', 'exit'],
+      D: ['retry', 'rollback', 'exit'],
+      E: ['retry', 'exit'],
+      F: ['retry', 'exit'],
+      G: ['retry', 'exit'],
+    };
+
+    const MAX_RETRIES = 3;
+
+    const runPhase = async <T>(
+      phase: string,
+      fn: () => Promise<T>,
+      rollbackSnapshot?: Record<string, unknown>,
+    ): Promise<T> => {
+      let retryCount = 0;
+      while (true) {
+        try {
+          return await fn();
+        } catch (err) {
+          if (isAbortError(err)) throw err;
+
+          if (!options.onPhaseError) throw err;
+
+          const actions = [...(phaseActions[phase] ?? ['retry', 'exit'])];
+          if (retryCount >= MAX_RETRIES) {
+            const idx = actions.indexOf('retry');
+            if (idx >= 0) actions.splice(idx, 1);
+          }
+
+          const action = await options.onPhaseError({
+            phase,
+            reason: err instanceof Error ? err.message : String(err),
+            availableActions: actions,
+          });
+
+          if (action === 'retry' && retryCount < MAX_RETRIES) {
+            retryCount++;
+            continue;
+          }
+          if (action === 'rollback' && rollbackSnapshot) {
+            this.stateManager.loadTree(rollbackSnapshot);
+            throw err;
+          }
+          throw err;
+        }
+      }
+    };
+
+    try {
+      // ── Phase A ──
+      phaseCtx.worldDescription = await runPhase('A', () => executePhaseA(phaseCtx));
+      const snapAfterA = this.stateManager.toSnapshot();
+      phasesCompleted.push('A');
+
+      // ── Phase B ──
+      phaseCtx.locationNames = await runPhase('B', () => executePhaseB(phaseCtx), snapAfterA);
+      const snapAfterB = this.stateManager.toSnapshot();
+      phasesCompleted.push('B');
+
+      // ── Phase C ──
+      phaseCtx.npcSummaryList = await runPhase('C', () => executePhaseC(phaseCtx), snapAfterB);
+      phasesCompleted.push('C');
+
+      // ── Phase D ──
+      phaseCtx.openingFacts = await runPhase('D', () => executePhaseD(phaseCtx));
+      phasesCompleted.push('D');
+
+      // ── Phase E ──
+      effectiveOptions.onProgress('phaseE', 0);
+      const phaseEResult = await runPhase('E', () => this.executePhaseE(phaseCtx));
+      phasesCompleted.push('E');
+
+      // ── Phase F ──
+      effectiveOptions.onProgress('phaseF', 0);
+      const phaseFCtx = await runPhase('F', () => this.executePhaseF(phaseCtx, phaseEResult));
+      phasesCompleted.push('F');
+      effectiveOptions.onProgress('phaseF', 100);
+
+      // ── Phase G ──
+      effectiveOptions.onProgress('phaseG', 0);
+      await runPhase('G', () => this.gameOrchestrator.runPostRoundForOpening(phaseFCtx, this.stateManager));
+      phasesCompleted.push('G');
+      effectiveOptions.onProgress('phaseG', 100);
+
+      const actionOpts = this.stateManager.get<string[]>('元数据.当前行动选项') ?? [];
+
+      return {
+        success: true,
+        phasesCompleted,
+        actionOptions: actionOpts,
+      };
+    } catch (err) {
+      this.stateManager.loadTree(baselineSnapshot);
+
+      if (isAbortError(err)) {
+        return {
+          success: false,
+          cancelled: true,
+          phasesCompleted,
+          actionOptions: [],
+        };
+      }
+
+      return {
+        success: false,
+        phasesCompleted,
+        phasesFailed: getFailedPhase(phasesCompleted),
+        failureReason: err instanceof Error ? err.message : String(err),
+        actionOptions: [],
+      };
+    } finally {
+      // CR-3.2: Restore rate limiter to its original state
+      if (options.settings.bypassRateLimitDuringOpening && savedRlEnabled) {
+        this.aiService.configureRateLimiter({ enabled: true });
+      }
+      // CR-3.3: Remove rate-limit toast listener
+      rateLimitCleanup?.();
+    }
+  }
+
+  /**
+   * Phase E: manual splitGen — ContextAssembly + AICall + BodyPolish.
+   * Skips PreProcess (avoids roundNumber 0→1), ResponseRepair, ReasoningIngest, Render.
+   */
+  private async executePhaseE(phaseCtx: PhaseContext): Promise<PhaseEResult> {
+    const aiCallStartedAt = performance.now();
+
+    // Build PipelineContext for ContextAssembly + AICall
+    let ctx: PipelineContext = {
+      userInput: '',
+      actionQueuePrompt: '',
+      stateSnapshot: this.stateManager.toSnapshot(),
+      chatHistory: [],
+      messages: [],
+      roundNumber: 0,
+      generationId: `enhancedOpening_E_${Date.now()}`,
+      worldEventTriggered: false,
+      onStreamChunk: phaseCtx.options.onStreamChunk,
+      abortSignal: phaseCtx.options.abortSignal,
+      onProgress: (msg) => {
+        if (typeof msg === 'string') phaseCtx.options.onProgress('phaseE', 50);
+      },
+      meta: {
+        splitGen: true,
+        isEnhancedOpening: true,
+        step1FlowOverride: 'openingEnhancedStep1',
+        step2FlowOverride: 'openingEnhancedStep2',
+      },
+    };
+
+    // ContextAssembly: assembles messages using the flow overrides
+    ctx = await this.stages.contextAssembly.execute(ctx);
+
+    // AICall: executes splitGen step1 (streaming) + step2 (non-streaming)
+    ctx = await this.stages.aiCall.execute(ctx);
+
+    // BodyPolish: polishes E1 narrative text (no-op if bodyPolish=false)
+    ctx = await this.stages.bodyPolish.execute(ctx);
+
+    const aiCallDurationMs = performance.now() - aiCallStartedAt;
+
+    // E2 knowledge_facts discard (immutable): if AI still output them, drop before Phase F
+    if (ctx.parsedResponse?.knowledgeFacts) {
+      ctx = { ...ctx, parsedResponse: { ...ctx.parsedResponse, knowledgeFacts: undefined } };
+    }
+
+    phaseCtx.options.onProgress('phaseE', 100);
+
+    return {
+      ctx,
+      aiCallStartedAt,
+      aiCallDurationMs,
+    };
+  }
+
+  /**
+   * Phase F: construct synthetic parsedResponse, run CommandExecution + PostProcess.
+   * Injects Phase D openingFacts into knowledgeFacts so Engram processes them.
+   */
+  private async executePhaseF(
+    phaseCtx: PhaseContext,
+    phaseE: PhaseEResult,
+  ): Promise<PipelineContext> {
+    let ctx = phaseE.ctx;
+
+    if (!ctx.parsedResponse) {
+      throw new Error('[EnhancedOpening] Phase F: parsedResponse absent after Phase E — cannot inject openingFacts or persist narrative');
+    }
+
+    // Immutable injection: Phase D knowledge_facts + timing metadata
+    ctx = {
+      ...ctx,
+      parsedResponse: {
+        ...ctx.parsedResponse,
+        knowledgeFacts: phaseCtx.openingFacts.length > 0
+          ? phaseCtx.openingFacts
+          : ctx.parsedResponse.knowledgeFacts,
+      },
+      aiCallStartedAt: phaseE.aiCallStartedAt,
+      aiCallDurationMs: phaseE.aiCallDurationMs,
+    };
+
+    // CommandExecutionStage
+    ctx = await this.stages.commandExecution.execute(ctx);
+
+    // PostProcessStage (isEnhancedOpening=true → skips user entry)
+    ctx = await this.stages.postProcess.execute(ctx);
+
+    return ctx;
+  }
+}
+
+interface PhaseEResult {
+  ctx: PipelineContext;
+  aiCallStartedAt: number;
+  aiCallDurationMs: number;
+}
+
+function getFailedPhase(completed: string[]): string {
+  const allPhases = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+  for (const p of allPhases) {
+    if (!completed.includes(p)) return p;
+  }
+  return 'unknown';
+}

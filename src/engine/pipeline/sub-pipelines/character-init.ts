@@ -73,6 +73,21 @@ export interface CharacterInitOptions {
    * 但会消耗 2 倍 API 调用时间和成本。worldGeneration 不分步（prompt 本身就是纯文本）。
    */
   splitGen?: boolean;
+
+  /** Story 0: Enhanced Opening — when true, skips steps 3-5 and runs the EnhancedOpeningPipeline */
+  enhancedOpening?: boolean;
+  /** Advanced settings for enhanced opening (NPC/location counts etc.) */
+  enhancedOpeningSettings?: import('./enhanced-opening').EnhancedOpeningSettings;
+  /** AbortSignal for cancellation during enhanced opening */
+  abortSignal?: AbortSignal;
+  /** Progress callback for enhanced opening multi-phase UI */
+  onProgress?: (phase: string, progress: number) => void;
+  /** E1 streaming text callback for opening preview */
+  onStreamChunk?: (chunk: string) => void;
+  /** Phase failure callback — returns user-chosen action (retry/rollback/exit) */
+  onPhaseError?: (info: import('./enhanced-opening').PhaseErrorInfo) => Promise<import('./enhanced-opening').PhaseErrorAction>;
+  /** Rate-limit wait callback — seconds=null means waiting ended */
+  onRateLimitWait?: (seconds: number | null) => void;
 }
 
 export class CharacterInitPipeline {
@@ -93,6 +108,8 @@ export class CharacterInitPipeline {
      * 传入时才启用；未传入时保持原有行为。
      */
     private memoryManager?: MemoryManager,
+    /** Story 0: Enhanced Opening Pipeline — optional, injected when available */
+    private enhancedOpeningPipeline?: import('./enhanced-opening').EnhancedOpeningPipeline,
   ) {}
 
   /**
@@ -113,47 +130,96 @@ export class CharacterInitPipeline {
       const initialState = this.buildInitialState(choices);
       this.stateManager.loadTree(initialState);
 
+      // 步骤 1.5: 从 localStorage 同步 NSFW 设置到状态树
+      // SettingsPanel 将 nsfwMode 存在 localStorage，但 syncNsfwToStateTree()
+      // 要到游戏加载后才执行。创角阶段需要在此处提前同步，否则增强开局
+      // Phase C 的 NSFW_SECTION 为空、Phase F/G 也不会触发 privacy repair。
+      try {
+        const nsfwRaw = localStorage.getItem('aga_nsfw_settings');
+        if (nsfwRaw) {
+          const nsfwParsed = JSON.parse(nsfwRaw) as Record<string, unknown>;
+          if (typeof nsfwParsed.nsfwMode === 'boolean') {
+            this.stateManager.set('系统.nsfwMode', nsfwParsed.nsfwMode, 'system');
+          }
+          if (typeof nsfwParsed.nsfwGenderFilter === 'string') {
+            this.stateManager.set('系统.nsfwGenderFilter', nsfwParsed.nsfwGenderFilter, 'system');
+          }
+        }
+      } catch { /* localStorage unavailable */ }
+
       // 步骤 2: 运行创角阶段的行为模块
       this.behaviorRunner.runOnCreation(this.stateManager);
 
-      // 步骤 3: 调用 AI 生成世界背景（单次调用，worldGen 本身就是纯文本）
-      const worldDescription = await this.generateWorldDescription(choices);
+      // ─── 分叉点：增强开局 vs 低负载路径 ───
+      let worldDescription: string | null = null;
+      let openingScene: string | null = null;
 
-      // 步骤 4: 将世界描述写入状态树
-      if (worldDescription) {
-        this.stateManager.set(this.paths.worldDescription, worldDescription, 'system');
-      }
+      if (options.enhancedOpening && this.enhancedOpeningPipeline) {
+        // ─── 增强路径：跳过步骤 3-5，编排器替代 ───
+        const { DEFAULT_ENHANCED_OPENING_SETTINGS } = await import('./enhanced-opening');
+        const result = await this.enhancedOpeningPipeline.execute({
+          choices,
+          settings: options.enhancedOpeningSettings ?? DEFAULT_ENHANCED_OPENING_SETTINGS,
+          nsfwMode: this.stateManager.get<boolean>('系统.nsfwMode') === true,
+          abortSignal: options.abortSignal ?? new AbortController().signal,
+          onProgress: options.onProgress ?? (() => {}),
+          onStreamChunk: options.onStreamChunk,
+          onPhaseError: options.onPhaseError,
+          onRateLimitWait: options.onRateLimitWait,
+        });
 
-      // 步骤 5: 调用 AI 生成开场叙事（§4.1c: 支持分步模式）
-      const openingScene = await this.generateOpeningScene(
-        choices,
-        worldDescription,
-        options.splitGen === true,
-      );
+        if (!result.success) {
+          if (result.cancelled) {
+            return { profileId, slotId, worldDescription: '', openingScene: '', success: false, error: 'cancelled' };
+          }
+          return { profileId, slotId, worldDescription: '', openingScene: '', success: false, error: result.failureReason ?? 'Enhanced opening failed' };
+        }
 
-      // 将开场叙事写入叙事历史（与 MainGamePanel 读取路径一致）
-      if (openingScene) {
-        const histPath = this.paths.narrativeHistory;
-        const history =
-          (this.stateManager.get(histPath) as Array<{ role: string; content: string }> | undefined) ?? [];
-        this.stateManager.set(
-          histPath,
-          [...history, { role: 'assistant', content: openingScene }],
-          'system',
+        // Phase A wrote worldDescription to state tree; read back for return value
+        worldDescription = this.stateManager.get<string>(this.paths.worldDescription) ?? '';
+        // Phase E/F wrote narrative to narrativeHistory; read back
+        const hist = this.stateManager.get<Array<{ role: string; content: string }>>(this.paths.narrativeHistory) ?? [];
+        const lastAssistant = hist.filter(h => h.role === 'assistant').pop();
+        openingScene = lastAssistant?.content ?? '';
+      } else {
+        // ─── 低负载路径：步骤 3-5 现有逻辑不变 ───
+
+        // 步骤 3: 调用 AI 生成世界背景（单次调用，worldGen 本身就是纯文本）
+        worldDescription = await this.generateWorldDescription(choices);
+
+        // 步骤 4: 将世界描述写入状态树
+        if (worldDescription) {
+          this.stateManager.set(this.paths.worldDescription, worldDescription, 'system');
+        }
+
+        // 步骤 5: 调用 AI 生成开场叙事（§4.1c: 支持分步模式）
+        openingScene = await this.generateOpeningScene(
+          choices,
+          worldDescription,
+          options.splitGen === true,
         );
 
-        // §C1 GAP_AUDIT: 同步写入短期记忆，让第一回合的 MEMORY_BLOCK 非空
-        // 否则玩家首次对话时 AI 看到的记忆块完全空白，失去开场上下文
-        // roundNumber 传 0 表示"开局前"，与 PreProcessStage 递增到 1 之前的约定一致
-        if (this.memoryManager) {
-          this.memoryManager.appendShortTerm(openingScene, 0);
-          // 1:1 配对不变量：短期写了一条，隐式中期也必须写一条占位
-          this.memoryManager.appendImplicitMidTerm({
-            相关角色: ['玩家'],
-            事件时间: '',
-            记忆主体: '开局场景。',
-            _占位: true,
-          } as never);
+        // 将开场叙事写入叙事历史（与 MainGamePanel 读取路径一致）
+        if (openingScene) {
+          const histPath = this.paths.narrativeHistory;
+          const history =
+            (this.stateManager.get(histPath) as Array<{ role: string; content: string }> | undefined) ?? [];
+          this.stateManager.set(
+            histPath,
+            [...history, { role: 'assistant', content: openingScene }],
+            'system',
+          );
+
+          // §C1 GAP_AUDIT: 同步写入短期记忆，让第一回合的 MEMORY_BLOCK 非空
+          if (this.memoryManager) {
+            this.memoryManager.appendShortTerm(openingScene, 0);
+            this.memoryManager.appendImplicitMidTerm({
+              相关角色: ['玩家'],
+              事件时间: '',
+              记忆主体: '开局场景。',
+              _占位: true,
+            } as never);
+          }
         }
       }
 

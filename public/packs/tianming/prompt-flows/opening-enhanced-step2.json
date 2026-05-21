@@ -1,0 +1,14 @@
+{
+  "id": "openingEnhancedStep2",
+  "$comment": "Phase E2: enhanced opening structured response (commands + action_options + mid_term_memory). splitGenContext provides state for correct set commands.",
+  "modules": [
+    { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
+    { "promptId": "openingEnhancedStep2", "role": "system", "order": 0, "depth": 0 },
+    { "promptId": "core", "role": "system", "order": 1, "depth": 0 },
+    { "promptId": "splitGenContext", "role": "system", "order": 2, "depth": 0 },
+    { "promptId": "actionOptions", "role": "system", "order": 3, "depth": 0,
+      "condition": "ACTION_OPTIONS_MODE_IS_ACTION" },
+    { "promptId": "actionOptionsStory", "role": "system", "order": 3, "depth": 0,
+      "condition": "ACTION_OPTIONS_MODE_IS_STORY" }
+  ]
+}

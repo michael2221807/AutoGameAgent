@@ -1,0 +1,8 @@
+{
+  "id": "openingEnhancedC",
+  "$comment": "Phase C: NPC profile generation — JSON output with npcs[] array. Each NPC is a complete profile object written directly to 社交.关系.",
+  "modules": [
+    { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
+    { "promptId": "openingEnhancedC", "role": "user", "order": 0, "depth": 0 }
+  ]
+}

@@ -51,6 +51,9 @@ import StepSelectMany from '@/ui/components/creation/StepSelectMany.vue';
 import StepAttributeAlloc from '@/ui/components/creation/StepAttributeAlloc.vue';
 import StepForm from '@/ui/components/creation/StepForm.vue';
 import StepConfirmation from '@/ui/components/creation/StepConfirmation.vue';
+import EnhancedOpeningProgress from '@/ui/components/creation/EnhancedOpeningProgress.vue';
+import EnhancedOpeningFailDialog from '@/ui/components/creation/EnhancedOpeningFailDialog.vue';
+import type { PhaseErrorAction, PhaseErrorInfo, EnhancedOpeningSettings } from '@/engine/pipeline/sub-pipelines/enhanced-opening';
 import LoadingOverlay from '@/ui/components/common/LoadingOverlay.vue';
 import { eventBus } from '@/engine/core/event-bus';
 
@@ -110,6 +113,41 @@ const finalizeError = ref<string | null>(null);
  * 时作为 `{ splitGen: true }` 传给 `characterInitPipeline.execute()`。
  */
 const splitGenOpening = ref(false);
+
+/** Story 0: Enhanced Opening toggle state — default on (D21) */
+const enhancedOpeningEnabled = ref(true);
+
+/** Enhanced opening progress phase + percentage for the progress UI */
+const openingProgress = ref<{ phase: string; progress: number } | null>(null);
+
+/** E1 streaming preview text */
+const openingStreamText = ref('');
+
+/** AbortController for cancelling enhanced opening */
+let openingAbortController: AbortController | null = null;
+
+/** Enhanced opening advanced settings (synced from StepConfirmation) */
+const enhancedOpeningSettings = ref<EnhancedOpeningSettings | null>(null);
+
+/** Rate-limit waiting state for progress UI */
+const rateLimitWaitSeconds = ref<number | null>(null);
+
+/** Failure dialog state */
+const phaseError = ref<PhaseErrorInfo | null>(null);
+let phaseErrorResolve: ((action: PhaseErrorAction) => void) | null = null;
+
+function onPhaseErrorAction(action: PhaseErrorAction): void {
+  phaseError.value = null;
+  phaseErrorResolve?.(action);
+  phaseErrorResolve = null;
+}
+
+async function handlePhaseError(info: PhaseErrorInfo): Promise<PhaseErrorAction> {
+  phaseError.value = info;
+  return new Promise<PhaseErrorAction>((resolve) => {
+    phaseErrorResolve = resolve;
+  });
+}
 
 /**
  * Map step types to their rendering components.
@@ -283,9 +321,15 @@ function onStepSelect(value: unknown): void {
       // 注意 buildChoices 不包含 generationMode（它只收集 selections/attributes/formValues），
       // 所以必须在这里单独捕获到 splitGenOpening ref。
       if (value && typeof value === 'object' && !Array.isArray(value)) {
-        const payload = value as { __confirm?: boolean; options?: { generationMode?: string } };
+        const payload = value as { __confirm?: boolean; options?: { generationMode?: string; enhancedOpening?: boolean; enhancedOpeningSettings?: EnhancedOpeningSettings } };
         if (payload.options && payload.options.generationMode !== undefined) {
           splitGenOpening.value = payload.options.generationMode === 'step';
+        }
+        if (payload.options && payload.options.enhancedOpening !== undefined) {
+          enhancedOpeningEnabled.value = payload.options.enhancedOpening;
+        }
+        if (payload.options?.enhancedOpeningSettings) {
+          enhancedOpeningSettings.value = payload.options.enhancedOpeningSettings;
         }
         if (payload.__confirm) {
           void onFinalize();
@@ -327,11 +371,36 @@ async function onFinalize(): Promise<void> {
     const choices = buildChoices();
 
     if (characterInitPipeline) {
-      // §4.1c: 把 splitGenOpening（捕获自 StepConfirmation 的 toggle）作为 options 传入
+      // Reset enhanced opening UI state
+      openingProgress.value = null;
+      openingStreamText.value = '';
+      rateLimitWaitSeconds.value = null;
+      openingAbortController = new AbortController();
+
       const result: CharacterInitResult = await characterInitPipeline.execute(
         choices,
-        { splitGen: splitGenOpening.value },
+        {
+          splitGen: splitGenOpening.value,
+          enhancedOpening: enhancedOpeningEnabled.value,
+          enhancedOpeningSettings: enhancedOpeningSettings.value ?? undefined,
+          abortSignal: openingAbortController.signal,
+          onProgress: (phase: string, progress: number) => {
+            openingProgress.value = { phase, progress };
+            // CR-4.2: Reset stream preview when Phase E starts (or retries)
+            if (phase === 'phaseE' && progress === 0) {
+              openingStreamText.value = '';
+            }
+          },
+          onStreamChunk: (chunk: string) => {
+            openingStreamText.value += chunk;
+          },
+          onPhaseError: handlePhaseError,
+          onRateLimitWait: (seconds: number | null) => {
+            rateLimitWaitSeconds.value = seconds;
+          },
+        },
       );
+      openingAbortController = null;
       if (!result.success) {
         finalizeError.value = result.error ?? t('creation.error.creationFailed');
         return;
@@ -389,6 +458,11 @@ async function onFinalize(): Promise<void> {
   } finally {
     isFinalizing.value = false;
   }
+}
+
+function cancelEnhancedOpening(): void {
+  openingAbortController?.abort();
+  openingAbortController = null;
 }
 
 /** Reset the flow and return to step 1 */
@@ -511,9 +585,33 @@ function goHome(): void {
       </button>
     </footer>
 
-    <!-- Fullscreen loading overlay for AI generation and finalization -->
+    <!-- Enhanced opening progress overlay -->
+    <Teleport to="body">
+      <div v-if="isFinalizing && enhancedOpeningEnabled && openingProgress && !phaseError" class="enhanced-opening-overlay">
+        <EnhancedOpeningProgress
+          :current-phase="openingProgress?.phase ?? null"
+          :current-progress="openingProgress?.progress ?? 0"
+          :stream-text="openingStreamText"
+          :rate-limit-wait-seconds="rateLimitWaitSeconds"
+          @cancel="cancelEnhancedOpening"
+        />
+      </div>
+    </Teleport>
+
+    <!-- Phase failure dialog -->
+    <Teleport to="body">
+      <EnhancedOpeningFailDialog
+        v-if="phaseError"
+        :phase="phaseError.phase"
+        :reason="phaseError.reason"
+        :available-actions="phaseError.availableActions"
+        @action="onPhaseErrorAction"
+      />
+    </Teleport>
+
+    <!-- Fullscreen loading overlay for AI generation and finalization (non-enhanced path) -->
     <LoadingOverlay
-      :visible="isLoadingVisible"
+      :visible="isLoadingVisible && !(enhancedOpeningEnabled && openingProgress)"
       :message="loadingMessage"
       :fullscreen="true"
     />
@@ -885,5 +983,16 @@ function goHome(): void {
     padding: 0.5rem 1.25rem;
     font-size: 0.78rem;
   }
+}
+
+.enhanced-opening-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-overlay-bg, rgba(0, 0, 0, 0.6));
+  backdrop-filter: var(--glass-overlay-blur, blur(8px));
 }
 </style>

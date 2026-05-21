@@ -88,6 +88,7 @@ import type { FieldRepairPipeline } from '../pipeline/sub-pipelines/field-repair
 import type { NpcMemorySummarizer } from '../social/npc-memory-summarizer';
 import type { ImageService } from '../image/image-service';
 import type { PrivacyIncompleteReport } from '../validators/privacy-profile-validator';
+import type { OpeningStages } from '../pipeline/sub-pipelines/enhanced-opening';
 
 /**
  * 子管线包 — 由 main.ts 在 bootstrap 期间构造并注入 GameOrchestrator。
@@ -146,6 +147,20 @@ export class GameOrchestrator {
   /** R-01: 子管线运行中标记，防止 rollback 在子管线 async 飞行期间触发 */
   private _subPipelineActive = false;
 
+  // ── deps stored for createStagesForOpening() factory method ──
+  private readonly _stateManager: StateManager;
+  private readonly _commandExecutor: CommandExecutor;
+  private readonly _behaviorRunner: BehaviorRunner;
+  private readonly _aiService: AIService;
+  private readonly _responseParser: ResponseParser;
+  private readonly _promptAssembler: PromptAssembler;
+  private readonly _memoryRetriever: IMemoryRetriever;
+  private readonly _saveManager: SaveManager;
+  private readonly _pack: GamePack;
+  private readonly _paths: EnginePathConfig;
+  private readonly _unifiedRetriever?: IUnifiedRetriever;
+  private readonly _getActiveSlot: () => { profileId: string; slotId: string } | null;
+
   constructor(
     stateManager: StateManager,
     commandExecutor: CommandExecutor,
@@ -167,6 +182,20 @@ export class GameOrchestrator {
     this.subPipelines = subPipelines;
     this.engramManager = engramManager;
     this.memoryManager = memoryManager;
+
+    // Store deps for createStagesForOpening()
+    this._stateManager = stateManager;
+    this._commandExecutor = commandExecutor;
+    this._behaviorRunner = behaviorRunner;
+    this._aiService = aiService;
+    this._responseParser = responseParser;
+    this._promptAssembler = promptAssembler;
+    this._memoryRetriever = memoryRetriever;
+    this._saveManager = saveManager;
+    this._pack = pack;
+    this._paths = paths;
+    this._unifiedRetriever = unifiedRetriever;
+
     // PostProcessStage 需要 profileId/slotId，通过闭包从 Pinia store 读取。
     // 这里读取是安全的：闭包只在 autoSave() 中被调用，
     // 彼时 Vue 应用已挂载、Pinia 已激活。
@@ -175,6 +204,7 @@ export class GameOrchestrator {
       if (!store.activeProfileId || !store.activeSlotId) return null;
       return { profileId: store.activeProfileId, slotId: store.activeSlotId };
     };
+    this._getActiveSlot = getActiveSlot;
 
     // PreProcessStage 消费 action queue；同理通过闭包延迟读取 Pinia store。
     const actionQueue = {
@@ -673,7 +703,8 @@ export class GameOrchestrator {
     }
 
     // ── Auto scene generation (post-round) ──
-    if (this.subPipelines.imageService) {
+    // D27: Skip ImageService during enhanced opening
+    if (this.subPipelines.imageService && !ctx.meta?.isEnhancedOpening) {
       const autoScene = stateManager.get<boolean>('系统.扩展.image.config.autoSceneOnRound') === true;
       const imageEnabled = stateManager.get<boolean>('系统.扩展.image.enabled') === true;
       if (autoScene && imageEnabled && ctx.parsedResponse?.text) {
@@ -707,7 +738,8 @@ export class GameOrchestrator {
     }
 
     // ── Auto NPC portrait (first appearance) ──
-    if (this.subPipelines.imageService) {
+    // D27: Skip ImageService during enhanced opening (same guard as auto scene above)
+    if (this.subPipelines.imageService && !ctx.meta?.isEnhancedOpening) {
       const autoPortrait = stateManager.get<boolean>('系统.扩展.image.config.autoPortraitForMajorNpcs') === true;
       const imageEnabled = stateManager.get<boolean>('系统.扩展.image.enabled') === true;
       if (autoPortrait && imageEnabled) {
@@ -761,6 +793,68 @@ export class GameOrchestrator {
 
     // R-03: 子管线可能修改了记忆（refine/summary/compact）、NPC 列表、心跳状态等。
     eventBus.emit('engine:request-save', undefined);
+  }
+
+  /**
+   * NEW-C1: Public wrapper for runPostRoundSubPipelines — used by EnhancedOpeningPipeline (Phase G).
+   *
+   * Reads the player's current location and passes it as locationBefore so that
+   * locationAfter === locationBefore → NpcGeneration no-op.
+   */
+  public async runPostRoundForOpening(
+    ctx: PipelineContext,
+    stateManager: StateManager,
+  ): Promise<void> {
+    const location = stateManager.get<string>(this._paths.playerLocation) ?? null;
+    this._subPipelineActive = true;
+    try {
+      await this.runPostRoundSubPipelines(ctx, stateManager, location);
+    } finally {
+      this._subPipelineActive = false;
+      eventBus.emit('engine:sub-pipelines-done');
+    }
+  }
+
+  /**
+   * NEW-I1 + NEW-C3: Factory method creating stage instances for the enhanced opening pipeline.
+   *
+   * Uses the same dependency instances as the main pipeline, ensuring consistent behavior.
+   * The opening pipeline calls stage.execute() manually instead of going through PipelineRunner.
+   */
+  public createStagesForOpening(): OpeningStages {
+    return {
+      contextAssembly: new ContextAssemblyStage(
+        this._stateManager,
+        this._promptAssembler,
+        this._memoryRetriever,
+        this._behaviorRunner,
+        this._pack,
+        this._paths,
+        this.engramManager,
+        this._unifiedRetriever,
+        () => this.subPipelines.worldBooks ?? [],
+        () => this.subPipelines.builtinOverrides ?? [],
+        // Use legacy flow-based path so step1/step2FlowOverride works
+        false,
+      ),
+      aiCall: new AICallStage(this._aiService, this._responseParser),
+      bodyPolish: new BodyPolishStage(this._aiService, this._stateManager, this._promptAssembler),
+      commandExecution: new CommandExecutionStage(
+        this._commandExecutor,
+        this._behaviorRunner,
+        this._stateManager,
+        this._paths,
+      ),
+      postProcess: new PostProcessStage(
+        this._stateManager,
+        this.memoryManager,
+        this.engramManager,
+        this._behaviorRunner,
+        this._saveManager,
+        this._paths,
+        this._getActiveSlot,
+      ),
+    };
   }
 
   /** 销毁 Orchestrator — 应在 app 卸载时调用（防止内存泄漏） */

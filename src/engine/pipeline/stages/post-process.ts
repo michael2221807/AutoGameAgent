@@ -240,11 +240,14 @@ export class PostProcessStage implements PipelineStage {
       this.stateManager.set('元数据.当前行动选项', [], 'system');
     }
 
-    this.stateManager.push(
-      this.paths.narrativeHistory,
-      { role: 'user', content: ctx.userInput },
-      'system',
-    );
+    // Enhanced opening has no user input — skip the fake user entry (I1)
+    if (!ctx.meta?.isEnhancedOpening) {
+      this.stateManager.push(
+        this.paths.narrativeHistory,
+        { role: 'user', content: ctx.userInput },
+        'system',
+      );
+    }
 
     const deltaChanges = ctx.commandResults?.changeLog?.changes ?? [];
     const assistantEntry: Record<string, unknown> = {

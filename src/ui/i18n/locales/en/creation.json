@@ -66,6 +66,9 @@
   "creation.confirm.options.stepGen": "Split Generation",
   "creation.confirm.options.stepGenDesc": "Two API calls: first generate opening text, then initial commands. Reduces single-call complexity, improves stability, but doubles time.",
   "creation.confirm.options.stepGenToggle": "Split generation toggle",
+  "creation.confirm.options.enhancedOpening": "Enhanced Opening",
+  "creation.confirm.options.enhancedOpeningDesc": "Rich initial world: more NPCs, locations, and relationships (~5-10 min extra)",
+  "creation.confirm.options.enhancedOpeningToggle": "Enhanced opening toggle",
 
   "creation.presetDetail.empty": "Hover or select an option to view details",
   "creation.presetDetail.cost": "Cost {value} points",
@@ -96,5 +99,33 @@
   "creation.aiGen.toast.generating": "AI generating custom {label}…",
   "creation.aiGen.toast.success": "AI generation complete — please review before saving",
   "creation.aiGen.toast.error": "AI generation failed: {msg}",
-  "creation.aiGen.error.serviceNotInit": "AI service not initialized"
+  "creation.aiGen.error.serviceNotInit": "AI service not initialized",
+
+  "progress.enhancedOpening.title": "Enhanced Opening...",
+  "progress.enhancedOpening.phaseA": "Generating world lore...",
+  "progress.enhancedOpening.phaseB": "Building map...",
+  "progress.enhancedOpening.phaseC": "Creating characters...",
+  "progress.enhancedOpening.phaseD": "Weaving relationships...",
+  "progress.enhancedOpening.phaseE": "Generating opening scene...",
+  "progress.enhancedOpening.phaseF": "Solidifying memories...",
+  "progress.enhancedOpening.phaseG": "Filling in details...",
+  "progress.enhancedOpening.rateLimitWait": "Waiting for quota (~{seconds}s)",
+  "progress.enhancedOpening.cancel": "Cancel",
+
+  "creation.confirm.options.advancedSettings": "Advanced Settings",
+  "creation.confirm.options.npcRange": "NPC count",
+  "creation.confirm.options.locationRange": "Location count",
+  "creation.confirm.options.edgeRange": "Relationship edges",
+  "creation.confirm.options.inventoryRange": "Inventory items",
+  "creation.confirm.options.relationDensity": "Relationship density",
+  "creation.confirm.options.densitySparse": "Sparse",
+  "creation.confirm.options.densityMedium": "Medium",
+  "creation.confirm.options.densityDense": "Dense",
+  "creation.confirm.options.bypassRateLimit": "Bypass rate limit during opening",
+  "creation.confirm.options.bypassRateLimitWarning": "Opening sends 7+ consecutive requests — disabling rate limit may quickly consume API quota",
+
+  "creation.enhancedOpening.failDialog.title": "Enhanced Opening Failed",
+  "creation.enhancedOpening.failDialog.retry": "Retry this step",
+  "creation.enhancedOpening.failDialog.rollback": "Go back one step",
+  "creation.enhancedOpening.failDialog.exit": "Exit enhanced opening"
 }

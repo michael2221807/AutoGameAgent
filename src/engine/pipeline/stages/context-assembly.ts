@@ -385,7 +385,14 @@ export class ContextAssemblyStage implements PipelineStage {
           ...PlotInjector.buildStep2Variables(this.stateManager, this.paths),
         };
 
-        const step2Flow = this.pack.promptFlows['splitGenMainRoundStep2'];
+        const step2OverrideId = ctx.meta.step2FlowOverride as string | undefined;
+        const step2Flow = this.pack.promptFlows[step2OverrideId ?? 'splitGenMainRoundStep2'];
+        if (step2OverrideId && !this.pack.promptFlows[step2OverrideId]) {
+          if (ctx.meta.isEnhancedOpening) {
+            throw new Error(`[ContextAssembly] Required flow override '${step2OverrideId}' not found — Enhanced Opening cannot proceed`);
+          }
+          console.warn(`[ContextAssembly] step2FlowOverride '${step2OverrideId}' not found, falling back to default`);
+        }
         if (step2Flow) {
           const s2 = this.promptAssembler.assemble(step2Flow, step2Vars, chatHistory);
           splitStep2Messages = s2.messages;
@@ -399,8 +406,22 @@ export class ContextAssemblyStage implements PipelineStage {
 
     } else {
       // ═══ LEGACY PATH: flow-based PromptAssembler ═══
-      const step1Flow = splitGen ? this.pack.promptFlows['splitGenMainRoundStep1'] : null;
-      const step2Flow = splitGen ? this.pack.promptFlows['splitGenMainRoundStep2'] : null;
+      const step1OverrideId = ctx.meta.step1FlowOverride as string | undefined;
+      const step2OverrideId = ctx.meta.step2FlowOverride as string | undefined;
+      const step1Flow = splitGen ? this.pack.promptFlows[step1OverrideId ?? 'splitGenMainRoundStep1'] ?? null : null;
+      const step2Flow = splitGen ? this.pack.promptFlows[step2OverrideId ?? 'splitGenMainRoundStep2'] ?? null : null;
+      if (step1OverrideId && !this.pack.promptFlows[step1OverrideId]) {
+        if (ctx.meta.isEnhancedOpening) {
+          throw new Error(`[ContextAssembly] Required flow override '${step1OverrideId}' not found — Enhanced Opening cannot proceed`);
+        }
+        console.warn(`[ContextAssembly] step1FlowOverride '${step1OverrideId}' not found, falling back to default`);
+      }
+      if (step2OverrideId && !this.pack.promptFlows[step2OverrideId]) {
+        if (ctx.meta.isEnhancedOpening) {
+          throw new Error(`[ContextAssembly] Required flow override '${step2OverrideId}' not found — Enhanced Opening cannot proceed`);
+        }
+        console.warn(`[ContextAssembly] step2FlowOverride '${step2OverrideId}' not found, falling back to default`);
+      }
 
       if (splitGen && step1Flow && step2Flow) {
         const s1 = this.promptAssembler.assemble(step1Flow, variables, chatHistory);
