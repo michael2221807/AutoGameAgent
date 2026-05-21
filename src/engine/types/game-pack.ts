@@ -165,6 +165,17 @@ export interface CreationStep {
    *   - attribute-allocation：不使用
    */
   valueField?: string;
+  /**
+   * When set alongside valueField, extractStoredValue produces structured objects
+   * instead of plain strings. The value is read from `preset[descriptionField]`.
+   * Output keys default to valueField/descriptionField unless overridden by
+   * outputNameKey/outputDescKey.
+   */
+  descriptionField?: string;
+  /** Key name for the "name" field in the output object (e.g. "名称"). Defaults to valueField. */
+  outputNameKey?: string;
+  /** Key name for the "description" field in the output object (e.g. "描述"). Defaults to descriptionField. */
+  outputDescKey?: string;
 }
 
 /** 详情面板中的单个展示字段 */

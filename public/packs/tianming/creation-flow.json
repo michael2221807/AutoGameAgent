@@ -38,6 +38,9 @@
       "costSource": "pointBudget",
       "statePath": "角色.身份.出身",
       "valueField": "name",
+      "descriptionField": "description",
+      "outputNameKey": "名称",
+      "outputDescKey": "描述",
       "customSchema": {
         "fields": [
           { "key": "name", "label": "出身名称", "type": "text", "required": true, "placeholder": "如「将门遗孤」" },
@@ -61,6 +64,9 @@
       "costSource": "pointBudget",
       "statePath": "角色.基础信息.特质",
       "valueField": "name",
+      "descriptionField": "description",
+      "outputNameKey": "名称",
+      "outputDescKey": "描述",
       "customSchema": {
         "fields": [
           { "key": "name", "label": "特质名称", "type": "text", "required": true, "placeholder": "如「过目不忘」" },
@@ -84,6 +90,9 @@
       "costSource": "pointBudget",
       "statePath": "角色.身份.天赋",
       "valueField": "name",
+      "descriptionField": "description",
+      "outputNameKey": "名称",
+      "outputDescKey": "描述",
       "customSchema": {
         "fields": [
           { "key": "name", "label": "天赋名称", "type": "text", "required": true, "placeholder": "如「天眼通」" },

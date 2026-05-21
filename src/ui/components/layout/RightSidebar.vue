@@ -169,9 +169,27 @@
       <section v-if="engineState.talents.length > 0" class="status-card" :aria-label="$t('layout.right.ariaTalents')">
         <h3 class="status-card__title">{{ $t('layout.right.talentsTitle') }}</h3>
         <div class="talent-list">
-          <span v-for="t in engineState.talents" :key="t" class="talent-tag">{{ t }}</span>
+          <span
+            v-for="t in engineState.talents"
+            :key="t.名称"
+            class="talent-tag"
+            @mouseenter="showTalentTip($event, t)"
+            @mouseleave="hideTalentTip"
+            @click.stop="toggleTalentTip($event, t)"
+          >{{ t.名称 }}</span>
         </div>
       </section>
+
+      <!-- Talent tooltip — teleported to body to escape overflow clipping -->
+      <Teleport to="body">
+        <div
+          v-if="talentTip.visible"
+          class="effect-detail effect-detail--fixed"
+          :style="{ top: talentTip.y + 'px', left: talentTip.x + 'px' }"
+        >
+          <p class="effect-detail__desc">{{ talentTip.desc }}</p>
+        </div>
+      </Teleport>
 
       <!-- ─── Quick actions ─── -->
       <section class="status-card" :aria-label="$t('layout.right.ariaQuickActions')">
@@ -363,6 +381,33 @@ function toggleEffectTip(ev: MouseEvent, effect: NormalizedEffect): void {
     hideEffectTip();
   } else {
     showEffectTip(ev, effect);
+  }
+}
+
+// ── Talent tooltip (same Teleport pattern as effect tooltip) ─────
+const talentTip = ref<{ visible: boolean; x: number; y: number; desc: string }>({
+  visible: false, x: 0, y: 0, desc: '',
+});
+
+function showTalentTip(ev: MouseEvent, t: { 名称: string; 描述: string }): void {
+  if (!t.描述) return;
+  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  const tipWidth = 220;
+  let x = rect.left + rect.width / 2 - tipWidth / 2;
+  if (x < 8) x = 8;
+  if (x + tipWidth > window.innerWidth - 8) x = window.innerWidth - 8 - tipWidth;
+  talentTip.value = { visible: true, x, y: rect.bottom + 6, desc: t.描述 };
+}
+
+function hideTalentTip(): void {
+  talentTip.value = { visible: false, x: 0, y: 0, desc: '' };
+}
+
+function toggleTalentTip(ev: MouseEvent, t: { 名称: string; 描述: string }): void {
+  if (talentTip.value.visible && talentTip.value.desc === t.描述) {
+    hideTalentTip();
+  } else {
+    showTalentTip(ev, t);
   }
 }
 
@@ -609,6 +654,7 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /*
@@ -821,13 +867,15 @@ onUnmounted(() => {
 .effect-detail--fixed {
   position: fixed;
   z-index: 9999;
-  width: 220px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: color-mix(in oklch, var(--color-surface) 96%, transparent);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+  min-width: 200px;
+  max-width: 280px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: none;
+  box-shadow: var(--glass-shadow);
   text-align: left;
   white-space: normal;
   pointer-events: none;

@@ -373,13 +373,10 @@ export interface EnginePathConfig {
   /** 角色地位描述（如 "角色.可变属性.地位.描述"） */
   characterDescription: string;
   /**
-   * 角色特质名称路径（如 "角色.基础信息.特质"）
-   *
-   * 注意：schema 定义为 **string**（单个特质名称），不是数组。
-   * 旧版本 UI 代码曾按 `string[]` 读取，应按 string 处理（有数组 fallback 兼容旧存档）。
+   * 角色特质路径（如 "角色.基础信息.特质"）— {名称, 描述} 对象
    */
   characterTraits: string;
-  /** 角色出身路径（如 "角色.身份.出身"）— 创角只读 string */
+  /** 角色出身路径（如 "角色.身份.出身"）— 创角只读 {名称, 描述} */
   characterOrigin: string;
   /** 角色天赋档次路径（如 "角色.身份.天赋档次"）— 创角只读 string */
   characterTalentTier: string;
@@ -446,7 +443,7 @@ export interface EnginePathConfig {
   statusEffects: string;
   /** 声望数值（如 "角色.可变属性.声望"） */
   reputation: string;
-  /** 天赋列表（如 "角色.身份.天赋"） */
+  /** 天赋列表（如 "角色.身份.天赋"）— [{名称, 描述}, ...] */
   talents: string;
   /** 游戏时间·小时（如 "世界.时间.小时"） */
   gameTimeHour: string;

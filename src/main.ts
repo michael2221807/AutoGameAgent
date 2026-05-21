@@ -102,6 +102,7 @@ import type { ComputedFieldConfig, ThresholdTriggerConfig, IntegrityRule, Effect
 
 import { ProfileManager } from './engine/persistence/profile-manager';
 import { SaveManager } from './engine/persistence/save-manager';
+import { migrationRegistry } from './engine/persistence/migration-registry';
 import { BackupService } from './engine/persistence/backup-service';
 import { ImageAssetCache } from './engine/image/asset-cache';
 import { GitHubSyncService } from './engine/sync/github-sync';
@@ -224,11 +225,36 @@ async function bootstrap(): Promise<void> {
   }
 
   // §5.2 GAP fix：把当前 pack 版本传给 SaveManager，启用 schema 迁移链
-  // SaveManager.loadGame 会在读旧存档时按 slotMeta.packVersion 与此值比较，
-  // 有差异且 migrationRegistry 有对应迁移则链式应用。未来新增迁移时在本行
-  // 之后（或独立的 `registerMigrations()` 模块中）调 `migrationRegistry.register(...)`。
   if (pack?.manifest.version) {
     saveManager.setCurrentPackVersion(pack.manifest.version);
+  }
+
+  // Register save migrations (built-in + custom presets merged for name→description lookup)
+  if (pack) {
+    type P = { name: string; description?: string };
+    const toP = (entries: Record<string, unknown>[]): P[] =>
+      entries
+        .filter((e) => typeof e['name'] === 'string')
+        .map((e) => ({ name: e['name'] as string, description: typeof e['description'] === 'string' ? e['description'] : undefined }));
+    const merge = (builtIn: unknown[], custom: Record<string, unknown>[]): P[] => [
+      ...toP(builtIn as Record<string, unknown>[]),
+      ...toP(custom),
+    ];
+    const [customOrigins, customTraits, customTalents] = await Promise.all([
+      customPresetStore.get(pack.manifest.id, 'origins'),
+      customPresetStore.get(pack.manifest.id, 'traits'),
+      customPresetStore.get(pack.manifest.id, 'talents'),
+    ]);
+    const { createBackfillIdentityDescriptionsMigration } = await import(
+      '@/engine/persistence/migrations/backfill-identity-descriptions'
+    );
+    migrationRegistry.register(
+      createBackfillIdentityDescriptionsMigration(
+        merge(pack.presets['origins'] ?? [], customOrigins),
+        merge(pack.presets['traits'] ?? [], customTraits),
+        merge(pack.presets['talents'] ?? [], customTalents),
+      ),
+    );
   }
 
   const promptRegistry = new PromptRegistry();

@@ -463,15 +463,34 @@ function buildPlayerProfileString(ctx: PhaseContext): string {
   const age = sm.get<number>(p.characterAge) ?? 0;
   const occupation = sm.get<string>(p.characterOccupation) ?? '';
   const desc = sm.get<string>(p.characterDescription) ?? '';
-  const traits = sm.get<string>(p.characterTraits) ?? '';
-  const origin = sm.get<string>(p.characterOrigin) ?? '';
+  const readNameDesc = (raw: unknown): { name: string; desc: string } => {
+    if (typeof raw === 'string') return { name: raw, desc: '' };
+    if (raw && typeof raw === 'object') {
+      const o = raw as Record<string, unknown>;
+      return { name: typeof o['名称'] === 'string' ? o['名称'] : '', desc: typeof o['描述'] === 'string' ? o['描述'] : '' };
+    }
+    return { name: '', desc: '' };
+  };
+
+  const traitObj = readNameDesc(sm.get(p.characterTraits));
+  const originObj = readNameDesc(sm.get(p.characterOrigin));
 
   const parts = [`姓名：${name}`];
   if (gender) parts.push(`性别：${gender}`);
   if (age) parts.push(`年龄：${age}`);
   if (occupation) parts.push(`身份：${occupation}`);
-  if (origin) parts.push(`出身：${origin}`);
-  if (traits) parts.push(`特质：${traits}`);
+  if (originObj.name) parts.push(`出身：${originObj.name}${originObj.desc ? `（${originObj.desc}）` : ''}`);
+  if (traitObj.name) parts.push(`特质：${traitObj.name}${traitObj.desc ? `（${traitObj.desc}）` : ''}`);
+
+  const rawTalents = sm.get<unknown[]>(p.talents) ?? [];
+  if (rawTalents.length > 0) {
+    const talentEntries = rawTalents.map((t) => {
+      const { name: n, desc: d } = readNameDesc(t);
+      return d ? `${n}（${d}）` : n;
+    }).filter(Boolean);
+    if (talentEntries.length > 0) parts.push(`天赋：${talentEntries.join('、')}`);
+  }
+
   if (desc) parts.push(`描述：${desc}`);
 
   return parts.join('\n');

@@ -87,8 +87,19 @@ export const useEngineStateStore = defineStore('engineState', () => {
   /** 声望数值 */
   const reputation = computed(() => get<number>(P.reputation) ?? 0);
 
-  /** 天赋列表 */
-  const talents = computed(() => get<string[]>(P.talents) ?? []);
+  /** 天赋列表 [{名称, 描述}, ...] */
+  const talents = computed(() => {
+    const raw = get<unknown>(P.talents);
+    if (!Array.isArray(raw)) return [] as Array<{ 名称: string; 描述: string }>;
+    return raw.map((item) => {
+      if (typeof item === 'string') return { '名称': item, '描述': '' };
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        return { '名称': typeof o['名称'] === 'string' ? o['名称'] : '', '描述': typeof o['描述'] === 'string' ? o['描述'] : '' };
+      }
+      return { '名称': '', '描述': '' };
+    });
+  });
 
   /**
    * Load game state from a snapshot.

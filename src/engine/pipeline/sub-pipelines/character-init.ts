@@ -366,16 +366,24 @@ export class CharacterInitPipeline {
    *   与用户意图不符，所以此处保留原对象作为安全回退）
    */
   private extractStoredValue(
-    step: { type: string; valueField?: string },
+    step: { type: string; valueField?: string; descriptionField?: string; outputNameKey?: string; outputDescKey?: string },
     value: unknown,
   ): unknown {
     const field = step.valueField;
     if (!field) return value;
+    const descField = step.descriptionField;
+    const outName = step.outputNameKey ?? field;
+    const outDesc = step.outputDescKey ?? (descField ?? 'description');
 
     if (step.type === 'select-one') {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
-        const extracted = (value as Record<string, unknown>)[field];
-        return extracted ?? value;
+        const rec = value as Record<string, unknown>;
+        const name = rec[field];
+        if (descField) {
+          const desc = typeof rec[descField] === 'string' ? rec[descField] : '';
+          return { [outName]: name ?? '', [outDesc]: desc };
+        }
+        return name ?? value;
       }
       return value;
     }
@@ -384,7 +392,14 @@ export class CharacterInitPipeline {
       if (Array.isArray(value)) {
         return value
           .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object')
-          .map((item) => item[field])
+          .map((item) => {
+            const name = item[field];
+            if (descField) {
+              const desc = typeof item[descField] === 'string' ? item[descField] : '';
+              return { [outName]: name ?? '', [outDesc]: desc };
+            }
+            return name;
+          })
           .filter((v): v is NonNullable<typeof v> => v !== undefined && v !== null);
       }
       return value;

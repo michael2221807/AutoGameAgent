@@ -137,16 +137,17 @@ export class SaveManager {
       );
     }
 
-    // 持久化新版本号 —— 下次加载相同存档不重复迁移（幂等保证）
-    // 仅在无错且真的前进到了新版本时写入
+    // Persist migrated data + version to IDB so next load doesn't re-migrate
     if (!result.error && result.finalVersion !== fromVersion) {
       try {
+        const backupKey = saveKey(profileId, slotId) + ':pre-migration';
+        await idbAdapter.set(backupKey, raw);
+        await idbAdapter.set(saveKey(profileId, slotId), result.data);
         await this.profileManager.updateSlotMeta(profileId, slotId, {
           packVersion: result.finalVersion,
         });
       } catch (err) {
-        // 写 slot meta 失败不中断加载流程 —— 下次打开会再迁移一次（幂等）
-        console.warn('[SaveManager] Failed to persist migrated packVersion:', err);
+        console.warn('[SaveManager] Failed to persist migrated save:', err);
       }
     }
 

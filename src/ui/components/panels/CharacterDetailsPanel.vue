@@ -10,7 +10,7 @@
  *
  * 2026-04-08 升级：英雄头像区、Tab 结构（基础/属性/关系/成就）
  */
-import { ref, computed, inject, watch, onUnmounted } from 'vue';
+import { ref, reactive, computed, inject, watch, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
@@ -583,8 +583,20 @@ const traitsRaw = useValue<unknown>(P.characterTraits);
 const traitText = computed<string>(() => {
   const v = traitsRaw.value;
   if (typeof v === 'string') return v.trim();
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const name = (v as Record<string, unknown>)['名称'];
+    return typeof name === 'string' ? name.trim() : '';
+  }
   if (Array.isArray(v)) {
     return v.filter((x): x is string => typeof x === 'string' && x.trim() !== '').join('、');
+  }
+  return '';
+});
+const traitDesc = computed<string>(() => {
+  const v = traitsRaw.value;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const desc = (v as Record<string, unknown>)['描述'];
+    return typeof desc === 'string' ? desc : '';
   }
   return '';
 });
@@ -592,19 +604,42 @@ const traitText = computed<string>(() => {
 // 2026-04-11 fix：补全创角身份字段的读取 —— 出身 / 天赋档次 / 天赋列表 / 先天六维。
 // 之前 CharacterDetailsPanel 只显示基础信息 + 后天属性，身份字段完全没展示，
 // 导致玩家创角选的天资/出身/特质/天赋不出现在角色页面上。
-const origin = useValue<string>(P.characterOrigin);
+const originObj = useValue<Record<string, unknown>>(P.characterOrigin);
+const origin = computed(() => {
+  const v = originObj.value;
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object') return typeof v['名称'] === 'string' ? v['名称'] : '';
+  return '';
+});
+const originDesc = computed(() => {
+  const v = originObj.value;
+  if (v && typeof v === 'object' && typeof v['描述'] === 'string') return v['描述'];
+  return '';
+});
 const talentTier = useValue<string>(P.characterTalentTier);
 const talentList = useValue<unknown>(P.talents);
 const innateStats = useValue<Record<string, unknown>>(P.characterInnateStats);
 
-/** 天赋列表统一为 string[]（兼容 schema 定义的 string[] 和偶发的单字符串 fallback） */
-const talentNames = computed<string[]>(() => {
+const idSectionOpen = reactive({ origin: true, trait: true, talent: true });
+const originDescExpanded = ref(false);
+const traitDescExpanded = ref(false);
+const talentExpanded = ref<Record<number, boolean>>({});
+
+/** 天赋列表 — 兼容旧格式 string[] 和新格式 {名称, 描述}[] */
+const talentItems = computed<Array<{ name: string; desc: string }>>(() => {
   const v = talentList.value;
-  if (Array.isArray(v)) {
-    return v.filter((x): x is string => typeof x === 'string' && x.trim() !== '');
-  }
-  if (typeof v === 'string' && v.trim() !== '') return [v.trim()];
-  return [];
+  if (!Array.isArray(v)) return [];
+  return v.map((item) => {
+    if (typeof item === 'string') return { name: item.trim(), desc: '' };
+    if (item && typeof item === 'object') {
+      const o = item as Record<string, unknown>;
+      return {
+        name: typeof o['名称'] === 'string' ? o['名称'] : '',
+        desc: typeof o['描述'] === 'string' ? o['描述'] : '',
+      };
+    }
+    return { name: '', desc: '' };
+  }).filter((t) => t.name !== '');
 });
 
 const attributes = useValue<Record<string, unknown>>(P.characterAttributes);
@@ -1207,33 +1242,76 @@ const avatarInitial = computed<string>(() => {
           玩家只能在 GameVariablePanel 里看到原始 JSON。
         -->
         <section
-          v-if="origin || talentTier || traitText || talentNames.length"
-          class="info-card"
-          :aria-label="$t('character.basic.sectionIdentity')"
+          v-if="origin || traitText || talentItems.length"
+          class="identity-tier"
         >
-          <h3 class="card-title">{{ $t('character.basic.sectionIdentity') }}</h3>
-          <div class="info-grid">
-            <div v-if="origin" class="info-row">
-              <span class="info-label">{{ $t('character.basic.fieldOrigin') }}</span>
-              <span class="info-value">{{ origin }}</span>
-            </div>
-            <div v-if="talentTier" class="info-row">
-              <span class="info-label">{{ $t('character.basic.fieldTalentTier') }}</span>
-              <span class="info-value">{{ talentTier }}</span>
-            </div>
-            <div v-if="traitText" class="info-row">
-              <span class="info-label">{{ $t('character.basic.fieldTrait') }}</span>
-              <span class="info-value">{{ traitText }}</span>
-            </div>
+          <!-- Origin -->
+          <div v-if="origin" class="id-tier-section">
+            <button class="id-tier-header" @click="idSectionOpen.origin = !idSectionOpen.origin">
+              <div class="id-tier-title-group">
+                <span class="id-tier-indicator id-tier-indicator--origin" />
+                <span class="id-tier-label">{{ $t('character.basic.fieldOrigin') }}</span>
+              </div>
+              <svg :class="['id-tier-chevron', { 'id-tier-chevron--open': idSectionOpen.origin }]" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+            </button>
+            <Transition name="id-tier-expand">
+              <div v-if="idSectionOpen.origin" class="id-tier-body">
+                <div
+                  :class="['id-entry', { 'id-entry--expanded': originDescExpanded }]"
+                  @click="originDescExpanded = !originDescExpanded"
+                >
+                  <div class="id-entry__title">{{ origin }}</div>
+                  <div v-if="originDesc" class="id-entry__text">{{ originDesc }}</div>
+                </div>
+              </div>
+            </Transition>
           </div>
-          <div v-if="talentNames.length" class="talent-section">
-            <div class="talent-header">
-              <span class="talent-label">{{ $t('character.basic.fieldTalent') }}</span>
-              <span class="badge">{{ talentNames.length }}</span>
-            </div>
-            <div class="talent-list">
-              <span v-for="(t, idx) in talentNames" :key="idx" class="talent-tag">{{ t }}</span>
-            </div>
+
+          <!-- Trait -->
+          <div v-if="traitText" class="id-tier-section">
+            <button class="id-tier-header" @click="idSectionOpen.trait = !idSectionOpen.trait">
+              <div class="id-tier-title-group">
+                <span class="id-tier-indicator id-tier-indicator--trait" />
+                <span class="id-tier-label">{{ $t('character.basic.fieldTrait') }}</span>
+              </div>
+              <svg :class="['id-tier-chevron', { 'id-tier-chevron--open': idSectionOpen.trait }]" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+            </button>
+            <Transition name="id-tier-expand">
+              <div v-if="idSectionOpen.trait" class="id-tier-body">
+                <div
+                  :class="['id-entry', { 'id-entry--expanded': traitDescExpanded }]"
+                  @click="traitDescExpanded = !traitDescExpanded"
+                >
+                  <div class="id-entry__title">{{ traitText }}</div>
+                  <div v-if="traitDesc" class="id-entry__text">{{ traitDesc }}</div>
+                </div>
+              </div>
+            </Transition>
+          </div>
+
+          <!-- Talents -->
+          <div v-if="talentItems.length" class="id-tier-section">
+            <button class="id-tier-header" @click="idSectionOpen.talent = !idSectionOpen.talent">
+              <div class="id-tier-title-group">
+                <span class="id-tier-indicator id-tier-indicator--talent" />
+                <span class="id-tier-label">{{ $t('character.basic.fieldTalent') }}</span>
+                <span class="id-tier-count">{{ talentItems.length }}</span>
+              </div>
+              <svg :class="['id-tier-chevron', { 'id-tier-chevron--open': idSectionOpen.talent }]" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+            </button>
+            <Transition name="id-tier-expand">
+              <div v-if="idSectionOpen.talent" class="id-tier-body">
+                <div
+                  v-for="(t, idx) in talentItems"
+                  :key="t.name"
+                  :class="['id-entry', { 'id-entry--expanded': talentExpanded[idx] }]"
+                  @click="talentExpanded[idx] = !talentExpanded[idx]"
+                >
+                  <div class="id-entry__title">{{ t.name }}</div>
+                  <div v-if="t.desc" class="id-entry__text">{{ t.desc }}</div>
+                </div>
+              </div>
+            </Transition>
           </div>
         </section>
 
@@ -1790,6 +1868,11 @@ const avatarInitial = computed<string>(() => {
       </template>
     </template>
 
+    <!-- Not loaded state -->
+    <div v-else class="empty-state">
+      <p>尚未加载游戏数据</p>
+    </div>
+
     <!-- Player Regenerate-Same modal -->
     <RegenerateSameModal
       v-if="playerRegenPayload"
@@ -1809,11 +1892,6 @@ const avatarInitial = computed<string>(() => {
       @confirm="confirmPlayerRegenerate"
       @cancel="cancelPlayerRegenerate"
     />
-
-    <!-- Not loaded state -->
-    <div v-else class="empty-state">
-      <p>尚未加载游戏数据</p>
-    </div>
 
     <!-- ─── SchemaForm Modal ─── -->
     <Modal v-model="showSchemaModal" :title="schemaModalTitle" width="560px">
@@ -2102,6 +2180,7 @@ const avatarInitial = computed<string>(() => {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+
 /* ── Inline editing ── */
 .inline-input {
   height: 26px;
@@ -2148,44 +2227,182 @@ const avatarInitial = computed<string>(() => {
 }
 
 /* ── Talents section (basic tab 身份 sub-section) ── */
-.talent-section {
-  margin-top: 14px;
-  padding-top: 12px;
+
+
+/* ── Identity tier (mirrors .memory-tier pattern from MemoryPanel) ── */
+.identity-tier {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  flex-shrink: 0;
+}
+.identity-tier::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.id-tier-section + .id-tier-section {
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.talent-header {
+.id-tier-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text);
+  user-select: none;
+  transition: background var(--duration-fast, 120ms) ease;
 }
-
-.talent-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-secondary, #8888a0);
+.id-tier-header:hover {
+  background: rgba(255, 255, 255, 0.02);
 }
-
-.talent-list {
+.id-tier-title-group {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.id-tier-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full, 999px);
+  position: relative;
+  flex-shrink: 0;
+}
+.id-tier-indicator::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: var(--radius-full, 999px);
+  background: inherit;
+  opacity: 0.4;
+  filter: blur(5px);
+}
+.id-tier-indicator--origin { background: var(--color-amber-400, #d4a24e); }
+.id-tier-indicator--trait  { background: var(--color-sage-400); }
+.id-tier-indicator--talent { background: var(--color-success); }
+
+.id-tier-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text);
+}
+.id-tier-count {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-full, 999px);
+  letter-spacing: 0.02em;
+}
+
+.id-tier-chevron {
+  color: var(--color-text-muted);
+  width: 14px;
+  height: 14px;
+  transition: transform var(--duration-normal, 240ms) ease;
+  transform: rotate(-90deg);
+}
+.id-tier-chevron--open {
+  transform: rotate(0deg);
+}
+
+/* Tier expand transition */
+.id-tier-expand-enter-active {
+  transition: opacity var(--duration-normal, 240ms) ease,
+              max-height var(--duration-normal, 240ms) ease;
+  overflow: hidden;
+  max-height: 2000px;
+}
+.id-tier-expand-leave-active {
+  transition: opacity var(--duration-fast, 120ms) ease,
+              max-height var(--duration-fast, 120ms) ease;
+  overflow: hidden;
+}
+.id-tier-expand-enter-from,
+.id-tier-expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding: 0 12px;
+}
+
+.id-tier-body {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.talent-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--color-success);
-  background: color-mix(in oklch, var(--color-success) 10%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-success) 22%, transparent);
-  border-radius: 14px;
+/* Entry (mirrors .mem-entry) */
+.id-entry {
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: background var(--duration-fast, 120ms) ease;
+  position: relative;
 }
+.id-entry:hover {
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: var(--lumi-inset-highlight);
+}
+.id-entry::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 1px;
+  opacity: 0.35;
+  transition: opacity var(--duration-fast, 120ms) ease;
+}
+.id-entry:hover::before { opacity: 0.8; }
+.id-tier-section:nth-child(1) .id-entry::before { background: var(--color-amber-400, #d4a24e); }
+.id-tier-section:nth-child(2) .id-entry::before { background: var(--color-sage-400); }
+.id-tier-section:nth-child(3) .id-entry::before { background: var(--color-success); }
+
+.id-entry__title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.id-entry__text {
+  margin-top: 6px;
+  font-family: var(--font-serif-cjk, serif);
+  font-size: 0.8rem;
+  line-height: 1.75;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  letter-spacing: 0.01em;
+}
+.id-entry--expanded .id-entry__text {
+  -webkit-line-clamp: unset;
+}
+
 
 /* ── Attributes ── */
 .attribute-list {

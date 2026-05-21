@@ -87,7 +87,7 @@ export class ValidationRepairModule implements BehaviorModule {
 
         // 检查 2: 类型校验与修复
         if (childSchema.type) {
-          const repaired = this.coerceType(value, childSchema.type, childSchema.default);
+          const repaired = this.coerceType(value, childSchema.type, childSchema.default, childSchema.properties);
           if (repaired !== value) {
             stateManager.set(fieldPath, repaired, 'system');
             repairCount++;
@@ -131,7 +131,12 @@ export class ValidationRepairModule implements BehaviorModule {
    * - number → string: String() 转换
    * - 其他不兼容类型 → 使用默认值
    */
-  private coerceType(value: unknown, expectedType: string, defaultValue: unknown): unknown {
+  private coerceType(
+    value: unknown,
+    expectedType: string,
+    defaultValue: unknown,
+    schemaProperties?: Record<string, SchemaNode>,
+  ): unknown {
     switch (expectedType) {
       case 'number':
       case 'integer': {
@@ -146,9 +151,14 @@ export class ValidationRepairModule implements BehaviorModule {
       case 'array':
         return Array.isArray(value) ? value : (defaultValue ?? []);
       case 'object':
-        return (value !== null && typeof value === 'object' && !Array.isArray(value))
-          ? value
-          : (defaultValue ?? {});
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value;
+        if (typeof value === 'string' && value && schemaProperties) {
+          const propKeys = Object.keys(schemaProperties);
+          if (propKeys.length === 2 && propKeys.every((k) => schemaProperties[k]?.type === 'string')) {
+            return { [propKeys[0]]: value, [propKeys[1]]: '' };
+          }
+        }
+        return (defaultValue ?? {});
       default:
         return value;
     }
@@ -188,7 +198,22 @@ export class ValidationRepairModule implements BehaviorModule {
     const arr = stateManager.get<unknown[]>(arrayPath);
     if (!Array.isArray(arr)) return;
 
-    for (let i = 0; i < arr.length; i++) {
+    let needsRewrite = false;
+    const propKeys = itemSchema.properties ? Object.keys(itemSchema.properties) : [];
+    const isTwoStringProps = propKeys.length === 2
+      && propKeys.every((k) => itemSchema.properties![k]?.type === 'string');
+    const converted = arr.map((item) => {
+      if (typeof item === 'string' && isTwoStringProps) {
+        needsRewrite = true;
+        return { [propKeys[0]]: item, [propKeys[1]]: '' };
+      }
+      return item;
+    });
+    if (needsRewrite) {
+      stateManager.set(arrayPath, converted, 'system');
+    }
+
+    for (let i = 0; i < converted.length; i++) {
       const itemPath = `${arrayPath}[${i}]`;
       for (const [key, propSchema] of Object.entries(itemSchema.properties)) {
         const fieldPath = `${itemPath}.${key}`;

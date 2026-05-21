@@ -46,7 +46,15 @@
             "当前位置": { "type": "string", "default": "未知之地" },
             "年龄":     { "type": "number", "default": 20 },
             "性别":     { "type": "string", "default": "" },
-            "特质":     { "type": "string", "default": "", "$comment": "创角选择的特质名称（如「坚毅」「迅捷」）" }
+            "特质": {
+              "type": "object",
+              "default": {},
+              "$comment": "创角选择的特质（如「坚毅」「迅捷」）",
+              "properties": {
+                "名称": { "type": "string", "default": "" },
+                "描述": { "type": "string", "default": "" }
+              }
+            }
           }
         },
 
@@ -56,9 +64,28 @@
           "x-assistant-label": "角色身份",
           "$comment": "创角只读元数据 — 由 AI 初始化命令写入，游戏中不再更改",
           "properties": {
-            "出身":     { "type": "string",  "default": "" },
+            "出身": {
+              "type": "object",
+              "default": {},
+              "$comment": "创角选择的出身",
+              "properties": {
+                "名称": { "type": "string", "default": "" },
+                "描述": { "type": "string", "default": "" }
+              }
+            },
             "天赋档次": { "type": "string",  "default": "" },
-            "天赋":     { "type": "array",   "default": [], "$comment": "天赋名称列表 [string]" },
+            "天赋": {
+              "type": "array",
+              "default": [],
+              "$comment": "天赋列表 [{名称, 描述}, ...]",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "名称": { "type": "string" },
+                  "描述": { "type": "string" }
+                }
+              }
+            },
             "种族":     { "type": "string",  "default": "人族" },
             "出生日期": {
               "type": "object",
