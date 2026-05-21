@@ -377,6 +377,16 @@ async function onFinalize(): Promise<void> {
       rateLimitWaitSeconds.value = null;
       openingAbortController = new AbortController();
 
+      // BUG FIX: Clear active game BEFORE the pipeline starts.
+      // The pipeline calls stateManager.loadTree() which overwrites the shared
+      // reactive proxy with the new character's data. If activeProfileId still
+      // points to the OLD character at that point, PostProcessStage.autoSave()
+      // (triggered during enhanced opening Phase F) would save the new character's
+      // data to the OLD character's IDB key, silently corrupting the old save.
+      // clearGame() sets activeProfileId/activeSlotId to null, so getActiveSlot()
+      // returns null and autoSave() safely no-ops.
+      engineState.clearGame();
+
       const result: CharacterInitResult = await characterInitPipeline.execute(
         choices,
         {

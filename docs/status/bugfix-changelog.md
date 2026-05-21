@@ -11,6 +11,48 @@ Regression phase started: 2026-04-09
 
 ---
 
+## [2026-05-21] Fix: Engram locations without marker characters misclassified as NPC
+
+**Flow:** Engram entity classification → `inferEntityType()` → EntityBuilder / Tier 1 stub creation
+**Root cause:** `inferEntityType()` uses a regex of Chinese location-marker characters (村镇城池山林洞窟街道广场酒馆教堂寺庙道观宫殿区域大陆) to detect locations. Names without these markers (e.g., 桃花源、落霞谷、碧水潭、望月楼) fall through to the default `return 'npc'`. Two trigger paths:
+1. AI puts a location name in `midTermMemory.相关角色` → enters `structured_kv.role` → `inferType()` returns `'npc'`
+2. KnowledgeFact edge endpoint names a location → Tier 1 stub creation calls `inferEntityType()` → returns `'npc'`
+
+**Files changed:**
+- `src/engine/memory/engram/entity-builder.ts:287-293` — `inferEntityType()` now accepts optional `knownLocations: ReadonlySet<string>` parameter; names in the set return `'location'` before regex fallback
+- `src/engine/memory/engram/entity-builder.ts:133-142` — `EntityBuilder.build()` pre-scans all events' `structured_kv.location` and `event.location` fields to build the known locations set, passed to all `inferType()` calls
+- `src/engine/memory/engram/engram-manager.ts:269-272` — Tier 1 stub creation derives `knownLocationNames` from already-built entities and passes to `inferEntityType()`
+- `src/engine/memory/engram/entity-builder.test.ts` — 7 new tests covering knownLocations parameter, cross-round classification, and flat field matching
+
+**Behavior before:** Location names without Chinese marker characters (桃花源, 落霞谷, etc.) classified as `type: 'npc'` in the knowledge graph.
+**Behavior after:** Locations recognized via cross-referencing event location fields, regardless of whether name contains marker characters.
+**Notes:** Regex-only detection is still the fallback for names that don't appear in any event's location field. A fully AI-driven classification approach could be a future enhancement but is out of scope.
+
+---
+
+## [2026-05-21] Fix: creating new character corrupts existing character's save data
+
+**Flow:** Character Creation (Enhanced Opening path) → PostProcessStage.autoSave()
+**Root cause:** Race condition between state tree ownership and Pinia store metadata during character creation.
+
+When a user creates a new character (Character 2) while having an existing character (Character 1) loaded:
+1. `CharacterInitPipeline.execute()` calls `stateManager.loadTree(initialState)` at step 1, overwriting the shared reactive proxy with Character 2's data.
+2. Enhanced Opening Phase F runs `PostProcessStage.execute()` which calls `autoSave()`.
+3. `autoSave()` calls `getActiveSlot()` which reads `activeProfileId`/`activeSlotId` from the Pinia store — still pointing to **Character 1** (because `markLoaded()` only runs after the pipeline completes).
+4. `saveGame(profile_A, 'auto', character2_snapshot)` overwrites Character 1's save with Character 2's mid-pipeline data.
+
+After the pipeline finishes, Character 2's final save is correctly written to `save_profile_B_auto`. But `save_profile_A_auto` now contains Character 2's incomplete data from step 4.
+
+**Files changed:**
+- `src/ui/views/CreationView.vue:~377` — added `engineState.clearGame()` before calling `characterInitPipeline.execute()`, so `getActiveSlot()` returns null and `autoSave()` no-ops during creation.
+
+**Behavior before:** Creating Character 2 silently overwrites Character 1's IDB save with Character 2's mid-pipeline state. Loading Character 1 afterwards shows Character 2's corrupted data.
+**Behavior after:** `clearGame()` nulls `activeProfileId`/`activeSlotId` before the pipeline starts. `autoSave()` sees no active slot and skips. Character 1's save remains untouched.
+
+**Notes:** The non-enhanced-opening path (steps 3-5 direct AI calls) is not affected because it doesn't invoke `PostProcessStage`. However, `clearGame()` protects against any future code path that might trigger a save during creation.
+
+---
+
 ## [2026-05-21] Fix: streaming display shows raw JSON instead of narrative text
 
 **Flow:** Main round (single-call & splitGen) + Enhanced Opening Phase E

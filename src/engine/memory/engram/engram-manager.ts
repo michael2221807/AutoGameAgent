@@ -266,6 +266,10 @@ export class EngramManager {
     // ── Step 2.5: Tier 1 — 自动补桩缺失实体（事实边端点） ──
     if (config.knowledgeEdgeMode === 'active' && response.knowledgeFacts && response.knowledgeFacts.length > 0) {
       const entityNames = new Set(entities.map((e) => e.name));
+      // Derived from EntityBuilder.build()'s pre-scan — both sites must stay in sync
+      const knownLocationNames = new Set(
+        entities.filter((e) => e.type === 'location').map((e) => e.name),
+      );
       const isSentenceLike = (s: string) => s.length > 6 && /[，。了的被在过着得让把将与从]/.test(s);
       for (const kf of response.knowledgeFacts) {
         for (const name of [kf.sourceEntity, kf.targetEntity]) {
@@ -273,7 +277,7 @@ export class EngramManager {
           if (isSentenceLike(name)) continue;
           entities.push({
             name,
-            type: inferEntityType(name),
+            type: inferEntityType(name, knownLocationNames),
             summary: '',
             attributes: {},
             firstSeen: currentRound,

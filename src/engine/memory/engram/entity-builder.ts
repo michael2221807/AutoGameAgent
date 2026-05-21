@@ -129,7 +129,19 @@ export class EntityBuilder {
       }
     }
 
-    // ── 3. 从 events 补充 role / location 实体 ──
+    // ── 3. Pre-scan: collect all known location names from events ──
+    const knownLocations = new Set<string>();
+    for (const event of events) {
+      const kv = event.structured_kv;
+      if (kv && Array.isArray(kv.location)) {
+        for (const loc of kv.location) {
+          if (typeof loc === 'string' && loc.trim()) knownLocations.add(loc.trim());
+        }
+      }
+      if (event.location) knownLocations.add(event.location.trim());
+    }
+
+    // ── 4. 从 events 补充 role / location 实体（uses knownLocations from step 3） ──
     for (const event of events) {
       const round = event.roundNumber ?? 0;
       const kv = event.structured_kv;
@@ -142,7 +154,7 @@ export class EntityBuilder {
           // "玩家"/"player" 字面量 → 合并到真实玩家名
           const isPlayerAlias = trimmedName === '玩家' || trimmedName === 'player';
           const resolvedName = (isPlayerAlias || trimmedName === playerName) ? playerName : trimmedName;
-          const type = (isPlayerAlias || resolvedName === playerName) ? 'player' : this.inferType(resolvedName);
+          const type = (isPlayerAlias || resolvedName === playerName) ? 'player' : this.inferType(resolvedName, knownLocations);
           this.upsertEntity(entityMap, resolvedName, type, round, '', {
             source: 'event_role',
             lastEventId: event.id,
@@ -164,19 +176,19 @@ export class EntityBuilder {
       // 兼容旧字段：event.subject / event.object / event.location（平铺字段）
       if (event.subject) {
         const subj = event.subject === '玩家' || event.subject === 'player' ? playerName : event.subject;
-        const subjType = subj === playerName ? 'player' : this.inferType(subj);
+        const subjType = subj === playerName ? 'player' : this.inferType(subj, knownLocations);
         this.upsertEntity(entityMap, subj, subjType, round, '');
       }
       if (event.object) {
         const obj = event.object === '玩家' || event.object === 'player' ? playerName : event.object;
-        this.upsertEntity(entityMap, obj, this.inferType(obj), round, '');
+        this.upsertEntity(entityMap, obj, this.inferType(obj, knownLocations), round, '');
       }
       if (event.location) {
         this.upsertEntity(entityMap, event.location, 'location', round, '');
       }
     }
 
-    // ── 4. Fix firstSeen/lastSeen from events ──
+    // ── 5. Fix firstSeen/lastSeen from events ──
     // Step 2 hardcodes round=0 for relationship-sourced entities because 社交.関係
     // doesn't record when an NPC was added. This post-processing pass derives the
     // actual first/last appearance round from event data (authoritative source).
@@ -279,13 +291,17 @@ export class EntityBuilder {
     });
   }
 
-  private inferType(name: string): EngramEntity['type'] {
-    return inferEntityType(name);
+  private inferType(name: string, knownLocations?: ReadonlySet<string>): EngramEntity['type'] {
+    return inferEntityType(name, knownLocations);
   }
 }
 
-export function inferEntityType(name: string): EngramEntity['type'] {
+export function inferEntityType(
+  name: string,
+  knownLocations?: ReadonlySet<string>,
+): EngramEntity['type'] {
   if (name === '玩家' || name === 'player') return 'player';
+  if (knownLocations?.has(name)) return 'location';
   if (/[·]/.test(name) || /[村镇城池山林洞窟街道广场酒馆教堂寺庙道观宫殿区域大陆]/.test(name)) return 'location';
   if (/[计划文件卷轴药剑书戒指吊坠笔记本信件地图钥匙]/.test(name)) return 'item';
   return 'npc';

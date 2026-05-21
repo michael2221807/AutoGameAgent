@@ -224,4 +224,91 @@ describe('inferEntityType', () => {
   ])('returns "item" for "$name" (contains $marker)', ({ name }) => {
     expect(inferEntityType(name)).toBe('item');
   });
+
+  it('returns "location" when name is in knownLocations set', () => {
+    const known = new Set(['桃花源', '落霞谷']);
+    expect(inferEntityType('桃花源', known)).toBe('location');
+    expect(inferEntityType('落霞谷', known)).toBe('location');
+  });
+
+  it('still returns "npc" for unknown names even with knownLocations', () => {
+    const known = new Set(['桃花源']);
+    expect(inferEntityType('张三', known)).toBe('npc');
+  });
+
+  it('knownLocations takes priority over regex fallback', () => {
+    const known = new Set(['碧水潭']);
+    expect(inferEntityType('碧水潭')).toBe('npc');
+    expect(inferEntityType('碧水潭', known)).toBe('location');
+  });
+});
+
+describe('EntityBuilder — location context from events', () => {
+  const builder = new EntityBuilder();
+
+  it('classifies role entry as location when it appears in event location field', () => {
+    const sm = makeSM();
+    const events = [
+      makeEvent({
+        structured_kv: makeKV({
+          role: ['桃花源'],
+          location: ['桃花源'],
+        }),
+      }),
+    ];
+    const entities = builder.build(events, sm, PATHS);
+    const entity = entities.find((e) => e.name === '桃花源');
+    expect(entity).toBeDefined();
+    expect(entity?.type).toBe('location');
+  });
+
+  it('classifies role entry as location when a different event has it as location', () => {
+    const sm = makeSM();
+    const events = [
+      makeEvent({
+        roundNumber: 1,
+        structured_kv: makeKV({ location: ['落霞谷'] }),
+      }),
+      makeEvent({
+        roundNumber: 2,
+        structured_kv: makeKV({ role: ['落霞谷'] }),
+      }),
+    ];
+    const entities = builder.build(events, sm, PATHS);
+    const entity = entities.find((e) => e.name === '落霞谷');
+    expect(entity).toBeDefined();
+    expect(entity?.type).toBe('location');
+  });
+
+  it('classifies name as location when it appears in role first then location later', () => {
+    const sm = makeSM();
+    const events = [
+      makeEvent({
+        roundNumber: 1,
+        structured_kv: makeKV({ role: ['望月楼'] }),
+      }),
+      makeEvent({
+        roundNumber: 3,
+        structured_kv: makeKV({ location: ['望月楼'] }),
+      }),
+    ];
+    const entities = builder.build(events, sm, PATHS);
+    const entity = entities.find((e) => e.name === '望月楼');
+    expect(entity).toBeDefined();
+    expect(entity?.type).toBe('location');
+  });
+
+  it('classifies role entry as location when event.location flat field matches', () => {
+    const sm = makeSM();
+    const events = [
+      makeEvent({
+        location: '碧水潭',
+        structured_kv: makeKV({ role: ['碧水潭'] }),
+      }),
+    ];
+    const entities = builder.build(events, sm, PATHS);
+    const entity = entities.find((e) => e.name === '碧水潭');
+    expect(entity).toBeDefined();
+    expect(entity?.type).toBe('location');
+  });
 });
