@@ -597,14 +597,11 @@ export class EnhancedOpeningPipeline {
       G: ['retry', 'exit'],
     };
 
-    const MAX_RETRIES = 3;
-
     const runPhase = async <T>(
       phase: string,
       fn: () => Promise<T>,
       rollbackSnapshot?: Record<string, unknown>,
     ): Promise<T> => {
-      let retryCount = 0;
       while (true) {
         try {
           return await fn();
@@ -614,10 +611,6 @@ export class EnhancedOpeningPipeline {
           if (!options.onPhaseError) throw err;
 
           const actions = [...(phaseActions[phase] ?? ['retry', 'exit'])];
-          if (retryCount >= MAX_RETRIES) {
-            const idx = actions.indexOf('retry');
-            if (idx >= 0) actions.splice(idx, 1);
-          }
 
           const action = await options.onPhaseError({
             phase,
@@ -625,8 +618,7 @@ export class EnhancedOpeningPipeline {
             availableActions: actions,
           });
 
-          if (action === 'retry' && retryCount < MAX_RETRIES) {
-            retryCount++;
+          if (action === 'retry') {
             continue;
           }
           if (action === 'rollback' && rollbackSnapshot) {

@@ -166,7 +166,7 @@ export class AIService {
     }
 
     const provider = this.createProvider(config);
-    const { signal, cleanup } = this.createTimeoutSignal();
+    const { signal, cleanup } = this.createTimeoutSignal(options.signal);
 
     eventBus.emit('ai:request-start', {
       usageType: options.usageType,
@@ -286,22 +286,24 @@ export class AIService {
    * 返回 signal + cleanup 函数，调用方必须在 finally 中调用 cleanup()
    * 以释放定时器和事件监听器，避免长达 5 分钟的内存泄漏。
    */
-  private createTimeoutSignal(): { signal: AbortSignal; cleanup: () => void } {
+  private createTimeoutSignal(callerSignal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
-    // 用户取消也触发此 signal
-    const onUserAbort = () => {
+    const onAbort = () => {
       clearTimeout(timeoutId);
       controller.abort();
     };
-    this.abortController?.signal.addEventListener('abort', onUserAbort);
+
+    this.abortController?.signal.addEventListener('abort', onAbort);
+    callerSignal?.addEventListener('abort', onAbort);
 
     return {
       signal: controller.signal,
       cleanup: () => {
         clearTimeout(timeoutId);
-        this.abortController?.signal.removeEventListener('abort', onUserAbort);
+        this.abortController?.signal.removeEventListener('abort', onAbort);
+        callerSignal?.removeEventListener('abort', onAbort);
       },
     };
   }
