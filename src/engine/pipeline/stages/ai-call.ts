@@ -44,14 +44,20 @@ export class AICallStage implements PipelineStage {
   private async executeSingleCall(ctx: PipelineContext): Promise<PipelineContext> {
     // Phase 1 (2026-04-19): capture per-turn timing for narrativeHistory `_metrics`.
     const aiCallStartedAt = performance.now();
+
+    const streamFilter = ctx.onStreamChunk
+      ? createJsonTextStreamUnwrapper(ctx.onStreamChunk)
+      : null;
+
     const rawResponse = await this.aiService.generate({
       messages: ctx.messages,
-      stream: !!ctx.onStreamChunk,
+      stream: !!streamFilter,
       usageType: 'main',
       generationId: ctx.generationId,
-      onStreamChunk: ctx.onStreamChunk,
+      onStreamChunk: streamFilter?.onChunk,
       signal: ctx.abortSignal,
     });
+    streamFilter?.flush();
     const aiCallDurationMs = performance.now() - aiCallStartedAt;
     const captureThinking = ctx.meta.cotEnabled === true;
     const parsedResponse = this.responseParser.parse(rawResponse, { captureThinking });
@@ -76,14 +82,22 @@ export class AICallStage implements PipelineStage {
     const aiCallStartedAt = performance.now();
     // ── 第1步：正文（流式，让用户看到逐字输出） ──
     ctx.onProgress?.({ i18nKey: 'engine.progress.aiCallStep1', message: '[AICall:分步第1步]' });
+
+    // splitGenStep1 asks the model to output {"text":"..."} JSON — strip
+    // the envelope during streaming so the UI sees clean narrative text.
+    const streamFilter = ctx.onStreamChunk
+      ? createJsonTextStreamUnwrapper(ctx.onStreamChunk)
+      : null;
+
     const rawStep1 = await this.aiService.generate({
       messages: ctx.messages,
-      stream: !!ctx.onStreamChunk,
+      stream: !!streamFilter,
       usageType: 'main',
       generationId: ctx.generationId + '_step1',
-      onStreamChunk: ctx.onStreamChunk,
+      onStreamChunk: streamFilter?.onChunk,
       signal: ctx.abortSignal,
     });
+    streamFilter?.flush();
     const captureThinking = ctx.meta.cotEnabled === true;
     const parsedStep1 = this.responseParser.parse(rawStep1, { captureThinking });
     emitDebugPromptResponse(
@@ -195,6 +209,85 @@ export class AICallStage implements PipelineStage {
       meta: { ...ctx.meta, rawResponseStep2: rawStep2 },
     };
   }
+}
+
+/**
+ * Character-level state machine that strips the JSON envelope from streamed
+ * AI output. Works for both single-call (`{"text":"...","commands":...}`) and
+ * splitGen step1 (`{"text":"..."}`).
+ *
+ * States: SEEKING → IN_TEXT → (ESCAPE) → DONE / PASSTHROUGH
+ *
+ * - SEEKING: buffers chars until `{"text":"` prefix is detected
+ * - IN_TEXT: emits narrative chars, decodes JSON escapes (\n→newline, \"→")
+ * - ESCAPE: just saw `\` inside the text value
+ * - DONE: hit the closing `"` of the text value — discards the rest
+ * - PASSTHROUGH: prefix not detected after 20 chars — emits everything raw
+ */
+function createJsonTextStreamUnwrapper(
+  onChunk: (chunk: string) => void,
+): { onChunk: (chunk: string) => void; flush: () => void } {
+  const PREFIX_RE = /^\s*\{\s*"text"\s*:\s*"/;
+  const PREFIX_MAX = 20;
+
+  let state: 'seeking' | 'text' | 'escape' | 'done' | 'passthrough' = 'seeking';
+  let seekBuf = '';
+
+  return {
+    onChunk(chunk: string) {
+      if (state === 'done') return;
+
+      if (state === 'passthrough') {
+        onChunk(chunk);
+        return;
+      }
+
+      for (let i = 0; i < chunk.length; i++) {
+        const ch = chunk[i];
+
+        switch (state) {
+          case 'seeking':
+            seekBuf += ch;
+            if (PREFIX_RE.test(seekBuf)) {
+              state = 'text';
+              seekBuf = '';
+            } else if (seekBuf.length > PREFIX_MAX) {
+              state = 'passthrough';
+              onChunk(seekBuf + chunk.slice(i + 1));
+              seekBuf = '';
+              return;
+            }
+            break;
+
+          case 'text':
+            if (ch === '\\') {
+              state = 'escape';
+            } else if (ch === '"') {
+              state = 'done';
+              return;
+            } else {
+              onChunk(ch);
+            }
+            break;
+
+          case 'escape': {
+            const ESCAPE_MAP: Record<string, string> = {
+              n: '\n', t: '\t', r: '\r', '"': '"', '\\': '\\', '/': '/',
+            };
+            onChunk(ESCAPE_MAP[ch] ?? '\\' + ch);
+            state = 'text';
+            break;
+          }
+        }
+      }
+    },
+
+    flush() {
+      if (state === 'seeking' && seekBuf) {
+        onChunk(seekBuf);
+      }
+    },
+  };
 }
 
 /**

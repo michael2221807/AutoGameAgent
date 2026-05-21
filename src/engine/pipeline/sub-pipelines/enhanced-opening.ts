@@ -367,31 +367,7 @@ async function executePhaseC(ctx: PhaseContext): Promise<string> {
     PLAYER_PROFILE: playerProfile,
     NPC_MIN: String(ctx.options.settings.npcRange[0]),
     NPC_MAX: String(ctx.options.settings.npcRange[1]),
-    NSFW_SECTION: ctx.options.nsfwMode
-      ? `   - 私密信息（完整对象），JSON 结构如下：
-     \`\`\`json
-     "私密信息": {
-       "是否为处女/处男": true,
-       "身体部位": [
-         { "部位名称": "嘴", "敏感度": 30, "开发度": 0, "特征描述": "...", "特殊印记": "" },
-         { "部位名称": "胸部", "敏感度": 50, "开发度": 0, "特征描述": "...", "特殊印记": "" },
-         { "部位名称": "小穴", "敏感度": 70, "开发度": 0, "特征描述": "...", "特殊印记": "" },
-         { "部位名称": "屁穴", "敏感度": 20, "开发度": 0, "特征描述": "...", "特殊印记": "" }
-       ],
-       "性格倾向": "...",
-       "性取向": "...",
-       "性癖好": ["标签1", "标签2"],
-       "性渴望程度": 50,
-       "性交总次数": 0,
-       "性伴侣名单": []
-     }
-     \`\`\`
-     - 身体部位必须至少包含 4 个固定部位：嘴/胸部/小穴/屁穴，可追加更多
-     - 敏感度/开发度：0-100 数字
-     - 性渴望程度：0-100 数字
-     - 性癖好：字符串数组
-     - 如果「是否为处女/处男」= false，则必须补全：初夜夺取者（字符串）、初夜时间（字符串）、初夜描述（50-200字）`
-      : '',
+    NSFW_SECTION: '',
   };
 
   const { messages, generationId } = assembleFlowMessages(
@@ -417,9 +393,7 @@ async function executePhaseC(ctx: PhaseContext): Promise<string> {
   const npcs = validateNpcs(parsed);
 
   for (const npc of npcs) {
-    if (!ctx.options.nsfwMode) {
-      delete npc['私密信息'];
-    }
+    delete npc['私密信息'];
     if (!Array.isArray(npc['记忆'])) npc['记忆'] = [];
     if (!Array.isArray(npc['关系网变量'])) npc['关系网变量'] = [];
 

@@ -391,9 +391,9 @@ async function onFinalize(): Promise<void> {
               openingStreamText.value = '';
             }
           },
-          onStreamChunk: (chunk: string) => {
-            openingStreamText.value += chunk;
-          },
+          onStreamChunk: splitGenOpening.value
+            ? (chunk: string) => { openingStreamText.value += chunk; }
+            : undefined,
           onPhaseError: handlePhaseError,
           onRateLimitWait: (seconds: number | null) => {
             rateLimitWaitSeconds.value = seconds;
