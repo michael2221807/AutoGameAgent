@@ -10,4 +10,4 @@
 
 ---
 
-玩家本回合输入将作为最后一条 user 消息（带 `narratorEnforcement` 前缀）附加在 chat history 之后。
+玩家本回合输入将作为最后一条 user 消息附加在对话记录之后。
