@@ -202,8 +202,9 @@ export class ResponseParser {
     const direct = tryParseWithSanitizer(text);
     if (direct) return direct;
 
-    // 策略 2: 提取 ```json ... ``` 代码块
-    const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    // 策略 2: 提取 ```json ... ``` 代码块 (also handles unclosed fence from truncated output)
+    const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+      ?? text.match(/```(?:json)?\s*\n?([\s\S]+)/);
     if (codeBlockMatch?.[1]) {
       const fromBlock = tryParseWithSanitizer(codeBlockMatch[1]);
       if (fromBlock) return fromBlock;

@@ -2,6 +2,7 @@
   "id": "fieldRepair",
   "$comment": "Mirrors splitGenMainRoundStep2 with the step-2 task prompt replaced by `fieldRepair`. FieldRepairPipeline reuses main-round context (game state, memory, chat history) and injects MISSING_FIELDS_SUMMARY into this flow.",
   "modules": [
+    { "promptId": "jailbreak",          "role": "system", "order": -2, "depth": 0 },
     { "promptId": "narratorFrame",     "role": "system", "order": -1, "depth": 0 },
     { "promptId": "fieldRepair",       "role": "system", "order": 0,  "depth": 0 },
     { "promptId": "core",              "role": "system", "order": 1,  "depth": 0 },

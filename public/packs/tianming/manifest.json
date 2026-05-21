@@ -30,7 +30,7 @@
     "openingEnhancedStep2": "prompt-flows/opening-enhanced-step2.json"
   },
   "prompts": [
-    "narratorFrame", "narratorEnforcement", "creationGenJailbreak", "assistantJailbreak",
+    "narratorFrame", "narratorEnforcement", "jailbreak", "creationGenJailbreak", "assistantJailbreak",
     "assistantInjectionContract", "historyFraming", "core", "worldGen", "opening", "mainRound",
     "memorySummary", "memorySummaryInput", "midTermRefine", "midTermRefineInput",
     "longTermCompact", "longTermCompactInput", "splitGenStep1", "splitGenStep2",

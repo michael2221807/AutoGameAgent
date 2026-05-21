@@ -128,7 +128,8 @@ interface PhaseContext {
 
 function extractJSON(raw: string, phaseLabel: string): unknown {
   const cleaned = raw.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
-  const fenced = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  const fenced = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+    ?? cleaned.match(/```(?:json)?\s*\n?([\s\S]+)/);
   const jsonStr = fenced ? fenced[1].trim() : cleaned;
   try {
     return JSON.parse(jsonStr);

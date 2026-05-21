@@ -2,6 +2,7 @@
   "id": "openingEnhancedD",
   "$comment": "Phase D: Engram structural knowledge edges — JSON output with knowledge_facts[]. Facts are stashed in ctx.meta.openingFacts for Phase F injection.",
   "modules": [
+    { "promptId": "jailbreak", "role": "system", "order": -2, "depth": 0 },
     { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
     { "promptId": "openingEnhancedD", "role": "user", "order": 0, "depth": 0 }
   ]

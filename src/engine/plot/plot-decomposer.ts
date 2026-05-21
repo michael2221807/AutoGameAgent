@@ -78,7 +78,8 @@ export class PlotDecomposer {
           result = JSON.parse(parsed.text) as Record<string, unknown>;
         } catch {
           // Try extracting JSON from code block
-          const match = parsed.text.match(/```json\s*([\s\S]*?)```/);
+          const match = parsed.text.match(/```json\s*([\s\S]*?)```/)
+            ?? parsed.text.match(/```json\s*([\s\S]+)/);
           if (match) {
             try {
               result = JSON.parse(match[1]) as Record<string, unknown>;

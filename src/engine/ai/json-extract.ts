@@ -35,9 +35,10 @@ import { sanitizeJsonEscapes } from './json-escape-sanitize';
  * 只替换围栏本身（` ``` ` 三个反引号），不替换 JSON 内部内容。
  */
 export function stripMarkdownFences(text: string): string {
-  // 匹配 ```[language]\n ... \n``` 并保留中间内容
-  // 使用非贪婪 [\s\S]*? 避免跨多个围栏块
-  return text.replace(/```(?:json|javascript|js)?\s*\n([\s\S]*?)\n?```/gi, '$1');
+  // First try closed fences; fallback strips an unclosed opening fence (truncated output)
+  const stripped = text.replace(/```(?:json|javascript|js)?\s*\n([\s\S]*?)\n?```/gi, '$1');
+  if (stripped !== text) return stripped;
+  return text.replace(/^```(?:json|javascript|js)?\s*\n/i, '');
 }
 
 /**

@@ -2,6 +2,7 @@
   "id": "mainRound",
   "$comment": "顺序：narratorFrame → cot-preamble(conditional) → mainRound → core → cot-no-thinking-guard(conditional) → cot-judge(conditional) → actionOptions* → historyFraming. CoT 相关模块通过 condition 字段实现 additive plugin 模式（PRINCIPLES §3.9）—— COT_ENABLED 时注入 thinking 指令; COT_DISABLED 时注入 thinking 禁令。narratorEnforcement 由 context-assembly 作为 post-history user message 追加。",
   "modules": [
+    { "promptId": "jailbreak", "role": "system", "order": -2, "depth": 0 },
     { "promptId": "narratorFrame", "role": "system", "order": -1, "depth": 0 },
     { "promptId": "cot-preamble", "role": "system", "order": -0.5, "depth": 1, "condition": "COT_ENABLED" },
     { "promptId": "cot-masquerade", "role": "assistant", "order": -0.4, "depth": 1, "condition": "COT_ENABLED" },

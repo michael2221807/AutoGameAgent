@@ -804,8 +804,9 @@ export function useCreationFlow(): UseCreationFlowReturn {
         if (isPresetEntry(obj)) return obj;
       } catch { /* continue */ }
 
-      // Strategy 2: ```json ... ``` code block
-      const codeBlock = candidate.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      // Strategy 2: ```json ... ``` code block (also handles unclosed fence)
+      const codeBlock = candidate.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+        ?? candidate.match(/```(?:json)?\s*\n?([\s\S]+)/);
       if (codeBlock?.[1]) {
         try {
           const obj = JSON.parse(codeBlock[1]) as unknown;

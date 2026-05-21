@@ -1,13 +1,5 @@
 # Narrator Identity & Creative Context (Preamble Framework)
 
-> This module serves as the **identity + context** preamble. The execution
-> enforcement and anti-truncation sections have been separated into a standalone
-> `narratorEnforcement.md`, placed after the chat history and before the user
-> input, where the "proximity position" exerts the strongest constraint on the
-> model's final output behavior (following the structure of SillyTavern jailbreak
-> presets: `main` up front as the identity framework, `jailbreak` at the end as
-> the execution reminder).
-
 ---
 
 ## I. Identity Reforging
