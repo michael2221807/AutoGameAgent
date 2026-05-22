@@ -20,7 +20,7 @@ import { ImagePromptComposer } from './prompt-composer';
 import { ImageProviderRegistry } from './provider-registry';
 import { ImageAssetCache } from './asset-cache';
 import { ImageTaskQueue } from './task-queue';
-import type { ImageTask, ImageAsset, ImageBackendType, ImageSubjectType, CharacterAnchor, StylePreset, CivitaiLoraShelfItem, CivitaiLoraSnapshot, ImageReferenceInput, ImageUnderstandingRequest, ImageUnderstandingResult } from './types';
+import type { ImageTask, ImageAsset, ImageBackendType, ImageSubjectType, CharacterAnchor, StylePreset, CivitaiLoraShelfItem, CivitaiLoraSnapshot, ImageReferenceInput, ImageUnderstandingRequest, ImageUnderstandingResult, SecretPartType } from './types';
 import { supportsImageToImage, supportsImageUnderstanding } from './provider-capabilities';
 import { blobToDataUrl } from './utils';
 import { prepareCivitaiLora, resolveLoraScope, validateShelfForGeneration } from './civitai-lora';
@@ -1023,6 +1023,23 @@ export class ImageService {
   clearNpcAvatar(npcName: string): void { this.state.clearNpcAvatar(npcName); }
   clearNpcPortrait(npcName: string): void { this.state.clearNpcPortrait(npcName); }
   clearNpcBackground(npcName: string): void { this.state.clearNpcBackground(npcName); }
+
+  setNpcSecretPart(npcName: string, part: SecretPartType, assetId: string): void {
+    const prevResult = this.state.getSecretPartResult(npcName, part);
+    const prevId = typeof prevResult?.id === 'string' ? prevResult.id : '';
+    if (prevId && prevId !== assetId) {
+      void this.cache.delete(prevId).catch(() => {/* best effort */});
+    }
+    this.state.setSecretPartResult(npcName, part, { id: assetId, status: 'complete', part, createdAt: Date.now() });
+  }
+
+  clearNpcSecretPart(npcName: string, part: SecretPartType): void {
+    const prevResult = this.state.getSecretPartResult(npcName, part);
+    const prevId = typeof prevResult?.id === 'string' ? prevResult.id : '';
+    this.state.clearSecretPartResult(npcName, part);
+    if (prevId) void this.cache.delete(prevId).catch(() => {/* best effort */});
+  }
+
   deleteNpcImage(npcName: string, imageId: string): void {
     this.state.deleteNpcImage(npcName, imageId);
     if (imageId) void this.cache.delete(imageId).catch(() => {/* best effort */});
@@ -1031,12 +1048,19 @@ export class ImageService {
   clearNpcHistory(npcName: string): void {
     const history = this.state.getNpcImageHistory(npcName);
     const idsToDelete = new Set(history.map((r) => String(r.id ?? '')).filter(Boolean));
-    // Also collect selected asset IDs that may not be in history
     const archive = this.state.getNpcArchive(npcName);
     if (archive) {
       for (const f of ['已选头像图片ID', '已选立绘图片ID', '已选背景图片ID']) {
         const v = String(archive[f] ?? '').trim();
         if (v) idsToDelete.add(v);
+      }
+      const secretArchive = archive['香闺秘档'] as Record<string, unknown> | undefined;
+      if (secretArchive) {
+        for (const partKey of ['胸部', '小穴', '屁穴']) {
+          const entry = secretArchive[partKey] as Record<string, unknown> | undefined;
+          const id = typeof entry?.id === 'string' ? entry.id : '';
+          if (id) idsToDelete.add(id);
+        }
       }
     }
     this.state.clearNpcHistory(npcName);

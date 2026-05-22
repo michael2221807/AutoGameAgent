@@ -31,7 +31,7 @@ import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import type { ImageService } from '@/engine/image/image-service';
-import type { ImageBackendType, CivitaiLoraSnapshot } from '@/engine/image/types';
+import type { ImageBackendType, CivitaiLoraSnapshot, SecretPartType } from '@/engine/image/types';
 import { buildPromptStyleInjection, type PromptStylePresetLike } from '@/engine/image/style-preset-injection';
 import { resolveStyleParams } from '@/engine/image/style-param-resolver';
 import { PROVIDER_CAPABILITIES } from '@/engine/image/provider-capabilities';
@@ -236,6 +236,7 @@ const playerArchiveHistory = computed(() => {
   const h = playerArchive.value['生图历史'];
   return Array.isArray(h) ? (h as Array<Record<string, unknown>>) : [];
 });
+const playerArchiveTick = ref(0);
 const playerAvatarId = computed(() => String(playerArchive.value['已选头像图片ID'] ?? ''));
 const playerPortraitId = computed(() => String(playerArchive.value['已选立绘图片ID'] ?? ''));
 
@@ -480,6 +481,33 @@ function setPlayerPortrait(assetId: string) {
 function deletePlayerImage(assetId: string) {
   if (!imageService) return;
   imageService.deleteNpcImage('__player__', assetId);
+}
+
+function isPlayerCurrentSecretPart(assetId: string, part: SecretPartType): boolean {
+  void playerArchiveTick.value;
+  const secretArchive = playerArchive.value['香闺秘档'] as Record<string, unknown> | undefined;
+  if (!secretArchive) return false;
+  const cnKey = part === 'breast' ? '胸部' : part === 'vagina' ? '小穴' : '屁穴';
+  const entry = secretArchive[cnKey] as Record<string, unknown> | undefined;
+  return typeof entry?.id === 'string' && entry.id === assetId;
+}
+
+function canShowPlayerSecretPartActions(): boolean {
+  return nsfwEnabled.value && !!gender.value && !String(gender.value).includes('男');
+}
+
+function setPlayerSecretPart(assetId: string, part: SecretPartType) {
+  if (!imageService) return;
+  imageService.setNpcSecretPart('__player__', part, assetId);
+  playerArchiveTick.value++;
+  const label = part === 'breast' ? t('character.image.archive.partBreast') : part === 'vagina' ? t('character.image.archive.partVagina') : t('character.image.archive.partAnus');
+  eventBus.emit('ui:toast', { type: 'success', message: t('character.image.archive.toastSetSecretPart', { part: label }), duration: 1500 });
+}
+
+function clearPlayerSecretPart(part: SecretPartType) {
+  if (!imageService) return;
+  imageService.clearNpcSecretPart('__player__', part);
+  playerArchiveTick.value++;
 }
 
 // ── Regenerate-Same for player images ──
@@ -1821,6 +1849,9 @@ const avatarInitial = computed<string>(() => {
                     <span v-if="img.composition" class="player-img-badge">{{ img.composition === 'portrait' ? $t('character.image.archive.compositionPortrait') : img.composition === 'half-body' ? $t('character.image.archive.compositionHalfBody') : img.composition === 'custom' ? $t('character.image.archive.compositionCustom') : $t('character.image.archive.compositionFullLength') }}</span>
                     <span v-if="playerAvatarId === String(img.id)" class="player-img-badge player-img-badge--selected">{{ $t('character.image.archive.selectedAvatar') }}</span>
                     <span v-if="playerPortraitId === String(img.id)" class="player-img-badge player-img-badge--selected">{{ $t('character.image.archive.selectedPortrait') }}</span>
+                    <span v-if="isPlayerCurrentSecretPart(String(img.id), 'breast')" class="player-img-badge player-img-badge--secret">{{ $t('character.image.archive.secretBreast') }}</span>
+                    <span v-if="isPlayerCurrentSecretPart(String(img.id), 'vagina')" class="player-img-badge player-img-badge--secret">{{ $t('character.image.archive.secretVagina') }}</span>
+                    <span v-if="isPlayerCurrentSecretPart(String(img.id), 'anus')" class="player-img-badge player-img-badge--secret">{{ $t('character.image.archive.secretAnus') }}</span>
                   </div>
                 </div>
                 <div v-if="img.positivePrompt || img.negativePrompt" class="player-img-prompts">
@@ -1858,6 +1889,11 @@ const avatarInitial = computed<string>(() => {
                     variant="secondary"
                     @click="setPlayerPortrait(String(img.id))"
                   >{{ playerPortraitId === String(img.id) ? $t('character.image.archive.unsetPortrait') : $t('character.image.archive.setAsPortrait') }}</AgaButton>
+                  <template v-if="img.status !== 'failed' && canShowPlayerSecretPartActions()">
+                    <AgaButton size="sm" :variant="isPlayerCurrentSecretPart(String(img.id), 'breast') ? 'ghost' : 'secondary'" @click="isPlayerCurrentSecretPart(String(img.id), 'breast') ? clearPlayerSecretPart('breast') : setPlayerSecretPart(String(img.id), 'breast')">{{ isPlayerCurrentSecretPart(String(img.id), 'breast') ? $t('character.image.archive.cancelSecretBreast') : $t('character.image.archive.setSecretBreast') }}</AgaButton>
+                    <AgaButton size="sm" :variant="isPlayerCurrentSecretPart(String(img.id), 'vagina') ? 'ghost' : 'secondary'" @click="isPlayerCurrentSecretPart(String(img.id), 'vagina') ? clearPlayerSecretPart('vagina') : setPlayerSecretPart(String(img.id), 'vagina')">{{ isPlayerCurrentSecretPart(String(img.id), 'vagina') ? $t('character.image.archive.cancelSecretVagina') : $t('character.image.archive.setSecretVagina') }}</AgaButton>
+                    <AgaButton size="sm" :variant="isPlayerCurrentSecretPart(String(img.id), 'anus') ? 'ghost' : 'secondary'" @click="isPlayerCurrentSecretPart(String(img.id), 'anus') ? clearPlayerSecretPart('anus') : setPlayerSecretPart(String(img.id), 'anus')">{{ isPlayerCurrentSecretPart(String(img.id), 'anus') ? $t('character.image.archive.cancelSecretAnus') : $t('character.image.archive.setSecretAnus') }}</AgaButton>
+                  </template>
                   <AgaButton size="sm" variant="danger" @click="deletePlayerImage(String(img.id))">{{ $t('common.actions.delete') }}</AgaButton>
                 </div>
               </div>
@@ -2706,6 +2742,7 @@ const avatarInitial = computed<string>(() => {
 }
 .player-img-badge--status { border-color: var(--color-success, #22c55e); color: var(--color-success, #22c55e); }
 .player-img-badge--selected { border-color: var(--color-sage-400); color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-400) 18%, transparent); }
+.player-img-badge--secret { border-color: var(--color-rose-400, #eb6f92); color: var(--color-rose-400, #eb6f92); background: rgba(235, 111, 146, 0.15); box-shadow: 0 0 8px rgba(235, 111, 146, 0.25); }
 .player-img-actions { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; }
 .player-img-prompts { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 0; }
 .player-img-prompts .prompt-details summary {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-main.md
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 
 const ACTION_OPTIONS_COLLAPSED_KEY = 'aga_action_options_collapsed';
@@ -299,7 +300,7 @@ defineExpose({
   padding: 0.42rem 0.85rem;
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-md);
   font-family: var(--font-serif-cjk);
   font-size: 0.82rem;
   line-height: 1.5;

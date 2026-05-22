@@ -10,7 +10,7 @@ import { ref, computed, inject, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import type { ImageService } from '@/engine/image/image-service';
-import type { ImageBackendType, ImageTask, ArtistPreset, ImageAsset } from '@/engine/image/types';
+import type { ImageBackendType, ImageTask, ArtistPreset, ImageAsset, SecretPartType } from '@/engine/image/types';
 import { generateReferenceId } from '@/engine/image/utils';
 import type { GameTime, SceneNpcDetail } from '@/engine/image/scene-context';
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
@@ -2904,6 +2904,39 @@ function canSelectBackground(img: GalleryImage): boolean {
   return img.status === 'complete';
 }
 
+function canSelectSecretPart(img: GalleryImage): boolean {
+  if (img.status !== 'complete') return false;
+  if (get('系统.nsfwMode') !== true) return false;
+  const npcData = galleryNpcData.value;
+  if (!npcData) return false;
+  const gender = String(npcData['性别'] ?? '');
+  return !gender.includes('男');
+}
+
+function isCurrentSecretPart(assetId: string, part: SecretPartType): boolean {
+  void imageUpdateTick.value;
+  const archive = getCurrentArchive();
+  const secretArchive = archive?.['香闺秘档'] as Record<string, unknown> | undefined;
+  if (!secretArchive) return false;
+  const cnKey = part === 'breast' ? '胸部' : part === 'vagina' ? '小穴' : '屁穴';
+  const entry = secretArchive[cnKey] as Record<string, unknown> | undefined;
+  return typeof entry?.id === 'string' && entry.id === assetId;
+}
+
+function setAsSecretPart(assetId: string, part: SecretPartType) {
+  if (!imageService || !galleryNpc.value) return;
+  imageService.setNpcSecretPart(galleryNpc.value, part, assetId);
+  imageUpdateTick.value++;
+  const label = part === 'breast' ? t('image.gallery.action.partBreast') : part === 'vagina' ? t('image.gallery.action.partVagina') : t('image.gallery.action.partAnus');
+  eventBus.emit('ui:toast', { type: 'success', message: t('image.gallery.toast.setSecretPart', { part: label }), duration: 1500 });
+}
+
+function clearSecretPart(part: SecretPartType) {
+  if (!imageService || !galleryNpc.value) return;
+  imageService.clearNpcSecretPart(galleryNpc.value, part);
+  imageUpdateTick.value++;
+}
+
 function deleteImage(assetId: string) {
   if (!galleryNpc.value || !imageService) return;
   imageService.deleteNpcImage(galleryNpc.value, assetId);
@@ -3437,6 +3470,9 @@ function clearNpcImages() {
                     <span v-if="isCurrentPortrait(img.id)" class="gallery-usage-badge">{{ $t('image.gallery.usageBadge.portrait') }}</span>
                     <span v-if="isCurrentBackground(img.id)" class="gallery-usage-badge">{{ $t('image.gallery.usageBadge.background') }}</span>
                     <span v-if="currentWallpaperId === img.id" class="gallery-usage-badge">{{ $t('image.gallery.usageBadge.wallpaper') }}</span>
+                    <span v-if="isCurrentSecretPart(img.id, 'breast')" class="gallery-usage-badge gallery-usage-badge--secret">{{ $t('image.gallery.usageBadge.secretBreast') }}</span>
+                    <span v-if="isCurrentSecretPart(img.id, 'vagina')" class="gallery-usage-badge gallery-usage-badge--secret">{{ $t('image.gallery.usageBadge.secretVagina') }}</span>
+                    <span v-if="isCurrentSecretPart(img.id, 'anus')" class="gallery-usage-badge gallery-usage-badge--secret">{{ $t('image.gallery.usageBadge.secretAnus') }}</span>
                     <span v-if="img.providerMeta?.reference" class="gallery-usage-badge gallery-usage-badge--ref">{{ $t('image.gallery.usageBadge.reference') }}</span>
                   </div>
                 </div>
@@ -3514,6 +3550,15 @@ function clearNpcImages() {
                       variant="ghost" size="sm"
                       @click="clearBackground()"
                     >{{ $t('image.gallery.action.cancelBackground') }}</AgaButton>
+                  </div>
+                  <!-- Row 1.5: secret part binding (NSFW + non-male gated) -->
+                  <div v-if="canSelectSecretPart(img)" class="gallery-actions-row">
+                    <AgaButton v-if="!isCurrentSecretPart(img.id, 'breast')" variant="secondary" size="sm" @click="setAsSecretPart(img.id, 'breast')">{{ $t('image.gallery.action.setSecretBreast') }}</AgaButton>
+                    <AgaButton v-else variant="ghost" size="sm" @click="clearSecretPart('breast')">{{ $t('image.gallery.action.cancelSecretBreast') }}</AgaButton>
+                    <AgaButton v-if="!isCurrentSecretPart(img.id, 'vagina')" variant="secondary" size="sm" @click="setAsSecretPart(img.id, 'vagina')">{{ $t('image.gallery.action.setSecretVagina') }}</AgaButton>
+                    <AgaButton v-else variant="ghost" size="sm" @click="clearSecretPart('vagina')">{{ $t('image.gallery.action.cancelSecretVagina') }}</AgaButton>
+                    <AgaButton v-if="!isCurrentSecretPart(img.id, 'anus')" variant="secondary" size="sm" @click="setAsSecretPart(img.id, 'anus')">{{ $t('image.gallery.action.setSecretAnus') }}</AgaButton>
+                    <AgaButton v-else variant="ghost" size="sm" @click="clearSecretPart('anus')">{{ $t('image.gallery.action.cancelSecretAnus') }}</AgaButton>
                   </div>
                   <!-- Row 2: utility actions -->
                   <div class="gallery-actions-row">
@@ -6096,6 +6141,12 @@ function clearNpcImages() {
   color: var(--color-sage-400, #a3be8c);
   background: rgba(163, 190, 140, 0.15);
   box-shadow: none;
+}
+.gallery-usage-badge--secret {
+  border-color: var(--color-rose-400, #eb6f92);
+  color: var(--color-rose-400, #eb6f92);
+  background: rgba(235, 111, 146, 0.15);
+  box-shadow: 0 0 8px rgba(235, 111, 146, 0.25);
 }
 .gallery-card-meta {
   padding: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs);

@@ -179,6 +179,17 @@ export class ImageStateManager {
         archive['最近生图结果'] = history[0]?.id ?? '';
       }
 
+      const secretArchive = archive['香闺秘档'] as Record<string, unknown> | undefined;
+      if (secretArchive) {
+        for (const partKey of ['胸部', '小穴', '屁穴']) {
+          const entry = secretArchive[partKey] as Record<string, unknown> | undefined;
+          if (typeof entry?.id === 'string' && entry.id === imageId) {
+            delete secretArchive[partKey];
+          }
+        }
+        archive['香闺秘档'] = secretArchive;
+      }
+
       npc['图片档案'] = { ...archive, '生图历史': history };
       return npc;
     });
@@ -220,6 +231,17 @@ export class ImageStateManager {
     const partKey = part === 'breast' ? '胸部' : part === 'vagina' ? '小穴' : '屁穴';
     const result = secretArchive[partKey];
     return result && typeof result === 'object' ? result as Record<string, unknown> : null;
+  }
+
+  clearSecretPartResult(npcName: string, part: SecretPartType): void {
+    this.mutateNpc(npcName, (npc) => {
+      const archive = this.ensureArchive(npc);
+      const secretArchive = (archive['香闺秘档'] ?? {}) as Record<string, unknown>;
+      const partKey = part === 'breast' ? '胸部' : part === 'vagina' ? '小穴' : '屁穴';
+      delete secretArchive[partKey];
+      npc['图片档案'] = { ...archive, '香闺秘档': secretArchive };
+      return npc;
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
