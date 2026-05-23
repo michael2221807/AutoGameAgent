@@ -113,8 +113,13 @@ export class ResponseParser {
     const json = this.tryParseJson(textForJson);
 
     if (json) {
-      const rawText = json.text ?? json['叙事文本'] ?? '';
-      const resolvedText = rawText ? String(rawText) : (narrativeFromTag ?? '');
+      const rawText = String(json.text ?? json['叙事文本'] ?? '');
+      // When both <正文> tag and json.text exist, pick the longer one.
+      // Models with CoT prompts often put real narrative in the tag and a
+      // short placeholder like "(见上方正文)" in json.text.
+      const resolvedText = narrativeFromTag && narrativeFromTag.length >= rawText.length
+        ? narrativeFromTag
+        : (rawText || narrativeFromTag || '');
       return {
         text: this.stripNarrativeWrapperTags(resolvedText),
         commands: this.normalizeCommands(
