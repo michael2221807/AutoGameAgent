@@ -137,12 +137,48 @@ export class EngramManager {
     this.getActiveSlot = getActiveSlot ?? (() => null);
   }
 
+  async withWriteLock<T>(fn: () => T | Promise<T>): Promise<T> {
+    const ticket = this._processMutex.then(() => fn());
+    this._processMutex = ticket.then(() => {}, () => {});
+    return ticket;
+  }
+
   isEnabled(): boolean {
     return loadEngramConfig().enabled;
   }
 
   getConfig(): EngramConfig {
     return loadEngramConfig();
+  }
+
+  /**
+   * Manually trigger vectorization of all unembedded entities and edges.
+   * Holds the write lock during the entire embedding API call (5-30s typical).
+   * @returns vectorized count = number of items queued, not actual successes
+   *          (partial embedding failures leave is_embedded=false for retry).
+   */
+  async vectorizePending(stateManager: StateManager): Promise<{ vectorized: number }> {
+    return this.withWriteLock(async () => {
+      const engram = this.loadEngram(stateManager);
+      const unembeddedEntities = engram.entities.filter((e) => !e.is_embedded);
+      const unembeddedEdges = engram.v2Edges.filter((e) => !e.is_embedded);
+      const count = unembeddedEntities.length + unembeddedEdges.length;
+      if (count === 0) return { vectorized: 0 };
+      await this.vectorizeAsync([], unembeddedEntities, stateManager, unembeddedEdges);
+      return { vectorized: count };
+    });
+  }
+
+  async deleteEdgeVectors(edgeIds: string[]): Promise<void> {
+    const slot = this.getActiveSlot();
+    if (!slot?.profileId || !slot?.slotId || edgeIds.length === 0) return;
+    await this.vectorStore.deleteEdgeVectorsByIds(edgeIds, slot.profileId, slot.slotId);
+  }
+
+  async deleteEntityVectors(names: string[]): Promise<void> {
+    const slot = this.getActiveSlot();
+    if (!slot?.profileId || !slot?.slotId || names.length === 0) return;
+    await this.vectorStore.deleteEntityVectorsByNames(names, slot.profileId, slot.slotId);
   }
 
   /**
@@ -180,19 +216,19 @@ export class EngramManager {
   async processResponse(
     response: AIResponse,
     stateManager: StateManager,
+    options?: { defaultEdgeCore?: boolean; defaultEdgeSource?: EngramEdge['source'] },
   ): Promise<EngramWriteSnapshot | null> {
     const config = loadEngramConfig();
     if (!config.enabled) return null;
 
-    const ticket = this._processMutex.then(() => this._processResponseInner(response, stateManager, config));
-    this._processMutex = ticket.then(() => {}, () => {});
-    return ticket;
+    return this.withWriteLock(() => this._processResponseInner(response, stateManager, config, options));
   }
 
   private async _processResponseInner(
     response: AIResponse,
     stateManager: StateManager,
     config: EngramConfig,
+    options?: { defaultEdgeCore?: boolean; defaultEdgeSource?: EngramEdge['source'] },
   ): Promise<EngramWriteSnapshot | null> {
 
     const startTime = performance.now();
@@ -250,6 +286,26 @@ export class EngramManager {
       relationships: this.relationshipsPath,
     };
     const entities = this.entityBuilder.build(allEvents, stateManager, entityPaths);
+
+    // -- Step 2.3 (Story 1): 恢复用户手动创建的实体 --
+    // ORDERING: must run BEFORE Step 2.25 (_pendingEnrichment). User entities are
+    // restored first so their names appear in the builtNames set that Step 2.25 uses,
+    // preventing duplicate pushes. Do not reorder these two blocks.
+    {
+      const builtNames = new Set(entities.map((e) => e.name));
+      for (const prev of engram.entities) {
+        if (prev.source === 'user' && !builtNames.has(prev.name)) {
+          entities.push({ ...prev, lastSeen: currentRound });
+        } else if (prev.source === 'user' && builtNames.has(prev.name)) {
+          const derived = entities.find((e) => e.name === prev.name);
+          if (derived && prev.summary && prev.summary !== derived.summary) {
+            derived.summary = prev.summary;
+            derived.source = 'user';
+            derived.userEditedAtRound = prev.userEditedAtRound;
+          }
+        }
+      }
+    }
 
     // ── Step 2.25: 恢复上一轮的 _pendingEnrichment 桩实体 ──
     // EntityBuilder 每轮从零构建，会丢失 Tier 1 补的桩实体。
@@ -338,6 +394,8 @@ export class EngramManager {
         {
           reviewThreshold: config.edgeReviewThreshold!,
           perFactCap: config.edgeReviewPerFactCap!,
+          defaultCore: options?.defaultEdgeCore,
+          defaultSource: options?.defaultEdgeSource,
         },
       );
 

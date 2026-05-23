@@ -113,6 +113,9 @@ export class PostProcessStage implements PipelineStage {
       const engramWriteSnapshot = await this.engramManager.processResponse(
         ctx.parsedResponse,
         this.stateManager,
+        ctx.meta?.isEnhancedOpening
+          ? { defaultEdgeCore: true, defaultEdgeSource: 'opening' }
+          : undefined,
       );
       if (engramWriteSnapshot) {
         ctx.meta['engramWrite'] = engramWriteSnapshot;

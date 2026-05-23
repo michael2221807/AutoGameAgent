@@ -21,8 +21,9 @@ const { formatTime } = useLocale();
 const isCollapsed = ref(false);
 const { isMobile, leftOpen, closeAll } = useSidebarDrawer();
 
-// ─── Engram 调试面板可见性（受 config.debug 控制）────────────────
+// ─── Engram 可见性（受 config 控制）────────────────
 const engramDebugVisible = ref(loadEngramConfig().debug);
+const engramEnabled = ref(loadEngramConfig().enabled);
 let offEngramConfigChanged: (() => void) | null = null;
 
 // ─── Collapse ─────────────────────────────────────────────────
@@ -55,7 +56,9 @@ onMounted(() => {
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
   offEngramConfigChanged = eventBus.on('engram:config-changed', (payload: unknown) => {
-    engramDebugVisible.value = (payload as { debug?: boolean })?.debug === true;
+    const cfg = payload as { debug?: boolean; enabled?: boolean };
+    engramDebugVisible.value = cfg?.debug === true;
+    engramEnabled.value = cfg?.enabled === true;
   });
 });
 
@@ -119,6 +122,7 @@ const icons = {
   exit:         '<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg>',
   assistant:    '<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.539 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>',
   plot:         '<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V15"/></svg>',
+  relGraph:     '<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 3.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM5 9.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm10 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM8.5 14.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/><path d="M9 6.5l-3 3M11 6.5l3 3M6 12.5l2 2M14 12.5l-4 2" stroke="currentColor" stroke-width="1" fill="none"/></svg>',
 } as const;
 
 const BASE_SYSTEM_ITEMS = computed<PanelItem[]>(() => [
@@ -141,6 +145,9 @@ const panelGroups = computed<PanelGroup[]>(() => [
       { route: '/game/character',    label: t('layout.sidebar.item.characterDetail'), icon: icons.character },
       { route: '/game/inventory',    label: t('layout.sidebar.item.inventory'),       icon: icons.inventory },
       { route: '/game/relationships',label: t('layout.sidebar.item.relationships'),   icon: icons.relationships },
+      ...(engramEnabled.value
+        ? [{ route: '/game/relationship-graph', label: t('layout.sidebar.item.relationshipGraph'), icon: icons.relGraph }]
+        : []),
       { route: '/game/map',          label: t('layout.sidebar.item.map'),             icon: icons.map },
       { route: '/game/plot',         label: t('layout.sidebar.item.plot'),            icon: icons.plot },
     ],

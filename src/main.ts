@@ -97,6 +97,7 @@ import { GameOrchestrator } from './engine/core/game-orchestrator';
 import { MemoryManager } from './engine/memory/memory-manager';
 import { MemoryRetriever } from './engine/memory/memory-retriever';
 import { EngramManager } from './engine/memory/engram/engram-manager';
+import { EngramEditor } from './engine/memory/engram/engram-editor';
 import { useEngineStateStore } from './engine/stores/engine-state';
 import type { ComputedFieldConfig, ThresholdTriggerConfig, IntegrityRule, EffectLifecycleConfig, NpcBehaviorConfig, ContentFilterConfig } from './engine/types';
 
@@ -436,6 +437,14 @@ async function bootstrap(): Promise<void> {
     getActiveSlot,
   );
 
+  // Story 1: EngramEditor for user-driven entity/edge CRUD
+  const engramEditor = new EngramEditor(stateManager, engramManager, {
+    engramMemory: '系统.扩展.engramMemory',
+    roundNumber: '元数据.回合序号',
+    relationships: '社交.关系',
+    npcNameField: DEFAULT_ENGINE_PATHS.npcFieldNames.name,
+  });
+
   // E.2/E.3: UnifiedRetriever 实例（hybrid 模式时由 ContextAssemblyStage 使用）
   const embedder = new Embedder(aiService);
   const reranker = new Reranker(aiService);
@@ -720,6 +729,7 @@ async function bootstrap(): Promise<void> {
     locale: i18n.global.locale.value,
   });
   app.provide('assistantService', assistantService);
+  app.provide('engramEditor', engramEditor);
   app.provide('configRegistry', configRegistry);
   app.provide('configResolver', configResolver);
   app.provide('eventBus', eventBus);

@@ -40,6 +40,7 @@
   "layout.sidebar.item.characterDetail": "角色详情",
   "layout.sidebar.item.inventory": "背包",
   "layout.sidebar.item.relationships": "社交关系",
+  "layout.sidebar.item.relationshipGraph": "关系网",
   "layout.sidebar.item.map": "地图",
   "layout.sidebar.item.plot": "剧情",
   "layout.sidebar.item.memory": "记忆",

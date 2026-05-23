@@ -403,7 +403,7 @@ export class FieldRepairPipeline {
     const validPairs: Array<{ newFact: string; oldEdgeId: string; similarity: number }> = [];
     for (const pair of pending) {
       const edge = edgeMap.get(pair.oldEdgeId);
-      if (edge && isEdgeCurrentlyValid(edge)) {
+      if (edge && isEdgeCurrentlyValid(edge) && edge.core !== true) {
         validPairs.push(pair);
       }
     }

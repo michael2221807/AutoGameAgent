@@ -53,6 +53,15 @@ export interface EngramEntity {
   _pendingEnrichment?: boolean;
   /** Round when Tier 2 AI enrichment filled the description */
   enrichedAtRound?: number;
+
+  /**
+   * 数据来源标记。
+   * undefined = legacy / EntityBuilder 派生（迁移时视为 'derived'）
+   */
+  source?: 'derived' | 'user' | 'card-import';
+
+  /** 用户手动编辑时记录回合号 */
+  userEditedAtRound?: number;
 }
 
 /** EntityBuilder 从 state 读取时使用的路径集合 */

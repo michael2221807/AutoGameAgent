@@ -24,6 +24,15 @@ export interface EngramEdge {
   confidence?: number;
   /** Edge status for temporal queries */
   temporalStatus?: 'historical' | 'superseded';
+
+  /** D1: 核心设定标记 — 世界设定边 vs 游玩产生边 */
+  core?: boolean;
+
+  /**
+   * 数据来源标记。
+   * undefined = legacy 旧数据 / 主回合 AI 自动生成（迁移时视为 'ai'）
+   */
+  source?: 'ai' | 'user' | 'opening' | 'card-import' | 'batch-sync';
 }
 
 export function isEdgeCurrentlyValid(edge: EngramEdge): boolean {

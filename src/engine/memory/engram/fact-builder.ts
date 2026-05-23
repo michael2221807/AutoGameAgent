@@ -35,6 +35,8 @@ export interface FactBuildResult {
 export interface FactBuilderOptions {
   reviewThreshold?: number;
   perFactCap?: number;
+  defaultCore?: boolean;
+  defaultSource?: EngramEdge['source'];
 }
 
 export function buildFacts(
@@ -197,6 +199,8 @@ export function buildFacts(
       createdAtRound: currentRound,
       lastSeenRound: currentRound,
       learnedAtRound: currentRound,
+      core: options?.defaultCore,
+      source: options?.defaultSource,
     });
   }
 

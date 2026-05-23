@@ -312,7 +312,11 @@ export interface IEngramManager {
    * 处理 AI 响应：提取事件 → 构建实体 → FactBuilder 边构建 → 写入状态树 → 异步向量化
    * 返回写入快照供 UI 可视化，Engram 未启用时返回 null
    */
-  processResponse(response: AIResponse, stateManager: StateManager): Promise<import('../memory/engram/engram-types').EngramWriteSnapshot | null>;
+  processResponse(
+    response: AIResponse,
+    stateManager: StateManager,
+    options?: { defaultEdgeCore?: boolean; defaultEdgeSource?: import('../memory/engram/knowledge-edge').EngramEdge['source'] },
+  ): Promise<import('../memory/engram/engram-types').EngramWriteSnapshot | null>;
   /** 获取当前 Engram 配置（ContextAssemblyStage 用于检索模式决策） */
   getConfig(): import('../memory/engram/engram-types').EngramConfig;
   /**

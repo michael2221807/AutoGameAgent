@@ -242,6 +242,23 @@ export class VectorStore {
     if (changed) await this.save(profileId, slotId, data);
   }
 
+  async deleteEntityVectorsByNames(
+    names: string[],
+    profileId: string,
+    slotId: string,
+  ): Promise<void> {
+    if (names.length === 0) return;
+    const data = await this.load(profileId, slotId);
+    let changed = false;
+    for (const name of names) {
+      if (data.entityVectors[name]) {
+        delete data.entityVectors[name];
+        changed = true;
+      }
+    }
+    if (changed) await this.save(profileId, slotId, data);
+  }
+
   async mergeEdgeVectors(
     edges: Array<{ id: string }>,
     vectors: number[][],
