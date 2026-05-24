@@ -79,5 +79,11 @@
 
   "plot.arc.newArcBtn": "New Arc",
   "plot.gauge.editBtn": "Edit",
-  "plot.gauge.deleteBtn": "Delete"
+  "plot.gauge.deleteBtn": "Delete",
+
+  "plot.arc.editTitle": "Edit Title",
+  "plot.arc.editSynopsis": "Edit Synopsis",
+  "plot.toast.arcUpdated": "Arc updated",
+  "plot.validate.titleRequired": "Title cannot be empty",
+  "plot.validate.arcNotFound": "Arc not found"
 }

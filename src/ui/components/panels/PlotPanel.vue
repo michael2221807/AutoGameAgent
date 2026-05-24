@@ -15,8 +15,11 @@ import Modal from '@/ui/components/common/Modal.vue';
 import GaugeBar from './plot/GaugeBar.vue';
 import PlotNodeList from './plot/PlotNodeList.vue';
 
+import { usePlotEditor } from '@/ui/composables/editors';
+
 const { isLoaded, useValue, setValue } = useGameState();
 const plotStore = usePlotStore();
+const plotEditor = usePlotEditor();
 const plotDecomposer = inject<PlotDecomposer | null>('plotDecomposer', null);
 
 const plotState = useValue<PlotDirectionState | undefined>(DEFAULT_ENGINE_PATHS.plotDirection);
@@ -141,6 +144,61 @@ function deleteCurrentArc(): void {
   if (!arc || arc.status === 'active') return;
   plotStore.deleteArc(arc.id);
   persist();
+}
+
+// ─── Story 2: Arc title/synopsis inline editing ───
+
+const editingArcTitle = ref(false);
+const editingArcSynopsis = ref(false);
+const arcTitleDraft = ref('');
+const arcSynopsisDraft = ref('');
+const arcTitleCancelled = ref(false);
+const arcSynopsisCancelled = ref(false);
+
+function startEditArcTitle(): void {
+  const arc = displayArc.value;
+  if (!arc) return;
+  arcTitleDraft.value = arc.title;
+  arcTitleCancelled.value = false;
+  editingArcTitle.value = true;
+}
+
+function commitArcTitle(): void {
+  if (arcTitleCancelled.value) { arcTitleCancelled.value = false; return; }
+  const arc = displayArc.value;
+  if (!arc) { editingArcTitle.value = false; return; }
+  const result = plotEditor.updateArc(arc.id, { title: arcTitleDraft.value });
+  if (!result.ok && result.error) {
+    eventBus.emit('ui:toast', { type: 'error', i18nKey: result.error.i18nKey, message: result.error.message, duration: 3000 });
+    return;
+  }
+  editingArcTitle.value = false;
+}
+
+function cancelArcTitle(): void {
+  arcTitleCancelled.value = true;
+  editingArcTitle.value = false;
+}
+
+function startEditArcSynopsis(): void {
+  const arc = displayArc.value;
+  if (!arc) return;
+  arcSynopsisDraft.value = arc.synopsis ?? '';
+  arcSynopsisCancelled.value = false;
+  editingArcSynopsis.value = true;
+}
+
+function commitArcSynopsis(): void {
+  if (arcSynopsisCancelled.value) { arcSynopsisCancelled.value = false; return; }
+  const arc = displayArc.value;
+  if (!arc) { editingArcSynopsis.value = false; return; }
+  plotEditor.updateArc(arc.id, { synopsis: arcSynopsisDraft.value });
+  editingArcSynopsis.value = false;
+}
+
+function cancelArcSynopsis(): void {
+  arcSynopsisCancelled.value = true;
+  editingArcSynopsis.value = false;
 }
 
 const showAddNode = ref(false);
@@ -372,12 +430,42 @@ function rejectAdvancement(): void {
       <template v-if="displayArc">
         <section class="arc-header">
           <div class="arc-title-row">
-            <h3 class="arc-title">{{ displayArc.title }}</h3>
+            <template v-if="editingArcTitle">
+              <input
+                v-model="arcTitleDraft"
+                type="text"
+                class="arc-inline-input arc-inline-input--title"
+                autofocus
+                @keyup.enter="commitArcTitle"
+                @keyup.escape="cancelArcTitle"
+                @blur="commitArcTitle"
+              />
+            </template>
+            <template v-else>
+              <h3 class="arc-title arc-title--editable" @click="startEditArcTitle" :title="$t('plot.arc.editTitle')">
+                {{ displayArc.title }} <span class="arc-edit-icon">✏</span>
+              </h3>
+            </template>
             <span :class="['arc-status', `arc-status--${displayArc.status}`]">
               {{ displayArc.status }}
             </span>
           </div>
-          <p v-if="displayArc.synopsis" class="arc-synopsis">{{ displayArc.synopsis }}</p>
+          <template v-if="editingArcSynopsis">
+            <textarea
+              v-model="arcSynopsisDraft"
+              class="arc-inline-input arc-inline-input--synopsis"
+              rows="3"
+              autofocus
+              @keyup.escape="cancelArcSynopsis"
+              @blur="commitArcSynopsis"
+            />
+          </template>
+          <p v-else-if="displayArc.synopsis" class="arc-synopsis arc-synopsis--editable" @click="startEditArcSynopsis" :title="$t('plot.arc.editSynopsis')">
+            {{ displayArc.synopsis }} <span class="arc-edit-icon">✏</span>
+          </p>
+          <p v-else class="arc-synopsis arc-synopsis--empty" @click="startEditArcSynopsis" :title="$t('plot.arc.editSynopsis')">
+            {{ $t('plot.arc.synopsisPlaceholder') }} <span class="arc-edit-icon">✏</span>
+          </p>
 
           <div class="arc-actions">
             <button
@@ -573,7 +661,7 @@ function rejectAdvancement(): void {
             </label>
             <label class="form-label form-label--inline">
               {{ $t('plot.node.maxRounds') }}
-              <input v-model.number="editingMaxRounds" type="number" class="form-input form-input--narrow" min="1" max="50" />
+              <input v-model.number="editingMaxRounds" type="number" class="form-input form-input--narrow" min="1" max="50" inputmode="numeric" />
             </label>
           </div>
         </div>
@@ -591,11 +679,11 @@ function rejectAdvancement(): void {
           <label class="form-label">{{ $t('plot.gauge.description') }}<textarea v-model="editGaugeDesc" class="form-textarea" rows="3" /></label>
 
           <div class="gauge-edit-grid">
-            <label class="form-label">{{ $t('plot.gauge.currentValue') }}<input v-model.number="editGaugeCurrent" type="number" class="form-input" /></label>
-            <label class="form-label">{{ $t('plot.gauge.maxValue') }}<input v-model.number="editGaugeMax" type="number" class="form-input" min="1" /></label>
-            <label class="form-label">{{ $t('plot.gauge.minValue') }}<input v-model.number="editGaugeMin" type="number" class="form-input" /></label>
+            <label class="form-label">{{ $t('plot.gauge.currentValue') }}<input v-model.number="editGaugeCurrent" type="number" class="form-input" inputmode="numeric" /></label>
+            <label class="form-label">{{ $t('plot.gauge.maxValue') }}<input v-model.number="editGaugeMax" type="number" class="form-input" min="1" inputmode="numeric" /></label>
+            <label class="form-label">{{ $t('plot.gauge.minValue') }}<input v-model.number="editGaugeMin" type="number" class="form-input" inputmode="numeric" /></label>
             <label class="form-label">{{ $t('plot.gauge.unit') }}<input v-model="editGaugeUnit" class="form-input" /></label>
-            <label class="form-label">{{ $t('plot.gauge.autoDecrement') }}<input v-model.number="editGaugeAutoDecrement" type="number" class="form-input" min="0" placeholder="0" /></label>
+            <label class="form-label">{{ $t('plot.gauge.autoDecrement') }}<input v-model.number="editGaugeAutoDecrement" type="number" class="form-input" min="0" placeholder="0" inputmode="numeric" /></label>
             <div class="gauge-edit-toggle">
               <span class="form-label">{{ $t('plot.gauge.aiUpdatable') }}</span>
               <span
@@ -627,7 +715,7 @@ function rejectAdvancement(): void {
           <div class="detail-row">
             <label class="form-label form-label--inline">
               {{ $t('plot.gauge.maxValue') }}
-              <input v-model.number="newGaugeMax" type="number" class="form-input form-input--narrow" min="1" />
+              <input v-model.number="newGaugeMax" type="number" class="form-input form-input--narrow" min="1" inputmode="numeric" />
             </label>
             <label class="form-label form-label--inline">
               {{ $t('plot.gauge.unit') }}
@@ -1097,7 +1185,68 @@ function rejectAdvancement(): void {
 .cfg-expand-enter-from,
 .cfg-expand-leave-to { opacity: 0; max-height: 0; overflow: hidden; }
 
+/* ── Story 2: Arc inline editing ── */
+.arc-title--editable,
+.arc-synopsis--editable,
+.arc-synopsis--empty {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.arc-title--editable:hover,
+.arc-synopsis--editable:hover { color: var(--color-sage-300); }
+.arc-synopsis--empty {
+  color: var(--color-text-secondary, #8888a0);
+  opacity: 0.5;
+  font-style: italic;
+}
+.arc-synopsis--empty:hover { opacity: 0.8; }
+.arc-edit-icon {
+  font-size: 0.7em;
+  opacity: 0.3;
+  transition: opacity 0.15s ease;
+  margin-left: 4px;
+}
+.arc-title--editable:hover .arc-edit-icon,
+.arc-synopsis--editable:hover .arc-edit-icon,
+.arc-synopsis--empty:hover .arc-edit-icon { opacity: 0.8; }
+.arc-inline-input {
+  width: 100%;
+  font-size: inherit;
+  font-family: inherit;
+  color: var(--color-text, #e0e0e6);
+  background: var(--color-surface-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-sage-600);
+  border-radius: 6px;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+}
+.arc-inline-input--title {
+  padding: 4px 10px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.arc-inline-input--synopsis {
+  padding: 6px 10px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 @media (max-width: 767px) {
   .plot-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+  /* Story 2: mobile touch targets */
+  .btn-primary { min-height: 44px; }
+  .btn-secondary { min-height: 44px; }
+  .btn-danger { min-height: 44px; }
+  .form-input { height: 44px; }
+  .form-input--narrow { height: 44px; }
+  .form-textarea { min-height: 44px; }
+  .node-action-btn { min-height: 44px; }
+  .gauge-action-btn { min-height: 44px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .arc-edit-icon { opacity: 0.5; }
+  .arc-edit-icon:active { opacity: 1; }
 }
 </style>

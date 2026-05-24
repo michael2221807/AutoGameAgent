@@ -140,6 +140,14 @@ export const usePlotStore = defineStore('plot-direction', () => {
     return true;
   }
 
+  function updateArc(arcId: string, updates: { title?: string; synopsis?: string }): boolean {
+    const arc = arcs.value.find(a => a.id === arcId);
+    if (!arc) return false;
+    if (updates.title !== undefined) arc.title = updates.title;
+    if (updates.synopsis !== undefined) arc.synopsis = updates.synopsis;
+    return true;
+  }
+
   function reviseArc(arcId: string, fromNodeIndex: number): boolean {
     const arc = arcs.value.find(a => a.id === arcId);
     if (!arc) return false;
@@ -391,6 +399,7 @@ export const usePlotStore = defineStore('plot-direction', () => {
     abandonArc,
     completeArc,
     reviseArc,
+    updateArc,
 
     addNode,
     insertNode,

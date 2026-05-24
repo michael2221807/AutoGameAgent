@@ -38,10 +38,15 @@ import { PROVIDER_CAPABILITIES } from '@/engine/image/provider-capabilities';
 import type { ArtistPreset } from '@/engine/image/types';
 import { generateReferenceId } from '@/engine/image/utils';
 
+import { useCharacterEditor } from '@/ui/composables/editors';
+import { useRouter } from 'vue-router';
+
 const P = DEFAULT_ENGINE_PATHS;
 
 const { t } = useI18n();
 const { isLoaded, useValue, setValue, get } = useGameState();
+const charEditor = useCharacterEditor();
+const router = useRouter();
 const imageService = inject<ImageService>('imageService');
 const aiService = inject<AIService | undefined>('aiService', undefined);
 const apiStore = useAPIManagementStore();
@@ -672,6 +677,230 @@ const talentItems = computed<Array<{ name: string; desc: string }>>(() => {
 
 const attributes = useValue<Record<string, unknown>>(P.characterAttributes);
 
+// ─── Story 2: Inline editing state for basic tab ───
+
+const locations = useValue<Array<{ 名称: string }>>(P.locations);
+const locationOptions = computed<string[]>(() => {
+  const locs = locations.value;
+  if (!Array.isArray(locs)) return [];
+  return locs.map(l => l.名称).filter(Boolean);
+});
+
+const editingGender = ref(false);
+const editingOccupation = ref(false);
+const editingLocation = ref(false);
+const editingDescription = ref(false);
+const editingOrigin = ref(false);
+const editingTrait = ref(false);
+const editingTalentIdx = ref<number | null>(null);
+const addingTalent = ref(false);
+
+const genderDraft = ref('');
+const occupationDraft = ref('');
+const locationDraft = ref('');
+const descriptionDraft = ref('');
+const originNameDraft = ref('');
+const originDescDraft = ref('');
+const traitNameDraft = ref('');
+const traitDescDraft = ref('');
+const talentNameDraft = ref('');
+const talentDescDraft = ref('');
+const locationCancelled = ref(false);
+const descriptionCancelled = ref(false);
+
+function startEditGender(): void { genderDraft.value = gender.value ?? ''; editingGender.value = true; }
+function commitGender(): void {
+  charEditor.updateField(P.characterGender, genderDraft.value);
+  editingGender.value = false;
+}
+
+function startEditOccupation(): void { occupationDraft.value = occupation.value ?? ''; editingOccupation.value = true; }
+function commitOccupation(): void {
+  charEditor.updateField(P.characterOccupation, occupationDraft.value);
+  editingOccupation.value = false;
+}
+function cancelOccupation(): void { editingOccupation.value = false; }
+
+function startEditLocation(): void { locationDraft.value = location.value ?? ''; locationCancelled.value = false; editingLocation.value = true; }
+function commitLocation(): void {
+  if (locationCancelled.value) { locationCancelled.value = false; return; }
+  charEditor.updateField(P.playerLocation, locationDraft.value);
+  editingLocation.value = false;
+}
+function cancelLocation(): void { locationCancelled.value = true; editingLocation.value = false; }
+
+function startEditDescription(): void { descriptionDraft.value = description.value ?? ''; descriptionCancelled.value = false; editingDescription.value = true; }
+function commitDescription(): void {
+  if (descriptionCancelled.value) { descriptionCancelled.value = false; return; }
+  charEditor.updateField(P.characterDescription, descriptionDraft.value);
+  editingDescription.value = false;
+}
+function cancelDescription(): void { descriptionCancelled.value = true; editingDescription.value = false; }
+
+const showOriginModal = ref(false);
+function startEditOrigin(): void {
+  originNameDraft.value = origin.value ?? '';
+  originDescDraft.value = originDesc.value ?? '';
+  showOriginModal.value = true;
+}
+function commitOrigin(): void {
+  charEditor.updateField(P.characterOrigin, { 名称: originNameDraft.value, 描述: originDescDraft.value });
+  showOriginModal.value = false;
+}
+
+const showTraitModal = ref(false);
+function startEditTrait(): void {
+  traitNameDraft.value = traitText.value ?? '';
+  traitDescDraft.value = traitDesc.value ?? '';
+  showTraitModal.value = true;
+}
+function commitTrait(): void {
+  charEditor.updateField(P.characterTraits, { 名称: traitNameDraft.value, 描述: traitDescDraft.value });
+  showTraitModal.value = false;
+}
+
+const showTalentModal = ref(false);
+const talentModalMode = ref<'edit' | 'add'>('add');
+
+function startEditTalent(idx: number): void {
+  const item = talentItems.value[idx];
+  if (!item) return;
+  talentNameDraft.value = item.name;
+  talentDescDraft.value = item.desc;
+  editingTalentIdx.value = idx;
+  talentModalMode.value = 'edit';
+  showTalentModal.value = true;
+}
+function commitEditTalent(): void {
+  if (talentModalMode.value === 'edit' && editingTalentIdx.value !== null) {
+    charEditor.updateTalent(editingTalentIdx.value, { 名称: talentNameDraft.value, 描述: talentDescDraft.value });
+  } else {
+    if (!talentNameDraft.value.trim()) {
+      eventBus.emit('ui:toast', { type: 'error', i18nKey: 'character.edit.nameRequired', message: 'Name required', duration: 2000 });
+      return;
+    }
+    charEditor.addTalent({ 名称: talentNameDraft.value, 描述: talentDescDraft.value });
+  }
+  showTalentModal.value = false;
+  editingTalentIdx.value = null;
+}
+
+function startAddTalent(): void {
+  talentNameDraft.value = '';
+  talentDescDraft.value = '';
+  editingTalentIdx.value = null;
+  talentModalMode.value = 'add';
+  showTalentModal.value = true;
+}
+const showRemoveTalentConfirm = ref(false);
+const removeTalentIdx = ref(-1);
+const removeTalentName = ref('');
+
+function requestRemoveTalent(idx: number, name: string): void {
+  removeTalentIdx.value = idx;
+  removeTalentName.value = name;
+  showRemoveTalentConfirm.value = true;
+}
+
+function confirmRemoveTalent(): void {
+  if (removeTalentIdx.value >= 0) {
+    charEditor.removeTalent(removeTalentIdx.value);
+  }
+  showRemoveTalentConfirm.value = false;
+}
+
+// ─── Story 2: Attribute steppers ───
+
+function stepInnateAttr(key: string, delta: number): void {
+  const path = `${P.characterInnateStats}.${key}`;
+  const current = get<number>(path) ?? 0;
+  const newVal = Math.max(1, Math.min(10, current + delta));
+  charEditor.updateField(path, newVal);
+}
+
+function stepAcquiredAttr(key: string, delta: number): void {
+  const path = `${P.characterAttributes}.${key}`;
+  charEditor.updateAttribute(path, delta);
+}
+
+// ─── Story 2: Vitals editing ───
+
+const vitalHealth = useValue<{ 当前: number; 上限: number }>(P.vitalHealth);
+const vitalEnergy = useValue<{ 当前: number; 上限: number }>(P.vitalEnergy);
+const reputationVal = useValue<number>(P.reputation);
+
+const showVitalsEdit = ref(false);
+const vitalsForm = ref({ healthCurrent: 0, healthMax: 100, energyCurrent: 0, energyMax: 100, reputation: 0 });
+
+function openVitalsEdit(): void {
+  vitalsForm.value = {
+    healthCurrent: vitalHealth.value?.当前 ?? 0,
+    healthMax: vitalHealth.value?.上限 ?? 100,
+    energyCurrent: vitalEnergy.value?.当前 ?? 0,
+    energyMax: vitalEnergy.value?.上限 ?? 100,
+    reputation: reputationVal.value ?? 0,
+  };
+  showVitalsEdit.value = true;
+}
+
+function saveVitals(): void {
+  const f = vitalsForm.value;
+  const result = charEditor.updateVitals({
+    health: { current: f.healthCurrent, max: f.healthMax },
+    energy: { current: f.energyCurrent, max: f.energyMax },
+    reputation: f.reputation,
+  });
+  if (result.ok) showVitalsEdit.value = false;
+}
+
+// ─── Story 2: Relations tab jump ───
+
+function jumpToNpcEdit(npcName: string): void {
+  router.push({ path: '/game/relationships', query: { npc: npcName } });
+}
+
+function openAdvancedEditor(targetPath: string): void {
+  router.push({ name: 'GameVariables', query: { path: targetPath, from: 'character' } });
+}
+
+// ─── Story 2: Body editing helpers ───
+
+const showBodyEditModal = ref(false);
+const bodyEditForm = ref({
+  身高: 0, 体重: 0,
+  胸围: 0, 腰围: 0, 臀围: 0,
+  胸部描述: '', 私处描述: '', 生殖器描述: '',
+});
+
+function openBodyEdit(): void {
+  const b = get<Record<string, unknown>>('角色.身体') ?? {};
+  const sw = (b['三围'] as Record<string, number>) ?? {};
+  bodyEditForm.value = {
+    身高: (b['身高'] as number) ?? 0,
+    体重: (b['体重'] as number) ?? 0,
+    胸围: sw['胸围'] ?? 0,
+    腰围: sw['腰围'] ?? 0,
+    臀围: sw['臀围'] ?? 0,
+    胸部描述: (b['胸部描述'] as string) ?? '',
+    私处描述: (b['私处描述'] as string) ?? '',
+    生殖器描述: (b['生殖器描述'] as string) ?? '',
+  };
+  showBodyEditModal.value = true;
+}
+
+function saveBodyEdit(): void {
+  const f = bodyEditForm.value;
+  charEditor.updateBody({
+    身高: f.身高,
+    体重: f.体重,
+    三围: { 胸围: f.胸围, 腰围: f.腰围, 臀围: f.臀围 },
+    胸部描述: f.胸部描述,
+    私处描述: f.私处描述,
+    生殖器描述: f.生殖器描述,
+  });
+  showBodyEditModal.value = false;
+}
+
 // ─── Relationships ───
 
 interface RelationEntry {
@@ -1235,6 +1464,7 @@ const avatarInitial = computed<string>(() => {
                 <input
                   v-model="editInputValue"
                   type="number"
+                  inputmode="numeric"
                   class="inline-input inline-input--narrow"
                   @keydown.enter="commitInlineEdit"
                   @keydown.escape="cancelInlineEdit"
@@ -1244,22 +1474,45 @@ const avatarInitial = computed<string>(() => {
               <span v-else class="info-value info-value--mono">{{ age ?? '—' }}</span>
             </div>
 
-            <!-- Gender -->
-            <div class="info-row">
+            <!-- Gender (Story 2: click → select dropdown) -->
+            <div class="info-row" @click="!editingGender && startEditGender()">
               <span class="info-label">{{ $t('character.basic.fieldGender') }}</span>
-              <span class="info-value">{{ gender ?? '—' }}</span>
+              <template v-if="editingGender">
+                <select v-model="genderDraft" class="inline-input" @change="commitGender" @blur="commitGender" @keydown.escape="editingGender = false">
+                  <option value="男">{{ $t('character.edit.genderOption.male') }}</option>
+                  <option value="女">{{ $t('character.edit.genderOption.female') }}</option>
+                  <option value="其他">{{ $t('character.edit.genderOption.other') }}</option>
+                </select>
+              </template>
+              <span v-else class="info-value info-value--editable">{{ gender ?? '—' }} <span class="edit-icon">✏</span></span>
             </div>
 
-            <!-- Occupation -->
-            <div class="info-row">
+            <!-- Occupation (Story 2: click → inline text input) -->
+            <div class="info-row" @click="!editingOccupation && startEditOccupation()">
               <span class="info-label">{{ $t('character.basic.fieldOccupation') }}</span>
-              <span class="info-value">{{ occupation ?? '—' }}</span>
+              <template v-if="editingOccupation">
+                <input
+                  v-model="occupationDraft"
+                  type="text"
+                  class="inline-input"
+                  @keydown.enter="commitOccupation"
+                  @keydown.escape="cancelOccupation"
+                  @blur="commitOccupation"
+                />
+              </template>
+              <span v-else class="info-value info-value--editable">{{ occupation ?? '—' }} <span class="edit-icon">✏</span></span>
             </div>
 
-            <!-- Location -->
-            <div class="info-row">
+            <!-- Location (Story 2: click-to-edit combo box with location suggestions) -->
+            <div class="info-row" @click="startEditLocation">
               <span class="info-label">{{ $t('character.basic.fieldLocation') }}</span>
-              <span class="info-value">{{ location ?? '—' }}</span>
+              <template v-if="editingLocation">
+                <select v-model="locationDraft" class="inline-input" @change="commitLocation" @keydown.escape="cancelLocation">
+                  <option v-for="loc in locationOptions" :key="loc" :value="loc">{{ loc }}</option>
+                  <option v-if="locationDraft && !locationOptions.includes(locationDraft)" :value="locationDraft">{{ locationDraft }}</option>
+                </select>
+              </template>
+              <span v-else class="info-value info-value--editable">{{ location ?? '—' }} <span class="edit-icon">✏</span></span>
             </div>
           </div>
         </section>
@@ -1275,7 +1528,7 @@ const avatarInitial = computed<string>(() => {
         >
           <!-- Origin -->
           <div v-if="origin" class="id-tier-section">
-            <button class="id-tier-header" @click="idSectionOpen.origin = !idSectionOpen.origin">
+            <button class="id-tier-header" @click="idSectionOpen.origin = !idSectionOpen.origin; if (!idSectionOpen.origin) editingOrigin = false">
               <div class="id-tier-title-group">
                 <span class="id-tier-indicator id-tier-indicator--origin" />
                 <span class="id-tier-label">{{ $t('character.basic.fieldOrigin') }}</span>
@@ -1284,11 +1537,8 @@ const avatarInitial = computed<string>(() => {
             </button>
             <Transition name="id-tier-expand">
               <div v-if="idSectionOpen.origin" class="id-tier-body">
-                <div
-                  :class="['id-entry', { 'id-entry--expanded': originDescExpanded }]"
-                  @click="originDescExpanded = !originDescExpanded"
-                >
-                  <div class="id-entry__title">{{ origin }}</div>
+                <div :class="['id-entry', { 'id-entry--expanded': originDescExpanded }]" @click="originDescExpanded = !originDescExpanded">
+                  <div class="id-entry__title">{{ origin }} <span class="edit-icon" @click.stop="startEditOrigin">✏</span></div>
                   <div v-if="originDesc" class="id-entry__text">{{ originDesc }}</div>
                 </div>
               </div>
@@ -1297,7 +1547,7 @@ const avatarInitial = computed<string>(() => {
 
           <!-- Trait -->
           <div v-if="traitText" class="id-tier-section">
-            <button class="id-tier-header" @click="idSectionOpen.trait = !idSectionOpen.trait">
+            <button class="id-tier-header" @click="idSectionOpen.trait = !idSectionOpen.trait; if (!idSectionOpen.trait) editingTrait = false">
               <div class="id-tier-title-group">
                 <span class="id-tier-indicator id-tier-indicator--trait" />
                 <span class="id-tier-label">{{ $t('character.basic.fieldTrait') }}</span>
@@ -1306,19 +1556,16 @@ const avatarInitial = computed<string>(() => {
             </button>
             <Transition name="id-tier-expand">
               <div v-if="idSectionOpen.trait" class="id-tier-body">
-                <div
-                  :class="['id-entry', { 'id-entry--expanded': traitDescExpanded }]"
-                  @click="traitDescExpanded = !traitDescExpanded"
-                >
-                  <div class="id-entry__title">{{ traitText }}</div>
+                <div :class="['id-entry', { 'id-entry--expanded': traitDescExpanded }]" @click="traitDescExpanded = !traitDescExpanded">
+                  <div class="id-entry__title">{{ traitText }} <span class="edit-icon" @click.stop="startEditTrait">✏</span></div>
                   <div v-if="traitDesc" class="id-entry__text">{{ traitDesc }}</div>
                 </div>
               </div>
             </Transition>
           </div>
 
-          <!-- Talents -->
-          <div v-if="talentItems.length" class="id-tier-section">
+          <!-- Talents (Story 2: editable with add/remove) -->
+          <div v-if="talentItems.length || addingTalent" class="id-tier-section">
             <button class="id-tier-header" @click="idSectionOpen.talent = !idSectionOpen.talent">
               <div class="id-tier-title-group">
                 <span class="id-tier-indicator id-tier-indicator--talent" />
@@ -1329,23 +1576,33 @@ const avatarInitial = computed<string>(() => {
             </button>
             <Transition name="id-tier-expand">
               <div v-if="idSectionOpen.talent" class="id-tier-body">
-                <div
-                  v-for="(t, idx) in talentItems"
-                  :key="t.name"
-                  :class="['id-entry', { 'id-entry--expanded': talentExpanded[idx] }]"
-                  @click="talentExpanded[idx] = !talentExpanded[idx]"
-                >
-                  <div class="id-entry__title">{{ t.name }}</div>
-                  <div v-if="t.desc" class="id-entry__text">{{ t.desc }}</div>
+                <div v-for="(talent, idx) in talentItems" :key="`${idx}-${talent.name}`" class="talent-entry">
+                  <div :class="['id-entry', { 'id-entry--expanded': talentExpanded[idx] }]" @click="talentExpanded[idx] = !talentExpanded[idx]">
+                    <div class="id-entry__title talent-title-row">
+                      <span class="talent-name-group">
+                        {{ talent.name }}
+                        <span class="edit-icon" @click.stop="startEditTalent(idx)">✏</span>
+                      </span>
+                      <span class="edit-icon edit-icon--danger talent-delete" @click.stop="requestRemoveTalent(idx, talent.name)">✕</span>
+                    </div>
+                    <div v-if="talent.desc" class="id-entry__text">{{ talent.desc }}</div>
+                  </div>
                 </div>
+                <button class="btn-add-talent" @click="startAddTalent">+ {{ $t('character.edit.addTalent') }}</button>
               </div>
             </Transition>
           </div>
         </section>
 
-        <section v-if="description" class="info-card" :aria-label="$t('character.basic.sectionDescription')">
+        <section class="info-card" :aria-label="$t('character.basic.sectionDescription')">
           <h3 class="card-title">{{ $t('character.basic.sectionDescription') }}</h3>
-          <p class="description-text">{{ description }}</p>
+          <template v-if="editingDescription">
+            <textarea v-model="descriptionDraft" class="inline-textarea" rows="3" autofocus @keydown.escape="cancelDescription" @blur="commitDescription" />
+          </template>
+          <p v-else class="description-text description-text--editable" @click="startEditDescription">
+            {{ description || $t('character.edit.clickToEdit') }}
+            <span class="edit-icon">✏</span>
+          </p>
         </section>
       </template>
 
@@ -1359,18 +1616,17 @@ const avatarInitial = computed<string>(() => {
         <section v-if="innateStatList.length" class="info-card" :aria-label="$t('character.attributes.sectionInnate')">
           <h3 class="card-title">{{ $t('character.attributes.sectionInnate') }} <span class="card-subtitle">{{ $t('character.attributes.innateSubtitle') }}</span></h3>
           <div class="attribute-list attribute-list--compact">
-            <div v-for="attr in innateStatList" :key="attr.key" class="attribute-item">
+            <div v-for="attr in innateStatList" :key="attr.key" class="attribute-item attribute-item--stepper">
               <div class="attribute-header">
                 <span class="attribute-name">{{ attr.label }}</span>
-                <span class="attribute-numbers">
-                  {{ attr.current }}<template v-if="attr.max !== null"> / {{ attr.max }}</template>
-                </span>
+                <div class="stepper-group">
+                  <button class="stepper-btn" @click="stepInnateAttr(attr.key, -1)" :disabled="attr.current <= 1">−</button>
+                  <span class="attribute-numbers">{{ attr.current }}</span>
+                  <button class="stepper-btn" @click="stepInnateAttr(attr.key, 1)" :disabled="attr.current >= 10">+</button>
+                </div>
               </div>
               <div class="attribute-bar">
-                <div
-                  class="attribute-bar__fill"
-                  :style="{ width: attrPercent(attr) + '%', background: 'var(--color-text-secondary, #8888a0)' }"
-                />
+                <div class="attribute-bar__fill" :style="{ width: attrPercent(attr) + '%', background: 'var(--color-text-secondary, #8888a0)' }" />
               </div>
             </div>
           </div>
@@ -1386,22 +1642,45 @@ const avatarInitial = computed<string>(() => {
             </button>
           </h3>
           <div v-if="attributeList.length" class="attribute-list">
-            <div v-for="attr in attributeList" :key="attr.key" class="attribute-item">
+            <div v-for="attr in attributeList" :key="attr.key" class="attribute-item attribute-item--stepper">
               <div class="attribute-header">
                 <span class="attribute-name">{{ attr.label }}</span>
-                <span class="attribute-numbers">
-                  {{ attr.current }}<template v-if="attr.max !== null"> / {{ attr.max }}</template>
-                </span>
+                <div class="stepper-group">
+                  <button class="stepper-btn" @click="stepAcquiredAttr(attr.key, -1)" :disabled="attr.current <= 0">−</button>
+                  <span class="attribute-numbers">{{ attr.current }}<template v-if="attr.max !== null"> / {{ attr.max }}</template></span>
+                  <button class="stepper-btn" @click="stepAcquiredAttr(attr.key, 1)" :disabled="attr.current >= 20">+</button>
+                </div>
               </div>
               <div class="attribute-bar">
-                <div
-                  class="attribute-bar__fill"
-                  :style="{ width: attrPercent(attr) + '%', background: attrBarColor(attrPercent(attr)) }"
-                />
+                <div class="attribute-bar__fill" :style="{ width: attrPercent(attr) + '%', background: attrBarColor(attrPercent(attr)) }" />
               </div>
             </div>
           </div>
           <p v-else class="empty-hint">{{ $t('character.attributes.empty') }}</p>
+        </section>
+
+        <!-- Story 2: Vitals section -->
+        <section class="info-card" :aria-label="$t('character.edit.vitals')">
+          <h3 class="card-title">
+            {{ $t('character.edit.vitals') }}
+            <button class="btn-icon" :title="$t('character.edit.advancedEdit')" @click="openVitalsEdit">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+            </button>
+          </h3>
+          <div class="vitals-grid">
+            <div class="vital-item">
+              <span class="vital-label">{{ $t('character.edit.health') }}</span>
+              <span class="vital-value">{{ vitalHealth?.当前 ?? 0 }} / {{ vitalHealth?.上限 ?? 100 }}</span>
+            </div>
+            <div class="vital-item">
+              <span class="vital-label">{{ $t('character.edit.energy') }}</span>
+              <span class="vital-value">{{ vitalEnergy?.当前 ?? 0 }} / {{ vitalEnergy?.上限 ?? 100 }}</span>
+            </div>
+            <div class="vital-item">
+              <span class="vital-label">{{ $t('character.edit.reputation') }}</span>
+              <span class="vital-value">{{ reputationVal ?? 0 }}</span>
+            </div>
+          </div>
         </section>
       </template>
 
@@ -1440,6 +1719,7 @@ const avatarInitial = computed<string>(() => {
             <p v-if="rel.内心想法" class="relation-thought">
               <span class="thought-quote">「</span>{{ rel.内心想法 }}<span class="thought-quote">」</span>
             </p>
+            <button class="btn-jump-social" @click="jumpToNpcEdit(rel.名称)">✏ {{ $t('relationship.detail.edit') }}</button>
           </div>
         </div>
         <div v-else class="empty-state">
@@ -1452,8 +1732,8 @@ const avatarInitial = computed<string>(() => {
         <div v-if="hasBodyData" class="body-nsfw-card">
           <div class="body-nsfw-title">{{ $t('character.body.title') }} <span class="body-nsfw-badge">{{ $t('character.body.privateBadge') }}</span></div>
 
-          <!-- Measurements row -->
-          <div v-if="playerBody?.身高 || playerBody?.体重" class="body-metrics-row">
+          <!-- Measurements row (Story 2: display with edit button) -->
+          <div class="body-metrics-row">
             <div v-if="playerBody?.身高" class="body-metric">
               <span class="body-metric-val">{{ playerBody.身高 }}</span>
               <span class="body-metric-lbl">{{ $t('character.body.heightUnit') }}</span>
@@ -1476,9 +1756,11 @@ const avatarInitial = computed<string>(() => {
                 <span class="body-metric-lbl">{{ $t('character.body.hip') }}</span>
               </div>
             </template>
+            <button class="btn-edit-body btn-edit-body--nsfw" @click="openBodyEdit">✏ {{ $t('map.action.edit') }}</button>
+            <button class="btn-edit-body btn-edit-body--nsfw" @click="openAdvancedEditor('角色.身体')">⚙ {{ $t('character.edit.advancedEdit') }}</button>
           </div>
 
-          <!-- Text descriptions -->
+          <!-- Text descriptions (read-only display, edit via modal) -->
           <div v-if="playerBody?.胸部描述" class="body-desc-field">
             <span class="body-hint">{{ $t('character.body.breastDesc') }}</span>
             <p class="body-desc-text">{{ playerBody.胸部描述 }}</p>
@@ -1939,6 +2221,142 @@ const avatarInitial = computed<string>(() => {
       <template #footer>
         <AgaButton variant="secondary" @click="showSchemaModal = false">取消</AgaButton>
         <AgaButton @click="saveSchemaEdit">保存</AgaButton>
+      </template>
+    </Modal>
+
+    <!-- Story 2: Remove talent confirmation -->
+    <Modal v-model="showRemoveTalentConfirm" :title="$t('character.edit.removeTalent')" width="360px">
+      <p>{{ $t('character.edit.confirmRemove') }}</p>
+      <p style="font-weight: 600; margin-top: 6px">{{ removeTalentName }}</p>
+      <template #footer>
+        <AgaButton variant="secondary" @click="showRemoveTalentConfirm = false">{{ $t('common.actions.cancel') }}</AgaButton>
+        <AgaButton variant="danger" @click="confirmRemoveTalent">{{ $t('character.edit.removeTalent') }}</AgaButton>
+      </template>
+    </Modal>
+
+    <!-- Story 2: Body edit modal -->
+    <Modal v-model="showBodyEditModal" :title="$t('character.body.title')" width="480px">
+      <div class="vitals-edit-form">
+        <div class="form-row-s2">
+          <div class="form-group-s2">
+            <label class="form-label-s2">{{ $t('character.body.heightUnit') }}</label>
+            <input v-model.number="bodyEditForm.身高" type="number" min="0" class="form-input-s2" inputmode="numeric" />
+          </div>
+          <div class="form-group-s2">
+            <label class="form-label-s2">{{ $t('character.body.weightUnit') }}</label>
+            <input v-model.number="bodyEditForm.体重" type="number" min="0" class="form-input-s2" inputmode="numeric" />
+          </div>
+        </div>
+        <div class="form-row-s2">
+          <div class="form-group-s2">
+            <label class="form-label-s2">{{ $t('character.body.bust') }}</label>
+            <input v-model.number="bodyEditForm.胸围" type="number" min="0" class="form-input-s2" inputmode="numeric" />
+          </div>
+          <div class="form-group-s2">
+            <label class="form-label-s2">{{ $t('character.body.waist') }}</label>
+            <input v-model.number="bodyEditForm.腰围" type="number" min="0" class="form-input-s2" inputmode="numeric" />
+          </div>
+          <div class="form-group-s2">
+            <label class="form-label-s2">{{ $t('character.body.hip') }}</label>
+            <input v-model.number="bodyEditForm.臀围" type="number" min="0" class="form-input-s2" inputmode="numeric" />
+          </div>
+        </div>
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.body.breastDesc') }}</label>
+          <textarea v-model="bodyEditForm.胸部描述" class="form-textarea-s2" rows="2" />
+        </div>
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.body.privateDesc') }}</label>
+          <textarea v-model="bodyEditForm.私处描述" class="form-textarea-s2" rows="2" />
+        </div>
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.body.genitalDesc') }}</label>
+          <textarea v-model="bodyEditForm.生殖器描述" class="form-textarea-s2" rows="2" />
+        </div>
+      </div>
+      <template #footer>
+        <AgaButton variant="secondary" @click="showBodyEditModal = false">{{ $t('common.actions.cancel') }}</AgaButton>
+        <AgaButton @click="saveBodyEdit">{{ $t('common.actions.save') }}</AgaButton>
+      </template>
+    </Modal>
+
+    <!-- Story 2: Origin edit modal -->
+    <Modal v-model="showOriginModal" :title="$t('character.edit.origin')" width="420px">
+      <div class="vitals-edit-form">
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.edit.origin') }}</label>
+          <input v-model="originNameDraft" type="text" class="form-input-s2" />
+        </div>
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.edit.description') }}</label>
+          <textarea v-model="originDescDraft" class="form-textarea-s2" rows="3" />
+        </div>
+      </div>
+      <template #footer>
+        <AgaButton variant="secondary" @click="showOriginModal = false">{{ $t('common.actions.cancel') }}</AgaButton>
+        <AgaButton @click="commitOrigin">{{ $t('common.actions.save') }}</AgaButton>
+      </template>
+    </Modal>
+
+    <!-- Story 2: Trait edit modal -->
+    <Modal v-model="showTraitModal" :title="$t('character.edit.trait')" width="420px">
+      <div class="vitals-edit-form">
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.edit.trait') }}</label>
+          <input v-model="traitNameDraft" type="text" class="form-input-s2" />
+        </div>
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.edit.description') }}</label>
+          <textarea v-model="traitDescDraft" class="form-textarea-s2" rows="3" />
+        </div>
+      </div>
+      <template #footer>
+        <AgaButton variant="secondary" @click="showTraitModal = false">{{ $t('common.actions.cancel') }}</AgaButton>
+        <AgaButton @click="commitTrait">{{ $t('common.actions.save') }}</AgaButton>
+      </template>
+    </Modal>
+
+    <!-- Story 2: Talent edit/add modal -->
+    <Modal v-model="showTalentModal" :title="talentModalMode === 'edit' ? $t('character.edit.talent') : $t('character.edit.addTalent')" width="420px">
+      <div class="vitals-edit-form">
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.edit.talent') }}</label>
+          <input v-model="talentNameDraft" type="text" class="form-input-s2" />
+        </div>
+        <div class="form-group-s2">
+          <label class="form-label-s2">{{ $t('character.edit.description') }}</label>
+          <textarea v-model="talentDescDraft" class="form-textarea-s2" rows="3" />
+        </div>
+      </div>
+      <template #footer>
+        <AgaButton variant="secondary" @click="showTalentModal = false">{{ $t('common.actions.cancel') }}</AgaButton>
+        <AgaButton @click="commitEditTalent">{{ $t('common.actions.save') }}</AgaButton>
+      </template>
+    </Modal>
+
+    <!-- Story 2: Vitals edit modal -->
+    <Modal v-model="showVitalsEdit" :title="$t('character.edit.vitals')" width="400px">
+      <div class="vitals-edit-form">
+        <div class="vitals-edit-row">
+          <span class="vitals-edit-label">{{ $t('character.edit.health') }}</span>
+          <input v-model.number="vitalsForm.healthCurrent" type="number" min="0" class="vitals-edit-input" inputmode="numeric" />
+          <span class="vitals-edit-sep">/</span>
+          <input v-model.number="vitalsForm.healthMax" type="number" min="1" class="vitals-edit-input" inputmode="numeric" />
+        </div>
+        <div class="vitals-edit-row">
+          <span class="vitals-edit-label">{{ $t('character.edit.energy') }}</span>
+          <input v-model.number="vitalsForm.energyCurrent" type="number" min="0" class="vitals-edit-input" inputmode="numeric" />
+          <span class="vitals-edit-sep">/</span>
+          <input v-model.number="vitalsForm.energyMax" type="number" min="1" class="vitals-edit-input" inputmode="numeric" />
+        </div>
+        <div class="vitals-edit-row">
+          <span class="vitals-edit-label">{{ $t('character.edit.reputation') }}</span>
+          <input v-model.number="vitalsForm.reputation" type="number" min="0" class="vitals-edit-input" inputmode="numeric" />
+        </div>
+      </div>
+      <template #footer>
+        <AgaButton variant="secondary" @click="showVitalsEdit = false">{{ $t('common.actions.cancel') }}</AgaButton>
+        <AgaButton @click="saveVitals">{{ $t('common.actions.save') }}</AgaButton>
       </template>
     </Modal>
   </div>
@@ -3050,6 +3468,23 @@ const avatarInitial = computed<string>(() => {
   .bp-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
+  /* Story 2: mobile touch targets */
+  .stepper-btn { min-width: 44px; min-height: 44px; font-size: 1rem; }
+  .btn-add-talent { min-height: 44px; }
+  .btn-sm { min-height: 44px; }
+  .btn-edit-body { min-height: 44px; }
+  .btn-jump-social { min-height: 44px; }
+  .btn-edit-all { min-height: 44px; }
+  .vitals-edit-input { height: 44px; }
+  .form-input-s2 { height: 44px; }
+  .form-textarea-s2 { min-height: 44px; }
+  .form-row-s2 { flex-direction: column; }
+  .body-metric-input { height: 44px; width: 80px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .edit-icon { opacity: 0.5; }
+  .info-value--editable:active { background: rgba(163, 190, 140, 0.08); border-radius: 4px; }
 }
 
 /* ─── Player secret part close-up styles ─── */
@@ -3198,4 +3633,78 @@ const avatarInitial = computed<string>(() => {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ── Story 2: Inline editing ── */
+.info-value--editable { cursor: pointer; transition: color 0.15s ease; }
+.info-value--editable:hover { color: var(--color-sage-300); }
+.edit-icon { font-size: 0.7em; opacity: 0.3; transition: opacity 0.15s; margin-left: 3px; }
+.info-value--editable:hover .edit-icon,
+.id-entry__title:hover .edit-icon,
+.description-text--editable:hover .edit-icon { opacity: 0.8; }
+.edit-icon--danger { color: var(--color-danger); }
+.edit-icon--danger:hover { opacity: 1; }
+.inline-textarea {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 0.84rem;
+  color: var(--color-text, #e0e0e6);
+  background: var(--color-surface-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-sage-600);
+  border-radius: 6px;
+  outline: none;
+  resize: vertical;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+}
+.description-text--editable { cursor: pointer; }
+.description-text--editable:hover { color: var(--color-sage-300); }
+
+/* Identity edit form */
+.id-edit-form { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; }
+.id-edit-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.btn-sm { padding: 2px 10px; font-size: 0.78rem; border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; background: rgba(255,255,255,0.04); color: var(--color-text-secondary); }
+.btn-save { color: var(--color-sage-400); border-color: var(--color-sage-600); }
+.btn-cancel { color: var(--color-text-secondary); }
+.btn-add-talent { padding: 4px 12px; font-size: 0.75rem; color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent); border-radius: 6px; cursor: pointer; margin-top: 6px; }
+.talent-entry { margin-bottom: 4px; }
+.talent-title-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.talent-name-group { display: flex; align-items: center; gap: 4px; }
+.talent-delete { flex-shrink: 0; margin-left: auto; }
+
+/* Stepper buttons */
+.attribute-item--stepper .attribute-header { display: flex; align-items: center; }
+.stepper-group { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.stepper-btn { min-width: 24px; min-height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 700; color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 25%, transparent); border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+.stepper-btn:hover:not(:disabled) { background: color-mix(in oklch, var(--color-sage-400) 20%, transparent); }
+.stepper-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Vitals display */
+.vitals-grid { display: flex; gap: 16px; flex-wrap: wrap; }
+.vital-item { display: flex; flex-direction: column; gap: 2px; min-width: 80px; }
+.vital-label { font-size: 0.72rem; color: var(--color-text-secondary); }
+.vital-value { font-size: 0.9rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--color-text); }
+
+/* Vitals edit modal */
+.vitals-edit-form { display: flex; flex-direction: column; gap: 12px; }
+.vitals-edit-row { display: flex; align-items: center; gap: 8px; }
+.vitals-edit-label { font-size: 0.82rem; color: var(--color-text-secondary); min-width: 50px; }
+.vitals-edit-input { width: 80px; height: 32px; padding: 0 8px; font-size: 0.84rem; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 6px; outline: none; }
+.vitals-edit-sep { color: var(--color-text-secondary); font-size: 0.9rem; }
+
+/* Relations jump button */
+.btn-jump-social { padding: 3px 10px; font-size: 0.72rem; color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent); border-radius: 4px; cursor: pointer; margin-top: 6px; transition: all 0.15s; }
+.btn-jump-social:hover { background: color-mix(in oklch, var(--color-sage-400) 16%, transparent); }
+
+/* Body editing */
+.body-metric--editable { flex-direction: column; }
+.body-metric-input { width: 60px; height: 28px; padding: 0 6px; font-size: 0.88rem; font-weight: 700; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 4px; outline: none; text-align: center; font-family: 'JetBrains Mono', monospace; }
+/* Story 2: Modal form classes */
+.form-group-s2 { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.form-row-s2 { display: flex; gap: 10px; }
+.form-label-s2 { font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); }
+.form-input-s2 { height: 34px; padding: 0 10px; font-size: 0.84rem; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 6px; outline: none; }
+.form-textarea-s2 { padding: 8px 10px; font-size: 0.84rem; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 6px; outline: none; resize: vertical; }
+.btn-edit-body { padding: 4px 10px; font-size: 0.78rem; color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent); border-radius: 5px; cursor: pointer; transition: all 0.15s; }
+.btn-edit-body:hover { background: color-mix(in oklch, var(--color-sage-400) 16%, transparent); }
+.btn-edit-body--nsfw { color: #e879a0; background: rgba(232, 121, 160, 0.08); border-color: rgba(232, 121, 160, 0.25); }
+.btn-edit-body--nsfw:hover { background: rgba(232, 121, 160, 0.16); }
 </style>

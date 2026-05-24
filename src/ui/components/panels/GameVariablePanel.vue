@@ -7,8 +7,9 @@
  * SchemaForm 编辑对象、与 `getStateSchema()` 对比的「重置」提示。
  * Phase 6.3 新增：导出 JSON + 统计 Modal + 每字段复制按钮。
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
 import { getPathLabel } from '@/ui/composables/useStateTreeNavigation';
@@ -21,6 +22,24 @@ const { t, locale } = useI18n();
 
 const { isLoaded, tree, get, setValue } = useGameState();
 const { getStateSchema, pack } = useConfig();
+const route = useRoute();
+const router = useRouter();
+
+const returnPanel = computed(() => (route.query.from as string) ?? '');
+const returnPanelLabel = computed(() => {
+  const map: Record<string, string> = {
+    character: t('character.tab.basic'),
+    relationships: t('relationship.title'),
+    map: t('map.title'),
+    inventory: t('inventory.title'),
+  };
+  return map[returnPanel.value] ?? returnPanel.value;
+});
+function goBack(): void {
+  if (returnPanel.value) {
+    router.push({ path: `/game/${returnPanel.value}` });
+  }
+}
 
 // Pack-level i18n data for translating state tree path segments (display only)
 const packI18n = computed<Record<string, string> | undefined>(() => {
@@ -122,6 +141,10 @@ function summarizeNode(_key: string, val: unknown): string {
 function navigateTo(path: string): void {
   selectedPath.value = path;
 }
+
+watch(() => route.query.path as string | undefined, (path) => {
+  if (path) navigateTo(path);
+}, { immediate: true });
 
 /** Navigate via breadcrumb */
 function navigateBreadcrumb(index: number): void {
@@ -546,7 +569,10 @@ async function copyFieldValue(path: string): Promise<void> {
     <template v-if="isLoaded">
       <!-- ─── Header ─── -->
       <header class="panel-header">
-        <h2 class="panel-title">{{ t('variable.title') }}</h2>
+        <div class="panel-title-group">
+          <button v-if="returnPanel" class="btn-return" @click="goBack">← {{ returnPanelLabel }}</button>
+          <h2 class="panel-title">{{ t('variable.title') }}</h2>
+        </div>
         <div class="header-actions">
           <button class="btn btn--ghost btn--sm" @click="showStatsModal = true" :title="t('variable.stats')">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
@@ -1445,4 +1471,9 @@ async function copyFieldValue(path: string): Promise<void> {
     overflow-wrap: anywhere;
   }
 }
+
+/* ── Story 2: Return link + title group ── */
+.panel-title-group { display: flex; align-items: center; gap: 10px; }
+.btn-return { padding: 3px 10px; font-size: 0.75rem; color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent); border-radius: 5px; cursor: pointer; transition: all 0.15s; }
+.btn-return:hover { background: color-mix(in oklch, var(--color-sage-400) 16%, transparent); }
 </style>

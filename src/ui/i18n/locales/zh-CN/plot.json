@@ -79,5 +79,11 @@
 
   "plot.arc.newArcBtn": "新建弧线",
   "plot.gauge.editBtn": "编辑",
-  "plot.gauge.deleteBtn": "删除"
+  "plot.gauge.deleteBtn": "删除",
+
+  "plot.arc.editTitle": "编辑标题",
+  "plot.arc.editSynopsis": "编辑概要",
+  "plot.toast.arcUpdated": "弧线已更新",
+  "plot.validate.titleRequired": "标题不能为空",
+  "plot.validate.arcNotFound": "弧线未找到"
 }

@@ -24,12 +24,21 @@ import { useGameState } from '@/ui/composables/useGameState';
 const { t } = useI18n();
 
 cytoscape.use(fcose);
-import { useMobile } from '@/ui/composables/useMobile';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import Modal from '@/ui/components/common/Modal.vue';
 
+import { useLocationEditor } from '@/ui/composables/editors';
+import { useRouter } from 'vue-router';
+import { eventBus } from '@/engine/core/event-bus';
+import type { LocationDeleteImpact, LocationFormData } from '@/ui/composables/editors';
+
 const { isLoaded, useValue } = useGameState();
-const { isMobile } = useMobile();
+const locEditor = useLocationEditor();
+const router = useRouter();
+
+function openAdvancedEditor(targetPath: string): void {
+  router.push({ name: 'GameVariables', query: { path: targetPath, from: 'map' } });
+}
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -39,6 +48,7 @@ interface LocationEntry {
   上级?: string;
   NPC?: string[];
   类型?: string;
+  连接?: string[];
   [key: string]: unknown;
 }
 
@@ -189,6 +199,143 @@ function navigateToChild(name: string): void {
       cyInstance.animate({ fit: { eles: node.union(node.descendants()), padding: 50 } }, { duration: 300 });
     }
   }
+}
+
+// ─── Story 2: Location CRUD ──────────────────────────────────────
+
+const relationships = useValue<Array<{ 名称: string }>>(DEFAULT_ENGINE_PATHS.relationships);
+const npcNames = computed<string[]>(() => {
+  const list = relationships.value;
+  return Array.isArray(list) ? list.map(r => r.名称).filter(Boolean) : [];
+});
+const locationNames = computed<string[]>(() => validLocations.value.map(l => l.名称));
+
+const showLocationModal = ref(false);
+const locationEditIdx = ref(-1);
+const locationForm = ref<LocationFormData>({
+  名称: '', 描述: '', 类型: '', 上级: '', 连接: [], NPC: [],
+});
+
+const showDeleteConfirm = ref(false);
+const deleteImpact = ref<LocationDeleteImpact | null>(null);
+const deleteIdx = ref(-1);
+
+const contextMenu = ref<{ x: number; y: number; name: string } | null>(null);
+
+function openCreateLocation(): void {
+  locationEditIdx.value = -1;
+  const currentDrillParent = focusStack.value.length > 0 ? focusStack.value[focusStack.value.length - 1] : '';
+  locationForm.value = {
+    名称: '', 描述: '', 类型: '', 上级: currentDrillParent, 连接: [], NPC: [],
+  };
+  showLocationModal.value = true;
+}
+
+function openCreateChild(parentName: string): void {
+  locationEditIdx.value = -1;
+  locationForm.value = {
+    名称: '', 描述: '', 类型: '', 上级: parentName, 连接: [], NPC: [],
+  };
+  contextMenu.value = null;
+  showLocationModal.value = true;
+}
+
+function openEditLocation(loc: LocationEntry): void {
+  const rawLocs = locations.value ?? [];
+  locationEditIdx.value = rawLocs.findIndex(l => l.名称 === loc.名称);
+  locationForm.value = {
+    名称: loc.名称,
+    描述: loc.描述 ?? '',
+    类型: loc.类型 ?? '',
+    上级: loc.上级 ?? '',
+    连接: Array.isArray(loc.连接) ? [...loc.连接] : [],
+    NPC: Array.isArray(loc.NPC) ? [...loc.NPC] : [],
+  };
+  contextMenu.value = null;
+  showLocationModal.value = true;
+}
+
+function saveLocation(): void {
+  const result = locationEditIdx.value >= 0
+    ? locEditor.update(locationEditIdx.value, locationForm.value)
+    : locEditor.create(locationForm.value);
+  if (result.ok) {
+    showLocationModal.value = false;
+    clearSelection();
+  } else if (result.error) {
+    eventBus.emit('ui:toast', {
+      type: 'error', i18nKey: result.error.i18nKey, message: result.error.message, duration: 3000,
+    });
+  }
+}
+
+function requestDeleteLocation(loc: LocationEntry): void {
+  const rawLocs = locations.value ?? [];
+  const idx = rawLocs.findIndex(l => l.名称 === loc.名称);
+  if (idx < 0) return;
+  deleteIdx.value = idx;
+  deleteImpact.value = locEditor.analyzeDeleteImpact(idx);
+  contextMenu.value = null;
+  showDeleteConfirm.value = true;
+}
+
+function confirmDeleteLocation(): void {
+  if (deleteIdx.value < 0) return;
+  const result = locEditor.delete(deleteIdx.value);
+  if (result.ok) {
+    clearSelection();
+  } else if (result.error) {
+    eventBus.emit('ui:toast', {
+      type: 'error', i18nKey: result.error.i18nKey, message: result.error.message, duration: 3000,
+    });
+  }
+  showDeleteConfirm.value = false;
+  deleteIdx.value = -1;
+  deleteImpact.value = null;
+}
+
+// Tag list helpers for the location edit modal
+const addConnectionSelect = ref('');
+function addConnection(): void {
+  const v = addConnectionSelect.value;
+  if (v && !locationForm.value.连接!.includes(v)) {
+    locationForm.value.连接!.push(v);
+  }
+  addConnectionSelect.value = '';
+}
+function removeConnection(idx: number): void {
+  locationForm.value.连接!.splice(idx, 1);
+}
+
+const addNpcSelect = ref('');
+function addNpc(): void {
+  const v = addNpcSelect.value;
+  if (v && !locationForm.value.NPC!.includes(v)) {
+    locationForm.value.NPC!.push(v);
+  }
+  addNpcSelect.value = '';
+}
+function removeNpc(idx: number): void {
+  locationForm.value.NPC!.splice(idx, 1);
+}
+
+// Filtered options (exclude self and already-selected)
+const availableParents = computed(() =>
+  locationNames.value.filter(n => n !== locationForm.value.名称),
+);
+const availableConnections = computed(() =>
+  locationNames.value.filter(n => n !== locationForm.value.名称 && !locationForm.value.连接!.includes(n)),
+);
+const availableNpcs = computed(() =>
+  npcNames.value.filter(n => !locationForm.value.NPC!.includes(n)),
+);
+
+function openContextMenu(name: string, renderedX: number, renderedY: number): void {
+  contextMenu.value = { x: renderedX, y: renderedY, name };
+}
+
+function closeContextMenu(): void {
+  contextMenu.value = null;
 }
 
 // ─── Short label ─────────────────────────────────────────────────
@@ -518,7 +665,14 @@ function initCytoscape(): void {
 
   // ── Click background → deselect ──
   cyInstance.on('tap', (evt: EventObject) => {
-    if (evt.target === cyInstance) clearSelection();
+    if (evt.target === cyInstance) { clearSelection(); closeContextMenu(); }
+  });
+
+  // Story 2: Right-click context menu on nodes
+  cyInstance.on('cxttap', 'node', (evt: EventObject) => {
+    const node = evt.target as NodeSingular;
+    const pos = node.renderedPosition();
+    openContextMenu(node.id(), pos.x, pos.y);
   });
 
   // ── Double-click → drill into compound node ──
@@ -817,6 +971,7 @@ onActivated(() => {
         <div class="header-actions">
           <button class="btn-secondary" :title="$t('map.fitView')" @click="fitView">{{ $t('map.fitView') }}</button>
           <button class="btn-secondary" :title="$t('map.refresh')" @click="refreshGraph">{{ $t('map.refresh') }}</button>
+          <button class="btn-create-loc" @click="openCreateLocation">+ {{ $t('map.action.create') }}</button>
           <button class="btn-help" :aria-label="$t('map.helpBtn')" :title="$t('map.helpBtn')" @click="showHelp = true">?</button>
         </div>
       </header>
@@ -878,6 +1033,13 @@ onActivated(() => {
             </button>
           </span>
         </div>
+
+        <!-- Context menu (right-click on node) — inside .map-container for correct coordinate space -->
+        <div v-if="contextMenu" class="ctx-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @mouseleave="closeContextMenu" @keydown.escape="closeContextMenu" tabindex="-1">
+          <button class="ctx-item" @click="openEditLocation(validLocations.find(l => l.名称 === contextMenu!.name)!)">✏ {{ $t('map.action.edit') }}</button>
+          <button class="ctx-item" @click="requestDeleteLocation(validLocations.find(l => l.名称 === contextMenu!.name)!)">🗑 {{ $t('map.action.delete') }}</button>
+          <button class="ctx-item" @click="openCreateChild(contextMenu.name)">+ {{ $t('map.action.createChild') }}</button>
+        </div>
       </div>
 
       <!-- Location detail panel -->
@@ -892,6 +1054,11 @@ onActivated(() => {
             <span v-if="exploredSet.has(selectedEntry.名称)" class="badge badge--explored">{{ $t('map.detail.explored') }}</span>
             <span v-else class="badge badge--unknown">{{ $t('map.detail.unexplored') }}</span>
             <span v-if="selectedEntry.名称 === playerLocation" class="badge badge--here">📍 {{ $t('map.detail.youAreHere') }}</span>
+          </div>
+          <div class="detail-crud-actions">
+            <button class="btn-secondary btn-sm-loc" @click="openEditLocation(selectedEntry)">✏ {{ $t('map.action.edit') }}</button>
+            <button class="btn-secondary btn-sm-loc" @click="openAdvancedEditor('世界.地点信息')">⚙ {{ $t('character.edit.advancedEdit') }}</button>
+            <button class="btn-danger-loc btn-sm-loc" @click="requestDeleteLocation(selectedEntry)">{{ $t('map.action.delete') }}</button>
           </div>
 
           <p v-if="selectedEntry.描述" class="detail-desc">{{ selectedEntry.描述 }}</p>
@@ -924,11 +1091,86 @@ onActivated(() => {
               >{{ shortLabel(child.名称) }}</button>
             </div>
           </div>
+
         </div>
       </Transition>
     </template>
 
     <div v-else class="empty-state"><p>{{ $t('map.notLoaded') }}</p></div>
+
+    <!-- Context menu moved to inside .map-container for correct positioning -->
+
+    <!-- Location edit/create modal -->
+    <Modal v-model="showLocationModal" :title="locationEditIdx >= 0 ? $t('map.edit.title') : $t('map.edit.titleCreate')" width="480px">
+      <div class="loc-edit-form">
+        <div class="loc-form-group">
+          <label class="loc-form-label">{{ $t('map.edit.label.name') }}</label>
+          <input v-model="locationForm.名称" type="text" class="loc-form-input" :placeholder="$t('map.edit.placeholder.name')" />
+        </div>
+        <div class="loc-form-group">
+          <label class="loc-form-label">{{ $t('map.edit.label.description') }}</label>
+          <textarea v-model="locationForm.描述" class="loc-form-textarea" rows="3" :placeholder="$t('map.edit.placeholder.description')" />
+        </div>
+        <div class="loc-form-group">
+          <label class="loc-form-label">{{ $t('map.edit.label.type') }}</label>
+          <input v-model="locationForm.类型" type="text" class="loc-form-input" />
+        </div>
+        <div class="loc-form-group">
+          <label class="loc-form-label">{{ $t('map.edit.label.parent') }}</label>
+          <select v-model="locationForm.上级" class="loc-form-input">
+            <option value="">{{ $t('map.edit.noParent') }}</option>
+            <option v-for="p in availableParents" :key="p" :value="p">{{ p }}</option>
+          </select>
+        </div>
+
+        <div class="loc-form-group">
+          <label class="loc-form-label">{{ $t('map.edit.label.connections') }}</label>
+          <div class="tag-list-edit">
+            <span v-for="(c, ci) in locationForm.连接" :key="ci" class="tag-chip">{{ c }} <button class="tag-x" @click="removeConnection(ci)">&times;</button></span>
+          </div>
+          <div class="tag-add-row">
+            <select v-model="addConnectionSelect" class="loc-form-input" @change="addConnection">
+              <option value="">{{ $t('map.edit.addConnection') }}</option>
+              <option v-for="opt in availableConnections" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+          <span class="loc-form-hint">ⓘ {{ $t('map.edit.connectionHint') }}</span>
+        </div>
+
+        <div class="loc-form-group">
+          <label class="loc-form-label">{{ $t('map.edit.label.npcs') }}</label>
+          <div class="tag-list-edit">
+            <span v-for="(n, ni) in locationForm.NPC" :key="ni" class="tag-chip">{{ n }} <button class="tag-x" @click="removeNpc(ni)">&times;</button></span>
+          </div>
+          <div class="tag-add-row">
+            <select v-model="addNpcSelect" class="loc-form-input" @change="addNpc">
+              <option value="">{{ $t('map.edit.addNpc') }}</option>
+              <option v-for="opt in availableNpcs" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="showLocationModal = false">{{ $t('common.actions.cancel') }}</button>
+        <button class="btn-primary" :disabled="!locationForm.名称?.trim()" @click="saveLocation">{{ $t('common.actions.save') }}</button>
+      </template>
+    </Modal>
+
+    <!-- Delete confirmation modal -->
+    <Modal v-model="showDeleteConfirm" :title="$t('map.delete.confirm')" width="400px">
+      <div v-if="deleteImpact" class="delete-impact">
+        <p style="margin-bottom: 8px; font-weight: 600">{{ deleteImpact.locationName }}</p>
+        <ul v-if="deleteImpact.childLocations.length || deleteImpact.npcRefs.length || deleteImpact.connectionRefs.length" class="impact-list">
+          <li v-if="deleteImpact.childLocations.length">{{ $t('map.delete.cascadeChildren') }}: <strong>{{ deleteImpact.childLocations.join(', ') }}</strong></li>
+          <li v-if="deleteImpact.npcRefs.length">{{ $t('map.delete.cascadeNpcs') }}: <strong>{{ deleteImpact.npcRefs.join(', ') }}</strong></li>
+          <li v-if="deleteImpact.connectionRefs.length">{{ $t('map.delete.cascadeConnections') }}: <strong>{{ deleteImpact.connectionRefs.join(', ') }}</strong></li>
+        </ul>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="showDeleteConfirm = false; deleteIdx = -1; deleteImpact = null">{{ $t('common.actions.cancel') }}</button>
+        <button class="btn-danger-loc" @click="confirmDeleteLocation">{{ $t('common.actions.delete') }}</button>
+      </template>
+    </Modal>
 
     <!-- Help modal -->
     <Modal v-model="showHelp" :title="$t('map.helpTitle')">
@@ -1093,8 +1335,61 @@ onActivated(() => {
 
 .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-secondary); font-size: 0.88rem; }
 
+/* ── Story 2: CRUD buttons ── */
+.btn-create-loc { padding: 4px 12px; font-size: 0.78rem; font-weight: 600; color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 25%, transparent); border-radius: 6px; cursor: pointer; }
+.btn-create-loc:hover { background: color-mix(in oklch, var(--color-sage-400) 18%, transparent); }
+.detail-crud-actions { display: flex; gap: 6px; margin: 8px 0; }
+.btn-sm-loc { padding: 4px 10px; font-size: 0.75rem; border-radius: 5px; cursor: pointer; }
+.btn-danger-loc { padding: 4px 10px; font-size: 0.75rem; font-weight: 600; color: var(--color-danger); background: color-mix(in oklch, var(--color-danger) 10%, transparent); border: 1px solid color-mix(in oklch, var(--color-danger) 25%, transparent); border-radius: 5px; cursor: pointer; }
+
+/* Context menu */
+.ctx-menu { position: absolute; z-index: 100; background: var(--glass-bg, rgba(30,30,40,0.92)); backdrop-filter: var(--glass-blur, blur(16px)); border: 1px solid var(--color-border); border-radius: 8px; padding: 4px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.4); min-width: 140px; }
+.ctx-item { display: block; width: 100%; padding: 8px 14px; font-size: 0.8rem; color: var(--color-text); background: none; border: none; cursor: pointer; text-align: left; transition: background 0.12s; }
+.ctx-item:hover { background: color-mix(in oklch, var(--color-sage-400) 12%, transparent); }
+
+/* Location edit form */
+.loc-edit-form { display: flex; flex-direction: column; gap: 12px; }
+.loc-form-group { display: flex; flex-direction: column; gap: 4px; }
+.loc-form-label { font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); }
+.loc-form-input { height: 34px; padding: 0 10px; font-size: 0.84rem; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 6px; outline: none; appearance: none; -webkit-appearance: none; }
+select.loc-form-input { padding-right: 28px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%238888a0'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+.loc-form-textarea { padding: 8px 10px; font-size: 0.84rem; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 6px; outline: none; resize: vertical; }
+.loc-form-hint { font-size: 0.72rem; color: var(--color-sage-400); font-style: italic; padding: 4px 8px; background: color-mix(in oklch, var(--color-sage-400) 6%, transparent); border-radius: 4px; }
+.tag-list-edit { display: flex; flex-wrap: wrap; gap: 4px; min-height: 28px; }
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; font-size: 0.78rem; color: var(--color-text); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent); border-radius: 12px; }
+.tag-x { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 2px; }
+.tag-x:hover { color: var(--color-danger); }
+.tag-add-row { margin-top: 4px; }
+.btn-primary { padding: 6px 16px; font-size: 0.82rem; font-weight: 600; color: var(--color-text-bone, #e0e0e6); background: var(--color-sage-400); border: none; border-radius: 6px; cursor: pointer; }
+.btn-primary:hover { background: var(--color-sage-300); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-advanced-map { padding: 4px 10px; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); border-radius: 5px; cursor: pointer; opacity: 0.5; transition: all 0.15s; }
+.btn-advanced-map:hover { opacity: 1; color: var(--color-sage-400); border-color: var(--color-sage-600); }
+
+/* Delete impact */
+.delete-impact { font-size: 0.84rem; color: var(--color-text); }
+.impact-list { list-style: disc; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+
 @media (max-width: 767px) {
   .map-panel { padding-left: var(--space-sm); padding-right: var(--space-sm); transition: none; }
   .cy-viewport { touch-action: manipulation; }
+  .ctx-menu { position: fixed; left: 50% !important; top: auto !important; bottom: 20px; transform: translateX(-50%); }
+
+  /* Story 2: mobile touch targets */
+  .btn-create-loc { min-height: 44px; }
+  .btn-sm-loc { min-height: 44px; }
+  .btn-danger-loc { min-height: 44px; }
+  .btn-secondary { min-height: 44px; }
+  .btn-primary { min-height: 44px; }
+  .loc-form-input { height: 44px; }
+  .loc-form-textarea { min-height: 44px; }
+  .tag-x { min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
+  .ctx-item { min-height: 44px; }
+  .loc-edit-form { gap: 16px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .detail-link:active { background: rgba(163, 190, 140, 0.08); border-radius: 4px; }
+  .child-link:active { background: color-mix(in oklch, var(--color-sage-400) 25%, transparent); }
 }
 </style>

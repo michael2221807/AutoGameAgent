@@ -35,7 +35,7 @@
 
   "character.relations.empty": "尚无社交关系记录",
 
-  "character.body.title": "♥ 法身档案",
+  "character.body.title": "♥ 私密档案",
   "character.body.privateBadge": "PRIVATE",
   "character.body.heightUnit": "cm",
   "character.body.weightUnit": "kg",
@@ -216,5 +216,38 @@
   "character.toast.secretRefFailed": "{part}参考重绘失败：{error}",
   "character.toast.secretRefDone": "{part}参考重绘完成。",
 
-  "character.notLoaded": "尚未加载游戏数据"
+  "character.notLoaded": "尚未加载游戏数据",
+
+  "character.edit.nameRequired": "姓名不能为空",
+  "character.edit.nameConflictNpc": "玩家姓名与 NPC 名称冲突",
+  "character.edit.invalidAge": "年龄值无效",
+  "character.edit.invalidIndex": "索引无效",
+  "character.edit.gender": "性别",
+  "character.edit.occupation": "地位",
+  "character.edit.location": "当前位置",
+  "character.edit.origin": "出身",
+  "character.edit.trait": "特质",
+  "character.edit.talent": "天赋",
+  "character.edit.description": "描述",
+  "character.edit.clickToEdit": "点击编辑",
+  "character.edit.addTalent": "添加天赋",
+  "character.edit.removeTalent": "删除天赋",
+  "character.edit.confirmRemove": "确认删除？",
+  "character.edit.innateStats": "先天六维",
+  "character.edit.acquiredStats": "后天属性",
+  "character.edit.vitals": "可变属性",
+  "character.edit.health": "体力",
+  "character.edit.energy": "精力",
+  "character.edit.reputation": "声望",
+  "character.edit.advancedEdit": "高级编辑",
+  "character.edit.genderOption.male": "男",
+  "character.edit.genderOption.female": "女",
+  "character.edit.genderOption.other": "其他",
+  "character.toast.fieldUpdated": "已更新",
+  "character.toast.talentAdded": "天赋已添加",
+  "character.toast.talentRemoved": "天赋已删除",
+  "character.body.edit.partNameRequired": "身体部位名称不能为空",
+  "character.body.edit.invalidIndex": "身体部位索引无效",
+  "character.body.edit.cannotRemoveRequired": "不能移除必需的身体部位",
+  "character.edit.invalidVitalMax": "上限值至少为 1"
 }

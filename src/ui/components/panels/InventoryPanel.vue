@@ -12,16 +12,25 @@
  * 1. items 类型错误为 InventoryItem[]，导致 Array.isArray 永远失败 → 背包永远空
  * 2. currency 类型错误为 number，读取容器对象 → 显示 0
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useActionQueueStore } from '@/engine/stores/engine-action-queue';
+import { useInventoryEditor } from '@/ui/composables/editors';
+import { useRouter } from 'vue-router';
+import Modal from '@/ui/components/common/Modal.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 
 const { t } = useI18n();
 
 const { isLoaded, useValue } = useGameState();
+const invEditor = useInventoryEditor();
+const router = useRouter();
+
+function openAdvancedEditor(): void {
+  router.push({ name: 'GameVariables', query: { path: '角色.背包', from: 'inventory' } });
+}
 const actionQueue = useActionQueueStore();
 
 /** 品质子对象 */
@@ -195,6 +204,141 @@ function itemTypeIcon(type: string | undefined): string {
   };
   return icons[type ?? ''] ?? '🔹';
 }
+
+// ─── Story 2: Item CRUD ───
+
+const ITEM_TYPES = ['武器', '防具', '消耗品', '材料', '任务', '饰品', '其他'] as const;
+const QUALITY_OPTIONS = ['普通', '优良', '稀有', '史诗', '传说', '神话'] as const;
+
+interface ItemEditForm {
+  名称: string;
+  类型: string;
+  数量: number;
+  品质: string;
+  描述: string;
+  可装备: boolean;
+  已装备: boolean;
+}
+
+const showItemModal = ref(false);
+const editingItemId = ref<string | null>(null);
+
+watch(showItemModal, (open) => {
+  if (!open) editingItemId.value = null;
+});
+const itemForm = ref<ItemEditForm>({
+  名称: '', 类型: '其他', 数量: 1, 品质: '普通', 描述: '', 可装备: false, 已装备: false,
+});
+
+function openCreateItem(): void {
+  editingItemId.value = null;
+  itemForm.value = { 名称: '', 类型: '其他', 数量: 1, 品质: '普通', 描述: '', 可装备: false, 已装备: false };
+  showItemModal.value = true;
+}
+
+function openEditItem(item: DisplayItem, event: Event): void {
+  event.stopPropagation();
+  editingItemId.value = item._id;
+  const qualityLabel = getQualityLabel(item);
+  itemForm.value = {
+    名称: item.名称,
+    类型: item.类型 ?? '其他',
+    数量: item.数量 ?? 1,
+    品质: qualityLabel ?? '普通',
+    描述: item.描述 ?? '',
+    可装备: item.可装备 === true,
+    已装备: item.已装备 === true,
+  };
+  showItemModal.value = true;
+}
+
+function saveItem(): void {
+  const formData = {
+    名称: itemForm.value.名称,
+    类型: itemForm.value.类型,
+    数量: itemForm.value.数量,
+    品质: itemForm.value.品质,
+    描述: itemForm.value.描述,
+    可装备: itemForm.value.可装备,
+    已装备: itemForm.value.已装备,
+  };
+
+  const result = editingItemId.value
+    ? invEditor.update(editingItemId.value, formData)
+    : invEditor.create(formData);
+
+  if (result.ok) {
+    showItemModal.value = false;
+  } else if (result.error) {
+    eventBus.emit('ui:toast', {
+      type: 'error',
+      i18nKey: result.error.i18nKey,
+      message: result.error.message,
+      duration: 3000,
+    });
+  }
+}
+
+const showDeleteConfirm = ref(false);
+const deleteTargetId = ref<string | null>(null);
+const deleteTargetName = ref('');
+
+function requestDeleteItem(item: DisplayItem, event: Event): void {
+  event.stopPropagation();
+  deleteTargetId.value = item._id;
+  deleteTargetName.value = item.名称;
+  showDeleteConfirm.value = true;
+}
+
+function confirmDeleteItem(): void {
+  if (!deleteTargetId.value) return;
+  const result = invEditor.delete(deleteTargetId.value);
+  if (result.ok) {
+    if (selectedItem.value?._id === deleteTargetId.value) {
+      selectedItem.value = null;
+    }
+  } else if (result.error) {
+    eventBus.emit('ui:toast', {
+      type: 'error',
+      i18nKey: result.error.i18nKey,
+      message: result.error.message,
+      duration: 3000,
+    });
+  }
+  showDeleteConfirm.value = false;
+  deleteTargetId.value = null;
+  deleteTargetName.value = '';
+}
+
+// ─── Story 2: Currency edit ───
+
+const showCurrencyModal = ref(false);
+const currencyForm = ref({ 现金: 0, 铜: 0, 银: 0, 金: 0 });
+
+function openCurrencyEdit(): void {
+  const raw = currencyMap.value;
+  currencyForm.value = {
+    现金: raw?.['现金'] ?? 0,
+    铜: raw?.['铜'] ?? 0,
+    银: raw?.['银'] ?? 0,
+    金: raw?.['金'] ?? 0,
+  };
+  showCurrencyModal.value = true;
+}
+
+function saveCurrency(): void {
+  const result = invEditor.updateCurrency(currencyForm.value);
+  if (result.ok) {
+    showCurrencyModal.value = false;
+  } else if (result.error) {
+    eventBus.emit('ui:toast', {
+      type: 'error',
+      i18nKey: result.error.i18nKey,
+      message: result.error.message,
+      duration: 3000,
+    });
+  }
+}
 </script>
 
 <template>
@@ -202,7 +346,12 @@ function itemTypeIcon(type: string | undefined): string {
     <template v-if="isLoaded">
       <!-- ─── Header with currency ─── -->
       <header class="panel-header">
-        <h2 class="panel-title">{{ t('inventory.title') }}</h2>
+        <div class="panel-header-left">
+          <h2 class="panel-title">{{ t('inventory.title') }}</h2>
+          <button class="btn-create" @click="openCreateItem">+ {{ t('inventory.action.create') }}</button>
+          <button class="btn-currency-edit" @click="openCurrencyEdit">{{ t('inventory.action.editCurrency') }}</button>
+          <button class="btn-currency-edit" @click="openAdvancedEditor">⚙ {{ t('character.edit.advancedEdit') }}</button>
+        </div>
         <div class="currency-bar">
           <template v-if="currencyEntries.length > 0">
             <div
@@ -229,7 +378,7 @@ function itemTypeIcon(type: string | undefined): string {
         />
         <select v-model="filterType" class="filter-select">
           <option value="all">{{ t('inventory.filter.all') }}</option>
-          <option v-for="t in itemTypes" :key="t" :value="t">{{ t }}</option>
+          <option v-for="typeOpt in itemTypes" :key="typeOpt" :value="typeOpt">{{ typeOpt }}</option>
         </select>
       </div>
 
@@ -281,6 +430,9 @@ function itemTypeIcon(type: string | undefined): string {
                 {{ item.已装备 ? t('inventory.action.unequip') : t('inventory.action.equip') }}
               </button>
               <button class="action-btn action-btn--drop" @click="handleDrop(item)">{{ t('inventory.action.drop') }}</button>
+              <span class="action-sep" />
+              <button class="action-btn action-btn--edit" @click="openEditItem(item, $event)">{{ t('inventory.action.editItem') }}</button>
+              <button class="action-btn action-btn--delete" @click="requestDeleteItem(item, $event)">{{ t('inventory.action.deleteItem') }}</button>
             </div>
           </Transition>
         </div>
@@ -294,6 +446,77 @@ function itemTypeIcon(type: string | undefined): string {
     <div v-else class="empty-state">
       <p>{{ t('inventory.notLoaded') }}</p>
     </div>
+
+    <!-- ─── Item Edit/Create Modal ─── -->
+    <Modal v-model="showItemModal" :title="editingItemId ? t('inventory.edit.titleEdit') : t('inventory.edit.titleCreate')" width="440px">
+      <div class="edit-form">
+        <div class="form-group">
+          <label class="form-label">{{ t('inventory.edit.label.name') }}</label>
+          <input v-model="itemForm.名称" type="text" class="form-input" :placeholder="t('inventory.edit.placeholder.name')" />
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group--half">
+            <label class="form-label">{{ t('inventory.edit.label.type') }}</label>
+            <select v-model="itemForm.类型" class="form-input">
+              <option v-for="tp in ITEM_TYPES" :key="tp" :value="tp">{{ t(`inventory.edit.typeOption.${({'武器':'weapon','防具':'armor','消耗品':'consumable','材料':'material','任务':'quest','饰品':'accessory','其他':'other'})[tp] ?? 'other'}`) }}</option>
+            </select>
+          </div>
+          <div class="form-group form-group--half">
+            <label class="form-label">{{ t('inventory.edit.label.quality') }}</label>
+            <select v-model="itemForm.品质" class="form-input">
+              <option v-for="q in QUALITY_OPTIONS" :key="q" :value="q">{{ t(`inventory.edit.qualityOption.${({'普通':'common','优良':'fine','稀有':'rare','史诗':'epic','传说':'legendary','神话':'mythic'})[q] ?? 'common'}`) }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('inventory.edit.label.quantity') }}</label>
+          <input v-model.number="itemForm.数量" type="number" min="1" class="form-input" inputmode="numeric" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('inventory.edit.label.description') }}</label>
+          <textarea v-model="itemForm.描述" class="form-textarea" rows="2" :placeholder="t('inventory.edit.placeholder.desc')" />
+        </div>
+        <div class="form-group form-group--row">
+          <label class="form-check-label">
+            <input type="checkbox" v-model="itemForm.可装备" />
+            <span>{{ t('inventory.edit.label.equippable') }}</span>
+          </label>
+          <label v-if="itemForm.可装备" class="form-check-label">
+            <input type="checkbox" v-model="itemForm.已装备" />
+            <span>{{ t('inventory.edit.label.equipped') }}</span>
+          </label>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="showItemModal = false">{{ t('common.actions.cancel') }}</button>
+        <button class="btn-primary" :disabled="!itemForm.名称?.trim()" @click="saveItem">{{ t('common.actions.save') }}</button>
+      </template>
+    </Modal>
+
+    <!-- ─── Currency Edit Modal ─── -->
+    <Modal v-model="showCurrencyModal" :title="t('inventory.edit.titleCurrency')" width="360px">
+      <div class="edit-form">
+        <div class="form-group" v-for="key in (['现金', '铜', '银', '金'] as const)" :key="key">
+          <label class="form-label">{{ CURRENCY_ICONS[key] }} {{ t(`inventory.currency.${({'现金':'cash','铜':'copper','银':'silver','金':'gold'})[key]}`) }}</label>
+          <input v-model.number="currencyForm[key]" type="number" min="0" class="form-input" inputmode="numeric" />
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="showCurrencyModal = false">{{ t('common.actions.cancel') }}</button>
+        <button class="btn-primary" @click="saveCurrency">{{ t('common.actions.save') }}</button>
+      </template>
+    </Modal>
+
+    <!-- ─── Delete Confirmation ─── -->
+    <Modal v-model="showDeleteConfirm" :title="t('inventory.action.deleteItem')" width="380px">
+      <p style="margin-bottom: 8px">{{ t('inventory.delete.confirm') }}</p>
+      <p class="delete-item-name">{{ deleteTargetName }}</p>
+      <p class="delete-warning">{{ t('inventory.delete.irreversible') }}</p>
+      <template #footer>
+        <button class="btn-secondary" @click="showDeleteConfirm = false">{{ t('common.actions.cancel') }}</button>
+        <button class="btn-danger" @click="confirmDeleteItem">{{ t('common.actions.delete') }}</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -604,7 +827,167 @@ function itemTypeIcon(type: string | undefined): string {
   border-radius: 3px;
 }
 
+/* ── Story 2: Header buttons ── */
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-create {
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-sage-400);
+  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-create:hover { background: color-mix(in oklch, var(--color-sage-400) 18%, transparent); }
+.btn-currency-edit {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-amber-400);
+  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-amber-400) 20%, transparent);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-currency-edit:hover { background: color-mix(in oklch, var(--color-amber-400) 16%, transparent); }
+.btn-advanced-inv { padding: 4px 10px; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); border-radius: 5px; cursor: pointer; opacity: 0.5; transition: all 0.15s; }
+.btn-advanced-inv:hover { opacity: 1; color: var(--color-sage-400); border-color: var(--color-sage-600); }
+
+/* ── Story 2: Action separator + edit/delete buttons ── */
+.action-sep {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 2px;
+}
+.action-btn--edit:hover {
+  background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  border-color: var(--color-sage-600);
+  color: var(--color-sage-400);
+}
+.action-btn--delete:hover {
+  background: color-mix(in oklch, var(--color-danger) 10%, transparent);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* ── Story 2: Edit form (shared with modals) ── */
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.form-group--half { flex: 1; min-width: 0; }
+.form-group--row { flex-direction: row; gap: 16px; align-items: center; }
+.form-row { display: flex; gap: 10px; }
+.form-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #8888a0);
+}
+.form-input {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 0.84rem;
+  color: var(--color-text, #e0e0e6);
+  background: var(--color-surface-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 6px;
+  outline: none;
+}
+.form-input:focus { box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-sage-400) 30%, transparent); }
+.form-textarea {
+  padding: 8px 10px;
+  font-size: 0.84rem;
+  color: var(--color-text, #e0e0e6);
+  background: var(--color-surface-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 6px;
+  outline: none;
+  resize: vertical;
+}
+.form-check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--color-text, #e0e0e6);
+  cursor: pointer;
+}
+.btn-primary {
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text-bone, #e0e0e6);
+  background: var(--color-sage-400);
+  border: none;
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btn-primary:hover { background: var(--color-sage-300); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-secondary {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #8888a0);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+}
+.btn-danger {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-danger, #ef4444);
+  background: color-mix(in oklch, var(--color-danger, #ef4444) 10%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-danger, #ef4444) 25%, transparent);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+}
+.delete-item-name {
+  font-weight: 600;
+  color: var(--color-text, #e0e0e6);
+  margin: 4px 0;
+}
+.delete-warning {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #8888a0);
+  font-style: italic;
+}
+
 @media (max-width: 767px) {
   .inventory-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+  .panel-header-left { flex-wrap: wrap; }
+  .form-row { flex-direction: column; }
+  /* Story 2: mobile touch targets */
+  .btn-create { min-height: 44px; }
+  .btn-currency-edit { min-height: 44px; }
+  .btn-primary { min-height: 44px; }
+  .btn-secondary { min-height: 44px; }
+  .btn-danger { min-height: 44px; }
+  .action-btn { min-height: 44px; }
+  .form-input { height: 44px; }
+  .form-textarea { min-height: 44px; }
+  .search-input { height: 44px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .action-btn--edit:active, .action-btn--delete:active { background: rgba(163, 190, 140, 0.08); }
 }
 </style>

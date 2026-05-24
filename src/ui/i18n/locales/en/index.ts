@@ -19,6 +19,7 @@ import settings from './settings.json';
 import api from './api.json';
 import save from './save.json';
 import engine from './engine.json';
+import inventory from './inventory.json';
 
 export default {
   ...common,
@@ -42,4 +43,5 @@ export default {
   ...api,
   ...save,
   ...engine,
+  ...inventory,
 };

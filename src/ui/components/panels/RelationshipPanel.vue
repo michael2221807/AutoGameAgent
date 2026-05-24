@@ -27,9 +27,11 @@ import type { MemorySummary } from '@/ui/components/shared/NpcMemoryTimeline.vue
 import ImageDisplay from '@/ui/components/image/ImageDisplay.vue';
 import ImageViewer from '@/ui/components/image/ImageViewer.vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useNpcEditor } from '@/ui/composables/editors';
 
 const { t } = useI18n();
-const { isLoaded, useValue, setValue, get } = useGameState();
+const { isLoaded, useValue, get } = useGameState();
+const npcEditor = useNpcEditor();
 
 /** 身体部位条目 */
 interface BodyPartEntry {
@@ -201,23 +203,25 @@ const filteredRelations = computed<NpcRelation[]>(() => {
 
 // ─── Phase 6.2: Attention + Heartbeat lock toggles ───────────
 
+function findNpcIndex(npc: NpcRelation): number {
+  const list = Array.isArray(relationships.value) ? relationships.value : [];
+  return list.findIndex((r) => r.名称 === npc.名称);
+}
+
 function toggleAttention(npc: NpcRelation, event: Event): void {
   event.stopPropagation();
-  const list = Array.isArray(relationships.value) ? [...relationships.value] : [];
-  const idx = list.findIndex((r) => r.名称 === npc.名称);
+  const idx = findNpcIndex(npc);
   if (idx < 0) return;
-  list[idx] = { ...list[idx], 关注: !list[idx].关注 };
-  setValue(DEFAULT_ENGINE_PATHS.relationships, list);
+  npcEditor.toggleFlag(idx, '关注');
 }
 
 function toggleHeartbeatLock(npc: NpcRelation, event: Event): void {
   event.stopPropagation();
-  const list = Array.isArray(relationships.value) ? [...relationships.value] : [];
-  const idx = list.findIndex((r) => r.名称 === npc.名称);
+  const idx = findNpcIndex(npc);
   if (idx < 0) return;
-  list[idx] = { ...list[idx], 心跳锁定: !list[idx].心跳锁定 };
-  setValue(DEFAULT_ENGINE_PATHS.relationships, list);
-  const locked = !npc.心跳锁定;
+  const wasLocked = npc.心跳锁定 === true;
+  npcEditor.toggleFlag(idx, '心跳锁定');
+  const locked = !wasLocked;
   eventBus.emit('ui:toast', {
     type: locked ? 'info' : 'success',
     message: locked ? t('relationship.toast.heartbeatLockOn', { name: npc.名称 }) : t('relationship.toast.heartbeatLockOff', { name: npc.名称 }),
@@ -243,22 +247,16 @@ function openAiEdit(npc: NpcRelation): void {
 
 function togglePresence(npc: NpcRelation, event: Event): void {
   event.stopPropagation();
-  const list = Array.isArray(relationships.value) ? [...relationships.value] : [];
-  const idx = list.findIndex((r) => r[npcFields.name] === npc[npcFields.name]);
+  const idx = findNpcIndex(npc);
   if (idx < 0) return;
-  const current = list[idx][npcFields.isPresent] === true;
-  list[idx] = { ...list[idx], [npcFields.isPresent]: !current };
-  setValue(DEFAULT_ENGINE_PATHS.relationships, list);
+  npcEditor.toggleFlag(idx, '是否在场');
 }
 
 function toggleMajorRole(npc: NpcRelation, event: Event): void {
   event.stopPropagation();
-  const list = Array.isArray(relationships.value) ? [...relationships.value] : [];
-  const idx = list.findIndex((r) => r[npcFields.name] === npc[npcFields.name]);
+  const idx = findNpcIndex(npc);
   if (idx < 0) return;
-  const current = list[idx][npcFields.isMajorRole] === true;
-  list[idx] = { ...list[idx], [npcFields.isMajorRole]: !current };
-  setValue(DEFAULT_ENGINE_PATHS.relationships, list);
+  npcEditor.toggleFlag(idx, '是否主要角色');
 }
 
 
@@ -345,6 +343,18 @@ watch(() => route.query.npc, (name) => {
 const showChatModal = ref(false);
 const chatNpc = ref<NpcRelation | null>(null);
 
+interface RelationNetworkEntry {
+  对象: string;
+  关系: string;
+  备注: string;
+}
+
+interface MemorySummaryEntry {
+  摘要: string;
+  涵盖范围: string;
+  生成时间: string;
+}
+
 interface NpcEditForm {
   名称: string;
   类型: string;
@@ -364,6 +374,12 @@ interface NpcEditForm {
   关注: boolean;
   心跳锁定: boolean;
   私密信息: PrivacyProfile;
+  核心性格特征: string;
+  关系状态: string;
+  好感度突破条件: string;
+  关系突破条件: string;
+  关系网变量: RelationNetworkEntry[];
+  总结记忆: MemorySummaryEntry[];
 }
 
 function clonePrivacy(p?: PrivacyProfile): PrivacyProfile {
@@ -451,6 +467,12 @@ const editForm = ref<NpcEditForm>({
   关注: false,
   心跳锁定: false,
   私密信息: {},
+  核心性格特征: '',
+  关系状态: '',
+  好感度突破条件: '',
+  关系突破条件: '',
+  关系网变量: [],
+  总结记忆: [],
 });
 const editIndex = ref<number>(-1);
 
@@ -482,6 +504,16 @@ function openEdit(npc: NpcRelation, _filteredIdx: number): void {
     关注: npc.关注 === true,
     心跳锁定: npc.心跳锁定 === true,
     私密信息: clonePrivacy(npc.私密信息),
+    核心性格特征: (npc[npcFields.corePersonality] as string) ?? '',
+    关系状态: (npc[npcFields.relationshipStatus] as string) ?? '',
+    好感度突破条件: (npc[npcFields.affinityBreakthrough] as string) ?? '',
+    关系突破条件: (npc[npcFields.relationshipBreakthrough] as string) ?? '',
+    关系网变量: Array.isArray(npc[npcFields.relationshipNetwork])
+      ? (npc[npcFields.relationshipNetwork] as RelationNetworkEntry[]).map(e => ({ ...e, 备注: e.备注 ?? '' }))
+      : [],
+    总结记忆: Array.isArray(npc[npcFields.memorySummaries])
+      ? (npc[npcFields.memorySummaries] as MemorySummaryEntry[]).map(e => ({ ...e }))
+      : [],
   };
   if (nsfwEnabled.value) seedRequiredBodyParts();
   newTraitInput.value = '';
@@ -511,6 +543,12 @@ function openAddNew(): void {
     关注: false,
     心跳锁定: false,
     私密信息: {},
+    核心性格特征: '',
+    关系状态: '',
+    好感度突破条件: '',
+    关系突破条件: '',
+    关系网变量: [],
+    总结记忆: [],
   };
   if (nsfwEnabled.value) seedRequiredBodyParts();
   newTraitInput.value = '';
@@ -519,38 +557,44 @@ function openAddNew(): void {
 }
 
 function saveNpc(): void {
-  // CR-R26 (2026-04-11)：名称非空兜底。模板上 disabled 按钮按同样的 computed
-  // 拦截，这里是防御性二次校验（防止外部脚本绕过）。空名 NPC 会破坏
-  // NpcChatPipeline.findNpc 和其他"按名查询"的下游逻辑，必须拒绝。
-  const trimmedName = editForm.value.名称?.trim() ?? '';
-  if (!trimmedName) {
+  const f = editForm.value;
+  const formData: Record<string, unknown> = {
+    名称: f.名称,
+    类型: f.类型,
+    好感度: f.好感度,
+    位置: f.位置,
+    描述: f.描述,
+    外貌描述: f.外貌描述,
+    身材描写: f.身材描写,
+    衣着风格: f.衣着风格,
+    性别: f.性别,
+    年龄: f.年龄,
+    背景: f.背景,
+    内心想法: f.内心想法,
+    在做事项: f.在做事项,
+    性格特征: f.性格特征,
+    记忆: f.记忆,
+    关注: f.关注,
+    心跳锁定: f.心跳锁定,
+    私密信息: f.私密信息,
+    [npcFields.corePersonality]: f.核心性格特征,
+    [npcFields.relationshipStatus]: f.关系状态,
+    [npcFields.affinityBreakthrough]: f.好感度突破条件,
+    [npcFields.relationshipBreakthrough]: f.关系突破条件,
+    [npcFields.relationshipNetwork]: f.关系网变量,
+    [npcFields.memorySummaries]: f.总结记忆,
+  };
+  const result = npcEditor.save(editIndex.value, formData as import('@/ui/composables/editors').NpcFormData);
+  if (result.ok) {
+    showEditModal.value = false;
+  } else if (result.error) {
     eventBus.emit('ui:toast', {
       type: 'error',
-      message: t('relationship.toast.nameRequired'),
-      duration: 2000,
+      i18nKey: result.error.i18nKey,
+      message: result.error.message,
+      duration: 3000,
     });
-    return;
   }
-  editForm.value.名称 = trimmedName;
-
-  const list = Array.isArray(relationships.value) ? [...relationships.value] : [];
-  // Preserve unknown extra fields from existing entry, then overlay form data
-  const existing = editIndex.value >= 0 ? list[editIndex.value] : {};
-  const entry: NpcRelation = { ...existing, ...editForm.value };
-
-  if (editIndex.value >= 0 && editIndex.value < list.length) {
-    list[editIndex.value] = entry;
-  } else {
-    list.push(entry);
-  }
-
-  setValue(DEFAULT_ENGINE_PATHS.relationships, list);
-  showEditModal.value = false;
-  eventBus.emit('ui:toast', {
-    type: 'success',
-    message: editIndex.value >= 0 ? t('relationship.toast.updated') : t('relationship.toast.added'),
-    duration: 1500,
-  });
 }
 
 // §7.2: 打开 NPC 私聊 modal — 直接打开，不经过 edit modal
@@ -599,13 +643,57 @@ function removeMemory(idx: number): void {
   editForm.value.记忆.splice(idx, 1);
 }
 
-function deleteNpc(): void {
+function addNetworkEntry(): void {
+  editForm.value.关系网变量.push({ 对象: '', 关系: '', 备注: '' });
+}
+
+function removeNetworkEntry(idx: number): void {
+  editForm.value.关系网变量.splice(idx, 1);
+}
+
+function addSummaryEntry(): void {
+  editForm.value.总结记忆.push({ 摘要: '', 涵盖范围: '', 生成时间: '' });
+}
+
+function removeSummaryEntry(idx: number): void {
+  editForm.value.总结记忆.splice(idx, 1);
+}
+
+function openAdvancedEditor(): void {
   if (editIndex.value < 0) return;
-  const list = Array.isArray(relationships.value) ? [...relationships.value] : [];
-  list.splice(editIndex.value, 1);
-  setValue(DEFAULT_ENGINE_PATHS.relationships, list);
-  showEditModal.value = false;
-  eventBus.emit('ui:toast', { type: 'warning', message: t('relationship.toast.deleted'), duration: 1500 });
+  router.push({ name: 'GameVariables', query: { path: `社交.关系`, from: 'relationships' } });
+}
+
+function openInEngramEditor(): void {
+  if (!selectedNpc.value) return;
+  router.push({ name: 'RelationshipGraph', query: { entity: selectedNpc.value.名称 } });
+}
+
+const hasEngramRoute = computed(() => router.hasRoute('RelationshipGraph'));
+
+const showDeleteConfirm = ref(false);
+const deleteImpact = ref<import('@/ui/composables/editors').DeleteImpact | null>(null);
+
+function requestDeleteNpc(): void {
+  if (editIndex.value < 0) return;
+  deleteImpact.value = npcEditor.analyzeDeleteImpact(editIndex.value);
+  showDeleteConfirm.value = true;
+}
+
+function confirmDeleteNpc(): void {
+  if (editIndex.value < 0) return;
+  const result = npcEditor.delete(editIndex.value);
+  if (result.ok) {
+    showDeleteConfirm.value = false;
+    showEditModal.value = false;
+    selectedNpc.value = null;
+    detailNpcIdx.value = -1;
+  }
+}
+
+function cancelDeleteNpc(): void {
+  showDeleteConfirm.value = false;
+  deleteImpact.value = null;
 }
 
 /** Affinity color gradient: red → yellow → green */
@@ -756,6 +844,7 @@ function displayBodyPartName(name: string | undefined): string {
                   <button class="rd-action-btn" @click="toggleMajorRole(selectedNpc, $event)">☆ {{ selectedNpc['是否主要角色'] ? $t('relationship.detail.cancelMajor') : $t('relationship.detail.setMajor') }}</button>
                   <button class="rd-action-btn" @click="toggleAttention(selectedNpc, $event)">👁 {{ selectedNpc.关注 ? $t('relationship.detail.unwatch') : $t('relationship.detail.watch') }}</button>
                   <button class="rd-action-btn" @click="toggleHeartbeatLock(selectedNpc, $event)">{{ selectedNpc.心跳锁定 ? '🔓 ' + $t('relationship.detail.unlockHeartbeat') : '🔒 ' + $t('relationship.detail.lockHeartbeat') }}</button>
+                  <button v-if="hasEngramRoute" class="rd-action-btn" @click="openInEngramEditor">🔗 {{ $t('relationship.detail.viewInEngram') }}</button>
                   <button class="rd-action-btn" @click="openChat(selectedNpc, $event)">💬 {{ $t('relationship.detail.privateChat') }}</button>
                   <button class="rd-action-btn" @click="openEdit(selectedNpc, detailNpcIdx)">✏ {{ $t('relationship.detail.edit') }}</button>
                   <button class="rd-action-btn" @click="openAiEdit(selectedNpc)">🤖 {{ $t('relationship.detail.aiEdit') }}</button>
@@ -957,7 +1046,7 @@ function displayBodyPartName(name: string | undefined): string {
             </div>
             <div class="form-group form-group--half">
               <label class="form-label">{{ $t('relationship.editForm.label.age') }}</label>
-              <input v-model.number="editForm.年龄" type="number" class="form-input" min="0" />
+              <input v-model.number="editForm.年龄" type="number" inputmode="numeric" class="form-input" min="0" />
             </div>
           </div>
 
@@ -970,6 +1059,41 @@ function displayBodyPartName(name: string | undefined): string {
             <label class="form-label">{{ $t('relationship.edit.placeholder.location') }}</label>
             <input v-model="editForm.位置" type="text" class="form-input" :placeholder="$t('relationship.edit.placeholder.location')" />
           </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ $t('relationship.editForm.label.relationshipStatus') }}</label>
+            <input v-model="editForm.关系状态" type="text" class="form-input" />
+            <span class="form-hint form-hint--d26">ⓘ {{ $t('relationship.editForm.d26Hint') }}</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ $t('relationship.editForm.label.corePersonality') }}</label>
+            <textarea v-model="editForm.核心性格特征" class="form-textarea" rows="2" :placeholder="$t('relationship.editForm.placeholder.corePersonality')" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ $t('relationship.editForm.label.affinityBreak') }}</label>
+            <textarea v-model="editForm.好感度突破条件" class="form-textarea" rows="2" :placeholder="$t('relationship.editForm.placeholder.breakCondition')" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ $t('relationship.editForm.label.relationBreak') }}</label>
+            <textarea v-model="editForm.关系突破条件" class="form-textarea" rows="2" :placeholder="$t('relationship.editForm.placeholder.breakCondition')" />
+          </div>
+        </div>
+
+        <!-- 关系网 (Story 2 新增) -->
+        <div class="form-section">
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionRelationNetwork') }}</h4>
+          <span class="form-hint form-hint--d26">ⓘ {{ $t('relationship.editForm.d26Hint') }}</span>
+
+          <div v-for="(entry, idx) in editForm.关系网变量" :key="idx" class="network-row">
+            <input v-model="entry.对象" type="text" class="form-input network-input" :placeholder="$t('relationship.editForm.label.networkTarget')" />
+            <input v-model="entry.关系" type="text" class="form-input network-input" :placeholder="$t('relationship.editForm.label.networkRelation')" />
+            <input v-model="entry.备注" type="text" class="form-input network-input" :placeholder="$t('relationship.editForm.label.networkNote')" />
+            <button class="tag-delete" @click="removeNetworkEntry(idx)" :aria-label="$t('common.actions.delete')">&times;</button>
+          </div>
+          <button class="btn-secondary btn-sm" @click="addNetworkEntry">{{ $t('relationship.editForm.addNetworkEntry') }}</button>
         </div>
 
         <!-- 外貌与描述 -->
@@ -1067,6 +1191,30 @@ function displayBodyPartName(name: string | undefined): string {
           </div>
         </div>
 
+        <!-- 总结记忆 (Story 2 新增) -->
+        <div class="form-section">
+          <h4 class="form-section-title">{{ $t('relationship.editForm.sectionMemorySummary') }}</h4>
+
+          <div v-for="(entry, idx) in editForm.总结记忆" :key="idx" class="summary-entry">
+            <div class="form-group">
+              <label class="form-label">{{ $t('relationship.editForm.label.summaryText') }}</label>
+              <textarea v-model="entry.摘要" class="form-textarea" rows="3" />
+            </div>
+            <div class="form-row">
+              <div class="form-group form-group--half">
+                <label class="form-label">{{ $t('relationship.editForm.label.summaryRange') }}</label>
+                <input v-model="entry.涵盖范围" type="text" class="form-input" />
+              </div>
+              <div class="form-group form-group--half">
+                <label class="form-label">{{ $t('relationship.editForm.label.summaryTime') }}</label>
+                <input v-model="entry.生成时间" type="text" class="form-input" />
+              </div>
+            </div>
+            <button class="btn-danger btn-sm" @click="removeSummaryEntry(idx)" style="align-self:flex-end">{{ $t('common.actions.delete') }}</button>
+          </div>
+          <button class="btn-secondary btn-sm" @click="addSummaryEntry">{{ $t('relationship.editForm.addSummary') }}</button>
+        </div>
+
         <!-- 私密信息（NSFW 开启时显示） -->
         <div v-if="nsfwEnabled" class="form-section">
           <h4 class="form-section-title" style="color: #e879a0;">{{ $t('relationship.editForm.sectionNsfw') }}</h4>
@@ -1100,7 +1248,7 @@ function displayBodyPartName(name: string | undefined): string {
             </div>
             <div class="form-group form-group--half">
               <label class="form-label">{{ $t('relationship.editForm.nsfw.sexualEncounters') }}</label>
-              <input v-model.number="editForm.私密信息.性交总次数" type="number" min="0" class="form-input" />
+              <input v-model.number="editForm.私密信息.性交总次数" type="number" inputmode="numeric" min="0" class="form-input" />
             </div>
           </div>
 
@@ -1275,10 +1423,32 @@ function displayBodyPartName(name: string | undefined): string {
         </div>
       </div>
       <template #footer>
-        <button v-if="editIndex >= 0" class="btn-danger" @click="deleteNpc">{{ $t('common.actions.delete') }}</button>
+        <button v-if="editIndex >= 0" class="btn-danger" @click="requestDeleteNpc">{{ $t('common.actions.delete') }}</button>
+        <button v-if="editIndex >= 0" class="btn-secondary" @click="openAdvancedEditor">⚙ {{ $t('character.edit.advancedEdit') }}</button>
         <div style="flex: 1" />
         <button class="btn-secondary" @click="showEditModal = false">{{ $t('common.actions.cancel') }}</button>
         <button class="btn-primary" :disabled="!editForm.名称?.trim()" @click="saveNpc">{{ $t('common.actions.save') }}</button>
+      </template>
+    </Modal>
+
+    <!-- Delete cascade confirmation dialog -->
+    <Modal v-model="showDeleteConfirm" :title="$t('common.actions.delete')" width="400px">
+      <div v-if="deleteImpact" class="delete-impact">
+        <p style="margin-bottom: 12px">{{ $t('relationship.delete.cascadeWarning') }}</p>
+        <ul class="impact-list">
+          <li>{{ deleteImpact.npcName }}</li>
+          <li v-if="deleteImpact.locationRefs.length">
+            {{ $t('relationship.delete.locationRefs') }}:
+            <span class="impact-refs">{{ deleteImpact.locationRefs.join(', ') }}</span>
+          </li>
+          <li v-if="deleteImpact.hasEngramEntity">
+            {{ $t('relationship.delete.engramEntity') }}
+          </li>
+        </ul>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="cancelDeleteNpc">{{ $t('common.actions.cancel') }}</button>
+        <button class="btn-danger" @click="confirmDeleteNpc">{{ $t('common.actions.delete') }}</button>
       </template>
     </Modal>
 
@@ -1364,8 +1534,8 @@ function displayBodyPartName(name: string | undefined): string {
 }
 
 .btn-add {
-  width: 28px;
-  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2770,5 +2940,73 @@ function displayBodyPartName(name: string | undefined): string {
   .edit-form {
     max-height: calc(100dvh - 200px);
   }
+  /* Story 2: mobile touch targets */
+  .btn-add { min-width: 44px; min-height: 44px; }
+  .btn-secondary { min-height: 44px; }
+  .btn-primary { min-height: 44px; }
+  .btn-danger { min-height: 44px; }
+  .form-input { height: 44px; }
+  .form-textarea { min-height: 44px; }
+  .network-row { flex-direction: column; }
+  .summary-entry .form-input { height: 44px; }
 }
+
+@media (hover: none) and (pointer: coarse) {
+  .rd-detail .edit-icon { opacity: 0.5; }
+  .npc-name:active { background: rgba(163, 190, 140, 0.08); }
+}
+
+/* ── Story 2: Relationship Network rows ── */
+.network-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.network-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Story 2: Memory Summary entries ── */
+.summary-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--color-surface-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+
+/* ── Story 2: D26 hint style ── */
+.form-hint--d26 {
+  color: var(--color-sage-400);
+  font-style: italic;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+  border-radius: var(--radius-sm);
+  display: block;
+  margin-top: 4px;
+}
+
+/* ── Story 2: Delete impact dialog ── */
+.delete-impact {
+  font-size: 0.84rem;
+  color: var(--color-text-bone);
+}
+.impact-list {
+  list-style: disc;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.impact-refs {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+.btn-advanced-rel { padding: 4px 10px; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); border-radius: 5px; cursor: pointer; opacity: 0.5; transition: all 0.15s; }
+.btn-advanced-rel:hover { opacity: 1; color: var(--color-sage-400); border-color: var(--color-sage-600); }
 </style>
