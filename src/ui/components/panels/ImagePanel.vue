@@ -2700,7 +2700,8 @@ onMounted(() => {
   const existingRulesets = get('系统.扩展.image.modelRulesets') as ModelRuleset[] | undefined;
   if (!Array.isArray(existingRulesets) || existingRulesets.length === 0) {
     setValue('系统.扩展.image.modelRulesets', localeDefRulesets);
-  } else if (packDefaults) {
+  } else {
+    const existingIds = new Set(existingRulesets.map(r => r.id));
     const localeMap = new Map(localeDefRulesets.map(r => [r.id, r]));
     const updated = existingRulesets.map(r => {
       const localeVer = localeMap.get(r.id);
@@ -2709,13 +2710,17 @@ onMounted(() => {
       }
       return r;
     });
-    setValue('系统.扩展.image.modelRulesets', updated);
+    const missing = localeDefRulesets.filter(r => !existingIds.has(r.id));
+    if (missing.length > 0 || packDefaults) {
+      setValue('系统.扩展.image.modelRulesets', [...updated, ...missing]);
+    }
   }
 
   const existingTemplates = get('系统.扩展.image.ruleTemplates') as RuleTemplate[] | undefined;
   if (!Array.isArray(existingTemplates) || existingTemplates.length === 0) {
     setValue('系统.扩展.image.ruleTemplates', localeDefTemplates);
-  } else if (packDefaults) {
+  } else {
+    const existingIds = new Set(existingTemplates.map(r => r.id));
     const localeMap = new Map(localeDefTemplates.map(r => [r.id, r]));
     const updated = existingTemplates.map(r => {
       const localeVer = localeMap.get(r.id);
@@ -2724,7 +2729,10 @@ onMounted(() => {
       }
       return r;
     });
-    setValue('系统.扩展.image.ruleTemplates', updated);
+    const missing = localeDefTemplates.filter(r => !existingIds.has(r.id));
+    if (missing.length > 0 || packDefaults) {
+      setValue('系统.扩展.image.ruleTemplates', [...updated, ...missing]);
+    }
   }
 });
 

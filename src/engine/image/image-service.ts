@@ -26,6 +26,16 @@ import { blobToDataUrl } from './utils';
 import { prepareCivitaiLora, resolveLoraScope, validateShelfForGeneration } from './civitai-lora';
 import { joinPromptFragments } from './style-preset-injection';
 import { normalizeSingleCharacterOutput, processTransformerOutput, type SerializationStrategy } from './output-processor';
+
+const VALID_STRATEGIES: ReadonlySet<SerializationStrategy> = new Set([
+  'flat', 'nai_character_segments', 'gemini_structured', 'grok_structured', 'sd_danbooru',
+]);
+
+function toSerializationStrategy(raw: string): SerializationStrategy {
+  return VALID_STRATEGIES.has(raw as SerializationStrategy)
+    ? raw as SerializationStrategy
+    : 'nai_character_segments';
+}
 import { buildDirectCharacterPrompt } from './direct-prompt-builder';
 import { getTransformerPresetContext } from './transformer-presets';
 import type { TransformerPromptPreset, ModelTransformerBundle, TransformerDefaultsData } from './transformer-presets';
@@ -226,7 +236,7 @@ export class ImageService {
         enabled: r.enabled === true,
         modelPrompt: String(r.baseModelRule ?? ''),
         anchorModeModelPrompt: String(r.anchorModeModelRule ?? ''),
-        serializationStrategy: (String(r.serializationStrategy || '') || 'nai_character_segments') as SerializationStrategy,
+        serializationStrategy: toSerializationStrategy(String(r.serializationStrategy || '')),
         npcPresetId: String(r.npcTemplateId ?? ''),
         scenePresetId: String(r.sceneTemplateId ?? ''),
         sceneJudgePresetId: String(r.judgeTemplateId ?? ''),

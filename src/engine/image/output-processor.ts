@@ -27,7 +27,7 @@ export interface StructuredOutput {
 }
 
 /** Serialization strategy — image prompt serialization strategy type */
-export type SerializationStrategy = 'flat' | 'nai_character_segments' | 'gemini_structured' | 'grok_structured';
+export type SerializationStrategy = 'flat' | 'nai_character_segments' | 'gemini_structured' | 'grok_structured' | 'sd_danbooru';
 
 // ═══════════════════════════════════════════════════════════
 // §2 — Leaf utilities (no internal dependencies)
@@ -566,6 +566,13 @@ export function processTransformerOutput(
       return normalizeNaiWeightSyntax(segments);
     }
 
+    if (strategy === 'sd_danbooru') {
+      // SD/Danbooru models use comma-separated tags natively
+      // No NAI weight normalization — A1111 (tag:1.3) syntax is native
+      const parts = [safeBase, ...roleTexts].filter(Boolean);
+      return parts.join(', ');
+    }
+
     if (strategy === 'gemini_structured' || strategy === 'grok_structured') {
       const baseLabel = strategy === 'grok_structured' ? 'Scene staging' : 'Base scene';
       const parts = [
@@ -586,5 +593,7 @@ export function processTransformerOutput(
 
   // Non-flat strategy with flat input — wrap as base-only
   if (strategy === 'nai_character_segments') return normalizeNaiWeightSyntax(cleaned);
+  // sd_danbooru / gemini_structured / grok_structured: return cleaned text as-is
+  // (no NAI weight normalization — A1111 (tag:1.3) syntax is native for SD models)
   return cleaned;
 }

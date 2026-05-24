@@ -39,6 +39,7 @@ export interface TransformerDefaultsData {
       nai_character_segments?: string;
       gemini_structured?: string;
       grok_structured?: string;
+      sd_danbooru?: string;
       fallback?: string;
     };
     npc_common?: string[];
@@ -46,6 +47,7 @@ export interface TransformerDefaultsData {
       nai_character_segments?: string;
       gemini_structured?: string;
       grok_structured?: string;
+      sd_danbooru?: string;
       fallback?: string;
     };
     scene_common?: string[];
@@ -128,7 +130,9 @@ function buildStructuredOutputFormatHint(
         ? (hints?.gemini_structured ?? 'Gemini 最终会把这条单角色 tags 转成清晰、可执行的英文短语。')
         : strategy === 'grok_structured'
           ? (hints?.grok_structured ?? 'Grok 最终会把这条单角色 tags 转成更电影化的描述式提示词。')
-          : (hints?.fallback ?? '输出必须可被后续解析成单角色提示词。');
+          : strategy === 'sd_danbooru'
+            ? (hints?.sd_danbooru ?? 'SD 生图后端会直接使用这条 Danbooru 标签作为正向提示词。标签应是逗号分隔的 Danbooru 格式英文标签。')
+            : (hints?.fallback ?? '输出必须可被后续解析成单角色提示词。');
 
     const common = fmt?.npc_common ?? [
       '请使用以下结构输出：',
@@ -154,7 +158,9 @@ function buildStructuredOutputFormatHint(
       ? (hints?.gemini_structured ?? 'Gemini 最终会把这些段落转成清晰的描述式提示词；<角色> 内每条 [序号] 写成完整、可执行的英文短语。')
       : strategy === 'grok_structured'
         ? (hints?.grok_structured ?? 'Grok 最终会把这些段落转成更电影化的描述式提示词；<角色> 内每条 [序号] 仍只写对应角色的动作、姿态、视线和镜头关系。')
-        : (hints?.fallback ?? '输出必须可被后续解析成基础段与 [序号] 角色段。');
+        : strategy === 'sd_danbooru'
+          ? (hints?.sd_danbooru ?? 'SD 生图后端会把基础段与角色段合并为逗号分隔的 Danbooru 标签序列。<基础> 负责全局环境、镜头、天气和光影标签；<角色> 内每条 [序号] 负责该角色的外观与动作标签，标签格式与基础段相同。')
+          : (hints?.fallback ?? '输出必须可被后续解析成基础段与 [序号] 角色段。');
 
   const common = fmt?.scene_common ?? [
     '请使用以下结构输出：',
@@ -456,6 +462,210 @@ function buildDefaultPresets(packData?: TransformerDefaultsData): TransformerPro
       '只输出"风景场景"或"故事快照"其中之一。',
     ].join('\n')),
   },
+
+  // ── Illustrious · NPC ──
+  // Sources: Arctenox's Illustrious Guide (Civitai), SeaArt Ultimate Guide,
+  // TIPO/DanTagGen tag ordering, TechTactician booru-tagging guide,
+  // ComfyUI-EasyNoobai quality tokens, pinkpixel-dev prompt enhancer
+  {
+    id: 'transformer_illustrious_npc',
+    name: p('transformer_illustrious_npc', 'name', 'Illustrious · NPC角色生成'),
+    scope: 'npc',
+    prompt: p('transformer_illustrious_npc', 'prompt', [
+      '你是 Illustrious XL 角色提示词整理器。',
+      '你的任务是把 NPC 角色资料转化成可直接用于 Illustrious XL 生图的 Danbooru 风格英文标签，保持稳定、统一、可复用。',
+      '输出格式为逗号分隔的 Danbooru 英文标签，多词标签用下划线连接（如 long_hair、blue_eyes、school_uniform）。',
+      '不要输出自然语言句子或描述式短语。需要强调时使用 A1111 权重语法 (tag:1.3)，权重控制在 0.6-1.5 之间。',
+      '若输入没有明确指定画风介质，不要擅自锁定二次元、写实、国风或摄影风格；只整理输入中已有的风格信息。',
+      '标签排序遵循 Danbooru 社区惯例，按重要性从高到低排列：人数与性别 (1girl/1boy/solo) > 角色名与作品出处 > 外貌特征（发型/发色/瞳色/面部）> 身材体态 > 服装层次与配饰 > 手持物或身份道具 > 姿态动作 > 表情 > 镜头构图 (cowboy_shot/upper_body/from_above) > 背景与环境 > 光影效果。',
+      '请把身份、等级、性格等抽象概念转换成对应的可见 Danbooru 标签——气质用 gaze/posture/expression 类标签，身份用 clothing/accessory/weapon 类标签，危险感用 dramatic_lighting/shadow/intense_expression 类标签。',
+      '画师标签 (by <artist_name>) 由模型规则统一控制，你在此只需关注角色内容标签。',
+      '单次输出只服务一个清晰镜头、一个主姿态、一个主光源，避免冲突的多视角、多动作、多光线。',
+      '只选择 Danbooru 上实际存在且高频使用的标签，避免生造不存在的标签、同义重复、堆砌空泛修饰词。',
+      '标签总数控制在 30-60 个，在模型有效注意力范围内。',
+      '资料缺口只做低冲突、可长期复用的保守补全。',
+      '当资料有限时，可根据身份、等级、年龄、性别补全发型发色、瞳色、年龄感、体态、常驻服饰材质、配饰与身份道具。',
+    ].join('\n')),
+    anchorModePrompt: p('transformer_illustrious_npc', 'anchorModePrompt', [
+      '请直接沿用锚点中的稳定外观标签，不要重复改写已确定的发型、发色、瞳色、体型、常驻衣着和主要配饰。',
+      '只在最终标签中补充当前镜头需要的动作、姿态、表情、景别、构图、光影、临时服装变化、环境关系和道具标签。',
+      '若正文与锚点一致，可直接吸收为动态补充；若冲突，以锚点中的稳定外观为主。',
+      '避免把基础段的全局环境标签复制到角色标签中。',
+    ].join('\n')),
+    noAnchorFallbackPrompt: p('transformer_illustrious_npc', 'noAnchorFallbackPrompt', [
+      '请根据输入的角色设定完成完整角色标签生成，不能只输出镜头、姿态、光影或空泛修饰标签。',
+      '请优先完整提炼人数性别 (1girl/1boy)、年龄感、身份、外貌（发型/发色/瞳色/面部特征）、身材、常驻衣着和其他稳定辨识特征的 Danbooru 标签。',
+      '请先完成稳定外观和身份辨识标签，再补动作、姿态、镜头、光影和环境。',
+      '补全时选择稳妥、低冲突、Danbooru 上高频出现的标签，但对输入中已明确给出的设定不得省略。',
+      '当资料只给出身份、等级、年龄、性别时，也要据此补全最稳妥的外观、体态、衣着层次、配饰、武器或身份道具标签。',
+    ].join('\n')),
+    outputFormatPrompt: [
+      buildStructuredOutputFormatHint('sd_danbooru', 'npc', packData),
+      p('transformer_illustrious_npc', 'outputFormatPrompt', [
+        '单角色图直接输出 <提示词>，不要再拆 <基础>/<角色>。',
+        '请先写人数和稳定主体标签，再补镜头、动作、光影和少量环境标签。',
+        '有锚点时，只补动态动作、姿态、表情、临时服装变化和道具标签。',
+      ].join('\n')),
+    ].join('\n'),
+  },
+
+  // ── Illustrious · Scene ──
+  {
+    id: 'transformer_illustrious_scene',
+    name: p('transformer_illustrious_scene', 'name', 'Illustrious · 场景生成'),
+    scope: 'scene',
+    prompt: p('transformer_illustrious_scene', 'prompt', [
+      '你是 Illustrious XL 场景提示词整理器。',
+      '你的任务是把场景描述转化成可直接用于 Illustrious XL 场景生图的 Danbooru 风格英文标签，保持空间清晰、层次稳定、单帧可执行。',
+      '输出格式为逗号分隔的 Danbooru 英文标签，多词标签用下划线连接。',
+      '基础段负责地点、时间、天气、空间结构、镜头、光影与整体氛围标签；角色信息统一写进 <角色> 块并用 [序号] 区分。',
+      '若输入没有明确指定画风介质，不要擅自锁定特定画风；只整理输入中已有的风格线索。',
+      '基础段标签顺序建议：scenery/outdoors/indoors > 具体地点标签 > 空间结构 > 时间天气 (night/sunset/rain) > 环境材质与细节 > 镜头构图 (wide_shot/panorama) > 光影氛围 (cinematic_lighting/volumetric_lighting)。',
+      '纯场景时让环境作为第一主体；故事快照时也必须保留地点、空间层级和环境标签。',
+      '请用 Danbooru 标签明确前景、中景、远景、天空、地面等空间层级，形成单一清晰视角。',
+      '单次输出只服务一个稳定时刻、一个主镜头、一个主光源、一个主要叙事焦点，避免多视角、多时间切片和多事件并列。',
+      '环境细节标签要为焦点服务，不要每一层都写成同等密度，避免画面容量失衡。',
+      '特定风格场景可主动整理 mountain、water、fog、wind、tree、bamboo_forest、lantern、rain、snow、flower、stone、cloud 等环境标签。',
+    ].join('\n')),
+    sceneAnchorModePrompt: p('transformer_illustrious_scene', 'sceneAnchorModePrompt', [
+      '请沿用角色锚点中的稳定外观标签，把场景输出重点放在空间、角色站位、互动关系、动作调度、镜头构图、天气、光影、环境细节和气氛标签。',
+      '<角色> 块里每条 [序号] 只补当前场景需要的识别外观、动作和站位标签，不要把完整角色设定标签重新灌入场景。',
+      '多人场景时优先表达关系 (eye_contact/holding_hands/back-to-back)、位置和调度标签，让环境层级与人物关系一起成立。',
+    ].join('\n')),
+    noAnchorFallbackPrompt: p('transformer_illustrious_scene', 'noAnchorFallbackPrompt', [
+      '请为主要角色补少量辨识外观标签（发色、瞳色、关键服饰特征）。',
+      '多人画面里优先保留位置、动作、关系和少数识别标签，让环境与人物容量保持平衡。',
+      '不要把场景图写成多个完整角色标签的拼贴。',
+    ].join('\n')),
+    outputFormatPrompt: [
+      buildStructuredOutputFormatHint('sd_danbooru', 'scene', packData),
+      p('transformer_illustrious_scene', 'outputFormatPrompt', [
+        '纯场景时可以只输出 <基础>；故事快照或多人画面时，主要角色必须写进 <角色> 块。',
+        '基础段负责地点、空间、天气、镜头、光影与环境标签；<角色> 内每条 [序号] 只写该角色自身的外观辨识、动作、姿态和站位标签。',
+        '<角色> 内每条 [序号] 内容以人数标签开头（如 1girl、1boy），然后是该角色的辨识与动作标签。',
+      ].join('\n')),
+    ].join('\n'),
+  },
+
+  // ── Illustrious · Scene Judge ──
+  {
+    id: 'transformer_illustrious_scene_judge',
+    name: p('transformer_illustrious_scene_judge', 'name', 'Illustrious · 场景判定'),
+    scope: 'scene_judge',
+    prompt: p('transformer_illustrious_scene_judge', 'prompt', [
+      '你负责判断当前文本更适合生成"风景场景"还是"故事快照"。',
+      '判定保持保守，优先选择稳定、易读、可执行的画面类型。',
+      '只有在文本能够稳定对应到一个单一时刻、一个清晰地点、一个主要事件时，才可判为故事快照。',
+      '故事快照通常至少满足以下四项：明确地点、可见环境细节、在场人物、稳定姿态、明确动作、道具交互、空间方向、单一时刻感。',
+      '如果文本主要是对话、心理活动、设定说明、回忆叙述、抽象氛围、身份介绍或长段内心描写，则默认判为风景场景。',
+      '若存在多人混战、频繁动作切换、连续剧情变化、复杂视角切换，也优先回退为风景场景。',
+      '若文本能稳定对应到"门前对峙、亭中交谈、桥上回首、崖边停步、举剑相向、递物瞬间"这类单帧事件，可提高故事快照优先级。',
+      '即使判为故事快照，也必须保证地点和环境仍然清晰可读，不允许变成拥挤人物拼贴。',
+      '只输出"风景场景"或"故事快照"其中之一。',
+    ].join('\n')),
+  },
+
+  // ── Pony · NPC ──
+  // Sources: Official Pony V6 XL model card (HuggingFace), Civitai score_9 article,
+  // Anakin.ai Pony prompt guide, ComfyUI-RandomPromptBuilder Pony mode,
+  // Local_LLM_Prompt_Enhancer Pony config, TechTactician booru-tagging guide
+  {
+    id: 'transformer_pony_npc',
+    name: p('transformer_pony_npc', 'name', 'Pony · NPC角色生成'),
+    scope: 'npc',
+    prompt: p('transformer_pony_npc', 'prompt', [
+      '你是 Pony Diffusion V6 XL 角色提示词整理器。',
+      '你的任务是把 NPC 角色资料转化成可直接用于 Pony Diffusion V6 XL 生图的 Danbooru 风格英文标签，保持稳定、统一、可复用。',
+      '输出格式为逗号分隔的 Danbooru 英文标签，多词标签用下划线连接（如 long_hair、blue_eyes、school_uniform）。',
+      '不要输出自然语言句子或描述式短语。需要强调时使用 A1111 权重语法 (tag:1.3)，权重控制在 0.6-1.5 之间。',
+      'Pony Diffusion 训练时移除了画师信息，不要在标签中包含画师名（by <artist>）；画风需通过 LoRA 控制。',
+      '若输入没有明确指定画风介质，不要擅自锁定二次元、写实、国风或摄影风格；只整理输入中已有的风格信息。',
+      '标签排序遵循 Pony 社区惯例：人数与性别 (1girl/1boy/solo) > 外貌特征（发型/发色/瞳色/面部）> 身材体态 > 服装层次与配饰 > 手持物或身份道具 > 姿态动作 > 表情 > 镜头构图 > 背景与环境 > 光影效果。',
+      '请把身份、等级、性格等抽象概念转换成对应的可见 Danbooru 标签——气质用 gaze/posture/expression 类标签，身份用 clothing/accessory/weapon 类标签。',
+      '单次输出只服务一个清晰镜头、一个主姿态、一个主光源，避免冲突的多视角、多动作。',
+      '只选择 Danbooru 上实际存在且高频使用的标签，避免生造标签、同义重复。',
+      '标签总数控制在 30-60 个，在模型有效注意力范围内。',
+      '资料缺口只做低冲突、可长期复用的保守补全。',
+      '当资料有限时，可根据身份、等级、年龄、性别补全发型发色、瞳色、年龄感、体态、常驻服饰、配饰与身份道具。',
+    ].join('\n')),
+    anchorModePrompt: p('transformer_pony_npc', 'anchorModePrompt', [
+      '请直接沿用锚点中的稳定外观标签，不要重复改写已确定的发型、发色、瞳色、体型、常驻衣着和主要配饰。',
+      '只在最终标签中补充当前镜头需要的动作、姿态、表情、景别、构图、光影、临时服装变化、环境关系和道具标签。',
+      '若正文与锚点一致，可直接吸收为动态补充；若冲突，以锚点中的稳定外观为主。',
+      '避免把基础段的全局环境标签复制到角色标签中。',
+    ].join('\n')),
+    noAnchorFallbackPrompt: p('transformer_pony_npc', 'noAnchorFallbackPrompt', [
+      '请根据输入的角色设定完成完整角色标签生成，不能只输出镜头、姿态或空泛修饰标签。',
+      '请优先完整提炼人数性别 (1girl/1boy)、年龄感、身份、外貌、身材、常驻衣着和其他稳定辨识特征的 Danbooru 标签。',
+      '请先完成稳定外观和身份辨识标签，再补动作、姿态、镜头、光影和环境。',
+      '补全时选择稳妥、低冲突、Danbooru 上高频出现的标签，但对输入中已明确给出的设定不得省略。',
+      '当资料只给出身份、等级、年龄、性别时，也要据此补全最稳妥的外观、体态、衣着层次、配饰、武器或身份道具标签。',
+    ].join('\n')),
+    outputFormatPrompt: [
+      buildStructuredOutputFormatHint('sd_danbooru', 'npc', packData),
+      p('transformer_pony_npc', 'outputFormatPrompt', [
+        '单角色图直接输出 <提示词>，不要再拆 <基础>/<角色>。',
+        '请先写人数和稳定主体标签，再补镜头、动作、光影和少量环境标签。',
+        '有锚点时，只补动态动作、姿态、表情、临时服装变化和道具标签。',
+      ].join('\n')),
+    ].join('\n'),
+  },
+
+  // ── Pony · Scene ──
+  {
+    id: 'transformer_pony_scene',
+    name: p('transformer_pony_scene', 'name', 'Pony · 场景生成'),
+    scope: 'scene',
+    prompt: p('transformer_pony_scene', 'prompt', [
+      '你是 Pony Diffusion V6 XL 场景提示词整理器。',
+      '你的任务是把场景描述转化成可直接用于 Pony Diffusion V6 XL 场景生图的 Danbooru 风格英文标签，保持空间清晰、层次稳定、单帧可执行。',
+      '输出格式为逗号分隔的 Danbooru 英文标签，多词标签用下划线连接。',
+      '基础段负责地点、时间、天气、空间结构、镜头、光影与整体氛围标签；角色信息统一写进 <角色> 块并用 [序号] 区分。',
+      'Pony Diffusion 训练时移除了画师信息，不要在标签中包含画师名；画风需通过 LoRA 控制。',
+      '若输入没有明确指定画风介质，不要擅自锁定特定画风；只整理输入中已有的风格线索。',
+      '基础段标签顺序建议：scenery/outdoors/indoors > 具体地点标签 > 空间结构 > 时间天气 (night/sunset/rain) > 环境细节 > 镜头构图 > 光影氛围。',
+      '纯场景时让环境作为第一主体；故事快照时也必须保留地点和空间层级标签。',
+      '请用 Danbooru 标签明确空间层级（outdoors/indoors、foreground/background/sky），形成单一清晰视角。',
+      '单次输出只服务一个稳定时刻、一个主镜头、一个主光源、一个主要叙事焦点。',
+      '环境细节标签要为焦点服务，不要堆砌过多环境标签导致画面失衡。',
+    ].join('\n')),
+    sceneAnchorModePrompt: p('transformer_pony_scene', 'sceneAnchorModePrompt', [
+      '请沿用角色锚点中的稳定外观标签，把场景输出重点放在空间、角色站位、互动关系、动作调度、镜头构图、天气、光影、环境细节标签。',
+      '<角色> 块里每条 [序号] 只补当前场景需要的识别外观、动作和站位标签，不要把完整角色设定重新灌入场景。',
+      '多人场景时优先表达关系 (eye_contact/holding_hands/back-to-back)、位置和调度标签。',
+    ].join('\n')),
+    noAnchorFallbackPrompt: p('transformer_pony_scene', 'noAnchorFallbackPrompt', [
+      '请为主要角色补少量辨识外观标签（发色、瞳色、关键服饰特征）。',
+      '多人画面里优先保留位置、动作、关系和少数识别标签，让环境与人物容量保持平衡。',
+      '不要把场景图写成多个完整角色标签的拼贴。',
+    ].join('\n')),
+    outputFormatPrompt: [
+      buildStructuredOutputFormatHint('sd_danbooru', 'scene', packData),
+      p('transformer_pony_scene', 'outputFormatPrompt', [
+        '纯场景时可以只输出 <基础>；故事快照或多人画面时，主要角色必须写进 <角色> 块。',
+        '基础段负责地点、空间、天气、镜头、光影与环境标签；<角色> 内每条 [序号] 只写该角色自身的外观辨识、动作、姿态和站位标签。',
+        '<角色> 内每条 [序号] 内容以人数标签开头（如 1girl、1boy），然后是该角色的辨识与动作标签。',
+      ].join('\n')),
+    ].join('\n'),
+  },
+
+  // ── Pony · Scene Judge ──
+  {
+    id: 'transformer_pony_scene_judge',
+    name: p('transformer_pony_scene_judge', 'name', 'Pony · 场景判定'),
+    scope: 'scene_judge',
+    prompt: p('transformer_pony_scene_judge', 'prompt', [
+      '你负责判断当前文本更适合生成"风景场景"还是"故事快照"。',
+      '判定保持保守，优先选择稳定、易读、可执行的画面类型。',
+      '只有在文本能够稳定对应到一个单一时刻、一个清晰地点、一个主要事件时，才可判为故事快照。',
+      '故事快照通常至少满足以下四项：明确地点、可见环境细节、在场人物、稳定姿态、明确动作、道具交互、空间方向、单一时刻感。',
+      '如果文本主要是对话、心理活动、设定说明、回忆叙述、抽象氛围、身份介绍或长段内心描写，则默认判为风景场景。',
+      '若存在多人混战、频繁动作切换、连续剧情变化、复杂视角切换，也优先回退为风景场景。',
+      '若文本能稳定对应到"门前对峙、亭中交谈、桥上回首、崖边停步、举剑相向、递物瞬间"这类单帧事件，可提高故事快照优先级。',
+      '即使判为故事快照，也必须保证地点和环境仍然清晰可读，不允许变成拥挤人物拼贴。',
+      '只输出"风景场景"或"故事快照"其中之一。',
+    ].join('\n')),
+  },
 ];
 }
 
@@ -544,6 +754,73 @@ function buildDefaultModelBundles(packData?: TransformerDefaultsData): ModelTran
     npcPresetId: 'transformer_grok_npc',
     scenePresetId: 'transformer_grok_scene',
     sceneJudgePresetId: 'transformer_grok_scene_judge',
+  },
+
+  // ── Illustrious XL Model Bundle ──
+  // Sources: SeaArt Ultimate Guide quality tags, ComfyUI-EasyNoobai quality tokens,
+  // Arctenox guide (artist tag positioning), TIPO tag ordering (quality at end),
+  // community consensus: Danbooru tags, A1111 weight syntax, 30-60 tag budget
+  {
+    id: 'transformer_model_bundle_illustrious',
+    name: b('transformer_model_bundle_illustrious', 'name', 'Illustrious'),
+    enabled: false,
+    modelPrompt: b('transformer_model_bundle_illustrious', 'modelPrompt', [
+      '目标模型为 Illustrious XL（基于 Danbooru 数据训练的动漫风格 SDXL 模型）。',
+      '输出采用 Danbooru 风格英文标签格式，逗号分隔，多词标签用下划线连接。',
+      '不要使用 NovelAI 权重语法；需要强调时使用 A1111 语法 (tag:1.3)。',
+      '标签顺序遵循 Danbooru/TIPO 训练惯例：人数标签 (1girl/1boy) > 角色名 > 画师标签 (by <artist_name>) > 内容标签（外貌/服装/动作/场景）> 质量标签。',
+      '在内容标签之后、末尾附加质量标签：masterpiece, best_quality, very_aesthetic, absurdres, newest。',
+      '画师标签使用 by <artist_name> 格式，放在人数标签之后、内容标签之前，可增强风格一致性。',
+      '标签前后顺序影响生成权重，最重要的角色辨识信息放在最前面。',
+      '若 NPC 资料较少，可根据身份、等级、年龄、性别做保守补全，补全内容必须长期稳定、低冲突。',
+      '标签总数控制在 30-60 个，避免超出模型有效注意力范围（Illustrious 有效 token 上限约 248）。',
+      '必须严格跟随任务要求给出的输出标签结构，不要自行改成其他格式。',
+    ].join('\n')),
+    anchorModeModelPrompt: b('transformer_model_bundle_illustrious', 'anchorModeModelPrompt', [
+      '目标模型为 Illustrious XL。',
+      '在内容标签末尾附加质量标签：masterpiece, best_quality, very_aesthetic, absurdres, newest。',
+      '请沿用锚点中的稳定外观标签，把输出重点放在动作、姿态、表情、镜头、光影、环境和临时状态补充标签。',
+      '不要把锚点已固定的稳定外观标签重复展开。',
+    ].join('\n')),
+    serializationStrategy: 'sd_danbooru',
+    npcPresetId: 'transformer_illustrious_npc',
+    scenePresetId: 'transformer_illustrious_scene',
+    sceneJudgePresetId: 'transformer_illustrious_scene_judge',
+  },
+
+  // ── Pony Diffusion V6 XL Model Bundle ──
+  // Sources: Official Pony V6 XL model card (HuggingFace), Civitai score_9 article,
+  // ComfyUI-RandomPromptBuilder Pony mode, Local_LLM_Prompt_Enhancer Pony config,
+  // Anakin.ai Pony guide, community consensus: score tags mandatory, no artist tags
+  {
+    id: 'transformer_model_bundle_pony',
+    name: b('transformer_model_bundle_pony', 'name', 'Pony'),
+    enabled: false,
+    modelPrompt: b('transformer_model_bundle_pony', 'modelPrompt', [
+      '目标模型为 Pony Diffusion V6 XL（多风格 SDXL 动漫模型）。',
+      '输出采用 Danbooru 风格英文标签格式，逗号分隔，多词标签用下划线连接。',
+      '不要使用 NovelAI 权重语法；需要强调时使用 A1111 语法 (tag:1.3)。',
+      '请在标签最开头放置 Pony 专用评分标签：score_9, score_8_up, score_7_up, score_6_up。',
+      '评分标签之后紧跟来源标签 source_anime（或根据画风选择 source_cartoon/source_furry）。',
+      '然后是评级标签 rating_safe（或 rating_questionable/rating_explicit）。',
+      '不要使用 masterpiece、best_quality 等传统质量标签，Pony 模型不识别这些标签。',
+      '不要在标签中包含画师名（by <artist>），Pony 训练时移除了画师信息，需要 LoRA 控制画风。',
+      '评分/来源/评级标签之后，按重要性排列内容标签：人数 (1girl/1boy) > 外貌 > 服装 > 动作 > 场景 > 光影。',
+      '若 NPC 资料较少，可根据身份、等级、年龄、性别做保守补全，补全内容必须长期稳定、低冲突。',
+      '标签总数控制在 30-60 个，避免超出模型有效注意力范围。',
+      '必须严格跟随任务要求给出的输出标签结构，不要自行改成其他格式。',
+    ].join('\n')),
+    anchorModeModelPrompt: b('transformer_model_bundle_pony', 'anchorModeModelPrompt', [
+      '目标模型为 Pony Diffusion V6 XL。',
+      '请在标签最开头放置评分标签：score_9, score_8_up, score_7_up, score_6_up。',
+      '之后紧跟 source_anime 和 rating_safe（或根据内容选择其他评级标签）。',
+      '请沿用锚点中的稳定外观标签，把输出重点放在动作、姿态、表情、镜头、光影、环境和临时状态补充标签。',
+      '不要把锚点已固定的稳定外观标签重复展开。',
+    ].join('\n')),
+    serializationStrategy: 'sd_danbooru',
+    npcPresetId: 'transformer_pony_npc',
+    scenePresetId: 'transformer_pony_scene',
+    sceneJudgePresetId: 'transformer_pony_scene_judge',
   },
 ];
 }

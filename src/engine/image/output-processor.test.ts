@@ -337,6 +337,25 @@ describe('processTransformerOutput', () => {
     expect(result).toContain('Scene staging:');
   });
 
+  it('sd_danbooru: comma-joins structured output without pipe separators', () => {
+    const input = '<提示词结构><基础>outdoors, scenery, sunset</基础><角色>[1]Alice|1girl, long_hair, blue_eyes\n[2]Bob|1boy, short_hair</角色></提示词结构>';
+    const result = processTransformerOutput(input, { strategy: 'sd_danbooru' });
+    expect(result).not.toContain('|');
+    expect(result).not.toContain('Base scene');
+    expect(result).not.toContain('Scene staging');
+    expect(result).toContain('outdoors');
+    expect(result).toContain('1girl');
+    expect(result).toContain('1boy');
+  });
+
+  it('sd_danbooru: preserves A1111 weight syntax without NAI normalization', () => {
+    const input = '<提示词>1girl, (blue_hair:1.3), (red_eyes:1.2), school_uniform</提示词>';
+    const result = processTransformerOutput(input, { strategy: 'sd_danbooru' });
+    expect(result).toContain('(blue_hair:1.3)');
+    expect(result).toContain('(red_eyes:1.2)');
+    expect(result).not.toContain('::');
+  });
+
   it('falls back to cleanSubjectPrompt for unstructured input', () => {
     const input = '<提示词>1girl, blue hair</提示词>';
     const result = processTransformerOutput(input, { strategy: 'flat' });
