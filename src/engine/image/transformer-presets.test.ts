@@ -6,18 +6,18 @@ import {
 } from '@/engine/image/transformer-presets';
 
 describe('getDefaultPresets', () => {
-  it('returns 9 default presets', () => {
-    expect(getDefaultPresets()).toHaveLength(9);
+  it('returns 15 default presets', () => {
+    expect(getDefaultPresets()).toHaveLength(15);
   });
 
-  it('covers all 3 scopes × 3 backends', () => {
+  it('covers all 3 scopes × 5 backends', () => {
     const presets = getDefaultPresets();
     const npc = presets.filter((p) => p.scope === 'npc');
     const scene = presets.filter((p) => p.scope === 'scene');
     const judge = presets.filter((p) => p.scope === 'scene_judge');
-    expect(npc).toHaveLength(3);
-    expect(scene).toHaveLength(3);
-    expect(judge).toHaveLength(3);
+    expect(npc).toHaveLength(5);
+    expect(scene).toHaveLength(5);
+    expect(judge).toHaveLength(5);
   });
 
   it('all presets have non-empty prompt', () => {
@@ -53,8 +53,8 @@ describe('getDefaultPresets', () => {
 });
 
 describe('getDefaultModelBundles', () => {
-  it('returns 3 model bundles', () => {
-    expect(getDefaultModelBundles()).toHaveLength(3);
+  it('returns 5 model bundles', () => {
+    expect(getDefaultModelBundles()).toHaveLength(5);
   });
 
   it('NAI bundle is enabled by default', () => {
@@ -62,10 +62,18 @@ describe('getDefaultModelBundles', () => {
     expect(nai?.enabled).toBe(true);
   });
 
-  it('Gemini and Grok bundles are disabled by default', () => {
+  it('Gemini, Grok, Illustrious, and Pony bundles are disabled by default', () => {
     const bundles = getDefaultModelBundles();
     expect(bundles.find((b) => b.name === 'Gemini')?.enabled).toBe(false);
     expect(bundles.find((b) => b.name === 'Grok')?.enabled).toBe(false);
+    expect(bundles.find((b) => b.name === 'Illustrious')?.enabled).toBe(false);
+    expect(bundles.find((b) => b.name === 'Pony')?.enabled).toBe(false);
+  });
+
+  it('Illustrious and Pony bundles use sd_danbooru strategy', () => {
+    const bundles = getDefaultModelBundles();
+    expect(bundles.find((b) => b.name === 'Illustrious')?.serializationStrategy).toBe('sd_danbooru');
+    expect(bundles.find((b) => b.name === 'Pony')?.serializationStrategy).toBe('sd_danbooru');
   });
 
   it('each bundle links to valid preset IDs', () => {
