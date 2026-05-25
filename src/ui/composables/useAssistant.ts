@@ -9,7 +9,7 @@
  *
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md Phase 5b。
  */
-import { ref, computed, inject, onMounted, type Ref } from 'vue';
+import { ref, computed, inject, onMounted, onUnmounted, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type {
   AssistantService,
@@ -55,15 +55,14 @@ export function useAssistant() {
     canRollback.value = service!.canRollbackInject();
   }
 
+  const eventCleanups: Array<() => void> = [];
   onMounted(() => {
     void refreshSession();
-    // Also refresh after inject/rollback events
-    const offInject = eventBus.on('assistant:payload-injected', () => { void refreshSession(); });
-    const offRollback = eventBus.on('assistant:payload-rolled-back', () => { void refreshSession(); });
-    const offFail = eventBus.on('assistant:payload-inject-failed', () => { void refreshSession(); });
-    // cleanup is handled by component unmount via composable contract
-    void offInject; void offRollback; void offFail;
+    eventCleanups.push(eventBus.on('assistant:payload-injected', () => { void refreshSession(); }));
+    eventCleanups.push(eventBus.on('assistant:payload-rolled-back', () => { void refreshSession(); }));
+    eventCleanups.push(eventBus.on('assistant:payload-inject-failed', () => { void refreshSession(); }));
   });
+  onUnmounted(() => { eventCleanups.forEach(fn => fn()); });
 
   // ─── Actions ──────────────────────────────────────
 
@@ -108,6 +107,13 @@ export function useAssistant() {
         message: t('assistant.toast.patchInjected', { count: result.patchCount }),
         duration: 2500,
       });
+      if (draft.raw.knowledgeFacts?.length && !draft.knowledgeFactsProcessed) {
+        eventBus.emit('ui:toast', {
+          type: 'warning',
+          message: t('assistant.toast.engramDisabled'),
+          duration: 4000,
+        });
+      }
     } else {
       eventBus.emit('ui:toast', {
         type: 'error',

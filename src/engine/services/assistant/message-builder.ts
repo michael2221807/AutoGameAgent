@@ -25,6 +25,8 @@ export interface BuildMessagesInput {
   userPrompt: string;
   attachments: AttachmentPayload[];   // 当前 turn 的完整附件
   gamePack: GamePack | null;
+  /** Story 3: when true, injects assistantWorldBuilder prompt module */
+  worldBuilderMode?: boolean;
 }
 
 export class MessageBuilder {
@@ -35,6 +37,14 @@ export class MessageBuilder {
     const jailbreak = input.gamePack?.prompts?.['assistantJailbreak']?.trim();
     if (jailbreak) {
       messages.push({ role: 'system', content: jailbreak });
+    }
+
+    // 1.5. World Builder mode prompt (Story 3 — between jailbreak and injection contract)
+    if (input.worldBuilderMode) {
+      const worldBuilder = input.gamePack?.prompts?.['assistantWorldBuilder']?.trim();
+      if (worldBuilder) {
+        messages.push({ role: 'system', content: worldBuilder });
+      }
     }
 
     // 2. Injection contract（仅 Mode B）

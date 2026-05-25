@@ -113,6 +113,10 @@ import { VectorStore } from './engine/memory/engram/vector-store';
 import { CustomPresetStore } from './engine/persistence/custom-preset-store';
 import { WorldBookStorage } from './engine/prompt/world-book-storage';
 import { AssistantService } from './engine/services/assistant/assistant-service';
+import { PayloadApplier } from './engine/services/assistant/payload-applier';
+import { PayloadValidator } from './engine/services/assistant/payload-validator';
+import { WorldBuilderService } from './engine/services/world-builder/world-builder-service';
+import { InMemoryConversationStore } from './engine/services/assistant/conversation-store';
 import { UnifiedRetriever } from './engine/memory/engram/unified-retriever';
 import { Embedder } from './engine/memory/engram/embedder';
 import { Reranker } from './engine/memory/engram/reranker';
@@ -710,6 +714,7 @@ async function bootstrap(): Promise<void> {
     maxHistoryTurns: 5,
     confirmBeforeInject: true,
     confirmBeforeClear: true,
+    worldBuilderMode: false,
   };
   try {
     const raw = localStorage.getItem('aga_assistant_settings');
@@ -718,8 +723,18 @@ async function bootstrap(): Promise<void> {
       if (typeof parsed.maxHistoryTurns === 'number') assistantSettings.maxHistoryTurns = parsed.maxHistoryTurns;
       if (typeof parsed.confirmBeforeInject === 'boolean') assistantSettings.confirmBeforeInject = parsed.confirmBeforeInject;
       if (typeof parsed.confirmBeforeClear === 'boolean') assistantSettings.confirmBeforeClear = parsed.confirmBeforeClear;
+      if (typeof parsed.worldBuilderMode === 'boolean') assistantSettings.worldBuilderMode = parsed.worldBuilderMode;
     }
   } catch { /* ignore */ }
+  const payloadApplier = new PayloadApplier({
+    stateManager,
+    commandExecutor,
+  });
+  const payloadValidator = new PayloadValidator({
+    stateManager,
+    gamePack: pack,
+  });
+  const assistantConversationStore = new InMemoryConversationStore();
   const assistantService = new AssistantService({
     aiService,
     stateManager,
@@ -727,8 +742,23 @@ async function bootstrap(): Promise<void> {
     gamePack: pack,
     settings: assistantSettings,
     locale: i18n.global.locale.value,
+    engramManager,
+    payloadApplier,
+    payloadValidator,
+    conversationStore: assistantConversationStore,
+  });
+  const worldBuilderService = new WorldBuilderService({
+    aiService,
+    stateManager,
+    gamePack: pack,
+    payloadValidator,
+    engramManager,
+    conversationStore: assistantConversationStore,
+    locale: i18n.global.locale.value,
+    maxHistoryTurns: assistantSettings.maxHistoryTurns,
   });
   app.provide('assistantService', assistantService);
+  app.provide('worldBuilderService', worldBuilderService);
   app.provide('engramEditor', engramEditor);
   app.provide('configRegistry', configRegistry);
   app.provide('configResolver', configResolver);

@@ -68,6 +68,7 @@ const USAGE_TYPE_CATEGORIES: Record<UsageType, AssignCategory> = {
   embedding: 'rag',
   rerank: 'rag',
   assistant: 'utility',
+  world_builder: 'utility',
 };
 
 function getUsageTypeMeta(key: UsageType): UsageTypeMeta {

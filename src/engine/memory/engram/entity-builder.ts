@@ -113,6 +113,7 @@ export class EntityBuilder {
     events: EngramEventNode[],
     stateManager: EngramStateReader,
     paths: EntityBuilderPaths,
+    options?: { includeAllNpcTypes?: boolean },
   ): EngramEntity[] {
     const entityMap: EntityMap = new Map();
 
@@ -127,8 +128,7 @@ export class EntityBuilder {
         if (!npc || typeof npc !== 'object') continue;
         const name = typeof npc.名称 === 'string' ? npc.名称.trim() : '';
         if (!name) continue;
-        // 跳过"普通"类型（demo 对齐）
-        if (npc.类型 === '普通') continue;
+        if (!options?.includeAllNpcTypes && npc.类型 === '普通') continue;
         const description = this.buildNpcDescription(npc);
         this.upsertEntity(entityMap, name, 'npc', 0, description, {
           relationToPlayer: npc.关系状态 ?? npc.与玩家关系,

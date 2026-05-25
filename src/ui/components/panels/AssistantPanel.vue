@@ -16,7 +16,7 @@
  *
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md §6 + Phase 5b。
  */
-import { ref, computed, nextTick, watch, onActivated } from 'vue';
+import { ref, computed, nextTick, watch, onActivated, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -36,7 +36,12 @@ import type {
   AssistantMessage,
   AttachmentSpec,
   PayloadDraft,
+  WorldBuilderTask,
 } from '@/engine/services/assistant/types';
+import type { WorldBuilderService } from '@/engine/services/world-builder/world-builder-service';
+import type { WorldBuilderPaths } from '@/engine/services/world-builder/world-builder-service';
+import BatchSummaryView from '@/ui/components/assistant/BatchSummaryView.vue';
+import CustomSelect from '@/ui/components/common/CustomSelect.vue';
 
 const {
   messages,
@@ -49,6 +54,7 @@ const {
   applyPayload,
   rollback,
   updateSettings,
+  refreshSession,
 } = useAssistant();
 
 const { t, locale } = useI18n();
@@ -275,6 +281,138 @@ function payloadButtonLabel(draft: PayloadDraft): string {
   if (warns > 0) return `📦 ${t('assistant.payload.warningsLabel', { total: draft.validated.length, warnings: warns })}`;
   return `📦 ${t('assistant.payload.readyLabel', { count: oks })}`;
 }
+
+// ─── World Builder mode (Story 3 Phase 4) ──────────────
+
+const worldBuilderService = inject<WorldBuilderService | null>('worldBuilderService', null);
+
+const isWorldBuilderMode = computed(() => settings.value.worldBuilderMode);
+const isWorldBuilderBusy = ref(false);
+const worldBuilderProgress = ref('');
+
+function toggleWorldBuilderMode(): void {
+  updateSettings({ worldBuilderMode: !settings.value.worldBuilderMode });
+}
+
+const inputPlaceholder = computed(() =>
+  isWorldBuilderMode.value ? t('assistant.worldBuilder.placeholder') : t('assistant.input.placeholder'),
+);
+
+const showRegionModal = ref(false);
+const showNpcModal = ref(false);
+const showDescModal = ref(false);
+
+const regionInstruction = ref('');
+const regionParent = ref('');
+const regionGenerateNpcs = ref(true);
+const regionNpcCount = ref(5);
+const regionSubLocCount = ref(3);
+const regionGenerateItems = ref(true);
+const regionItemCount = ref(3);
+const npcInstruction = ref('');
+const npcCount = ref(5);
+const descInstruction = ref('');
+
+const locations = computed(() => get<Array<Record<string, unknown>>>(DEFAULT_ENGINE_PATHS.locations) ?? []);
+const locationNames = computed(() => locations.value.map(l => (l['名称'] ?? l['name'] ?? '') as string).filter(Boolean));
+const locationOptions = computed(() => [
+  { value: '', label: t('assistant.worldBuilder.regionModal.parentNone') },
+  ...locationNames.value.map(n => ({ value: n, label: n })),
+]);
+
+const worldBuilderPaths: WorldBuilderPaths = {
+  relationships: DEFAULT_ENGINE_PATHS.relationships,
+  locations: DEFAULT_ENGINE_PATHS.locations,
+  worldDescription: DEFAULT_ENGINE_PATHS.worldDescription,
+  inventory: DEFAULT_ENGINE_PATHS.inventoryItems,
+  npcSummaryFields: DEFAULT_ENGINE_PATHS.npcFieldNames
+    ? [DEFAULT_ENGINE_PATHS.npcFieldNames.name, DEFAULT_ENGINE_PATHS.npcFieldNames.type,
+       DEFAULT_ENGINE_PATHS.npcFieldNames.location, DEFAULT_ENGINE_PATHS.npcFieldNames.description]
+    : ['名称', '类型', '位置', '核心性格特征', '是否主要角色'],
+  locationSummaryFields: ['名称', '类型', '上级', '连接'],
+  itemNameField: DEFAULT_ENGINE_PATHS.npcFieldNames?.name ?? '名称',
+};
+
+async function executeWorldBuilder(task: WorldBuilderTask): Promise<void> {
+  if (!worldBuilderService || isWorldBuilderBusy.value) return;
+
+  isWorldBuilderBusy.value = true;
+  worldBuilderProgress.value = t('assistant.worldBuilder.progress');
+  try {
+    const result = await worldBuilderService.execute(
+      'default',
+      task,
+      worldBuilderPaths,
+      (payload) => { worldBuilderProgress.value = payload.message; },
+    );
+
+    if (result.assistantMessage.systemKind === 'ai-error') {
+      eventBus.emit('ui:toast', {
+        type: 'error',
+        message: t('assistant.toast.worldBuilderFailed', { error: result.assistantMessage.content }),
+        duration: 4000,
+      });
+    }
+  } catch (err) {
+    eventBus.emit('ui:toast', {
+      type: 'error',
+      message: t('assistant.toast.worldBuilderFailed', { error: String(err) }),
+      duration: 4000,
+    });
+  } finally {
+    isWorldBuilderBusy.value = false;
+    worldBuilderProgress.value = '';
+    await refreshSession();
+  }
+}
+
+function onGenerateRegion(): void {
+  if (!regionInstruction.value.trim()) return;
+  const task: WorldBuilderTask = {
+    type: 'region',
+    userInstruction: regionInstruction.value,
+    config: {
+      parentLocation: regionParent.value || undefined,
+      npcCount: regionGenerateNpcs.value ? regionNpcCount.value : 0,
+      subLocationCount: regionSubLocCount.value,
+      generateItems: regionGenerateItems.value,
+      itemCount: regionGenerateItems.value ? regionItemCount.value : 0,
+    },
+  };
+  showRegionModal.value = false;
+  regionInstruction.value = '';
+  regionParent.value = '';
+  regionGenerateNpcs.value = true;
+  regionNpcCount.value = 5;
+  regionSubLocCount.value = 3;
+  regionGenerateItems.value = true;
+  regionItemCount.value = 3;
+  void executeWorldBuilder(task);
+}
+
+function onGenerateNpcs(): void {
+  if (!npcInstruction.value.trim()) return;
+  const task: WorldBuilderTask = {
+    type: 'npcs',
+    userInstruction: npcInstruction.value,
+    config: { npcCount: npcCount.value },
+  };
+  showNpcModal.value = false;
+  npcInstruction.value = '';
+  npcCount.value = 5;
+  void executeWorldBuilder(task);
+}
+
+function onExtractFromDescription(): void {
+  if (!descInstruction.value.trim()) return;
+  const task: WorldBuilderTask = {
+    type: 'from-description',
+    userInstruction: descInstruction.value,
+  };
+  showDescModal.value = false;
+  descInstruction.value = '';
+  void executeWorldBuilder(task);
+}
 </script>
 
 <template>
@@ -283,6 +421,20 @@ function payloadButtonLabel(draft: PayloadDraft): string {
     <header class="ap-header">
       <div class="header-left">
         <h2 class="title">🪄 {{ t('assistant.title') }}</h2>
+        <div class="mode-toggle" role="group" aria-label="Assistant mode">
+          <button
+            class="mode-seg"
+            :class="{ active: !isWorldBuilderMode }"
+            :aria-pressed="!isWorldBuilderMode"
+            @click="isWorldBuilderMode && toggleWorldBuilderMode()"
+          >{{ t('assistant.mode.chat') }}</button>
+          <button
+            class="mode-seg"
+            :class="{ active: isWorldBuilderMode }"
+            :aria-pressed="isWorldBuilderMode"
+            @click="!isWorldBuilderMode && toggleWorldBuilderMode()"
+          >{{ t('assistant.mode.worldBuilder') }}</button>
+        </div>
         <span class="mode-tag" :data-mode="currentMode">{{ modeLabel }}</span>
         <span class="history-count">{{ t('assistant.historyCount', { current: turnCount, max: settings.maxHistoryTurns }) }}</span>
       </div>
@@ -334,6 +486,29 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       >
         {{ t('assistant.editEnvTags') }}
       </button>
+    </div>
+
+    <!-- World builder quick-actions (Story 3 Phase 4) — visible only in build mode -->
+    <div v-if="isWorldBuilderMode" class="ap-quick-actions wb-actions">
+      <span class="qa-label">{{ t('assistant.worldBuilder.quickLabel') }}</span>
+      <button
+        type="button"
+        class="qa-chip wb-chip"
+        :disabled="isSending || isWorldBuilderBusy"
+        @click="showRegionModal = true"
+      >🏘 {{ t('assistant.worldBuilder.generateRegion') }}</button>
+      <button
+        type="button"
+        class="qa-chip wb-chip"
+        :disabled="isSending || isWorldBuilderBusy"
+        @click="showNpcModal = true"
+      >👥 {{ t('assistant.worldBuilder.batchNpcs') }}</button>
+      <button
+        type="button"
+        class="qa-chip wb-chip"
+        :disabled="isSending || isWorldBuilderBusy"
+        @click="showDescModal = true"
+      >📝 {{ t('assistant.worldBuilder.fromDescription') }}</button>
     </div>
 
     <!-- ── Attachments bar ── -->
@@ -391,8 +566,13 @@ function payloadButtonLabel(draft: PayloadDraft): string {
           </span>
         </div>
 
-        <!-- assistant message: payload draft button -->
+        <!-- assistant message: payload draft button + batch summary -->
         <div v-if="msg.role === 'assistant' && msg.payloadDraft" class="msg-payload">
+          <BatchSummaryView
+            v-if="msg.payloadDraft.validated.length > 5"
+            :patches="msg.payloadDraft.validated"
+            :knowledge-facts="msg.payloadDraft.raw.knowledgeFacts"
+          />
           <button
             v-if="msg.payloadDraft.status === 'pending'"
             class="payload-btn"
@@ -419,6 +599,15 @@ function payloadButtonLabel(draft: PayloadDraft): string {
         </div>
         <div class="msg-content">{{ streamingContent || t('assistant.streamingWait') }}</div>
       </article>
+
+      <!-- World builder progress bubble -->
+      <article v-if="isWorldBuilderBusy" class="msg msg-assistant streaming wb-progress">
+        <div class="msg-header">
+          <span class="msg-role">{{ t('assistant.roleAssistant') }}</span>
+          <span class="msg-time">{{ t('assistant.streamingTime') }}</span>
+        </div>
+        <div class="msg-content">⌛ {{ worldBuilderProgress || t('assistant.worldBuilder.progress') }}</div>
+      </article>
     </div>
 
     <!-- ── Input bar ── -->
@@ -426,12 +615,12 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       <textarea
         v-model="userInput"
         class="input-textarea"
-        :placeholder="t('assistant.input.placeholder')"
-        :disabled="isSending"
+        :placeholder="inputPlaceholder"
+        :disabled="isSending || isWorldBuilderBusy"
         rows="3"
         @keydown="onKeyDown"
       />
-      <button class="send-btn" :disabled="!canSend" @click="onSend">
+      <button class="send-btn" :disabled="!canSend || isWorldBuilderBusy" @click="onSend">
         {{ isSending ? t('assistant.input.sending') : t('assistant.input.send') }}
       </button>
     </div>
@@ -513,6 +702,83 @@ function payloadButtonLabel(draft: PayloadDraft): string {
       </div>
       <template #footer>
         <button class="btn btn--primary" @click="showSettings = false">{{ t('assistant.settings.close') }}</button>
+      </template>
+    </Modal>
+
+    <!-- World Builder batch modals (Story 3 Phase 4) -->
+    <Modal v-model="showRegionModal" :title="t('assistant.worldBuilder.regionModal.title')" width="560px">
+      <div class="wb-modal-form">
+        <label class="wb-form-label">{{ t('assistant.worldBuilder.regionModal.description') }}</label>
+        <textarea
+          v-model="regionInstruction"
+          class="wb-textarea"
+          rows="4"
+          :placeholder="t('assistant.worldBuilder.regionModal.description')"
+        />
+        <label class="wb-form-label">{{ t('assistant.worldBuilder.regionModal.parentLocation') }}</label>
+        <CustomSelect
+          v-model="regionParent"
+          :options="locationOptions"
+          :placeholder="t('assistant.worldBuilder.regionModal.parentNone')"
+        />
+        <div class="wb-config-grid">
+          <div class="wb-config-line">
+            <span class="wb-config-label">{{ t('assistant.worldBuilder.regionModal.subLocations') }}</span>
+            <input v-model.number="regionSubLocCount" type="number" min="1" max="8" class="wb-number-input" />
+          </div>
+          <div class="wb-config-line">
+            <label class="wb-config-toggle">
+              <input v-model="regionGenerateNpcs" type="checkbox" class="setting-row-checkbox" />
+              <span>{{ t('assistant.worldBuilder.regionModal.generateNpcs') }}</span>
+            </label>
+            <input v-if="regionGenerateNpcs" v-model.number="regionNpcCount" type="number" min="1" max="15" class="wb-number-input" />
+          </div>
+          <div class="wb-config-line">
+            <label class="wb-config-toggle">
+              <input v-model="regionGenerateItems" type="checkbox" class="setting-row-checkbox" />
+              <span>{{ t('assistant.worldBuilder.regionModal.generateItems') }}</span>
+            </label>
+            <input v-if="regionGenerateItems" v-model.number="regionItemCount" type="number" min="1" max="5" class="wb-number-input" />
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn--secondary" @click="showRegionModal = false">{{ t('assistant.worldBuilder.cancel') }}</button>
+        <button class="btn btn--primary" :disabled="!regionInstruction.trim()" @click="onGenerateRegion">{{ t('assistant.worldBuilder.regionModal.generate') }}</button>
+      </template>
+    </Modal>
+
+    <Modal v-model="showNpcModal" :title="t('assistant.worldBuilder.npcModal.title')" width="520px">
+      <div class="wb-modal-form">
+        <label class="wb-form-label">{{ t('assistant.worldBuilder.npcModal.description') }}</label>
+        <textarea
+          v-model="npcInstruction"
+          class="wb-textarea"
+          rows="4"
+          :placeholder="t('assistant.worldBuilder.npcModal.description')"
+        />
+        <label class="wb-form-label">{{ t('assistant.worldBuilder.npcModal.count') }}</label>
+        <input v-model.number="npcCount" type="number" min="1" max="20" class="wb-number-input" />
+      </div>
+      <template #footer>
+        <button class="btn btn--secondary" @click="showNpcModal = false">{{ t('assistant.worldBuilder.cancel') }}</button>
+        <button class="btn btn--primary" :disabled="!npcInstruction.trim()" @click="onGenerateNpcs">{{ t('assistant.worldBuilder.npcModal.generate') }}</button>
+      </template>
+    </Modal>
+
+    <Modal v-model="showDescModal" :title="t('assistant.worldBuilder.descModal.title')" width="600px">
+      <div class="wb-modal-form">
+        <label class="wb-form-label">{{ t('assistant.worldBuilder.descModal.description') }}</label>
+        <textarea
+          v-model="descInstruction"
+          class="wb-textarea large"
+          rows="8"
+          :placeholder="t('assistant.worldBuilder.descModal.description')"
+        />
+      </div>
+      <template #footer>
+        <button class="btn btn--secondary" @click="showDescModal = false">{{ t('assistant.worldBuilder.cancel') }}</button>
+        <button class="btn btn--primary" :disabled="!descInstruction.trim()" @click="onExtractFromDescription">{{ t('assistant.worldBuilder.descModal.extract') }}</button>
       </template>
     </Modal>
   </div>
@@ -814,8 +1080,45 @@ function payloadButtonLabel(draft: PayloadDraft): string {
 /* Settings modal */
 .settings-form { display: flex; flex-direction: column; gap: 14px; }
 .setting-row { display: flex; flex-direction: column; gap: 4px; }
-.setting-row label { font-size: 0.84rem; cursor: pointer; }
-.setting-row input[type="number"] { width: 80px; padding: 4px 8px; }
+.setting-row label { font-size: 0.84rem; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.setting-row input[type="number"] {
+  width: 80px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text, #e0e0e6);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-family: inherit;
+  outline: none;
+}
+.setting-row input[type="number"]:focus { border-color: var(--color-primary, #6366f1); }
+.setting-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+.setting-row input[type="checkbox"]:checked {
+  background: color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  border-color: var(--color-sage-400);
+}
+.setting-row input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--color-text, #e0e0e6);
+}
 .setting-hint { font-size: 0.74rem; color: var(--color-text-secondary, #8888a0); }
 
 .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.84rem; font-weight: 500; cursor: pointer; }
@@ -824,7 +1127,167 @@ function payloadButtonLabel(draft: PayloadDraft): string {
 .btn--danger { background: color-mix(in oklch, var(--color-danger) 12%, transparent); color: var(--color-danger-hover); border: 1px solid color-mix(in oklch, var(--color-danger) 30%, transparent); }
 .confirm-hint { margin-top: 8px; font-size: 0.8rem; color: var(--color-text-secondary, #8888a0); }
 
+/* Mode toggle (Story 3) */
+.mode-toggle {
+  display: inline-flex;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #2a2a3a);
+  background: rgba(255, 255, 255, 0.03);
+  margin-left: 8px;
+}
+.mode-seg {
+  padding: 4px 14px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #8888a0);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  min-height: 28px;
+}
+.mode-seg.active {
+  background: color-mix(in oklch, var(--color-sage-400) 18%, transparent);
+  color: var(--color-text, #e0e0e6);
+}
+.mode-seg:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* World builder quick actions */
+.wb-actions {
+  border-bottom: 1px solid color-mix(in oklch, var(--color-sage-400) 15%, transparent);
+}
+.wb-chip {
+  border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+}
+
+/* World builder modal forms */
+.wb-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wb-form-label {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--color-text, #e0e0e6);
+}
+.wb-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text, #e0e0e6);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 6px;
+  font-size: 0.86rem;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.wb-textarea:focus {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+}
+.wb-textarea.large { min-height: 180px; }
+.wb-config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.wb-config-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+}
+.wb-config-label {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--color-text, #e0e0e6);
+  min-width: 100px;
+}
+.wb-config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--color-text, #e0e0e6);
+  min-width: 100px;
+}
+.wb-config-line .wb-number-input {
+  max-width: 70px;
+}
+.setting-row-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+.setting-row-checkbox:checked {
+  background: color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+  border-color: var(--color-sage-400);
+}
+.setting-row-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--color-text, #e0e0e6);
+}
+.wb-select,
+.wb-number-input {
+  width: 100%;
+  max-width: 240px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text, #e0e0e6);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-family: inherit;
+  outline: none;
+}
+.wb-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238888a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+.wb-select option {
+  background: var(--color-bg, #1a1a25);
+  color: var(--color-text, #e0e0e6);
+}
+.wb-select:focus,
+.wb-number-input:focus {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+}
+
+/* World builder progress bubble */
+.wb-progress { border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent); }
+
 @media (max-width: 767px) {
   .assistant-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
+  .mode-seg { padding: 4px 10px; font-size: 0.72rem; min-height: 36px; }
+  .wb-actions { overflow-x: auto; flex-wrap: nowrap; }
 }
 </style>

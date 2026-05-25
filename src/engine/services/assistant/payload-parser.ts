@@ -21,7 +21,7 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md §5.2.2 + Phase 2。
  */
 import { stripMarkdownFences, findBalancedJsonBlocks } from '../../ai/json-extract';
-import type { AssistantPayload, AssistantPatch } from './types';
+import type { AssistantPayload, AssistantPatch, KnowledgeFact } from './types';
 
 /** 剥离 thinking 标签 —— 与 preset-ai-generator 同范式 */
 function stripThinkingTags(text: string): string {
@@ -80,8 +80,9 @@ function scoreCandidate(obj: Record<string, unknown>): number {
  * - patches 必须是数组，每个元素必须有 target/op
  * - 单条 patch 字段净化：
  *   - target → string
- *   - op → 五个枚举之一（其他值跳过该 patch）
+ *   - op → 六个枚举之一（其他值跳过该 patch）
  *   - value/match/rationale 透传
+ * - knowledge_facts（optional）：worldBuilder 模式下 AI 输出的关系数据
  */
 function sanitizePayload(raw: Record<string, unknown>): AssistantPayload | null {
   const patchesRaw = raw['patches'];
@@ -94,10 +95,32 @@ function sanitizePayload(raw: Record<string, unknown>): AssistantPayload | null 
     if (sanitized) patches.push(sanitized);
   }
 
-  return {
+  const knowledgeFacts = sanitizeKnowledgeFacts(raw['knowledge_facts']);
+
+  const result: AssistantPayload = {
     summary: typeof raw['summary'] === 'string' ? raw['summary'] : '',
     patches,
   };
+  if (knowledgeFacts.length > 0) {
+    result.knowledgeFacts = knowledgeFacts;
+  }
+  return result;
+}
+
+function sanitizeKnowledgeFacts(raw: unknown): KnowledgeFact[] {
+  if (!Array.isArray(raw)) return [];
+  const facts: KnowledgeFact[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    const sourceEntity = typeof r['sourceEntity'] === 'string' ? r['sourceEntity'] : '';
+    const targetEntity = typeof r['targetEntity'] === 'string' ? r['targetEntity'] : '';
+    const fact = typeof r['fact'] === 'string' ? r['fact'] : '';
+    if (!sourceEntity || !targetEntity || !fact) continue;
+    const confidence = typeof r['confidence'] === 'number' ? r['confidence'] : 1.0;
+    facts.push({ sourceEntity, targetEntity, fact, confidence });
+  }
+  return facts;
 }
 
 const VALID_OPS = new Set(['set-field', 'append-item', 'insert-item', 'replace-item', 'remove-item', 'replace-array']);

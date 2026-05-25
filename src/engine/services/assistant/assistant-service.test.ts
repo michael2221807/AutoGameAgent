@@ -51,7 +51,7 @@ describe('AssistantService — 构造 + 默认值', () => {
   it('注入自定义 settings 生效', () => {
     const svc = new AssistantService({
       ...makeMockDeps(),
-      settings: { maxHistoryTurns: 10, confirmBeforeInject: false, confirmBeforeClear: false },
+      settings: { maxHistoryTurns: 10, confirmBeforeInject: false, confirmBeforeClear: false, worldBuilderMode: false },
     });
     expect(svc.getSettings().maxHistoryTurns).toBe(10);
   });

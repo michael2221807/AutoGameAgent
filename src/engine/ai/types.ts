@@ -128,7 +128,8 @@ export type UsageType =
   | 'imageSecretTokenizer'     // 私密部位 token 提取（LLM 类）— Sprint Image-2
   | 'bodyPolish'               // 文本润色（LLM 类）— Sprint CoT-4
   | 'field_repair'             // 通用字段补齐（2026-04-18）— 复用 step-2 context 补齐 rules/required-fields.json 列出的任意字段
-  | 'plot_decompose';          // 剧情大纲拆解（Sprint Plot-1）— 将玩家大纲拆解为 PlotNode 链
+  | 'plot_decompose'           // 剧情大纲拆解（Sprint Plot-1）— 将玩家大纲拆解为 PlotNode 链
+  | 'world_builder';           // Story 3: 世界构建批量生成（WorldBuilderService）— 可单独配 API
 
 /** API 分配 — 指定某个功能使用哪个 API 配置 */
 export interface APIAssignment {

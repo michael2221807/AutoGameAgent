@@ -216,7 +216,7 @@ export class EngramManager {
   async processResponse(
     response: AIResponse,
     stateManager: StateManager,
-    options?: { defaultEdgeCore?: boolean; defaultEdgeSource?: EngramEdge['source'] },
+    options?: { defaultEdgeCore?: boolean; defaultEdgeSource?: EngramEdge['source']; includeAllNpcTypes?: boolean },
   ): Promise<EngramWriteSnapshot | null> {
     const config = loadEngramConfig();
     if (!config.enabled) return null;
@@ -228,7 +228,7 @@ export class EngramManager {
     response: AIResponse,
     stateManager: StateManager,
     config: EngramConfig,
-    options?: { defaultEdgeCore?: boolean; defaultEdgeSource?: EngramEdge['source'] },
+    options?: { defaultEdgeCore?: boolean; defaultEdgeSource?: EngramEdge['source']; includeAllNpcTypes?: boolean },
   ): Promise<EngramWriteSnapshot | null> {
 
     const startTime = performance.now();
@@ -285,7 +285,9 @@ export class EngramManager {
       playerName: this.playerNamePath,
       relationships: this.relationshipsPath,
     };
-    const entities = this.entityBuilder.build(allEvents, stateManager, entityPaths);
+    const entities = this.entityBuilder.build(allEvents, stateManager, entityPaths, {
+      includeAllNpcTypes: options?.includeAllNpcTypes,
+    });
 
     // -- Step 2.3 (Story 1): 恢复用户手动创建的实体 --
     // ORDERING: must run BEFORE Step 2.25 (_pendingEnrichment). User entities are

@@ -176,6 +176,18 @@ export class AttachmentBuilder {
     if (!pack) return null;
     return pack.stateSchema ?? null;
   }
+
+  /**
+   * Story 3: suggest default attachments for worldBuilder mode.
+   * Caller provides engine paths to avoid hardcoding game-specific paths in engine code.
+   */
+  suggestWorldBuilderAttachments(paths: { relationships: string; locations: string; worldDescription: string }): AttachmentSpec[] {
+    return [
+      { path: paths.relationships, scope: 'context' },
+      { path: paths.locations, scope: 'context' },
+      { path: paths.worldDescription, scope: 'context' },
+    ];
+  }
 }
 
 // ─── 工具：schema walk ────────────────────────────────────

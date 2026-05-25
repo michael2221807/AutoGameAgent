@@ -16,7 +16,7 @@
  *
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md §6.3 + Phase 5b。
  */
-import { ref, computed, watch, inject } from 'vue';
+import { ref, computed, watch, inject, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import JsonEditor from '@/ui/components/editing/JsonEditor.vue';
@@ -179,6 +179,18 @@ const diffPreview = computed<{ before: string; after: string } | null>(() => {
   };
 });
 
+const diffAfterEl = ref<HTMLPreElement | null>(null);
+
+watch(selectedPatch, () => {
+  if (selectedPatch.value?.op === 'append-item' || selectedPatch.value?.op === 'insert-item') {
+    nextTick(() => {
+      if (diffAfterEl.value) {
+        diffAfterEl.value.scrollTop = diffAfterEl.value.scrollHeight;
+      }
+    });
+  }
+});
+
 // ─── Aggregate state ──────────────────────────────
 
 const errorCount = computed(() => workingPatches.value.filter((p) => p.status === 'error').length);
@@ -290,7 +302,7 @@ function statusLabel(status: ValidatedPatch['status']): string {
               </div>
               <div class="diff-section">
                 <div class="diff-label">{{ t('assistant.payloadPreview.afterLabel') }}</div>
-                <pre class="diff-pre after">{{ diffPreview?.after }}</pre>
+                <pre ref="diffAfterEl" class="diff-pre after">{{ diffPreview?.after }}</pre>
               </div>
             </div>
             <div v-else class="json-edit">

@@ -15,8 +15,10 @@
  * 对应 docs/status/plan-assistant-utility-2026-04-14.md §4 + Phase 1。
  */
 import type { AIService } from '../../ai/ai-service';
+import type { AIResponse } from '../../ai/types';
 import type { CommandExecutor } from '../../core/command-executor';
 import type { StateManager } from '../../core/state-manager';
+import type { EngramManager } from '../../memory/engram/engram-manager';
 import type { GamePack } from '../../types';
 import type {
   AssistantMessage,
@@ -55,6 +57,12 @@ export interface AssistantServiceDeps {
   settings?: AssistantSettings;
   /** Current UI locale — forwarded to AttachmentBuilder for display label translation */
   locale?: string;
+  /** Story 3: EngramManager for knowledge_facts processing after inject */
+  engramManager?: EngramManager;
+  /** Story 3: externally-constructed PayloadApplier for sharing with WorldBuilderService */
+  payloadApplier?: PayloadApplier;
+  /** Story 3: externally-constructed PayloadValidator for sharing with WorldBuilderService */
+  payloadValidator?: PayloadValidator;
 }
 
 /**
@@ -89,6 +97,8 @@ export class AssistantService {
   private attachmentBuilder: AttachmentBuilder;
   private payloadValidator: PayloadValidator;
   private messageBuilder: MessageBuilder;
+  private engramManager: EngramManager | null;
+  private validatorExternallySupplied: boolean;
 
   /**
    * 上一次成功注入时的状态树快照 —— 用于"撤销"（与主回合 rollback 同 UX）
@@ -123,7 +133,9 @@ export class AssistantService {
     this.locale = deps.locale;
     this.conversationStore = deps.conversationStore ?? new InMemoryConversationStore();
     this.settings = deps.settings ?? { ...DEFAULT_ASSISTANT_SETTINGS };
-    this.payloadApplier = new PayloadApplier({
+    this.engramManager = deps.engramManager ?? null;
+    this.validatorExternallySupplied = !!deps.payloadValidator;
+    this.payloadApplier = deps.payloadApplier ?? new PayloadApplier({
       stateManager: deps.stateManager,
       commandExecutor: deps.commandExecutor,
     });
@@ -132,7 +144,7 @@ export class AssistantService {
       gamePack: deps.gamePack,
       locale: deps.locale,
     });
-    this.payloadValidator = new PayloadValidator({
+    this.payloadValidator = deps.payloadValidator ?? new PayloadValidator({
       stateManager: deps.stateManager,
       gamePack: deps.gamePack,
     });
@@ -184,16 +196,17 @@ export class AssistantService {
   /** 当前生效 game pack —— 装配新 pack 时由 outer service 调用 */
   setGamePack(pack: GamePack | null): void {
     this.gamePack = pack;
-    // 重建依赖 pack 的子模块（schema 提取需要 pack 引用）
     this.attachmentBuilder = new AttachmentBuilder({
       stateManager: this.stateManager,
       gamePack: pack,
       locale: this.locale,
     });
-    this.payloadValidator = new PayloadValidator({
-      stateManager: this.stateManager,
-      gamePack: pack,
-    });
+    if (!this.validatorExternallySupplied) {
+      this.payloadValidator = new PayloadValidator({
+        stateManager: this.stateManager,
+        gamePack: pack,
+      });
+    }
   }
 
   /**
@@ -242,6 +255,7 @@ export class AssistantService {
       userPrompt: input.prompt,
       attachments: attachmentPayloads,
       gamePack: this.gamePack,
+      worldBuilderMode: this.settings.worldBuilderMode,
     });
 
     // ── 4-5. AI 调用（流式） ──
@@ -364,6 +378,32 @@ export class AssistantService {
     };
     draft.status = 'injected';
     draft.injectedAt = Date.now();
+
+    // 3.5 Process knowledge_facts via EngramManager (Story 3 §3.1.5)
+    if (this.engramManager && draft.raw.knowledgeFacts?.length) {
+      try {
+        const syntheticResponse: AIResponse = {
+          text: '',
+          // confidence is KnowledgeFact-only; AIResponse.knowledgeFacts omits it by design
+          knowledgeFacts: draft.raw.knowledgeFacts.map(kf => ({
+            fact: kf.fact,
+            sourceEntity: kf.sourceEntity,
+            targetEntity: kf.targetEntity,
+          })),
+        };
+        const writeResult = await this.engramManager.processResponse(
+          syntheticResponse,
+          this.stateManager,
+          { defaultEdgeCore: true, defaultEdgeSource: 'ai', includeAllNpcTypes: true },
+        );
+        if (writeResult !== null) {
+          draft.knowledgeFactsProcessed = true;
+        }
+        // writeResult === null means Engram is disabled — caller can check knowledgeFactsProcessed
+      } catch (err) {
+        console.warn('[AssistantService] knowledge_facts Engram processing failed (non-blocking):', err);
+      }
+    }
 
     // 4. 审计 + system 消息
     this.injectAuditLog.push({

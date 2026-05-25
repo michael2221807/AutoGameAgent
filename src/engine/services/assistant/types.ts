@@ -89,6 +89,19 @@ export interface AssistantPatch {
 export interface AssistantPayload {
   summary: string;
   patches: AssistantPatch[];
+  knowledgeFacts?: KnowledgeFact[];
+}
+
+/**
+ * Knowledge fact extracted from AI response in worldBuilder mode.
+ * Processed by EngramManager.processResponse after patches injection.
+ * Uses same structure as main-round step2 knowledge_facts output.
+ */
+export interface KnowledgeFact {
+  sourceEntity: string;
+  targetEntity: string;
+  fact: string;
+  confidence: number;
 }
 
 // ─── Validator 输出 ────────────────────────────────────────
@@ -231,6 +244,8 @@ export interface PayloadDraft {
   editedTimes?: number;
   /** 撤销标记（只 inject 后才可能有值） */
   rolledBackAt?: number;
+  /** Engram knowledge_facts 已处理标记（inject 后 engramManager 处理完成） */
+  knowledgeFactsProcessed?: boolean;
 }
 
 // ─── ConversationStore 接口 ────────────────────────────────
@@ -298,13 +313,53 @@ export interface AssistantSettings {
   confirmBeforeInject: boolean;
   /** 是否在清空对话前显示二次确认对话框 */
   confirmBeforeClear: boolean;
+  /** 世界构建模式 — 启用后 prompt 增强 + context 自动建议 + knowledge_facts 处理 */
+  worldBuilderMode: boolean;
 }
 
 export const DEFAULT_ASSISTANT_SETTINGS: AssistantSettings = {
   maxHistoryTurns: 5,        // 用户拍板默认值
   confirmBeforeInject: true,
   confirmBeforeClear: true,
+  worldBuilderMode: false,
 };
+
+// ─── WorldBuilder 类型（D3 双工程 — "批量/复杂"通道） ──────
+
+/**
+ * WorldBuilderService 的任务描述
+ * - region: 生成完整区域（地点+NPC+物品）
+ * - npcs: 批量生成 NPC
+ * - from-description: 根据自由文本描述生成结构化数据
+ * - st-import: Story 8 ST 卡导入（预留）
+ */
+export interface WorldBuilderTask {
+  type: 'region' | 'npcs' | 'from-description' | 'st-import';
+  userInstruction: string;
+  config?: {
+    npcCount?: number;
+    parentLocation?: string;
+    subLocationCount?: number;
+    generateItems?: boolean;
+    itemCount?: number;
+  };
+}
+
+export interface WorldBuilderResult {
+  userMessage: AssistantMessage;
+  assistantMessage: AssistantMessage;
+  knowledgeFacts?: KnowledgeFact[];
+}
+
+/**
+ * Progress callback payload — consistent with pipeline-runner's onProgress signature.
+ * UI layer can render both pipeline and world-builder progress uniformly.
+ */
+export interface ProgressPayload {
+  i18nKey: string;
+  i18nParams?: Record<string, unknown>;
+  message: string;
+}
 
 // ─── ID 工具 ──────────────────────────────────────────────
 
