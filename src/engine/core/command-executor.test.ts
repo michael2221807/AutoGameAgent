@@ -136,4 +136,58 @@ describe('CommandExecutor', () => {
       expect(items).not.toContain('item0'); // oldest evicted
     });
   });
+
+  describe('pushDedupGuard', () => {
+    it('suppresses push when guard returns false', () => {
+      const guard = vi.fn().mockReturnValue(false);
+      const mock = createMockStateManager({ 社交: { 关系: [{ 记忆: ['existing'] }] } });
+      const guarded = new CommandExecutor(mock.sm as never, null, guard);
+      const result = guarded.execute({
+        action: 'push',
+        key: '社交.关系.0.记忆',
+        value: 'duplicate',
+      });
+      expect(result.success).toBe(true);
+      expect(guard).toHaveBeenCalledWith('社交.关系.0.记忆', 'duplicate', ['existing']);
+      expect(mock.sm.get<string[]>('社交.关系.0.记忆')).toEqual(['existing']);
+    });
+
+    it('allows push when guard returns true', () => {
+      const guard = vi.fn().mockReturnValue(true);
+      const mock = createMockStateManager({ 社交: { 关系: [{ 记忆: ['existing'] }] } });
+      const guarded = new CommandExecutor(mock.sm as never, null, guard);
+      guarded.execute({ action: 'push', key: '社交.关系.0.记忆', value: 'new' });
+      expect(mock.sm.get<string[]>('社交.关系.0.记忆')).toContain('new');
+    });
+
+    it('skips guard when no existing array', () => {
+      const guard = vi.fn().mockReturnValue(true);
+      const mock = createMockStateManager({ 角色: {} });
+      const guarded = new CommandExecutor(mock.sm as never, null, guard);
+      guarded.execute({ action: 'push', key: '角色.技能', value: 'fireball' });
+      expect(guard).not.toHaveBeenCalled();
+    });
+
+    it('skips guard when target is non-array value', () => {
+      const guard = vi.fn().mockReturnValue(true);
+      const mock = createMockStateManager({ 角色: { 名字: 'text' } });
+      const guarded = new CommandExecutor(mock.sm as never, null, guard);
+      guarded.execute({ action: 'push', key: '角色.名字', value: 'append' });
+      expect(guard).not.toHaveBeenCalled();
+    });
+
+    it('returns failure when guard throws', () => {
+      const guard = vi.fn().mockImplementation(() => { throw new Error('guard boom'); });
+      const mock = createMockStateManager({ 社交: { 关系: [{ 记忆: ['existing'] }] } });
+      const guarded = new CommandExecutor(mock.sm as never, null, guard);
+      const result = guarded.execute({
+        action: 'push',
+        key: '社交.关系.0.记忆',
+        value: 'x',
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('guard boom');
+      expect(mock.sm.get<string[]>('社交.关系.0.记忆')).toEqual(['existing']);
+    });
+  });
 });

@@ -23,6 +23,17 @@ import type { Command, CommandResult, BatchCommandResult, ChangeLog } from '../t
 import type { StateManager } from './state-manager';
 import { eventBus } from './event-bus';
 
+/**
+ * Optional guard for push operations — returns `false` to suppress a
+ * duplicate push. Injected at construction time so the executor stays
+ * content-agnostic (the caller decides which paths need dedup and how).
+ */
+export type PushDedupGuard = (
+  path: string,
+  newValue: unknown,
+  existingArray: unknown[],
+) => boolean;
+
 /** 单字段数值写入的安全上限（防止 AI 生成极端值破坏 UI 渲染） */
 const MAX_NUMERIC_VALUE = 999_999;
 
@@ -49,6 +60,12 @@ export class CommandExecutor {
      * 传入 null：禁用验证（测试或向后兼容）
      */
     private pathRootWhitelist: readonly string[] | null = null,
+    /**
+     * Optional dedup guard for push operations. When provided, called before
+     * every `push` with (path, newValue, existingArray). Return `false` to
+     * suppress the push (treated as a no-op success, not an error).
+     */
+    private pushDedupGuard?: PushDedupGuard,
   ) {}
 
   /** 执行单条指令 — 返回执行结果 */
@@ -91,6 +108,16 @@ export class CommandExecutor {
         case 'push': {
           // ── 步骤 4：数组容量限制 ──
           const arr = this.stateManager.get<unknown[]>(command.key);
+
+          // ── 步骤 4b：push 去重守卫 ──
+          if (this.pushDedupGuard && Array.isArray(arr)) {
+            const shouldPush = this.pushDedupGuard(command.key, command.value, arr);
+            if (!shouldPush) {
+              change = undefined;
+              break;
+            }
+          }
+
           if (Array.isArray(arr) && arr.length >= MAX_ARRAY_CAPACITY) {
             this.stateManager.pull(command.key, arr[0], 'command');
           }

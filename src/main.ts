@@ -56,6 +56,7 @@ import { GamePackLoader } from './engine/core/pack-loader';
 import { ConfigRegistry, ConfigStore, ConfigResolver } from './engine/core/config-system';
 import { StateManager } from './engine/core/state-manager';
 import { CommandExecutor } from './engine/core/command-executor';
+import { buildMemoryPushDedupGuard } from './engine/social/memory-dedup';
 import { BehaviorRunner } from './engine/behaviors/behavior-runner';
 import { AIService } from './engine/ai/ai-service';
 import { ResponseParser } from './engine/ai/response-parser';
@@ -298,7 +299,9 @@ async function bootstrap(): Promise<void> {
         ((pack.stateSchema as { properties?: Record<string, unknown> }).properties) ?? {},
       )
     : null;
-  const commandExecutor = new CommandExecutor(stateManager, schemaRoots);
+  const memoryFieldName = DEFAULT_ENGINE_PATHS.npcFieldNames.memory;
+  const pushDedupGuard = buildMemoryPushDedupGuard(memoryFieldName);
+  const commandExecutor = new CommandExecutor(stateManager, schemaRoots, pushDedupGuard);
 
   const behaviorRunner = new BehaviorRunner();
 

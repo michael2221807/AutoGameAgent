@@ -54,6 +54,7 @@ import {
   extractThinkingFromRaw,
 } from '../../core/prompt-debug';
 import { formatMemoryEntry } from '../../social/npc-memory-format';
+import { isDuplicateMemory } from '../../social/memory-dedup';
 import { buildEnvironmentBlock } from '../../prompt/environment-block';
 
 /** 单条私聊消息结构 — 存储在 NPC.私聊历史 数组中 */
@@ -427,6 +428,15 @@ export class NpcChatPipeline {
     const memoryList = Array.isArray(npc[memoryKey])
       ? [...(npc[memoryKey] as unknown[])]
       : [];
+
+    if (isDuplicateMemory(entry, memoryList)) {
+      const nameKey = this.paths.npcFieldNames?.name ?? '名称';
+      console.debug(
+        `[NpcChat] Suppressed duplicate memory for ${String(npc[nameKey])}: ${entry.slice(0, 50)}…`,
+      );
+      return;
+    }
+
     memoryList.push(entry);
     npc[memoryKey] = memoryList;
 
