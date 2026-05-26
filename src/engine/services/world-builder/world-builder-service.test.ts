@@ -12,7 +12,7 @@
  * - progress callbacks
  */
 import { describe, it, expect } from 'vitest';
-import { WorldBuilderService, compressWorldContext, type WorldBuilderPaths } from './world-builder-service';
+import { WorldBuilderService, compressWorldContext, applyRegionConditionals, type WorldBuilderPaths } from './world-builder-service';
 import { InMemoryConversationStore } from '../assistant/conversation-store';
 import { PayloadValidator } from '../assistant/payload-validator';
 import type { StateManager } from '../../core/state-manager';
@@ -66,10 +66,17 @@ const SCHEMA = {
   },
 };
 
+const REGION_TEMPLATE = `REGION_PROMPT {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION} {SUB_LOCATION_COUNT} subs
+{{NPC_TASK_BULLETS}}{{ITEM_TASK_BULLET}}
+"NPC": {{LOCATION_NPC_VALUE}}
+patches[{{NPC_JSON_TEMPLATE}}{{ITEM_JSON_TEMPLATE}}]{{KNOWLEDGE_FACTS_SECTION}}
+{{ITEM_NOTE}}
+{{NPC_CONSTRAINTS}}{{ITEM_CONSTRAINTS}}`;
+
 const PACK: GamePack = {
   prompts: {
     assistantJailbreak: 'JAILBREAK_PROMPT',
-    worldBuilderBatchRegion: 'REGION_PROMPT {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION}',
+    worldBuilderBatchRegion: REGION_TEMPLATE,
     worldBuilderBatchNpcs: 'NPCS_PROMPT {NPC_COUNT} {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION}',
     worldBuilderFromDescription: 'DESC_PROMPT {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION}',
   },
@@ -434,5 +441,153 @@ describe('WorldBuilderService — progress', () => {
     expect(steps[1]).toContain('Prompt');
     expect(steps[2]).toContain('AI');
     expect(steps[3]).toContain('Parse');
+  });
+});
+
+// ─── applyRegionConditionals ─────────────────────────────
+
+describe('applyRegionConditionals', () => {
+  const TEMPLATE = `任务：
+- 地点
+{{NPC_TASK_BULLETS}}{{ITEM_TASK_BULLET}}
+"NPC": {{LOCATION_NPC_VALUE}}
+JSON[{{NPC_JSON_TEMPLATE}}{{ITEM_JSON_TEMPLATE}}]{{KNOWLEDGE_FACTS_SECTION}}
+{{ITEM_NOTE}}约束：
+{{NPC_CONSTRAINTS}}{{ITEM_CONSTRAINTS}}`;
+
+  it('both NPC and items enabled → includes all sections', () => {
+    const result = applyRegionConditionals(TEMPLATE, {
+      genNpcs: true, npcCount: 5, genItems: true, itemCount: 3, nsfwMode: false,
+    });
+    expect(result).toContain('5 个常驻 NPC');
+    expect(result).toContain('NPC 之间');
+    expect(result).toContain('3 个特色物品');
+    expect(result).toContain('$.社交.关系');
+    expect(result).toContain('$.角色.背包.物品');
+    expect(result).toContain('knowledge_facts');
+    expect(result).toContain('NPC 字段完整');
+    expect(result).toContain('物品路径');
+    expect(result).toContain('Record<物品ID');
+    expect(result).toContain('"NPC": ["<常驻NPC名1>"');
+  });
+
+  it('NPC disabled → removes NPC sections, keeps items, location NPC=[]', () => {
+    const result = applyRegionConditionals(TEMPLATE, {
+      genNpcs: false, npcCount: 0, genItems: true, itemCount: 2, nsfwMode: false,
+    });
+    expect(result).not.toContain('常驻 NPC');
+    expect(result).not.toContain('NPC 之间');
+    expect(result).not.toContain('$.社交.关系');
+    expect(result).not.toContain('knowledge_facts');
+    expect(result).not.toContain('NPC 字段完整');
+    expect(result).toContain('"NPC": []');
+    expect(result).toContain('2 个特色物品');
+    expect(result).toContain('$.角色.背包.物品');
+    expect(result).toContain('物品路径');
+  });
+
+  it('items disabled → removes item sections, keeps NPCs', () => {
+    const result = applyRegionConditionals(TEMPLATE, {
+      genNpcs: true, npcCount: 3, genItems: false, itemCount: 0, nsfwMode: false,
+    });
+    expect(result).toContain('3 个常驻 NPC');
+    expect(result).toContain('$.社交.关系');
+    expect(result).toContain('knowledge_facts');
+    expect(result).not.toContain('特色物品');
+    expect(result).not.toContain('$.角色.背包.物品');
+    expect(result).not.toContain('物品路径');
+    expect(result).not.toContain('Record<物品ID');
+  });
+
+  it('both disabled → only location content remains', () => {
+    const result = applyRegionConditionals(TEMPLATE, {
+      genNpcs: false, npcCount: 0, genItems: false, itemCount: 0, nsfwMode: false,
+    });
+    expect(result).toContain('地点');
+    expect(result).not.toContain('常驻 NPC');
+    expect(result).not.toContain('特色物品');
+    expect(result).not.toContain('$.社交.关系');
+    expect(result).not.toContain('$.角色.背包.物品');
+    expect(result).not.toContain('knowledge_facts');
+    expect(result).not.toContain('NPC 字段完整');
+    expect(result).not.toContain('物品路径');
+  });
+
+  it('NSFW mode + NPC enabled → includes NSFW section', () => {
+    const result = applyRegionConditionals(TEMPLATE, {
+      genNpcs: true, npcCount: 5, genItems: false, itemCount: 0, nsfwMode: true,
+    });
+    expect(result).toContain('私密信息');
+    expect(result).toContain('NSFW');
+  });
+
+  it('NSFW mode + NPC disabled → NSFW section omitted', () => {
+    const result = applyRegionConditionals(TEMPLATE, {
+      genNpcs: false, npcCount: 0, genItems: true, itemCount: 3, nsfwMode: true,
+    });
+    expect(result).not.toContain('私密信息');
+  });
+});
+
+// ─── integration: region with npcCount=0 ─────────────────
+
+describe('WorldBuilderService — region conditional prompts', () => {
+  it('npcCount=0 → prompt omits NPC sections', async () => {
+    const { svc, calls } = makeService(VALID_AI_RESPONSE);
+
+    await svc.execute('default', {
+      type: 'region',
+      userInstruction: 'test region',
+      config: { npcCount: 0, subLocationCount: 2, generateItems: true, itemCount: 2 },
+    }, TEST_PATHS);
+
+    const prompt = (calls[0].messages as Array<{ role: string; content: string }>)[1].content;
+    expect(prompt).not.toContain('常驻 NPC');
+    expect(prompt).not.toContain('$.社交.关系');
+    expect(prompt).toContain('2 个特色物品');
+    expect(prompt).toContain('$.角色.背包.物品');
+  });
+
+  it('generateItems=false → prompt omits item sections', async () => {
+    const { svc, calls } = makeService(VALID_AI_RESPONSE);
+
+    await svc.execute('default', {
+      type: 'region',
+      userInstruction: 'test region',
+      config: { npcCount: 3, subLocationCount: 2, generateItems: false },
+    }, TEST_PATHS);
+
+    const prompt = (calls[0].messages as Array<{ role: string; content: string }>)[1].content;
+    expect(prompt).toContain('3 个常驻 NPC');
+    expect(prompt).not.toContain('特色物品');
+    expect(prompt).not.toContain('$.角色.背包.物品');
+  });
+
+  it('user instruction containing {{...}} markers is NOT expanded', async () => {
+    const { svc, calls } = makeService(VALID_AI_RESPONSE);
+
+    await svc.execute('default', {
+      type: 'region',
+      userInstruction: '{{NPC_TASK_BULLETS}} test injection',
+      config: { npcCount: 0, subLocationCount: 2, generateItems: false },
+    }, TEST_PATHS);
+
+    const prompt = (calls[0].messages as Array<{ role: string; content: string }>)[1].content;
+    expect(prompt).toContain('{{NPC_TASK_BULLETS}} test injection');
+    expect(prompt).not.toContain('常驻 NPC');
+  });
+
+  it('negative npcCount is clamped to 0 (NPC disabled)', async () => {
+    const { svc, calls } = makeService(VALID_AI_RESPONSE);
+
+    await svc.execute('default', {
+      type: 'region',
+      userInstruction: 'test',
+      config: { npcCount: -3, subLocationCount: 2, generateItems: true, itemCount: 1 },
+    }, TEST_PATHS);
+
+    const prompt = (calls[0].messages as Array<{ role: string; content: string }>)[1].content;
+    expect(prompt).not.toContain('常驻 NPC');
+    expect(prompt).not.toContain('$.社交.关系');
   });
 });

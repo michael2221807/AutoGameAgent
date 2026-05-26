@@ -85,6 +85,114 @@ const NSFW_NPC_SECTION = `
      ⚠ 所有数值字段（敏感度/开发度/性渴望程度/性交总次数）必须是 number 类型，禁止用字符串如"无法计算"
 `;
 
+// ── Conditional prompt sections for region generation ──
+
+function buildNpcTaskBullets(npcCount: number): string {
+  return `- **${npcCount} 个常驻 NPC**（分布在各子地点）
+- **NPC 之间、NPC 与地点之间的关系**`;
+}
+
+function buildItemTaskBullet(itemCount: number): string {
+  return `\n- **${itemCount} 个特色物品**（该区域可获得的物品，加入玩家背包）`;
+}
+
+function buildNpcJsonTemplate(nsfwSection: string): string {
+  return `,
+    {
+      "target": "$.社交.关系",
+      "op": "append-item",
+      "value": {
+        "名称": "<NPC中文名>",
+        "性别": "<男|女|其他>",
+        "年龄": 25,
+        "类型": "<重点|普通>",
+        "好感度": 50,
+        "位置": "<所在地点名>",
+        "描述": "<一句话身份/气质概述，30字以内>",
+        "外貌描述": "<完整外貌段（脸、发、瞳、体型、气质），50-200字>",
+        "身材描写": "<身高/体态/身体特征，30-120字>",
+        "衣着风格": "<日常着装偏好（材质、色调、款式），30-100字>",
+        "背景": "<出身/经历，50-200字>",
+        "内心想法": "<当前内心状态>",
+        "在做事项": "<当前正在做的事>",
+        "性格特征": ["<标签1>", "<标签2>"],
+        "核心性格特征": "<一句话锚定主性格>",
+        "是否主要角色": false,
+        "是否在场": false,
+        "关系状态": "陌生人",
+        "好感度突破条件": "<好感提升到下一阶段的条件>",
+        "关系突破条件": "<关系升级触发条件>",
+        "记忆": [],
+        "私聊历史": [],
+        "总结记忆": [],
+        "关系网变量": [],
+        "最后互动时间": ""
+      }
+    }` + nsfwSection;
+}
+
+const ITEM_JSON_TEMPLATE = `,
+    {
+      "target": "$.角色.背包.物品.<物品ID>",
+      "op": "set-field",
+      "value": {
+        "名称": "<物品名>",
+        "描述": "<物品描述>",
+        "类型": "<物品类型>",
+        "数量": 1
+      },
+      "rationale": "该区域特色物品"
+    }`;
+
+const KNOWLEDGE_FACTS_SECTION = `,
+  "knowledge_facts": [
+    {
+      "sourceEntity": "<实体A>",
+      "targetEntity": "<实体B>",
+      "fact": "<A和B的关系描述>",
+      "confidence": 1.0
+    }
+  ]`;
+
+const ITEM_NOTE = `\n**注意：** \`角色.背包.物品\` 是 Record<物品ID, Item> 结构（不是数组）。每个物品用 \`set-field\` 写入 \`$.角色.背包.物品.<自动生成的物品ID>\`。物品ID 格式：\`<类型>_<时间戳13位>_<随机3字符>\`（如 \`weapon_1716000000_abc\`）。\n`;
+
+function buildNpcConstraints(nsfwContent: string): string {
+  return `4. **NPC 字段完整** — 每个 NPC 必须包含示例中的**全部字段**，禁止缺少任何字段
+${nsfwContent ? nsfwContent + '\n' : ''}5. **NPC 类型** — 必须为 \`"重点"\` 或 \`"普通"\`，不得使用职业/身份作为类型值
+6. **NPC 位置存在** — NPC 的 \`位置\` 必须是已有地点或本次新建的地点
+7. **关系网变量** — 保持空数组 \`[]\`（NPC 间关系统一写在 \`knowledge_facts\` 中）
+8. **好感度合理** — 友好类 NPC 60-70，中立类 40-50，警惕类 20-30
+9. **关系丰富** — 至少为每个 NPC 生成 1 条 knowledge_fact（与其他 NPC 或地点的关系）
+10. **私聊历史不填** — NPC 的 \`私聊历史\` 字段设为 \`[]\`（由系统运行时维护）
+11. **性格多样** — 每个 NPC 的性格、外貌、背景不重复，同场景多个 NPC 须有明显差异
+`;
+}
+
+const ITEM_CONSTRAINTS = `12. **物品路径** — 物品写入路径 \`$.角色.背包.物品.<ID>\`，ID 自行生成（\`<类型>_<时间戳13位>_<随机3字符>\`）
+`;
+
+/**
+ * Apply conditional section replacements for the region prompt template.
+ * Sections like {{NPC_TASK_BULLETS}} are injected or removed based on task config.
+ */
+export function applyRegionConditionals(
+  template: string,
+  opts: { genNpcs: boolean; npcCount: number; genItems: boolean; itemCount: number; nsfwMode: boolean },
+): string {
+  const nsfwContent = opts.nsfwMode && opts.genNpcs ? NSFW_NPC_SECTION : '';
+
+  return template
+    .replace(/\{\{NPC_TASK_BULLETS\}\}/g, opts.genNpcs ? buildNpcTaskBullets(opts.npcCount) : '')
+    .replace(/\{\{ITEM_TASK_BULLET\}\}/g, opts.genItems ? buildItemTaskBullet(opts.itemCount) : '')
+    .replace(/\{\{LOCATION_NPC_VALUE\}\}/g, opts.genNpcs ? '["<常驻NPC名1>", "<常驻NPC名2>"]' : '[]')
+    .replace(/\{\{NPC_JSON_TEMPLATE\}\}/g, opts.genNpcs ? buildNpcJsonTemplate(nsfwContent) : '')
+    .replace(/\{\{ITEM_JSON_TEMPLATE\}\}/g, opts.genItems ? ITEM_JSON_TEMPLATE : '')
+    .replace(/\{\{KNOWLEDGE_FACTS_SECTION\}\}/g, opts.genNpcs ? KNOWLEDGE_FACTS_SECTION : '')
+    .replace(/\{\{ITEM_NOTE\}\}/g, opts.genItems ? ITEM_NOTE : '')
+    .replace(/\{\{NPC_CONSTRAINTS\}\}/g, opts.genNpcs ? buildNpcConstraints(nsfwContent) : '')
+    .replace(/\{\{ITEM_CONSTRAINTS\}\}/g, opts.genItems ? ITEM_CONSTRAINTS : '');
+}
+
 const PROMPT_KEYS: Record<string, string> = {
   region: 'worldBuilderBatchRegion',
   npcs: 'worldBuilderBatchNpcs',
@@ -156,18 +264,20 @@ export class WorldBuilderService {
       return this.buildErrorResult(sessionId, task, `Prompt "${promptKey}" not found in game pack`);
     }
 
-    const npcCount = task.config?.npcCount ?? 5;
+    const npcCount = Math.max(0, task.config?.npcCount ?? 5);
     const subLocCount = task.config?.subLocationCount ?? 3;
+    const genNpcs = npcCount > 0;
     const genItems = task.config?.generateItems !== false;
+    const itemCount = Math.max(0, task.config?.itemCount ?? 3);
     const nsfwMode = this.deps.stateManager.get<boolean>('系统.nsfwMode') === true;
-    const prompt = promptTemplate
+
+    // Apply conditional sections BEFORE user instruction to prevent marker injection
+    const prompt = applyRegionConditionals(promptTemplate, { genNpcs, npcCount, genItems, itemCount, nsfwMode })
       .replace(/\{EXISTING_WORLD_CONTEXT\}/g, worldContext)
       .replace(/\{USER_INSTRUCTION\}/g, task.userInstruction)
       .replace(/\{NPC_COUNT\}/g, String(npcCount))
       .replace(/\{SUB_LOCATION_COUNT\}/g, String(subLocCount))
-      .replace(/\{GENERATE_ITEMS\}/g, genItems ? 'enabled — generate if thematically appropriate' : 'disabled — do NOT generate items')
-      .replace(/\{ITEM_COUNT\}/g, String(task.config?.itemCount ?? 3))
-      .replace(/\{\{NSFW_SECTION\}\}/g, nsfwMode ? NSFW_NPC_SECTION : '');
+      .replace(/\{ITEM_COUNT\}/g, String(itemCount));
 
     // Step 3: AI Call (non-streaming — batch needs complete JSON)
     onProgress?.({
