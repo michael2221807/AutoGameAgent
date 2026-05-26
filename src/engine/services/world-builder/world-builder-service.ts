@@ -177,11 +177,16 @@ export class WorldBuilderService {
 
     let aiResponse: string;
     try {
+      const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+      const jailbreak = this.deps.gamePack?.prompts?.['assistantJailbreak']?.trim();
+      if (jailbreak) {
+        messages.push({ role: 'system', content: jailbreak });
+      }
+      messages.push({ role: 'system', content: prompt });
+      messages.push({ role: 'user', content: 'Please generate the data as instructed above.' });
+
       aiResponse = await this.deps.aiService.generate({
-        messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: 'Please generate the data as instructed above.' },
-        ],
+        messages,
         stream: false,
         usageType: 'world_builder',
       });

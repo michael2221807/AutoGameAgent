@@ -68,6 +68,7 @@ const SCHEMA = {
 
 const PACK: GamePack = {
   prompts: {
+    assistantJailbreak: 'JAILBREAK_PROMPT',
     worldBuilderBatchRegion: 'REGION_PROMPT {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION}',
     worldBuilderBatchNpcs: 'NPCS_PROMPT {NPC_COUNT} {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION}',
     worldBuilderFromDescription: 'DESC_PROMPT {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION}',
@@ -173,13 +174,53 @@ describe('WorldBuilderService — execute region', () => {
     await svc.execute('default', { type: 'region', userInstruction: '创建森林' }, TEST_PATHS);
 
     const msgs = calls[0].messages as Array<{ role: string; content: string }>;
-    const systemMsg = msgs[0];
+    // msgs[0] = jailbreak, msgs[1] = world builder prompt, msgs[2] = user
+    const systemMsg = msgs[1];
     expect(systemMsg.content).toContain('一个繁华的城镇');
     expect(systemMsg.content).toContain('创建森林');
     expect(systemMsg.content).not.toContain('{EXISTING_WORLD_CONTEXT}');
     expect(systemMsg.content).not.toContain('{USER_INSTRUCTION}');
+    expect(msgs[2].role).toBe('user');
+    expect(msgs[2].content).not.toContain('创建森林');
+  });
+
+  it('injects assistantJailbreak as first system message before prompt', async () => {
+    const { svc, calls } = makeService(VALID_AI_RESPONSE);
+
+    await svc.execute('default', { type: 'region', userInstruction: 'test' }, TEST_PATHS);
+
+    const msgs = calls[0].messages as Array<{ role: string; content: string }>;
+    expect(msgs[0]).toEqual({ role: 'system', content: 'JAILBREAK_PROMPT' });
+    expect(msgs[1].role).toBe('system');
+    expect(msgs[1].content).toContain('REGION_PROMPT');
+    expect(msgs[2].role).toBe('user');
+  });
+
+  it('skips jailbreak when gamePack has no assistantJailbreak prompt', async () => {
+    const sm = new FakeStateManager(JSON.parse(JSON.stringify(INITIAL_STATE)));
+    const store = new InMemoryConversationStore();
+    const packNoJailbreak = {
+      prompts: {
+        worldBuilderBatchRegion: 'REGION_PROMPT {EXISTING_WORLD_CONTEXT} {USER_INSTRUCTION}',
+      },
+      stateSchema: SCHEMA,
+    } as unknown as GamePack;
+    const validator = new PayloadValidator({ stateManager: sm as unknown as StateManager, gamePack: packNoJailbreak });
+    const { aiService, calls } = makeAIService(VALID_AI_RESPONSE);
+
+    const svc = new WorldBuilderService({
+      aiService,
+      stateManager: sm as unknown as StateManager,
+      gamePack: packNoJailbreak,
+      payloadValidator: validator,
+      conversationStore: store,
+    });
+
+    await svc.execute('default', { type: 'region', userInstruction: 'test' }, TEST_PATHS);
+
+    const msgs = calls[0].messages as Array<{ role: string; content: string }>;
+    expect(msgs[0].content).toContain('REGION_PROMPT');
     expect(msgs[1].role).toBe('user');
-    expect(msgs[1].content).not.toContain('创建森林');
   });
 });
 
@@ -195,7 +236,7 @@ describe('WorldBuilderService — execute npcs', () => {
       config: { npcCount: 8 },
     }, TEST_PATHS);
 
-    const systemMsg = (calls[0].messages as Array<{ role: string; content: string }>)[0];
+    const systemMsg = (calls[0].messages as Array<{ role: string; content: string }>)[1];
     expect(systemMsg.content).toContain('8');
     expect(systemMsg.content).not.toContain('{NPC_COUNT}');
   });
@@ -205,7 +246,7 @@ describe('WorldBuilderService — execute npcs', () => {
 
     await svc.execute('default', { type: 'npcs', userInstruction: 'test' }, TEST_PATHS);
 
-    const systemMsg = (calls[0].messages as Array<{ role: string; content: string }>)[0];
+    const systemMsg = (calls[0].messages as Array<{ role: string; content: string }>)[1];
     expect(systemMsg.content).toContain('5');
   });
 });
@@ -221,7 +262,7 @@ describe('WorldBuilderService — execute from-description', () => {
       userInstruction: '城中有一个老铁匠，名叫王铁锤...',
     }, TEST_PATHS);
 
-    const systemMsg = (calls[0].messages as Array<{ role: string; content: string }>)[0];
+    const systemMsg = (calls[0].messages as Array<{ role: string; content: string }>)[1];
     expect(systemMsg.content).toContain('DESC_PROMPT');
   });
 });
