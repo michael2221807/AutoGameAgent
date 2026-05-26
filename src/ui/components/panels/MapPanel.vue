@@ -185,11 +185,16 @@ function clearSelection(): void {
   selectedEntry.value = null;
 }
 
-/** Children of selected location (for detail panel navigation) */
+/** Children of selected location (for detail panel navigation) — deduplicated by name */
 const selectedChildren = computed<LocationEntry[]>(() => {
   if (!selectedEntry.value) return [];
   const parent = selectedEntry.value.名称;
-  return allLocsWithPlaceholders.value.filter((l) => l.上级 === parent);
+  const seen = new Set<string>();
+  return allLocsWithPlaceholders.value.filter((l) => {
+    if (l.上级 !== parent || seen.has(l.名称)) return false;
+    seen.add(l.名称);
+    return true;
+  });
 });
 
 function navigateToChild(name: string): void {
