@@ -384,6 +384,13 @@ function buildGraphData() {
     }
   }
 
+  // Re-link children whose parents were just created as placeholders
+  for (const loc of locs) {
+    if (loc.上级 && !parentMap.has(loc.名称) && nameSet.has(loc.上级)) {
+      parentMap.set(loc.名称, loc.上级);
+    }
+  }
+
   const allLocs = [...locs, ...placeholders];
   // Rebuild children map with placeholders
   const fullChildrenMap = buildChildrenMap(allLocs);
