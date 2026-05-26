@@ -64,6 +64,7 @@ let cyInstance: CyCore | null = null;
 
 const selectedEntry = ref<LocationEntry | null>(null);
 const focusStack = ref<string[]>([]);
+const allLocsWithPlaceholders = ref<LocationEntry[]>([]);
 
 // ─── Color families ──────────────────────────────────────────────
 
@@ -176,7 +177,7 @@ function getExplorationState(
 // ─── Selection ───────────────────────────────────────────────────
 
 function selectByName(name: string): void {
-  const locs = validLocations.value;
+  const locs = allLocsWithPlaceholders.value;
   selectedEntry.value = locs.find((l) => l.名称 === name) ?? null;
 }
 
@@ -188,7 +189,7 @@ function clearSelection(): void {
 const selectedChildren = computed<LocationEntry[]>(() => {
   if (!selectedEntry.value) return [];
   const parent = selectedEntry.value.名称;
-  return validLocations.value.filter((l) => l.上级 === parent);
+  return allLocsWithPlaceholders.value.filter((l) => l.上级 === parent);
 });
 
 function navigateToChild(name: string): void {
@@ -370,11 +371,11 @@ function buildGraphData() {
       // Create placeholder parent (and its ancestors if `·`-delimited)
       let parentName = loc.上级;
       while (parentName && !nameSet.has(parentName)) {
-        placeholders.push({ 名称: parentName });
-        nameSet.add(parentName);
         const segments = parentName.split('·');
-        if (segments.length > 1) {
-          const grandparent = segments.slice(0, -1).join('·');
+        const grandparent = segments.length > 1 ? segments.slice(0, -1).join('·') : undefined;
+        placeholders.push({ 名称: parentName, 上级: grandparent });
+        nameSet.add(parentName);
+        if (grandparent) {
           parentMap.set(parentName, grandparent);
           parentName = grandparent;
         } else {
@@ -392,6 +393,7 @@ function buildGraphData() {
   }
 
   const allLocs = [...locs, ...placeholders];
+  allLocsWithPlaceholders.value = allLocs;
   // Rebuild children map with placeholders
   const fullChildrenMap = buildChildrenMap(allLocs);
 
