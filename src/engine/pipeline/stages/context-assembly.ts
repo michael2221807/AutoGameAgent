@@ -24,8 +24,9 @@ import type { PromptAssembler } from '../../prompt/prompt-assembler';
 import { eventBus } from '../../core/event-bus';
 import { stringifySnapshotForPrompt, stripTagFromMessages, NSFW_STRIP_TAG } from '../../memory/snapshot-sanitizer';
 import { loadShortTermInjectionSettings } from '../../memory/memory-manager';
-import { NpcPresenceService } from '../../social/npc-presence';
+import { NpcPresenceService, type NpcRecord } from '../../social/npc-presence';
 import { NpcContextRenderer } from '../../social/npc-context-renderer';
+import { NpcRelevanceScorer, DEFAULT_NPC_RELEVANCE_CONFIG } from '../../social/npc-relevance-scorer';
 import { buildSystemPrompt } from '../../prompt/system-prompt-builder';
 import { buildEnvironmentBlock } from '../../prompt/environment-block';
 import { PlotInjector } from '../../plot/plot-injector';
@@ -120,16 +121,85 @@ export class ContextAssemblyStage implements PipelineStage {
       ? (this.pack.engineFragments?.paceSlow ?? defaultPaceSlow)
       : (this.pack.engineFragments?.paceFast ?? defaultPaceFast);
 
-    // ── NPC Presence (Sprint Social-2) — read flag, render present/absent blocks ──
+    // ── NPC Presence + Relevance filtering ──
+    // When Engram is active with knowledge edges, uses NpcRelevanceScorer to
+    // tier NPCs by plot relevance, reducing token waste on irrelevant NPCs.
+    // Falls back to flat present/absent split when Engram is unavailable.
     const presenceEnabled = this.stateManager.get<boolean>('系统.设置.social.presenceEnabled') === true;
     let npcPresentBlock = '';
     let npcAbsentBlock = '';
     if (presenceEnabled) {
       const presenceSvc = new NpcPresenceService(this.stateManager, this.paths);
       const renderer = new NpcContextRenderer(presenceSvc, this.paths);
-      const split = renderer.renderSplit();
-      npcPresentBlock = split.presentBlock;
-      npcAbsentBlock = split.absentBlock;
+
+      const engramConfig = this.engramManager?.getConfig();
+      const useRelevanceFilter =
+        engramConfig?.enabled === true &&
+        engramConfig?.knowledgeEdgeMode === 'active' &&
+        this.unifiedRetriever?.lastReadSnapshot != null &&
+        engramConfig?.npcRelevanceFilter?.enabled !== false;
+
+      if (useRelevanceFilter) {
+        const engramData = this.stateManager.get<{
+          entities?: Array<{ name: string; type: string; lastSeen?: number; firstSeen: number; mentionCount: number; summary: string; is_embedded: boolean; attributes: Record<string, unknown> }>;
+          v2Edges?: import('../../memory/engram/knowledge-edge').EngramEdge[];
+        }>(this.paths.engramMemory);
+        const allNpcs = this.stateManager.get<NpcRecord[]>(this.paths.relationships) ?? [];
+        const nameField = this.paths.npcFieldNames?.name ?? '名称';
+        const playerName = this.stateManager.get<string>(this.paths.playerName) ?? '';
+
+        const filterConfig = engramConfig?.npcRelevanceFilter;
+        const scorer = new NpcRelevanceScorer(filterConfig ? {
+          recentRoundWindow: filterConfig.recentRoundWindow,
+          bfsHops: filterConfig.bfsHops,
+          minNpcCountForFilter: filterConfig.minNpcCountForFilter,
+          playerAliases: this.pack.engineFragments?.playerAliases as string[] | undefined ?? ['玩家'],
+        } : {
+          ...DEFAULT_NPC_RELEVANCE_CONFIG,
+          playerAliases: this.pack.engineFragments?.playerAliases as string[] | undefined ?? ['玩家'],
+        });
+        const relevance = scorer.score({
+          readSnapshot: this.unifiedRetriever!.lastReadSnapshot ?? null,
+          engramEntities: (engramData?.entities ?? []) as import('../../memory/engram/entity-builder').EngramEntity[],
+          engramEdges: engramData?.v2Edges ?? [],
+          currentRound: this.stateManager.get<number>(this.paths.roundNumber) ?? 0,
+          allNpcNames: allNpcs.map(n => String(n[nameField] ?? '')).filter(Boolean),
+          playerName,
+        });
+
+        if (!relevance.skipped) {
+          const tiered = renderer.renderTiered(relevance.relevantNames);
+          npcPresentBlock = tiered.presentBlock;
+          npcAbsentBlock = tiered.absentBlock;
+
+          const { fromSnapshot, fromRecentActivity, fromBfsExpansion } = relevance.signals;
+          const signalLookup = (name: string): string[] => {
+            const s: string[] = [];
+            if (fromSnapshot.includes(name)) s.push('snapshot');
+            if (fromRecentActivity.includes(name)) s.push('recent');
+            if (fromBfsExpansion.includes(name)) s.push('bfs');
+            return s;
+          };
+          ctx.meta['npcRelevance'] = {
+            ...tiered.stats,
+            signals: relevance.signals,
+            tiers: {
+              tier1: tiered.tierNames.tier1.map(name => ({ name, signals: signalLookup(name) })),
+              tier2Present: tiered.tierNames.tier2Present.map(name => ({ name })),
+              tier2Absent: tiered.tierNames.tier2Absent.map(name => ({ name, signals: signalLookup(name) })),
+              tier3: tiered.tierNames.tier3.map(name => ({ name })),
+            },
+          };
+        } else {
+          const split = renderer.renderSplit();
+          npcPresentBlock = split.presentBlock;
+          npcAbsentBlock = split.absentBlock;
+        }
+      } else {
+        const split = renderer.renderSplit();
+        npcPresentBlock = split.presentBlock;
+        npcAbsentBlock = split.absentBlock;
+      }
     }
 
     // ── CoT flags (Sprint CoT-2) — read once, freeze into ctx.meta ──

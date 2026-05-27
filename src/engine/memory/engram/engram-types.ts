@@ -102,6 +102,8 @@ export interface EngramConfig {
   edgeReviewPerFactCap?: number;
   /** Maximum total review pairs sent to AI per combine-repair round (default 40) */
   edgeReviewGlobalCap?: number;
+  /** NPC relevance filter: tiers NPC prompt injection by Engram relevance to reduce token waste */
+  npcRelevanceFilter?: import('../../social/npc-relevance-scorer').NpcRelevanceConfig & { enabled: boolean };
 }
 
 /**

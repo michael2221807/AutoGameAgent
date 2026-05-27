@@ -308,6 +308,9 @@ export class PostProcessStage implements PipelineStage {
     if (ctx.meta['engramRead']) {
       assistantEntry._engramRead = ctx.meta['engramRead'];
     }
+    if (ctx.meta['npcRelevance']) {
+      assistantEntry._npcRelevance = ctx.meta['npcRelevance'];
+    }
 
     // ── Phase 4 (2026-04-19): polish metadata ──
     //

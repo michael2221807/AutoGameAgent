@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// App doc: docs/user-guide/pages/game-engram-debug.md
+// App doc: docs/user-guide/pages/game-main.md §3.8.4 (EngramRoundViewer modal + NPC filter)
 /**
  * EngramRoundViewer — per-round Engram visualization showing write path
  * (what was extracted) and read path (what was recalled and why).
@@ -18,16 +18,20 @@ import type {
   ScoredComponent,
 } from '@/engine/memory/engram/engram-types';
 
+import type { NpcRelevanceMeta } from '@/engine/social/npc-relevance-scorer';
+
 interface Props {
   modelValue: boolean;
   write?: EngramWriteSnapshot | null;
   read?: EngramReadSnapshot | null;
+  npcRelevance?: NpcRelevanceMeta | null;
   roundNumber?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   write: null,
   read: null,
+  npcRelevance: null,
   roundNumber: 0,
 });
 
@@ -93,6 +97,23 @@ function outcomeLabel(o: ScoredCandidateTrace['outcome']): string {
     'filtered-as-redundant': t('mainGame.engram.outcome.filteredAsRedundant'),
   };
   return map[o] ?? o;
+}
+
+const showTier3 = ref(false);
+
+const npcSignalLabel: Record<string, string> = {
+  snapshot: '🔍 召回命中',
+  recent: '🕐 近期互动',
+  bfs: '🔗 NPC关联',
+};
+
+function fmtSignals(signals?: string[]): string {
+  if (!signals?.length) return '';
+  return signals.map(s => npcSignalLabel[s] ?? s).join(' + ');
+}
+
+function fmtTokenSaved(n: number): string {
+  return n >= 1000 ? `~${(n / 1000).toFixed(1)}K` : `~${n}`;
 }
 
 function fmtScore(n: number): string {
@@ -329,8 +350,62 @@ function fmtScore(n: number): string {
         </div>
       </section>
 
+      <!-- ═══ NPC RELEVANCE FILTERING ═══ -->
+      <section v-if="props.npcRelevance" class="erv__section">
+        <h3 class="erv__heading erv__heading--npc">🎭 NPC 上下文过滤</h3>
+
+        <div class="erv__npc-summary">
+          <span>共 {{ props.npcRelevance.tier1Count + props.npcRelevance.tier2PresentCount + props.npcRelevance.tier2AbsentCount + props.npcRelevance.tier3Count }} NPC →
+            {{ props.npcRelevance.tier1Count }} 详细 +
+            {{ props.npcRelevance.tier2PresentCount + props.npcRelevance.tier2AbsentCount }} 精简 +
+            {{ props.npcRelevance.tier3Count }} 略</span>
+          <span class="erv__npc-saved">💰 预估节省 {{ fmtTokenSaved(props.npcRelevance.totalSaved) }} tokens</span>
+        </div>
+
+        <div v-if="props.npcRelevance.tiers.tier1.length" class="erv__npc-tier">
+          <div class="erv__npc-tier-header erv__npc-tier-header--t1">Tier 1 — 详细档案（在场 + 相关）· {{ props.npcRelevance.tiers.tier1.length }} 人</div>
+          <div v-for="npc in props.npcRelevance.tiers.tier1" :key="npc.name" class="erv__npc-row">
+            <span class="erv__npc-dot erv__npc-dot--t1">●</span>
+            <span class="erv__npc-name">{{ npc.name }}</span>
+            <span v-if="npc.signals?.length" class="erv__npc-signals">{{ fmtSignals(npc.signals) }}</span>
+          </div>
+        </div>
+
+        <div v-if="props.npcRelevance.tiers.tier2Present.length" class="erv__npc-tier">
+          <div class="erv__npc-tier-header erv__npc-tier-header--t2">Tier 2a — 精简（在场但低相关）· {{ props.npcRelevance.tiers.tier2Present.length }} 人</div>
+          <div v-for="npc in props.npcRelevance.tiers.tier2Present" :key="npc.name" class="erv__npc-row">
+            <span class="erv__npc-dot erv__npc-dot--t2">○</span>
+            <span class="erv__npc-name">{{ npc.name }}</span>
+          </div>
+        </div>
+
+        <div v-if="props.npcRelevance.tiers.tier2Absent.length" class="erv__npc-tier">
+          <div class="erv__npc-tier-header erv__npc-tier-header--t2">Tier 2b — 精简（离场但相关）· {{ props.npcRelevance.tiers.tier2Absent.length }} 人</div>
+          <div v-for="npc in props.npcRelevance.tiers.tier2Absent" :key="npc.name" class="erv__npc-row">
+            <span class="erv__npc-dot erv__npc-dot--t2a">◉</span>
+            <span class="erv__npc-name">{{ npc.name }}</span>
+            <span v-if="npc.signals?.length" class="erv__npc-signals">{{ fmtSignals(npc.signals) }}</span>
+          </div>
+        </div>
+
+        <div v-if="props.npcRelevance.tiers.tier3.length" class="erv__npc-tier">
+          <div class="erv__npc-tier-header erv__npc-tier-header--t3 erv__npc-tier-header--clickable" @click="showTier3 = !showTier3">
+            {{ showTier3 ? '▾' : '▸' }} Tier 3 — 超精简 / 省略 · {{ props.npcRelevance.tiers.tier3.length }} 人
+          </div>
+          <div v-if="showTier3" class="erv__npc-tier3-list">
+            {{ props.npcRelevance.tiers.tier3.map(n => n.name).join('、') }}
+          </div>
+        </div>
+
+        <div class="erv__npc-legend">
+          <span>🔍 召回命中 = Engram 检索中出现</span>
+          <span>🕐 近期互动 = 主角边近期活跃</span>
+          <span>🔗 NPC关联 = NPC↔NPC 边间接关联</span>
+        </div>
+      </section>
+
       <!-- Empty state -->
-      <div v-if="!props.write && !props.read" class="erv__empty">
+      <div v-if="!props.write && !props.read && !props.npcRelevance" class="erv__empty">
         {{ $t('mainGame.engram.empty') }}
       </div>
     </div>
@@ -735,4 +810,78 @@ function fmtScore(n: number): string {
   font-style: italic;
 }
 
+/* ── NPC Relevance Section ── */
+.erv__heading--npc { color: #a87bdf; }
+
+.erv__npc-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-umber);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.erv__npc-saved {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.erv__npc-tier {
+  padding: var(--space-xs) 0;
+}
+
+.erv__npc-tier-header {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 0;
+  color: var(--color-text-umber);
+}
+.erv__npc-tier-header--t1 { color: #5bba6f; }
+.erv__npc-tier-header--t2 { color: var(--color-amber-400); }
+.erv__npc-tier-header--t3 { color: var(--color-text-umber); opacity: 0.7; }
+.erv__npc-tier-header--clickable { cursor: pointer; }
+
+.erv__npc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 2px 8px;
+  font-size: var(--font-size-sm);
+}
+
+.erv__npc-dot { font-size: 10px; flex-shrink: 0; width: 14px; text-align: center; }
+.erv__npc-dot--t1 { color: #5bba6f; }
+.erv__npc-dot--t2 { color: var(--color-amber-400); }
+.erv__npc-dot--t2a { color: #5b8def; }
+
+.erv__npc-name {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.erv__npc-signals {
+  font-size: 11px;
+  color: var(--color-text-umber);
+  opacity: 0.8;
+}
+
+.erv__npc-tier3-list {
+  font-size: 12px;
+  color: var(--color-text-umber);
+  opacity: 0.7;
+  padding: 4px 0 4px 8px;
+  line-height: 1.6;
+}
+
+.erv__npc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: 10px;
+  color: var(--color-text-umber);
+}
 </style>

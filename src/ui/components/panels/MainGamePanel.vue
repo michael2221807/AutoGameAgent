@@ -108,6 +108,7 @@ interface ChatMessage {
   // Engram per-round visualization snapshots
   _engramWrite?: import('@/engine/memory/engram/engram-types').EngramWriteSnapshot;
   _engramRead?: import('@/engine/memory/engram/engram-types').EngramReadSnapshot;
+  _npcRelevance?: import('@/engine/social/npc-relevance-scorer').NpcRelevanceMeta;
   // Phase 4 metadata (2026-04-19) — polish state for 优化/原文 toggle.
   _polish?: {
     applied: boolean;
@@ -263,6 +264,7 @@ function openRawViewer(msg: ChatMessage): void {
 const activeEngramPayload = ref<{
   write?: ChatMessage['_engramWrite'];
   read?: ChatMessage['_engramRead'];
+  npcRelevance?: ChatMessage['_npcRelevance'];
   roundNumber: number;
 } | null>(null);
 const showEngramViewer = ref(false);
@@ -272,6 +274,7 @@ function openEngramViewer(msg: ChatMessage): void {
   activeEngramPayload.value = {
     write: msg._engramWrite,
     read: msg._engramRead,
+    npcRelevance: msg._npcRelevance,
     roundNumber: round,
   };
   showEngramViewer.value = true;
@@ -1098,6 +1101,7 @@ watch(
       v-model="showEngramViewer"
       :write="activeEngramPayload?.write ?? null"
       :read="activeEngramPayload?.read ?? null"
+      :npc-relevance="activeEngramPayload?.npcRelevance ?? null"
       :round-number="activeEngramPayload?.roundNumber ?? 0"
     />
   </div>

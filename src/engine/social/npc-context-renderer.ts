@@ -22,6 +22,24 @@ export interface RenderSplitResult {
   absentBlock: string;
 }
 
+export interface TieredRenderResult {
+  presentBlock: string;
+  absentBlock: string;
+  stats: {
+    tier1Count: number;
+    tier2PresentCount: number;
+    tier2AbsentCount: number;
+    tier3Count: number;
+    totalSaved: number;
+  };
+  tierNames: {
+    tier1: string[];
+    tier2Present: string[];
+    tier2Absent: string[];
+    tier3: string[];
+  };
+}
+
 export class NpcContextRenderer {
   private fields: EnginePathConfig['npcFieldNames'];
 
@@ -136,5 +154,66 @@ export class NpcContextRenderer {
     if (v === undefined || v === null) return;
     if (typeof v === 'string' && !v.trim()) return;
     lines.push(`- **${label}**：${String(v)}`);
+  }
+
+  renderTiered(relevantNames: Set<string>): TieredRenderResult {
+    const { present, absent } = this.presenceService.partition();
+    const f = this.fields;
+
+    const tier1 = present.filter(n => relevantNames.has(this.str(n, f.name)));
+    const tier2Present = present.filter(n => !relevantNames.has(this.str(n, f.name)));
+    const tier2Absent = absent.filter(n => relevantNames.has(this.str(n, f.name)));
+    const tier3 = absent.filter(n => !relevantNames.has(this.str(n, f.name)));
+
+    const presentParts: string[] = [];
+    if (tier1.length > 0) {
+      presentParts.push(tier1.map((n) => this.renderDetailedNpc(n)).join('\n\n---\n\n'));
+    }
+    if (tier2Present.length > 0) {
+      presentParts.push('\n\n#### 其他在场人物（简要）\n');
+      presentParts.push(tier2Present.map((n) => this.renderLeanNpc(n)).join('\n'));
+    }
+    const presentBlock = presentParts.length > 0
+      ? presentParts.join('')
+      : '（当前场景没有 NPC 在场）';
+
+    const absentParts: string[] = [];
+    if (tier2Absent.length > 0) {
+      absentParts.push(tier2Absent.map((n) => this.renderLeanNpc(n)).join('\n'));
+    }
+    if (tier3.length > 0) {
+      absentParts.push('\n#### 其他离场人物\n');
+      absentParts.push(tier3.map((n) => this.renderUltraLeanNpc(n)).join('、'));
+    }
+    const absentBlock = absentParts.join('');
+
+    // Rough token estimates based on average NPC field density
+    const DETAILED = 2000, LEAN = 150, ULTRA = 20;
+    const savedFromDowngrade = tier2Present.length * (DETAILED - LEAN) + tier3.length * (LEAN - ULTRA);
+
+    return {
+      presentBlock,
+      absentBlock,
+      stats: {
+        tier1Count: tier1.length,
+        tier2PresentCount: tier2Present.length,
+        tier2AbsentCount: tier2Absent.length,
+        tier3Count: tier3.length,
+        totalSaved: savedFromDowngrade,
+      },
+      tierNames: {
+        tier1: tier1.map(n => this.str(n, f.name)),
+        tier2Present: tier2Present.map(n => this.str(n, f.name)),
+        tier2Absent: tier2Absent.map(n => this.str(n, f.name)),
+        tier3: tier3.map(n => this.str(n, f.name)),
+      },
+    };
+  }
+
+  private renderUltraLeanNpc(npc: NpcRecord): string {
+    const f = this.fields;
+    const name = this.str(npc, f.name);
+    const location = this.str(npc, f.location);
+    return location ? `${name}(${location})` : name;
   }
 }
