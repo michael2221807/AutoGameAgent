@@ -89,13 +89,19 @@ export class ContextAssemblyStage implements PipelineStage {
     // nsfwMode=false 时从发给 AI 的 JSON 快照剥离 私密信息 和 角色.身体，
     // 原始状态树保持不变（存档完整，UI 可继续显示）。
     const nsfwMode = this.stateManager.get<boolean>('系统.nsfwMode') === true;
+    const presenceEnabled = this.stateManager.get<boolean>('系统.设置.social.presenceEnabled') === true;
     // 2026-04-11 token 节省：
     // 1. 去重：叙事历史 / 记忆 / engramMemory / 上次对话前快照 **无条件**从 JSON 剥离
     //    （它们通过 chatHistory + MEMORY_BLOCK 等专用渠道独立注入，不应再在
     //     GAME_STATE_JSON 里重复）
     // 2. 紧凑：indent=0 去掉 JSON 缩进空白，单回合 prompt 可节省数千 token
     // 见 `snapshot-sanitizer.ts` 的 `PROMPT_ALWAYS_STRIP_PATHS` 注释。
-    const gameStateJson = stringifySnapshotForPrompt(stateSnapshot, nsfwMode, 0);
+    // 2026-05-28: When presenceEnabled, NPC data is injected via presencePartition
+    // template (tiered by relevance). Strip from GAME_STATE_JSON to avoid duplication.
+    const gameStateJson = stringifySnapshotForPrompt(
+      stateSnapshot, nsfwMode, 0,
+      presenceEnabled ? ['社交.关系'] : undefined,
+    );
 
     // ── 4a. 行动选项模式 (bugfix 2026-04-11) ──
     //
@@ -125,7 +131,6 @@ export class ContextAssemblyStage implements PipelineStage {
     // When Engram is active with knowledge edges, uses NpcRelevanceScorer to
     // tier NPCs by plot relevance, reducing token waste on irrelevant NPCs.
     // Falls back to flat present/absent split when Engram is unavailable.
-    const presenceEnabled = this.stateManager.get<boolean>('系统.设置.social.presenceEnabled') === true;
     let npcPresentBlock = '';
     let npcAbsentBlock = '';
     if (presenceEnabled) {
@@ -168,7 +173,7 @@ export class ContextAssemblyStage implements PipelineStage {
         });
 
         if (!relevance.skipped) {
-          const tiered = renderer.renderTiered(relevance.relevantNames);
+          const tiered = renderer.renderTiered(relevance.relevantNames, relevance.npcSignalCounts);
           npcPresentBlock = tiered.presentBlock;
           npcAbsentBlock = tiered.absentBlock;
 

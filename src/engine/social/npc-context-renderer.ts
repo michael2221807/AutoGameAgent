@@ -156,18 +156,30 @@ export class NpcContextRenderer {
     lines.push(`- **${label}**：${String(v)}`);
   }
 
-  renderTiered(relevantNames: Set<string>): TieredRenderResult {
+  renderTiered(
+    relevantNames: Set<string>,
+    npcSignalCounts?: Map<string, number>,
+  ): TieredRenderResult {
     const { present, absent } = this.presenceService.partition();
     const f = this.fields;
 
-    const tier1 = present.filter(n => relevantNames.has(this.str(n, f.name)));
+    const tier1Present = present.filter(n => relevantNames.has(this.str(n, f.name)));
     const tier2Present = present.filter(n => !relevantNames.has(this.str(n, f.name)));
-    const tier2Absent = absent.filter(n => relevantNames.has(this.str(n, f.name)));
+
+    const absentRelevant = absent.filter(n => relevantNames.has(this.str(n, f.name)));
+    const promotedAbsent = npcSignalCounts
+      ? absentRelevant.filter(n => (npcSignalCounts.get(this.str(n, f.name)) ?? 0) >= 2)
+      : [];
+    const tier2Absent = absentRelevant.filter(n =>
+      !promotedAbsent.includes(n),
+    );
     const tier3 = absent.filter(n => !relevantNames.has(this.str(n, f.name)));
 
+    const tier1 = [...tier1Present, ...promotedAbsent];
+
     const presentParts: string[] = [];
-    if (tier1.length > 0) {
-      presentParts.push(tier1.map((n) => this.renderDetailedNpc(n)).join('\n\n---\n\n'));
+    if (tier1Present.length > 0) {
+      presentParts.push(tier1Present.map((n) => this.renderDetailedNpc(n)).join('\n\n---\n\n'));
     }
     if (tier2Present.length > 0) {
       presentParts.push('\n\n#### 其他在场人物（简要）\n');
@@ -178,7 +190,11 @@ export class NpcContextRenderer {
       : '（当前场景没有 NPC 在场）';
 
     const absentParts: string[] = [];
+    if (promotedAbsent.length > 0) {
+      absentParts.push(promotedAbsent.map((n) => this.renderDetailedNpc(n)).join('\n\n---\n\n'));
+    }
     if (tier2Absent.length > 0) {
+      if (promotedAbsent.length > 0) absentParts.push('\n\n');
       absentParts.push(tier2Absent.map((n) => this.renderLeanNpc(n)).join('\n'));
     }
     if (tier3.length > 0) {
@@ -187,7 +203,6 @@ export class NpcContextRenderer {
     }
     const absentBlock = absentParts.join('');
 
-    // Rough token estimates based on average NPC field density
     const DETAILED = 2000, LEAN = 150, ULTRA = 20;
     const savedFromDowngrade = tier2Present.length * (DETAILED - LEAN) + tier3.length * (LEAN - ULTRA);
 

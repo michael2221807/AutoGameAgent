@@ -363,7 +363,7 @@ function fmtScore(n: number): string {
         </div>
 
         <div v-if="props.npcRelevance.tiers.tier1.length" class="erv__npc-tier">
-          <div class="erv__npc-tier-header erv__npc-tier-header--t1">Tier 1 — 详细档案（在场 + 相关）· {{ props.npcRelevance.tiers.tier1.length }} 人</div>
+          <div class="erv__npc-tier-header erv__npc-tier-header--t1">Tier 1 — 详细档案（高相关）· {{ props.npcRelevance.tiers.tier1.length }} 人</div>
           <div v-for="npc in props.npcRelevance.tiers.tier1" :key="npc.name" class="erv__npc-row">
             <span class="erv__npc-dot erv__npc-dot--t1">●</span>
             <span class="erv__npc-name">{{ npc.name }}</span>

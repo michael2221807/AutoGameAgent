@@ -159,12 +159,21 @@ function pathMatchesStripRule(path: string, rule: string): boolean {
  * - `PROMPT_ALWAYS_STRIP_PATHS`：无条件剥离（去重 / 瘦身）
  * - `NSFW_STRIP_PATHS`：仅在 `nsfwMode=false` 时剥离
  */
-function shouldStripAtPath(path: string, nsfwMode: boolean): boolean {
+function shouldStripAtPath(
+  path: string,
+  nsfwMode: boolean,
+  additionalPaths?: readonly string[],
+): boolean {
   for (const rule of PROMPT_ALWAYS_STRIP_PATHS) {
     if (pathMatchesStripRule(path, rule)) return true;
   }
   if (!nsfwMode) {
     for (const rule of NSFW_STRIP_PATHS) {
+      if (pathMatchesStripRule(path, rule)) return true;
+    }
+  }
+  if (additionalPaths) {
+    for (const rule of additionalPaths) {
       if (pathMatchesStripRule(path, rule)) return true;
     }
   }
@@ -187,7 +196,12 @@ function shouldStripAtPath(path: string, nsfwMode: boolean): boolean {
  * 在数组上下文里，命中 strip 的元素被 skip（不保留位置），后续索引前移。
  * 当前所有 strip 规则都作用于对象键而非数组元素本身，所以索引变化无实际影响。
  */
-function sanitizeDeep(value: unknown, path: string, nsfwMode: boolean): unknown {
+function sanitizeDeep(
+  value: unknown,
+  path: string,
+  nsfwMode: boolean,
+  additionalPaths?: readonly string[],
+): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value !== 'object') return value;
 
@@ -195,8 +209,8 @@ function sanitizeDeep(value: unknown, path: string, nsfwMode: boolean): unknown 
     const result: unknown[] = [];
     for (let i = 0; i < value.length; i++) {
       const childPath = `${path}.${i}`;
-      if (shouldStripAtPath(childPath, nsfwMode)) continue;
-      result.push(sanitizeDeep(value[i], childPath, nsfwMode));
+      if (shouldStripAtPath(childPath, nsfwMode, additionalPaths)) continue;
+      result.push(sanitizeDeep(value[i], childPath, nsfwMode, additionalPaths));
     }
     return result;
   }
@@ -206,8 +220,8 @@ function sanitizeDeep(value: unknown, path: string, nsfwMode: boolean): unknown 
   const obj = value as Record<string, unknown>;
   for (const key of Object.keys(obj)) {
     const childPath = path ? `${path}.${key}` : key;
-    if (shouldStripAtPath(childPath, nsfwMode)) continue;
-    result[key] = sanitizeDeep(obj[key], childPath, nsfwMode);
+    if (shouldStripAtPath(childPath, nsfwMode, additionalPaths)) continue;
+    result[key] = sanitizeDeep(obj[key], childPath, nsfwMode, additionalPaths);
   }
   return result;
 }
@@ -225,12 +239,13 @@ export function stringifySnapshotForPrompt(
   snapshot: Record<string, unknown>,
   nsfwMode: boolean,
   indent: number = 0,
+  additionalStripPaths?: readonly string[],
 ): string {
   // 2026-04-11：无论 nsfwMode 是什么都要做 sanitizeDeep —
   // 原来 nsfwMode=true 时走的快捷 JSON.stringify(snapshot) 路径会把叙事历史/
   // 记忆/engramMemory 等**总是**要剥离的重复路径也原样发送出去。新版本总是
   // 走 sanitizeDeep，由 `shouldStripAtPath` 按 nsfwMode 决定是否叠加 NSFW 规则。
-  const cleaned = sanitizeDeep(snapshot, '', nsfwMode);
+  const cleaned = sanitizeDeep(snapshot, '', nsfwMode, additionalStripPaths);
   return indent > 0
     ? JSON.stringify(cleaned, null, indent)
     : JSON.stringify(cleaned);

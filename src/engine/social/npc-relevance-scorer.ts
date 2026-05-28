@@ -43,6 +43,8 @@ export interface NpcRelevanceResult {
     fromRecentActivity: string[];
     fromBfsExpansion: string[];
   };
+  /** Per-NPC count of how many distinct signals matched (0-3). */
+  npcSignalCounts: Map<string, number>;
 }
 
 export interface NpcTierEntry { name: string; signals?: string[] }
@@ -79,6 +81,7 @@ export class NpcRelevanceScorer {
       relevantNames: new Set(allNpcNames),
       skipped: true,
       signals: { fromSnapshot: [], fromRecentActivity: [], fromBfsExpansion: [] },
+      npcSignalCounts: new Map(),
     };
 
     if (allNpcNames.length < this.config.minNpcCountForFilter) return allRelevant;
@@ -103,10 +106,22 @@ export class NpcRelevanceScorer {
 
     if (relevantNames.size === 0) return allRelevant;
 
+    const npcSignalCounts = new Map<string, number>();
+    for (const name of fromSnapshot) {
+      npcSignalCounts.set(name, (npcSignalCounts.get(name) ?? 0) + 1);
+    }
+    for (const name of fromRecentActivity) {
+      npcSignalCounts.set(name, (npcSignalCounts.get(name) ?? 0) + 1);
+    }
+    for (const name of fromBfsExpansion) {
+      npcSignalCounts.set(name, (npcSignalCounts.get(name) ?? 0) + 1);
+    }
+
     return {
       relevantNames,
       skipped: false,
       signals: { fromSnapshot, fromRecentActivity, fromBfsExpansion },
+      npcSignalCounts,
     };
   }
 

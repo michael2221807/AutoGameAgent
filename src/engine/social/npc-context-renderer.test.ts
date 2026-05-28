@@ -137,6 +137,60 @@ describe('NpcContextRenderer.renderTiered', () => {
   });
 });
 
+describe('NpcContextRenderer.renderTiered — multi-signal promotion', () => {
+  const npcs = [
+    makeNpc('张三', true, { 描述: '铁匠' }),
+    makeNpc('李四', false, { 描述: '药师', 背景: '世代行医' }),
+    makeNpc('王五', false, { 关系状态: '朋友' }),
+    makeNpc('赵六', false),
+  ];
+
+  it('promotes absent NPC with ≥2 signals to tier 1', () => {
+    const renderer = makeRenderer(npcs);
+    const relevant = new Set(['张三', '李四', '王五']);
+    const signalCounts = new Map([['张三', 1], ['李四', 2], ['王五', 1]]);
+    const result = renderer.renderTiered(relevant, signalCounts);
+
+    // 李四 is absent but has 2 signals → promoted to tier1
+    expect(result.tierNames.tier1).toContain('李四');
+    expect(result.tierNames.tier2Absent).not.toContain('李四');
+    // 王五 has 1 signal → stays tier2Absent
+    expect(result.tierNames.tier2Absent).toContain('王五');
+    expect(result.stats.tier1Count).toBe(2); // 张三 (present) + 李四 (promoted)
+    expect(result.stats.tier2AbsentCount).toBe(1); // 王五 only
+  });
+
+  it('promoted absent NPC gets detailed rendering in absentBlock', () => {
+    const renderer = makeRenderer(npcs);
+    const relevant = new Set(['李四']);
+    const signalCounts = new Map([['李四', 3]]);
+    const result = renderer.renderTiered(relevant, signalCounts);
+
+    expect(result.absentBlock).toContain('### 李四');
+    expect(result.absentBlock).toContain('**描述**');
+  });
+
+  it('without signalCounts, no promotion happens (backward compat)', () => {
+    const renderer = makeRenderer(npcs);
+    const relevant = new Set(['张三', '李四']);
+    const result = renderer.renderTiered(relevant);
+
+    // 李四 is absent + relevant → tier2Absent (no promotion without signalCounts)
+    expect(result.tierNames.tier2Absent).toContain('李四');
+    expect(result.tierNames.tier1).not.toContain('李四');
+  });
+
+  it('NPC with exactly 1 signal is not promoted', () => {
+    const renderer = makeRenderer(npcs);
+    const relevant = new Set(['李四']);
+    const signalCounts = new Map([['李四', 1]]);
+    const result = renderer.renderTiered(relevant, signalCounts);
+
+    expect(result.tierNames.tier2Absent).toContain('李四');
+    expect(result.tierNames.tier1).not.toContain('李四');
+  });
+});
+
 describe('NpcContextRenderer.renderUltraLeanNpc (via renderTiered)', () => {
   it('formats as name(location) when location exists', () => {
     const renderer = makeRenderer([makeNpc('张三', false, { 位置: '城北' })]);

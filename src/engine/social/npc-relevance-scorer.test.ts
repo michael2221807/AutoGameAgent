@@ -489,6 +489,60 @@ describe('NpcRelevanceScorer', () => {
     });
   });
 
+  describe('npcSignalCounts', () => {
+    it('counts signals per NPC correctly', () => {
+      const snapshot = makeSnapshot([
+        makeCandidate('entity', { entityName: '张三' }),
+        makeCandidate('edge', { text: '[张三→李四] 张三教李四武功' }),
+      ]);
+
+      const result = scorer.score({
+        readSnapshot: snapshot,
+        engramEntities: [makeEntity('张三'), makeEntity('李四')],
+        engramEdges: [
+          makeEdge({ sourceEntity: PLAYER, targetEntity: '张三', lastSeenRound: 9 }),
+          makeEdge({ sourceEntity: '张三', targetEntity: '李四' }),
+        ],
+        currentRound: 10,
+        allNpcNames: ALL_NPCS,
+        playerName: PLAYER,
+      });
+
+      // 张三: fromSnapshot + fromRecentActivity = 2 signals
+      expect(result.npcSignalCounts.get('张三')).toBe(2);
+      // 李四: fromSnapshot only (already a seed, BFS won't re-discover)
+      expect(result.npcSignalCounts.get('李四')).toBe(1);
+    });
+
+    it('returns empty map when skipped', () => {
+      const result = scorer.score({
+        readSnapshot: null,
+        engramEntities: [],
+        engramEdges: [],
+        currentRound: 10,
+        allNpcNames: ALL_NPCS,
+        playerName: PLAYER,
+      });
+
+      expect(result.npcSignalCounts.size).toBe(0);
+    });
+
+    it('NPC with single signal has count=1', () => {
+      const result = scorer.score({
+        readSnapshot: null,
+        engramEntities: [makeEntity('张三')],
+        engramEdges: [
+          makeEdge({ sourceEntity: PLAYER, targetEntity: '张三', lastSeenRound: 9 }),
+        ],
+        currentRound: 10,
+        allNpcNames: ALL_NPCS,
+        playerName: PLAYER,
+      });
+
+      expect(result.npcSignalCounts.get('张三')).toBe(1);
+    });
+  });
+
   describe('hub simulation: player connected to ALL NPCs', () => {
     it('with recency gate, only recent player edges pass', () => {
       const edges: EngramEdge[] = ALL_NPCS.map((name, i) =>
