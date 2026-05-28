@@ -16,6 +16,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useEngramEditor } from '@/ui/composables/useEngramEditor';
+import { useBatchSolidify } from '@/ui/composables/useBatchSolidify';
 import { loadEngramConfig } from '@/engine/memory/engram/engram-config';
 import { inject } from 'vue';
 import type { StateManager } from '@/engine/core/state-manager';
@@ -42,6 +43,8 @@ try {
   // EngramEditor not provided — panel will show not-enabled state
 }
 
+const batchSolidify = useBatchSolidify();
+
 // ─── Reactive data ───
 const entities = ref<EngramEntity[]>([]);
 const edges = ref<EngramEdge[]>([]);
@@ -50,6 +53,12 @@ const coverage = ref<CoverageStats>({
   npcsWithEntity: 0,
   missingNpcNames: [],
   coveragePercent: 100,
+  totalLocations: 0,
+  locationsWithEntity: 0,
+  missingLocationNames: [],
+  locationCoveragePercent: 100,
+  totalEdges: 0,
+  edgesBySource: { opening: 0, user: 0, 'batch-sync': 0, 'card-import': 0, legacy: 0 },
 });
 
 function loadData(): void {
@@ -327,6 +336,25 @@ async function vectorizeAll(): Promise<void> {
   }
 }
 
+// ─── Batch solidify ───
+async function runBatchSolidify(): Promise<void> {
+  if (!batchSolidify) return;
+  await batchSolidify.run();
+  loadData();
+}
+
+// ─── Coverage source distribution (non-zero buckets only) ───
+const nonZeroSources = computed(() => {
+  const src = coverage.value.edgesBySource;
+  const labels: Array<{ key: string; count: number }> = [];
+  if (src.opening > 0) labels.push({ key: 'engram.batchSolidify.stats.sourceOpening', count: src.opening });
+  if (src.user > 0) labels.push({ key: 'engram.batchSolidify.stats.sourceUser', count: src.user });
+  if (src['batch-sync'] > 0) labels.push({ key: 'engram.batchSolidify.stats.sourceBatchSync', count: src['batch-sync'] });
+  if (src['card-import'] > 0) labels.push({ key: 'engram.batchSolidify.stats.sourceCardImport', count: src['card-import'] });
+  if (src.legacy > 0) labels.push({ key: 'engram.batchSolidify.stats.sourceLegacy', count: src.legacy });
+  return labels;
+});
+
 // ─── Graph interaction placeholders ───
 const highlightedEntityName = ref<string | null>(null);
 const highlightedEdgeId = ref<string | null>(null);
@@ -416,22 +444,89 @@ const edgeSectionOpen = ref(true);
           />
         </div>
 
-        <!-- ── Coverage bar ── -->
-        <div v-if="coverage.totalNpcs > 0" class="coverage-section">
+        <!-- ── Coverage & Batch Solidify ── -->
+        <div v-if="coverage.totalNpcs > 0 || coverage.totalLocations > 0" class="coverage-section">
           <div class="coverage-header">
-            <span class="coverage-title">{{ t('engram.editor.coverage.title') }}</span>
-            <span class="coverage-ratio">{{ coverage.npcsWithEntity }}/{{ coverage.totalNpcs }}</span>
+            <span class="coverage-title">{{ t('engram.batchSolidify.title') }}</span>
           </div>
-          <div class="coverage-bar-track">
-            <div
-              class="coverage-bar-fill"
-              :style="{ width: coverage.coveragePercent + '%' }"
-            />
+
+          <!-- NPC coverage bar -->
+          <div v-if="coverage.totalNpcs > 0" class="coverage-row"
+               :title="`${coverage.npcsWithEntity} proper entities / ${coverage.totalNpcs} non-普通 NPCs in 社交.関系 (excluding _pendingEnrichment stubs)`">
+            <span class="coverage-label">{{ t('engram.batchSolidify.stats.npc') }}</span>
+            <div class="coverage-bar-track">
+              <div class="coverage-bar-fill" :style="{ width: coverage.coveragePercent + '%' }" />
+            </div>
+            <span class="coverage-ratio">{{ coverage.npcsWithEntity }}/{{ coverage.totalNpcs }} ({{ coverage.coveragePercent }}%)</span>
           </div>
-          <div class="coverage-pct">{{ coverage.coveragePercent }}%</div>
-          <div v-if="coverage.missingNpcNames.length > 0" class="coverage-missing">
-            <span class="coverage-missing-label">{{ t('engram.editor.coverage.missing') }}:</span>
-            <span class="coverage-missing-names">{{ coverage.missingNpcNames.join(', ') }}</span>
+
+          <!-- Location coverage bar -->
+          <div v-if="coverage.totalLocations > 0" class="coverage-row"
+               :title="`${coverage.locationsWithEntity} proper location entities / ${coverage.totalLocations} locations in 世界.地点信息 (excluding _pendingEnrichment stubs)`">
+            <span class="coverage-label">{{ t('engram.batchSolidify.stats.location') }}</span>
+            <div class="coverage-bar-track">
+              <div class="coverage-bar-fill" :style="{ width: coverage.locationCoveragePercent + '%' }" />
+            </div>
+            <span class="coverage-ratio">{{ coverage.locationsWithEntity }}/{{ coverage.totalLocations }} ({{ coverage.locationCoveragePercent }}%)</span>
+          </div>
+
+          <!-- Coverage formula annotation -->
+          <div class="coverage-formula">
+            = Engram proper entities / state tree entries (stubs excluded)
+          </div>
+
+          <!-- Edge count + source distribution -->
+          <div v-if="coverage.totalEdges > 0" class="coverage-edge-stats">
+            <span class="coverage-edge-count">{{ t('engram.batchSolidify.stats.edges') }} {{ coverage.totalEdges }}</span>
+            <span
+              v-for="src in nonZeroSources"
+              :key="src.key"
+              class="source-chip"
+            >{{ t(src.key) }} {{ src.count }}</span>
+          </div>
+
+          <!-- Operations row: solidify + vectorize side by side -->
+          <div class="ops-row">
+            <!-- Batch solidify (AI edge generation) -->
+            <button
+              v-if="batchSolidify.available"
+              class="btn-op btn-op--solidify"
+              :disabled="batchSolidify.isRunning.value"
+              :title="t('engram.batchSolidify.buttonTooltip')"
+              @click="runBatchSolidify"
+            >
+              <span v-if="batchSolidify.isRunning.value" class="spinner-sm" />
+              <span v-else class="op-icon">&#9889;</span>
+              {{ batchSolidify.isRunning.value ? batchSolidify.getProgressMessage() : t('engram.batchSolidify.buttonLabel') }}
+            </button>
+            <button
+              v-if="batchSolidify.available && batchSolidify.lastError.value"
+              class="btn-op btn-op--retry"
+              :disabled="batchSolidify.isRunning.value"
+              @click="runBatchSolidify"
+            >{{ t('engram.batchSolidify.retry') }}</button>
+
+            <!-- Vectorize (embedding computation, no AI) -->
+            <button
+              class="btn-op btn-op--vectorize"
+              :disabled="vectorizing || pendingCount === 0"
+              @click="vectorizeAll"
+            >
+              <span v-if="vectorizing" class="spinner-sm" />
+              {{ vectorizing ? t('engram.editor.vectorize.running') : t('engram.editor.vectorize.button') }}
+            </button>
+            <span v-if="pendingCount > 0" class="pending-hint">{{ pendingCount }} {{ t('engram.editor.stats.pending') }}</span>
+          </div>
+
+          <!-- Missing names -->
+          <div v-if="coverage.missingNpcNames.length > 0 || coverage.missingLocationNames.length > 0" class="coverage-missing">
+            <span class="coverage-missing-label">{{ t('engram.batchSolidify.stats.missing') }}:</span>
+            <span class="coverage-missing-names">
+              {{ [...coverage.missingNpcNames, ...coverage.missingLocationNames].slice(0, 5).join(', ') }}
+              <template v-if="coverage.missingNpcNames.length + coverage.missingLocationNames.length > 5">
+                ... (+{{ coverage.missingNpcNames.length + coverage.missingLocationNames.length - 5 }})
+              </template>
+            </span>
           </div>
         </div>
 
@@ -706,20 +801,7 @@ const edgeSectionOpen = ref(true);
           </Transition>
         </section>
 
-        <!-- ── Operations bar ── -->
-        <div class="operations-bar">
-          <button
-            class="btn-vectorize"
-            :disabled="vectorizing || pendingCount === 0"
-            @click="vectorizeAll"
-          >
-            <span v-if="vectorizing" class="spinner" />
-            {{ vectorizing ? t('engram.editor.vectorize.running') : t('engram.editor.vectorize.button') }}
-          </button>
-          <span v-if="!vectorizing && pendingCount > 0" class="vectorize-hint">
-            {{ pendingCount }} {{ t('engram.editor.stats.pending') }}
-          </span>
-        </div>
+        <!-- Operations bar removed — buttons moved to coverage card -->
       </div>
     </template>
   </div>
@@ -900,7 +982,7 @@ const edgeSectionOpen = ref(true);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .coverage-title {
@@ -909,14 +991,31 @@ const edgeSectionOpen = ref(true);
   color: var(--color-text-secondary);
 }
 
+.coverage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.coverage-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  min-width: 36px;
+  flex-shrink: 0;
+}
+
 .coverage-ratio {
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--color-text-bone);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .coverage-bar-track {
-  width: 100%;
+  flex: 1;
   height: 6px;
   background: var(--color-surface-elevated);
   border-radius: 3px;
@@ -930,11 +1029,106 @@ const edgeSectionOpen = ref(true);
   transition: width var(--duration-normal, 0.3s) ease;
 }
 
-.coverage-pct {
+.coverage-edge-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  margin-bottom: 8px;
   font-size: 0.75rem;
   color: var(--color-text-muted);
-  margin-top: 4px;
-  text-align: right;
+}
+
+.coverage-edge-count {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Compact operations row (solidify + vectorize side by side) ── */
+.ops-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-op {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  min-height: 30px;
+}
+
+.btn-op:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--color-sage-400, #8a9e6c);
+}
+
+.btn-op:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-op--solidify {
+  border-color: var(--color-sage-600, #5a7a6a);
+  color: var(--color-sage-400, #8a9e6c);
+}
+
+.btn-op--retry {
+  border-color: var(--color-amber-400, #c9a040);
+  color: var(--color-amber-400, #c9a040);
+}
+
+.btn-op--vectorize {
+  color: var(--color-text-muted);
+}
+
+.op-icon {
+  font-size: 0.85rem;
+}
+
+.spinner-sm {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--color-sage-400, #8a9e6c);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.pending-hint {
+  font-size: 0.72rem;
+  color: var(--color-amber-400, #c9a040);
+}
+
+.coverage-formula {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #555);
+  font-style: italic;
+  margin-top: 2px;
+  margin-bottom: 4px;
 }
 
 .coverage-missing {
@@ -950,6 +1144,20 @@ const edgeSectionOpen = ref(true);
 
 .coverage-missing-names {
   color: var(--color-text-umber);
+}
+
+@media (max-width: 640px) {
+  .coverage-row {
+    flex-wrap: wrap;
+  }
+  .coverage-bar-track {
+    width: 100%;
+    flex: none;
+  }
+  .coverage-edge-stats {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 /* ── Collapsible sections (debug-section pattern) ── */

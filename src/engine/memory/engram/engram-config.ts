@@ -45,7 +45,7 @@ export function saveEngramConfig(config: EngramConfig): void {
   try {
     localStorage.setItem(ENGRAM_CONFIG_KEY, JSON.stringify(config));
     // 通知 UI（如 LeftSidebar）Engram 配置已变更，以便同步可见性开关
-    eventBus.emit('engram:config-changed', { debug: config.debug });
+    eventBus.emit('engram:config-changed', { debug: config.debug, enabled: config.enabled });
   } catch (err) {
     console.warn('[EngramConfig] 保存失败（localStorage 不可用）:', err);
   }

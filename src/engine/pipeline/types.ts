@@ -506,6 +506,20 @@ export interface EnginePathConfig {
    * 接收剧情信息，不需要看原始数据模型。
    */
   plotDirection: string;
+
+  /** Location field names (Story 4 — Engram batch solidify needs location name/description/connections) */
+  locationFieldNames: EngineLocationFieldNames;
+
+  /** NPC type value to exclude from Engram coverage (default: '普通') */
+  npcTypeExclude: string;
+}
+
+/** Location object field name mappings — same pattern as EngineNpcFieldNames */
+export interface EngineLocationFieldNames {
+  name: string;
+  description: string;
+  connections: string;
+  npcList: string[];
 }
 
 /**
@@ -711,6 +725,13 @@ export const DEFAULT_ENGINE_PATHS: EnginePathConfig = {
   reasoningHistory: '元数据.推理历史',
   storyPlan: '元数据.剧情规划',
   plotDirection: '元数据.剧情导向',
+  locationFieldNames: {
+    name: '名称',
+    description: '描述',
+    connections: '连接',
+    npcList: ['NPC', '常驻NPC'],
+  },
+  npcTypeExclude: '普通',
   npcFieldNames: {
     // 基础信息（现有字段；本 sprint 前引擎代码硬编码，本 sprint 起统一走此映射）
     name: '名称',

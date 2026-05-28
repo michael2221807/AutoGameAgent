@@ -135,6 +135,8 @@ const PROMPT_ALWAYS_STRIP_PATHS: readonly string[] = [
   '角色.图片档案',
   '社交.关系.*.图片档案',
   '社交.关系.*.私聊历史',
+  '社交.关系.*.总结记忆',
+  'NPC列表',
 ];
 
 /**

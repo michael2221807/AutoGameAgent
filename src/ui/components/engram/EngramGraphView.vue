@@ -7,7 +7,7 @@
  * Toolbar: layout select, label toggle, relayout button (matching EngramDebugPanel style).
  */
 // App doc: docs/user-guide/pages/game-relationship-graph.md
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, Transition } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import cytoscape from 'cytoscape';
 import type { Core as CyCore, ElementDefinition } from 'cytoscape';
@@ -40,6 +40,16 @@ type LayoutName = 'cose' | 'concentric' | 'breadthfirst' | 'circle';
 const layout = ref<LayoutName>('cose');
 const showLabels = ref(true);
 const graphExpanded = ref(true);
+
+// ─── Tooltip state (matches EngramDebugPanel pattern) ───
+
+const graphTooltip = ref<{ visible: boolean; x: number; y: number; html: string }>({
+  visible: false, x: 0, y: 0, html: '',
+});
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 // ─── Node visual encoding (reuses engram-graph-builder constants) ───
 
@@ -156,6 +166,11 @@ function buildNodeElements(): ElementDefinition[] {
         w, h,
         nodeType: ent.type,
         opacity: ent.is_embedded === false ? 0.5 : 1,
+        summary: ent.summary || '',
+        embedded: ent.is_embedded,
+        mentionCount: ent.mentionCount,
+        firstSeen: ent.firstSeen,
+        lastSeen: ent.lastSeen,
       },
     };
   });
@@ -184,6 +199,12 @@ function buildEdgeElements(): ElementDefinition[] {
           w: isCore ? 3 : 1.5,
           lineStyle: isUserEdited ? 'dashed' : 'solid',
           opacity: isPending ? 0.5 : 1,
+          fullFact: edge.fact,
+          edgeSource: edge.source,
+          createdAtRound: edge.createdAtRound,
+          episodes: edge.episodes?.length ?? 0,
+          embedded: edge.is_embedded,
+          invalidatedAtRound: edge.invalidAtRound ?? edge.invalidatedAtRound,
         },
       };
     });
@@ -231,20 +252,77 @@ function initGraph(): void {
     if (edgeId) emit('click-edge', edgeId);
   });
 
+  // ── Hover tooltips (matches EngramDebugPanel pattern) ──
+  const typeLabels: Record<string, string> = {
+    player: t('engram.entity.typePlayer'),
+    npc: 'NPC',
+    location: t('engram.entity.typeLocation'),
+    item: t('engram.entity.typeItem'),
+  };
+  const sourceLabels: Record<string, string> = {
+    'ai': t('engram.editor.edge.sourceLabel.ai'),
+    'user': t('engram.editor.edge.sourceLabel.user'),
+    'opening': t('engram.editor.edge.sourceLabel.opening'),
+    'batch-sync': t('engram.editor.edge.sourceLabel.batch-sync'),
+    'card-import': t('engram.editor.edge.sourceLabel.card-import'),
+  };
+
+  cyInstance.on('mouseover', 'node', (evt) => {
+    const d = evt.target.data();
+    const e = evt.originalEvent as MouseEvent;
+    const embedStr = d.embedded ? t('engram.graph.tooltip.embedded') : t('engram.graph.tooltip.notEmbedded');
+    const typeStr = typeLabels[d.nodeType] || d.nodeType;
+    graphTooltip.value = {
+      visible: true, x: e.clientX, y: e.clientY,
+      html: `<div class="gtt-type">${esc(typeStr)}</div>`
+        + `<div class="gtt-title">${esc(d.fullName)}</div>`
+        + (d.summary ? `<div class="gtt-body">${esc(d.summary.length > 80 ? d.summary.slice(0, 80) + '…' : d.summary)}</div>` : '')
+        + `<div class="gtt-meta">${esc(t('engram.graph.tooltip.mentionCount', { count: d.mentionCount, first: d.firstSeen, last: d.lastSeen, embedStatus: embedStr }))}</div>`,
+    };
+  });
+
+  cyInstance.on('mouseover', 'edge', (evt) => {
+    const d = evt.target.data();
+    const e = evt.originalEvent as MouseEvent;
+    const statusText = d.invalidatedAtRound
+      ? `<span style="color:#df6b6b;">${esc(t('engram.graph.tooltip.factInvalid', { round: d.invalidatedAtRound }))}</span>`
+      : esc(t('engram.graph.tooltip.factValid'));
+    const embedStr = d.embedded ? t('engram.graph.tooltip.embedded') : t('engram.graph.tooltip.notEmbedded');
+    const srcLabel = sourceLabels[d.edgeSource] || t('engram.editor.edge.sourceLabel.ai');
+    graphTooltip.value = {
+      visible: true, x: e.clientX, y: e.clientY,
+      html: `<div class="gtt-type">${t('engram.graph.tooltip.factEdge', { status: '' })} ${statusText}</div>`
+        + `<div class="gtt-fact">${esc(d.fullFact)}</div>`
+        + `<div class="gtt-meta">${esc(srcLabel)} · ${esc(t('engram.graph.tooltip.factMeta', { episodes: d.episodes, created: d.createdAtRound, embedStatus: embedStr }))}</div>`,
+    };
+  });
+
+  cyInstance.on('mouseout', () => { graphTooltip.value.visible = false; });
+  cyInstance.on('mousemove', (evt) => {
+    if (!graphTooltip.value.visible) return;
+    const e = evt.originalEvent as MouseEvent;
+    graphTooltip.value.x = e.clientX;
+    graphTooltip.value.y = e.clientY;
+  });
+
   applyHighlight();
 }
 
 function runLayout(): void {
-  if (!cyInstance) return;
+  if (!cyInstance || cyInstance.elements().length === 0) return;
   cyInstance.layout(getLayoutOpts()).run();
 }
 
 function updateElements(): void {
   if (!cyInstance) {
-    nextTick(() => initGraph());
+    if (showGraph.value) nextTick(() => initGraph());
     return;
   }
   const newElements = [...buildNodeElements(), ...buildEdgeElements()];
+  if (newElements.length === 0) {
+    nextTick(() => destroyGraph());
+    return;
+  }
   cyInstance.elements().remove();
   cyInstance.add(newElements);
   runLayout();
@@ -331,7 +409,7 @@ function applyHighlight(): void {
 watch(
   () => [props.entities, props.edges],
   () => {
-    if (!showGraph.value) { destroyGraph(); return; }
+    if (!showGraph.value) { nextTick(() => destroyGraph()); return; }
     if (cyInstance) updateElements();
     else nextTick(() => initGraph());
   },
@@ -410,6 +488,14 @@ onBeforeUnmount(() => destroyGraph());
             <span class="ov-sep" />
             <span>{{ t('engram.editor.stats.pending') }} <b class="ov-pending">{{ props.stats.pending }}</b></span>
           </div>
+
+          <!-- Tooltip (fixed position, follows cursor) -->
+          <div
+            v-if="graphTooltip.visible"
+            class="graph-tooltip"
+            :style="{ left: (graphTooltip.x + 12) + 'px', top: (graphTooltip.y + 12) + 'px' }"
+            v-html="graphTooltip.html"
+          />
 
           <!-- Legend overlay (bottom-right) -->
           <div class="graph-overlay graph-overlay--legend">
@@ -553,5 +639,50 @@ onBeforeUnmount(() => destroyGraph());
 .graph-empty {
   display: flex; align-items: center; justify-content: center;
   height: 200px; color: var(--color-text-secondary, #8888a0); font-size: 0.85rem;
+}
+
+/* ── Graph tooltip (matches EngramDebugPanel .graph-tooltip + .gtt-* pattern) ── */
+.graph-tooltip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 360px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(20, 20, 18, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-secondary, #8888a0);
+}
+.graph-tooltip :deep(.gtt-type) {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-sage-400, #8a9e6c);
+  margin-bottom: 2px;
+}
+.graph-tooltip :deep(.gtt-title) {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-bone, #d4cfc5);
+  margin-bottom: 3px;
+}
+.graph-tooltip :deep(.gtt-body) {
+  font-size: 10.5px;
+  color: var(--color-text-secondary, #a0a0a0);
+  margin-bottom: 3px;
+}
+.graph-tooltip :deep(.gtt-fact) {
+  font-size: 11px;
+  color: var(--color-text-bone, #d4cfc5);
+  margin-bottom: 3px;
+}
+.graph-tooltip :deep(.gtt-meta) {
+  font-size: 9px;
+  color: var(--color-text-muted, #666);
 }
 </style>

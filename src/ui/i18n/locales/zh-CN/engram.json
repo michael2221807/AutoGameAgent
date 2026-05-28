@@ -187,5 +187,27 @@
   "engram.editor.autoStubbed": "已自动创建实体「{name}」",
 
   "engram.editor.notEnabled.title": "Engram 未启用",
-  "engram.editor.notEnabled.hint": "请前往设置 → Engram → 开启后再使用关系网编辑器"
+  "engram.editor.notEnabled.hint": "请前往设置 → Engram → 开启后再使用关系网编辑器",
+
+  "engram.batchSolidify.title": "Engram 覆盖率",
+  "engram.batchSolidify.buttonLabel": "一键批量固化",
+  "engram.batchSolidify.buttonTooltip": "扫描世界数据并补全 Engram 图谱",
+  "engram.batchSolidify.progress.scanning": "正在扫描世界数据...",
+  "engram.batchSolidify.progress.generating": "正在生成知识边...",
+  "engram.batchSolidify.progress.applying": "正在应用变更...",
+  "engram.batchSolidify.complete": "已新增 {created} 条知识边",
+  "engram.batchSolidify.completeWithSkipped": "已新增 {created} 条知识边，跳过 {skipped} 条",
+  "engram.batchSolidify.nothingToGenerate": "图谱已完整，无需补全",
+  "engram.batchSolidify.alreadyComplete": "AI 未检测到需要补全的关系",
+  "engram.batchSolidify.error": "生成失败，请重试",
+  "engram.batchSolidify.retry": "重试",
+  "engram.batchSolidify.stats.npc": "NPC",
+  "engram.batchSolidify.stats.location": "地点",
+  "engram.batchSolidify.stats.edges": "知识边",
+  "engram.batchSolidify.stats.missing": "缺失",
+  "engram.batchSolidify.stats.sourceOpening": "开局",
+  "engram.batchSolidify.stats.sourceUser": "用户",
+  "engram.batchSolidify.stats.sourceBatchSync": "批量",
+  "engram.batchSolidify.stats.sourceLegacy": "主回合",
+  "engram.batchSolidify.stats.sourceCardImport": "卡导入"
 }

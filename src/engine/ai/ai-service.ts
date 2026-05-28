@@ -160,12 +160,20 @@ export class AIService {
     const config = this.getConfigForUsage(options.usageType ?? 'main');
     if (!config) throw new Error('未配置可用的 API');
 
+    const effectiveConfig = (options.temperature != null || options.maxTokens != null)
+      ? {
+          ...config,
+          ...(options.temperature != null ? { temperature: options.temperature } : {}),
+          ...(options.maxTokens != null ? { maxTokens: options.maxTokens } : {}),
+        }
+      : config;
+
     let effectiveOptions = options;
-    if (config.disablePrefill && options.messages.length > 0) {
+    if (effectiveConfig.disablePrefill && options.messages.length > 0) {
       effectiveOptions = { ...options, messages: this.convertPrefillToSystem(options.messages) };
     }
 
-    const provider = this.createProvider(config);
+    const provider = this.createProvider(effectiveConfig);
     const { signal, cleanup } = this.createTimeoutSignal(options.signal);
 
     eventBus.emit('ai:request-start', {

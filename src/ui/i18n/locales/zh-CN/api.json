@@ -31,6 +31,7 @@
   "api.usage.rerank": "重排序",
   "api.usage.assistant": "AI 助手",
   "api.usage.world_builder": "世界构建",
+  "api.usage.engram_batch_solidify": "Engram 批量固化",
 
   "api.usage.tip.main": "每回合叙事生成的核心调用，消耗最多 token，建议分配最强模型",
   "api.usage.tip.cot": "主回合前的独立推理步骤，提升剧情一致性和判定质量，需额外 API 调用",
@@ -59,6 +60,7 @@
   "api.usage.tip.rerank": "对检索结果做精排以提升相关性，需 Rerank 类别 API 或 LLM 兜底",
   "api.usage.tip.assistant": "游戏内 AI 助手聊天面板，回答玩家关于游戏世界的问题",
   "api.usage.tip.world_builder": "批量世界构建（区域、NPC、物品），用于游戏卡创作",
+  "api.usage.tip.engram_batch_solidify": "一键批量固化：扫描世界数据并为缺失的 NPC/地点补全知识边和描述",
 
   "api.category.narrative": "正文生成",
   "api.category.world_memory": "世界与记忆",

@@ -449,7 +449,11 @@ async function bootstrap(): Promise<void> {
     engramMemory: '系统.扩展.engramMemory',
     roundNumber: '元数据.回合序号',
     relationships: '社交.关系',
+    locations: DEFAULT_ENGINE_PATHS.locations,
     npcNameField: DEFAULT_ENGINE_PATHS.npcFieldNames.name,
+    npcTypeField: DEFAULT_ENGINE_PATHS.npcFieldNames.type,
+    npcTypeExclude: DEFAULT_ENGINE_PATHS.npcTypeExclude,
+    locationNameField: DEFAULT_ENGINE_PATHS.locationFieldNames.name,
   });
 
   // E.2/E.3: UnifiedRetriever 实例（hybrid 模式时由 ContextAssemblyStage 使用）
@@ -763,6 +767,8 @@ async function bootstrap(): Promise<void> {
   app.provide('assistantService', assistantService);
   app.provide('worldBuilderService', worldBuilderService);
   app.provide('engramEditor', engramEditor);
+  app.provide('engramManager', engramManager);
+  app.provide('memoryRetriever', memoryRetriever);
   app.provide('configRegistry', configRegistry);
   app.provide('configResolver', configResolver);
   app.provide('eventBus', eventBus);

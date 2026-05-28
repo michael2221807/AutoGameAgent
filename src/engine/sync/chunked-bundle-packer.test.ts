@@ -731,3 +731,107 @@ describe('edge cases', () => {
     expect(await unpack(manifest, chunks)).toBe(json);
   });
 });
+
+// ─── Story 4: Engram batch-sync source roundtrip ───
+
+describe('Engram batch-sync source roundtrip (Story 4)', () => {
+  function makeEngramEdge(src: string, tgt: string, fact: string, source: string, core: boolean) {
+    return {
+      id: `${src}|${tgt}|${fact.slice(0, 40)}`,
+      sourceEntity: src,
+      targetEntity: tgt,
+      fact,
+      episodes: [],
+      is_embedded: false,
+      createdAtRound: 1,
+      lastSeenRound: 1,
+      core,
+      source,
+    };
+  }
+
+  function makeBundleWithEngramEdges(edges: unknown[]): string {
+    const engramMemory = {
+      events: [],
+      entities: [
+        { name: '张三', type: 'npc', summary: '测试NPC', attributes: {}, firstSeen: 0, lastSeen: 0, mentionCount: 1, is_embedded: false },
+        { name: '李四', type: 'npc', summary: '另一个NPC', attributes: {}, firstSeen: 0, lastSeen: 0, mentionCount: 1, is_embedded: false },
+      ],
+      relations: [],
+      v2Edges: edges,
+      meta: { lastUpdated: 1716800000000, eventCount: 0, embeddedEventCount: 0, embeddedEntityCount: 0, schemaVersion: 5 },
+    };
+    return JSON.stringify({
+      version: 1,
+      exportedAt: '2026-05-27T00:00:00.000Z',
+      engineVersion: '0.1.0',
+      bundleType: 'full',
+      activeProfile: { profileId: 'p_test', slotId: 'auto' },
+      profiles: { p_test: { name: '测试', packId: 'tianming', createdAt: '2026-05-27T00:00:00Z', slotIds: ['auto'] } },
+      saves: { 'p_test/auto': { 系统: { 扩展: { engramMemory } } } },
+      vectors: {},
+      configs: {},
+      prompts: {},
+      engineSettings: {},
+    }, null, 2);
+  }
+
+  it('exports EngramEdge with source=batch-sync and core=false', async () => {
+    const edge = makeEngramEdge('张三', '李四', '张三和李四是同门师兄弟在天剑门共同修行多年', 'batch-sync', false);
+    const json = makeBundleWithEngramEdges([edge]);
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    const saves = parsed.saves as Record<string, Record<string, unknown>>;
+    const engram = ((saves['p_test/auto']['系统'] as Record<string, unknown>)['扩展'] as Record<string, unknown>).engramMemory as { v2Edges: Array<{ source: string; core: boolean }> };
+    expect(engram.v2Edges[0].source).toBe('batch-sync');
+    expect(engram.v2Edges[0].core).toBe(false);
+  });
+
+  it('imports BackupBundle preserving batch-sync source after pack/unpack', async () => {
+    const edge = makeEngramEdge('张三', '李四', '张三和李四是同门师兄弟在天剑门共同修行多年', 'batch-sync', false);
+    const json = makeBundleWithEngramEdges([edge]);
+    const { manifest, chunks } = await pack(json);
+    const restored = await unpack(manifest, chunks);
+    const parsed = JSON.parse(restored) as Record<string, unknown>;
+    const saves = parsed.saves as Record<string, Record<string, unknown>>;
+    const engram = ((saves['p_test/auto']['系统'] as Record<string, unknown>)['扩展'] as Record<string, unknown>).engramMemory as { v2Edges: Array<{ source: string; core: boolean }> };
+    expect(engram.v2Edges[0].source).toBe('batch-sync');
+    expect(engram.v2Edges[0].core).toBe(false);
+  });
+
+  it('ChunkedBundlePacker pack/unpack preserves source field exactly', async () => {
+    const edge = makeEngramEdge('张三', '李四', '张三和李四是同门师兄弟在天剑门共同修行多年', 'batch-sync', false);
+    const json = makeBundleWithEngramEdges([edge]);
+    const { manifest, chunks } = await pack(json);
+    expect(await unpack(manifest, chunks)).toBe(json);
+  });
+
+  it('export→import→re-export produces identical SHA-256', async () => {
+    const edge = makeEngramEdge('张三', '李四', '张三和李四是同门师兄弟在天剑门共同修行多年', 'batch-sync', false);
+    const json = makeBundleWithEngramEdges([edge]);
+    const hash1 = await sha256String(json);
+    const { manifest, chunks } = await pack(json);
+    const restored = await unpack(manifest, chunks);
+    const hash2 = await sha256String(restored);
+    expect(hash2).toBe(hash1);
+  });
+
+  it('mixed source edges (opening + user + batch-sync) all preserved', async () => {
+    const edges = [
+      makeEngramEdge('张三', '玩家', '张三在开局时与玩家相识建立了初步友好关系', 'opening', true),
+      makeEngramEdge('李四', '玩家', '李四是玩家手动添加的重要盟友两人志同道合', 'user', false),
+      makeEngramEdge('张三', '李四', '张三和李四是同门师兄弟在天剑门共同修行多年', 'batch-sync', false),
+    ];
+    const json = makeBundleWithEngramEdges(edges);
+    const { manifest, chunks } = await pack(json);
+    const restored = await unpack(manifest, chunks);
+    const parsed = JSON.parse(restored) as Record<string, unknown>;
+    const saves = parsed.saves as Record<string, Record<string, unknown>>;
+    const engram = ((saves['p_test/auto']['系统'] as Record<string, unknown>)['扩展'] as Record<string, unknown>).engramMemory as { v2Edges: Array<{ source: string; core: boolean }> };
+    expect(engram.v2Edges).toHaveLength(3);
+    expect(engram.v2Edges[0].source).toBe('opening');
+    expect(engram.v2Edges[0].core).toBe(true);
+    expect(engram.v2Edges[1].source).toBe('user');
+    expect(engram.v2Edges[2].source).toBe('batch-sync');
+    expect(engram.v2Edges[2].core).toBe(false);
+  });
+});

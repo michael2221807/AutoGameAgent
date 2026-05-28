@@ -31,6 +31,7 @@
   "api.usage.rerank": "Reranking",
   "api.usage.assistant": "AI Assistant",
   "api.usage.world_builder": "World Builder",
+  "api.usage.engram_batch_solidify": "Engram Batch Solidify",
 
   "api.usage.tip.main": "Core call for each turn's narrative generation, consuming the most tokens — assign your strongest model",
   "api.usage.tip.cot": "Independent reasoning step before the main turn, improving plot consistency and check quality — requires extra API call",
@@ -59,6 +60,7 @@
   "api.usage.tip.rerank": "Re-rank retrieved results to improve relevance — requires Rerank category API or LLM fallback",
   "api.usage.tip.assistant": "In-game AI assistant chat panel, answering player questions about the game world",
   "api.usage.tip.world_builder": "Batch world building (regions, NPCs, items) for game card authoring",
+  "api.usage.tip.engram_batch_solidify": "One-click batch solidify: scan world data and fill missing knowledge edges and descriptions for NPCs/locations",
 
   "api.category.narrative": "Narrative Generation",
   "api.category.world_memory": "World & Memory",

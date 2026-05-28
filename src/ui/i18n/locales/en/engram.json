@@ -187,5 +187,27 @@
   "engram.editor.autoStubbed": "Auto-created entity \"{name}\"",
 
   "engram.editor.notEnabled.title": "Engram Not Enabled",
-  "engram.editor.notEnabled.hint": "Please go to Settings > Engram > Enable to use the relationship editor"
+  "engram.editor.notEnabled.hint": "Please go to Settings > Engram > Enable to use the relationship editor",
+
+  "engram.batchSolidify.title": "Engram Coverage",
+  "engram.batchSolidify.buttonLabel": "Batch Solidify",
+  "engram.batchSolidify.buttonTooltip": "Scan world data and fill missing Engram graph",
+  "engram.batchSolidify.progress.scanning": "Scanning world data...",
+  "engram.batchSolidify.progress.generating": "Generating knowledge edges...",
+  "engram.batchSolidify.progress.applying": "Applying changes...",
+  "engram.batchSolidify.complete": "Added {created} knowledge edges",
+  "engram.batchSolidify.completeWithSkipped": "Added {created} edges, skipped {skipped}",
+  "engram.batchSolidify.nothingToGenerate": "Graph is complete, nothing to add",
+  "engram.batchSolidify.alreadyComplete": "AI found no relationships to add",
+  "engram.batchSolidify.error": "Generation failed, please retry",
+  "engram.batchSolidify.retry": "Retry",
+  "engram.batchSolidify.stats.npc": "NPC",
+  "engram.batchSolidify.stats.location": "Location",
+  "engram.batchSolidify.stats.edges": "Edges",
+  "engram.batchSolidify.stats.missing": "Missing",
+  "engram.batchSolidify.stats.sourceOpening": "Opening",
+  "engram.batchSolidify.stats.sourceUser": "User",
+  "engram.batchSolidify.stats.sourceBatchSync": "Batch",
+  "engram.batchSolidify.stats.sourceLegacy": "Auto",
+  "engram.batchSolidify.stats.sourceCardImport": "Card Import"
 }

@@ -129,7 +129,8 @@ export type UsageType =
   | 'bodyPolish'               // 文本润色（LLM 类）— Sprint CoT-4
   | 'field_repair'             // 通用字段补齐（2026-04-18）— 复用 step-2 context 补齐 rules/required-fields.json 列出的任意字段
   | 'plot_decompose'           // 剧情大纲拆解（Sprint Plot-1）— 将玩家大纲拆解为 PlotNode 链
-  | 'world_builder';           // Story 3: 世界构建批量生成（WorldBuilderService）— 可单独配 API
+  | 'world_builder'            // Story 3: 世界构建批量生成（WorldBuilderService）— 可单独配 API
+  | 'engram_batch_solidify';   // Story 4: Engram 批量固化（EngramBatchSolidifyPipeline）— 可单独配 API
 
 /** API 分配 — 指定某个功能使用哪个 API 配置 */
 export interface APIAssignment {
@@ -153,6 +154,10 @@ export interface GenerateOptions {
   onStreamChunk?: (chunk: string) => void;
   /** AbortSignal — 由 AIService 注入，用于取消和超时 */
   signal?: AbortSignal;
+  /** Per-call temperature override (takes precedence over APIConfig.temperature) */
+  temperature?: number;
+  /** Per-call maxTokens override (takes precedence over APIConfig.maxTokens) */
+  maxTokens?: number;
 }
 
 // ─── AI 响应 ───

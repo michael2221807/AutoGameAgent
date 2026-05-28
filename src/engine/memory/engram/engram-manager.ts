@@ -443,7 +443,14 @@ export class EngramManager {
       const isRelevant = (n: string) => importantNames.has(n) || n === playerName || n === '玩家';
 
       engram.v2Edges = engram.v2Edges.filter((e) =>
-        e.episodes.length >= 3 || isRelevant(e.sourceEntity) || isRelevant(e.targetEntity),
+        e.episodes.length >= 3
+        || isRelevant(e.sourceEntity)
+        || isRelevant(e.targetEntity)
+        || e.source === 'batch-sync'
+        || e.source === 'user'
+        || e.source === 'opening'
+        || e.source === 'card-import'
+        || e.core === true,
       );
     }
 

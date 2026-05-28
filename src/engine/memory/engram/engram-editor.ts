@@ -103,11 +103,32 @@ export interface CoverageStats {
   npcsWithEntity: number;
   missingNpcNames: string[];
   coveragePercent: number;
+  totalLocations: number;
+  locationsWithEntity: number;
+  missingLocationNames: string[];
+  locationCoveragePercent: number;
+  totalEdges: number;
+  edgesBySource: {
+    opening: number;
+    user: number;
+    'batch-sync': number;
+    'card-import': number;
+    legacy: number;
+  };
 }
 
 // ─── Constants ───
 
 const MIN_FACT_LENGTH = 10;
+
+function normalizeLocationRecords(raw: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(raw)) return raw.filter(x => x && typeof x === 'object');
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return Object.values(raw as Record<string, unknown>)
+      .filter((v): v is Record<string, unknown> => v != null && typeof v === 'object' && !Array.isArray(v));
+  }
+  return [];
+}
 
 // ─── EngramEditor ───
 
@@ -118,7 +139,11 @@ export class EngramEditor {
   private readonly engramPath: string;
   private readonly roundNumberPath: string;
   private readonly relationshipsPath: string;
+  private readonly locationsPath: string;
   private readonly npcNameField: string;
+  private readonly npcTypeField: string;
+  private readonly npcTypeExclude: string;
+  private readonly locationNameField: string;
 
   constructor(
     stateManager: StateManager,
@@ -127,7 +152,11 @@ export class EngramEditor {
       engramMemory?: string;
       roundNumber?: string;
       relationships?: string;
+      locations?: string;
       npcNameField?: string;
+      npcTypeField?: string;
+      npcTypeExclude?: string;
+      locationNameField?: string;
     },
   ) {
     this.stateManager = stateManager;
@@ -135,7 +164,11 @@ export class EngramEditor {
     this.engramPath = pathOverrides?.engramMemory ?? '系统.扩展.engramMemory';
     this.roundNumberPath = pathOverrides?.roundNumber ?? '元数据.回合序号';
     this.relationshipsPath = pathOverrides?.relationships ?? '社交.关系';
+    this.locationsPath = pathOverrides?.locations ?? '世界.地点信息';
     this.npcNameField = pathOverrides?.npcNameField ?? '名称';
+    this.npcTypeField = pathOverrides?.npcTypeField ?? '类型';
+    this.npcTypeExclude = pathOverrides?.npcTypeExclude ?? '普通';
+    this.locationNameField = pathOverrides?.locationNameField ?? '名称';
   }
 
   // ─── Entity CRUD ───
@@ -650,19 +683,56 @@ export class EngramEditor {
 
   getCoverageStats(): CoverageStats {
     const engram = this.loadEngram();
+    const properEntities = engram.entities.filter(e => !e._pendingEnrichment);
+    const properEntityNames = new Set(properEntities.map(e => e.name));
+
+    // NPC coverage (exclude npcTypeExclude='普通', consistent with EntityBuilder entity-builder.ts:131)
     const raw = this.stateManager.get<Array<Record<string, unknown>>>(this.relationshipsPath);
     const relationships = Array.isArray(raw) ? raw : [];
 
     const npcNames: string[] = [];
     for (const npc of relationships) {
       const name = npc[this.npcNameField];
+      if (typeof name !== 'string' || !name.trim()) continue;
+      if (npc[this.npcTypeField] === this.npcTypeExclude) continue;
+      npcNames.push(name.trim());
+    }
+
+    const missingNpcNames = npcNames.filter(n => !properEntityNames.has(n));
+
+    // Location coverage — 世界.地点信息 is Record<id, LocationItem>, not array
+    const rawLocations = this.stateManager.get<unknown>(this.locationsPath);
+    const locationRecords = normalizeLocationRecords(rawLocations);
+
+    const locationNames: string[] = [];
+    for (const loc of locationRecords) {
+      const name = loc[this.locationNameField];
       if (typeof name === 'string' && name.trim()) {
-        npcNames.push(name.trim());
+        locationNames.push(name.trim());
       }
     }
 
-    const entityNameSet = new Set(engram.entities.map((e) => e.name));
-    const missingNpcNames = npcNames.filter((n) => !entityNameSet.has(n));
+    const locationEntityNames = new Set(
+      properEntities.filter(e => e.type === 'location').map(e => e.name),
+    );
+    const missingLocationNames = locationNames.filter(n => !locationEntityNames.has(n));
+
+    // Edge source distribution
+    const edges = engram.v2Edges;
+    const edgesBySource = {
+      opening: 0,
+      user: 0,
+      'batch-sync': 0,
+      'card-import': 0,
+      legacy: 0,
+    };
+    for (const edge of edges) {
+      if (edge.source === 'opening') edgesBySource.opening++;
+      else if (edge.source === 'user') edgesBySource.user++;
+      else if (edge.source === 'batch-sync') edgesBySource['batch-sync']++;
+      else if (edge.source === 'card-import') edgesBySource['card-import']++;
+      else edgesBySource.legacy++; // undefined or 'ai'
+    }
 
     return {
       totalNpcs: npcNames.length,
@@ -671,6 +741,14 @@ export class EngramEditor {
       coveragePercent: npcNames.length === 0
         ? 100
         : Math.round(((npcNames.length - missingNpcNames.length) / npcNames.length) * 100),
+      totalLocations: locationNames.length,
+      locationsWithEntity: locationNames.length - missingLocationNames.length,
+      missingLocationNames,
+      locationCoveragePercent: locationNames.length === 0
+        ? 100
+        : Math.round(((locationNames.length - missingLocationNames.length) / locationNames.length) * 100),
+      totalEdges: edges.length,
+      edgesBySource,
     };
   }
 

@@ -69,6 +69,7 @@ const USAGE_TYPE_CATEGORIES: Record<UsageType, AssignCategory> = {
   rerank: 'rag',
   assistant: 'utility',
   world_builder: 'utility',
+  engram_batch_solidify: 'repair',
 };
 
 function getUsageTypeMeta(key: UsageType): UsageTypeMeta {

@@ -267,6 +267,28 @@ export class Embedder {
 
     const format = detectEmbeddingFormat(config);
     const endpoint = buildEmbeddingEndpoint(config, format);
+
+    // Split into batches to respect API limits (most providers cap at 64)
+    const MAX_BATCH = 48;
+    if (texts.length <= MAX_BATCH) {
+      return this.callEmbeddingBatch(texts, config, format, endpoint);
+    }
+
+    const allVectors: number[][] = [];
+    for (let i = 0; i < texts.length; i += MAX_BATCH) {
+      const batch = texts.slice(i, i + MAX_BATCH);
+      const batchVectors = await this.callEmbeddingBatch(batch, config, format, endpoint);
+      allVectors.push(...batchVectors);
+    }
+    return allVectors;
+  }
+
+  private async callEmbeddingBatch(
+    texts: string[],
+    config: { apiKey: string; model: string },
+    format: ReturnType<typeof detectEmbeddingFormat>,
+    endpoint: string,
+  ): Promise<number[][]> {
     const body = buildEmbeddingBody(texts, config.model, format);
 
     const controller = new AbortController();

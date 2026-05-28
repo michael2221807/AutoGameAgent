@@ -39,6 +39,7 @@ const ALL_USAGE_TYPES: UsageType[] = [
   'imageGen_novelai', 'imageGen_openai', 'imageGen_sd_webui', 'imageGen_comfyui', 'imageGen_civitai',
   'imageCharacterTokenizer', 'imageSceneTokenizer', 'imageSecretTokenizer',
   'bodyPolish', 'plot_decompose',
+  'world_builder', 'engram_batch_solidify',
 ];
 
 /** 默认 Rerank 路由路径 */
