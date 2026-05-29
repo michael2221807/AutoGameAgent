@@ -2,7 +2,6 @@
   "character.tab.basic": "基础",
   "character.tab.attributes": "属性",
   "character.tab.relations": "关系",
-  "character.tab.achievements": "成就",
   "character.tab.body": "身体",
   "character.tab.playerImage": "主角生图",
 
@@ -61,8 +60,6 @@
   "character.body.devLevel": "开发度",
   "character.body.empty": "尚无身体数据",
 
-  "character.achievements.icon": "🏆",
-  "character.achievements.placeholder": "成就系统暂未开放",
 
   "character.image.statsTotal": "{n} 张",
   "character.image.statsLabel.total": "影像总数",
@@ -246,8 +243,15 @@
   "character.toast.fieldUpdated": "已更新",
   "character.toast.talentAdded": "天赋已添加",
   "character.toast.talentRemoved": "天赋已删除",
-  "character.body.edit.partNameRequired": "身体部位名称不能为空",
-  "character.body.edit.invalidIndex": "身体部位索引无效",
-  "character.body.edit.cannotRemoveRequired": "不能移除必需的身体部位",
+  "character.body.edit.partName": "部位名称",
+  "character.body.edit.featureDescription": "特征描述",
+  "character.body.edit.specialMark": "特殊印记",
+  "character.body.edit.addBodyPart": "添加部位",
+  "character.body.edit.inseminationRecords": "内射记录",
+  "character.body.edit.recordDate": "日期",
+  "character.body.edit.recordDesc": "描述",
+  "character.body.edit.addRecord": "添加记录",
+  "character.body.edit.addSensitivePoint": "添加敏感点",
+  "character.body.edit.addTattoo": "添加纹身 / 印记",
   "character.edit.invalidVitalMax": "上限值至少为 1"
 }

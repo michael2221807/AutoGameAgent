@@ -55,6 +55,7 @@ const {
   rollback,
   updateSettings,
   refreshSession,
+  suggestWorldBuilderAttachments,
 } = useAssistant();
 
 const { t, locale } = useI18n();
@@ -70,6 +71,13 @@ const packI18n = computed<Record<string, string> | undefined>(() => {
 
 const userInput = ref('');
 const attachments = ref<AttachmentSpec[]>([]);
+/**
+ * Story 3: paths of attachments auto-seeded by world-builder mode (vs. user-picked).
+ * Lets toggling WB mode OFF remove only the auto context, never the user's own picks.
+ * Read only imperatively (never in template/computed), so in-place Set
+ * add/delete is safe — no reactive consumer depends on identity change.
+ */
+const autoAttachmentPaths = ref<Set<string>>(new Set());
 const showPicker = ref(false);
 const showClearConfirm = ref(false);
 const showSettings = ref(false);
@@ -99,6 +107,11 @@ function applyEditNpcQuery(): void {
   const npcName = route.query.editNpc as string | undefined;
   if (!npcName) return;
 
+  // Drop any WB auto-markers before replacing the attachment list wholesale,
+  // otherwise stale markers could point at the edit-NPC context chips and get
+  // wrongly stripped when WB mode is later toggled off.
+  clearWorldBuilderAttachments();
+
   const defaultContext: AttachmentSpec[] = [
     { path: '元数据.叙事历史', scope: 'context' },
     { path: '世界.描述', scope: 'context' },
@@ -112,9 +125,19 @@ function applyEditNpcQuery(): void {
   userInput.value = t('assistant.editNpc.defaultPrompt', { name: npcName });
 
   router.replace({ query: {} });
+
+  // Keep world context available for WB free-chat after the NPC edit.
+  // Idempotent: skips paths already present in the edit-NPC set.
+  reseedWorldBuilderContext();
 }
 
-onActivated(applyEditNpcQuery);
+// Single activation hook with explicit ordering: install the edit-NPC set
+// first (it self-reseeds WB context), then cover the no-editNpc case. The
+// second call is idempotent when the first already reseeded.
+onActivated(() => {
+  applyEditNpcQuery();
+  reseedWorldBuilderContext();
+});
 watch(() => route.query.editNpc, (v) => { if (v) applyEditNpcQuery(); });
 
 // ─── Derived ────────────────────────────────────────
@@ -157,6 +180,10 @@ async function onSend(): Promise<void> {
   await send(prompt, att);
   // 用户拍板：drop target after send；context 也清空（与 demo Mode 一致）
   attachments.value = [];
+  autoAttachmentPaths.value = new Set();
+  // World-builder mode means "attach current world state to every message",
+  // so re-seed the auto context for the next turn (snapshot is rebuilt at send).
+  reseedWorldBuilderContext();
 }
 
 function onKeyDown(e: KeyboardEvent): void {
@@ -175,10 +202,18 @@ function openPicker(): void {
 
 function onPickerConfirm(picked: AttachmentSpec[]): void {
   attachments.value = picked;
+  // Keep auto-marking only for paths that survived the explicit pick; any
+  // new path the user added is treated as manual.
+  const pickedPaths = new Set(picked.map((a) => a.path));
+  for (const p of [...autoAttachmentPaths.value]) {
+    if (!pickedPaths.has(p)) autoAttachmentPaths.value.delete(p);
+  }
 }
 
 function removeAttachment(path: string): void {
   attachments.value = attachments.value.filter((a) => a.path !== path);
+  // If the user manually drops an auto chip, it stops being "auto".
+  autoAttachmentPaths.value.delete(path);
 }
 
 // ─── Payload preview ────────────────────────────────
@@ -214,7 +249,10 @@ async function doClear(): Promise<void> {
   await clear();
   showClearConfirm.value = false;
   attachments.value = [];
+  autoAttachmentPaths.value = new Set();
   userInput.value = '';
+  // Fresh conversation in WB mode still carries world context on its first turn.
+  reseedWorldBuilderContext();
 }
 
 // ─── Rollback ───────────────────────────────────────
@@ -291,7 +329,49 @@ const isWorldBuilderBusy = ref(false);
 const worldBuilderProgress = ref('');
 
 function toggleWorldBuilderMode(): void {
-  updateSettings({ worldBuilderMode: !settings.value.worldBuilderMode });
+  const next = !settings.value.worldBuilderMode;
+  updateSettings({ worldBuilderMode: next });
+  if (next) {
+    applyWorldBuilderAttachments();
+  } else {
+    clearWorldBuilderAttachments();
+  }
+}
+
+/**
+ * Seed the recommended world-state context attachments (relationships /
+ * locations / world description) so WB free-chat carries real world data.
+ * Idempotent: skips paths already attached; records seeded paths as "auto".
+ */
+function applyWorldBuilderAttachments(): void {
+  const suggestions = suggestWorldBuilderAttachments({
+    relationships: worldBuilderPaths.relationships,
+    locations: worldBuilderPaths.locations,
+    worldDescription: worldBuilderPaths.worldDescription,
+  });
+  const existing = new Set(attachments.value.map((a) => a.path));
+  const added: AttachmentSpec[] = [];
+  for (const spec of suggestions) {
+    if (!existing.has(spec.path)) {
+      added.push(spec);
+      autoAttachmentPaths.value.add(spec.path);
+    }
+  }
+  if (added.length > 0) {
+    attachments.value = [...attachments.value, ...added];
+  }
+}
+
+/** Remove only the attachments that WB mode auto-seeded; keep user picks. */
+function clearWorldBuilderAttachments(): void {
+  if (autoAttachmentPaths.value.size === 0) return;
+  attachments.value = attachments.value.filter((a) => !autoAttachmentPaths.value.has(a.path));
+  autoAttachmentPaths.value = new Set();
+}
+
+/** Re-seed world context when still in WB mode (after send / clear). */
+function reseedWorldBuilderContext(): void {
+  if (isWorldBuilderMode.value) applyWorldBuilderAttachments();
 }
 
 const inputPlaceholder = computed(() =>

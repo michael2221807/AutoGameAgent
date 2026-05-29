@@ -49,10 +49,14 @@ export function useBatchSolidify() {
     locations: DEFAULT_ENGINE_PATHS.locations,
     engramMemory: DEFAULT_ENGINE_PATHS.engramMemory,
     playerName: DEFAULT_ENGINE_PATHS.playerName,
+    roundNumber: DEFAULT_ENGINE_PATHS.roundNumber,
     npcNameField: DEFAULT_ENGINE_PATHS.npcFieldNames.name,
     npcTypeField: DEFAULT_ENGINE_PATHS.npcFieldNames.type,
     npcTypeExclude: DEFAULT_ENGINE_PATHS.npcTypeExclude,
+    npcAppearanceField: DEFAULT_ENGINE_PATHS.npcFieldNames.appearance,
+    npcDescriptionField: DEFAULT_ENGINE_PATHS.npcFieldNames.description,
     locationNameField: DEFAULT_ENGINE_PATHS.locationFieldNames.name,
+    locationDescriptionField: DEFAULT_ENGINE_PATHS.locationFieldNames.description,
     narrativeHistory: DEFAULT_ENGINE_PATHS.narrativeHistory,
   };
 

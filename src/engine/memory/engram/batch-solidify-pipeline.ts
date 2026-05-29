@@ -78,10 +78,17 @@ export interface BatchSolidifyPaths {
   locations: string;
   engramMemory: string;
   playerName: string;
+  roundNumber: string;
   npcNameField: string;
   npcTypeField: string;
   npcTypeExclude: string;
+  /** NPC 外貌描述字段名（默认 '外貌描述'）—— 注入避免引擎硬编码游戏中文字段名 */
+  npcAppearanceField: string;
+  /** NPC 一句话描述字段名（默认 '描述'） */
+  npcDescriptionField: string;
   locationNameField: string;
+  /** 地点描述字段名（默认 '描述'） */
+  locationDescriptionField: string;
   narrativeHistory: string;
 }
 
@@ -257,8 +264,17 @@ function validateFacts(
     const src = f.source_entity.trim();
     const tgt = f.target_entity.trim();
 
-    if (!validNames.has(src) && !validNames.has(tgt)) {
-      skipped.push({ input: f, reason: 'both_endpoints_unknown' });
+    // M-4 fix (2026-05-28): BOTH endpoints must exist in the post-backfill world
+    // entity set. `validNames` is built AFTER Phase 3 backfills entities for every
+    // state-tree NPC/location + injects descriptions (run() :424-427, buildValidNameSet
+    // :760-787), so a missing endpoint here is an AI hallucination not present in the
+    // already-solidified world — reject it. (Was OR: single-endpoint edges slipped
+    // through and bulkCreateEdges auto-stubbed a permanent, vectorized phantom entity
+    // that no orphan cleanup could remove because the phantom owns this very edge.)
+    const srcKnown = validNames.has(src);
+    const tgtKnown = validNames.has(tgt);
+    if (!srcKnown || !tgtKnown) {
+      skipped.push({ input: f, reason: srcKnown || tgtKnown ? 'endpoint_unknown' : 'both_endpoints_unknown' });
       continue;
     }
     if (f.fact.length < MIN_FACT_LENGTH) {
@@ -338,7 +354,7 @@ export class EngramBatchSolidifyPipeline {
       }>(paths.engramMemory);
       if (!currentEngram?.entities) return;
 
-      const currentRound = stateManager.get<number>('元数据.回合序号') ?? 0;
+      const currentRound = stateManager.get<number>(paths.roundNumber) ?? 0;
       let changed = false;
 
       for (const edge of currentEngram.v2Edges) {
@@ -592,8 +608,10 @@ export class EngramBatchSolidifyPipeline {
       for (const npc of rawNpcs) {
         const name = npc?.[paths.npcNameField];
         if (typeof name !== 'string' || !name.trim()) continue;
-        const desc = typeof npc['外貌描述'] === 'string' ? npc['外貌描述'].trim()
-          : typeof npc['描述'] === 'string' ? npc['描述'].trim()
+        const appearance = npc[paths.npcAppearanceField];
+        const description = npc[paths.npcDescriptionField];
+        const desc = typeof appearance === 'string' ? appearance.trim()
+          : typeof description === 'string' ? description.trim()
           : '';
         if (desc) map.set(name.trim(), desc);
       }
@@ -602,7 +620,8 @@ export class EngramBatchSolidifyPipeline {
     for (const loc of normalizeLocations(stateManager.get<unknown>(paths.locations))) {
       const n = loc[paths.locationNameField];
       if (typeof n === 'string' && n.trim()) {
-        const desc = typeof loc['描述'] === 'string' ? loc['描述'].trim() : '';
+        const locDesc = loc[paths.locationDescriptionField];
+        const desc = typeof locDesc === 'string' ? locDesc.trim() : '';
         if (desc) map.set(n.trim(), desc);
       }
     }

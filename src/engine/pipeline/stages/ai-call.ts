@@ -28,7 +28,7 @@ export class AICallStage implements PipelineStage {
   ) {}
 
   async execute(ctx: PipelineContext): Promise<PipelineContext> {
-    const splitStep2Messages = ctx.meta.splitStep2Messages as AIMessage[] | undefined;
+    const splitStep2Messages = ctx.meta.splitStep2Messages; // typed via PipelineMeta (L-1)
 
     if (Array.isArray(splitStep2Messages)) {
       return this.executeSplitGen(ctx, splitStep2Messages);
@@ -155,18 +155,18 @@ export class AICallStage implements PipelineStage {
     // meant the debug panel's step2 snapshot was missing the last 2-3 actual
     // messages (step1 thinking injection / step1 raw / step2 followup user).
     const step2DebugSources: string[] = [
-      ...((ctx.meta.splitStep2Sources as string[] | undefined) ?? []),
+      ...(ctx.meta.splitStep2Sources ?? []),
       ...(step2ThinkingContext.length > 0 ? ['step1_thinking_context'] : []),
       'step1_response',
       'step2_followup',
     ];
     emitPromptAssemblyDebug({
       flow: 'splitGenMainRoundStep2',
-      variables: (ctx.meta.debugVariables as Record<string, string> | undefined) ?? {},
+      variables: ctx.meta.debugVariables ?? {},
       messages: step2Messages,
       messageSources: step2DebugSources,
       generationId: `${ctx.generationId ?? ''}_step2`,
-      roundNumber: ctx.meta.debugRoundNumber as number | undefined,
+      roundNumber: ctx.meta.debugRoundNumber,
     });
 
     const rawStep2 = await this.aiService.generate({

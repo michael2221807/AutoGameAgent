@@ -534,7 +534,15 @@ const edgeSectionOpen = ref(true);
              ENTITY LIST
              ══════════════════════════════════════════════════════ -->
         <section class="debug-section">
-          <button class="section-header" @click="entitySectionOpen = !entitySectionOpen">
+          <div
+            class="section-header"
+            role="button"
+            tabindex="0"
+            :aria-expanded="entitySectionOpen"
+            @click="entitySectionOpen = !entitySectionOpen"
+            @keydown.enter.self.prevent="entitySectionOpen = !entitySectionOpen"
+            @keydown.space.self.prevent="entitySectionOpen = !entitySectionOpen"
+          >
             <span class="section-title">{{ t('engram.section.entityList') }}</span>
             <span class="section-badge">{{ entityCount }}</span>
             <span class="section-header__spacer" />
@@ -542,7 +550,7 @@ const edgeSectionOpen = ref(true);
             <svg :class="['chevron', { 'chevron--open': entitySectionOpen }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
               <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
             </svg>
-          </button>
+          </div>
           <Transition name="section-expand">
           <div v-if="entitySectionOpen" class="section-body">
 
@@ -679,7 +687,15 @@ const edgeSectionOpen = ref(true);
              EDGE LIST
              ══════════════════════════════════════════════════════ -->
         <section class="debug-section">
-          <button class="section-header" @click="edgeSectionOpen = !edgeSectionOpen">
+          <div
+            class="section-header"
+            role="button"
+            tabindex="0"
+            :aria-expanded="edgeSectionOpen"
+            @click="edgeSectionOpen = !edgeSectionOpen"
+            @keydown.enter.self.prevent="edgeSectionOpen = !edgeSectionOpen"
+            @keydown.space.self.prevent="edgeSectionOpen = !edgeSectionOpen"
+          >
             <span class="section-title">{{ t('engram.section.factEdges') }}</span>
             <span class="section-badge">{{ edgeCount }}</span>
             <span class="section-header__spacer" />
@@ -687,7 +703,7 @@ const edgeSectionOpen = ref(true);
             <svg :class="['chevron', { 'chevron--open': edgeSectionOpen }]" viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
               <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
             </svg>
-          </button>
+          </div>
           <Transition name="section-expand">
           <div v-if="edgeSectionOpen" class="section-body">
 

@@ -109,6 +109,7 @@ function createRealMutexManager() {
     },
     vectorizePending: vi.fn(async () => ({ vectorized: 0 })),
     deleteEdgeVectors: vi.fn(async () => {}),
+    deleteEntityVectors: vi.fn(async () => {}),
   };
 }
 
@@ -607,6 +608,9 @@ describe('EngramEditor integration tests', () => {
       // deleteEdgeVectors should be called with all removed edge IDs
       expect(manager.deleteEdgeVectors).toHaveBeenCalledTimes(1);
       expect(manager.deleteEdgeVectors).toHaveBeenCalledWith(result.deletedEdgeIds);
+
+      // L-2: the deleted entity's own vector is dropped too (consume deleteEntityVectors)
+      expect(manager.deleteEntityVectors).toHaveBeenCalledWith(['张三']);
     });
 
     it('deleteEntity without cascade preserves edges', async () => {
@@ -634,6 +638,24 @@ describe('EngramEditor integration tests', () => {
       expect(readEngram().v2Edges).toHaveLength(1); // edge preserved
       expect(readEngram().entities.find((e) => e.name === '张三')).toBeUndefined();
       expect(manager.deleteEdgeVectors).not.toHaveBeenCalled();
+      // L-2: entity vector still cleaned even without edge cascade
+      expect(manager.deleteEntityVectors).toHaveBeenCalledWith(['张三']);
+    });
+
+    it('renameEntity drops the old-name vector and resets is_embedded for re-embed (L-2)', async () => {
+      const { editor, manager, readEngram } = createTestHarness({
+        entities: [makeEntity({ name: '张三', is_embedded: true })],
+        v2Edges: [],
+      });
+
+      const { entity } = await editor.renameEntity('张三', '张三丰');
+
+      expect(entity.name).toBe('张三丰');
+      // Old-name entity vector must be dropped (it can never match the renamed entity).
+      expect(manager.deleteEntityVectors).toHaveBeenCalledWith(['张三']);
+      // Renamed entity is flagged for re-embedding under the new name.
+      const renamed = readEngram().entities.find((e) => e.name === '张三丰');
+      expect(renamed?.is_embedded).toBe(false);
     });
 
     it('deleteEntity cascade cleans pendingReview entries referencing deleted edges', async () => {

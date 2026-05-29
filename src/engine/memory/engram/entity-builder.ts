@@ -11,7 +11,8 @@
  * 即使 events 空，也能从状态树直接建玩家 + NPC 实体。
  *
  * 新增字段：
- * - `description`：从 NPC 的"当前外貌状态"/"当前内心想法"读，供 embedding 输入
+ * - `summary`：NPC 的「生平（背景）+ 外貌描述」拼接，供 embedding 输入（稳定知识；
+ *   刻意排除内心想法等瞬时状态，避免污染实体检索向量）
  * - `is_embedded`：向量化成功后置 true，供调试面板统计
  *
  * 对应 STEP-03B M3.6 Engram 数据流（EntityBuilder 阶段）。
@@ -35,9 +36,9 @@ export interface EngramEntity {
   /** 累计出现次数（重要性指标） */
   mentionCount: number;
   /**
-   * 实体描述文本 —— 供 Embedding 输入
-   * 对于 NPC 是"当前外貌状态"/"当前内心想法"的组合；对于玩家填空字符串。
-   * 2026-04-14 新增。
+   * 实体描述文本 —— 供 Embedding 输入（实体语义检索 / Node search）
+   * 对于 NPC 是「生平（背景）+ 外貌描述」的组合（稳定知识；刻意排除内心想法等
+   * 瞬时状态，避免污染实体检索向量）；对于玩家填占位字符串。
    */
   summary: string;
   /**
@@ -70,6 +71,19 @@ export interface EntityBuilderPaths {
   playerName: string;
   /** 社交关系数组 —— 默认 "社交.关系"，结构为 NpcRelationshipEntry[] */
   relationships: string;
+  /**
+   * NPC 实体 summary 的来源字段名（注入，避免在引擎里硬编码游戏特定中文字段名）。
+   * summary = 生平（background）+ 外貌（appearance）；description 仅作兜底。
+   * 刻意不含内心想法/在做事项等瞬时字段 —— Engram 实体向量只承载稳定知识。
+   */
+  npcDescriptionFields: {
+    /** 生平/背景 字段名（默认 '背景'） */
+    background: string;
+    /** 外貌描述 字段名（默认 '外貌描述'） */
+    appearance: string;
+    /** 一句话身份描述 字段名（默认 '描述'，仅当背景+外貌均空时兜底） */
+    description: string;
+  };
 }
 
 /**
@@ -83,14 +97,10 @@ interface NpcRelationshipEntry {
   /** 与玩家关系 */
   关系状态?: string;
   与玩家关系?: string;
-  /** 当前外貌状态（供 description 使用） */
-  当前外貌状态?: string;
-  /** 当前内心想法（供 description 使用） */
-  当前内心想法?: string;
-  /** 外貌描述（备用描述源） */
-  外貌描述?: string;
   /** 位置 */
   位置?: string;
+  // summary 来源字段（背景/外貌描述/描述）通过 EntityBuilderPaths.npcDescriptionFields
+  // 的动态键名访问，走下方 index signature，不在此硬编码具体中文字段名。
   [key: string]: unknown;
 }
 
@@ -129,7 +139,7 @@ export class EntityBuilder {
         const name = typeof npc.名称 === 'string' ? npc.名称.trim() : '';
         if (!name) continue;
         if (!options?.includeAllNpcTypes && npc.类型 === '普通') continue;
-        const description = this.buildNpcDescription(npc);
+        const description = this.buildNpcDescription(npc, paths.npcDescriptionFields);
         this.upsertEntity(entityMap, name, 'npc', 0, description, {
           relationToPlayer: npc.关系状态 ?? npc.与玩家关系,
           location: npc.位置,
@@ -246,17 +256,31 @@ export class EntityBuilder {
   }
 
   /**
-   * 拼接 NPC 描述字符串（供 Embedding 使用）
-   * 组合所有可用描述信息：外貌 + 内心想法 + 外貌描述（参照 ming 的多源实体描述）
+   * 拼接 NPC 实体描述字符串（供 Embedding / 实体语义检索）
+   *
+   * summary = 生平（背景）+ 外貌描述（稳定知识）；两者皆空时用一句话「描述」兜底。
+   * **刻意排除** 内心想法 / 在做事项 等瞬时状态 —— 它们每回合变化，放进实体检索向量
+   * 会污染召回质量（Engram 实体只承载稳定知识）。
+   * 字段名经 paths 注入，不在引擎内硬编码游戏特定中文字段名。
    */
-  private buildNpcDescription(npc: NpcRelationshipEntry): string {
+  private buildNpcDescription(
+    npc: NpcRelationshipEntry,
+    fields: EntityBuilderPaths['npcDescriptionFields'],
+  ): string {
+    const read = (key: string): string => {
+      const v = npc[key];
+      return typeof v === 'string' ? v.trim() : '';
+    };
     const parts: string[] = [];
-    const appearance = typeof npc.当前外貌状态 === 'string' ? npc.当前外貌状态.trim() : '';
+    const background = read(fields.background);
+    if (background) parts.push(background);
+    const appearance = read(fields.appearance);
     if (appearance) parts.push(appearance);
-    const thought = typeof npc.当前内心想法 === 'string' ? npc.当前内心想法.trim() : '';
-    if (thought) parts.push(thought);
-    const desc = typeof npc.外貌描述 === 'string' ? npc.外貌描述.trim() : '';
-    if (desc && !appearance) parts.push(desc);
+    // 兜底：背景与外貌都缺失时，用一句话身份「描述」避免空 summary。
+    if (parts.length === 0) {
+      const desc = read(fields.description);
+      if (desc) parts.push(desc);
+    }
     return parts.join('；');
   }
 

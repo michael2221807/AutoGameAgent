@@ -13,6 +13,11 @@ import { createMockStateManager } from '@/engine/__test-utils__/state-manager.mo
 const PATHS: EntityBuilderPaths = {
   playerName: '角色.基础信息.姓名',
   relationships: '社交.关系',
+  npcDescriptionFields: {
+    background: '背景',
+    appearance: '外貌描述',
+    description: '描述',
+  },
 };
 
 function makeKV(overrides: Partial<EngramEventStructuredKV> = {}): EngramEventStructuredKV {
@@ -71,17 +76,19 @@ describe('EntityBuilder (2026-04-14 双源重构)', () => {
   });
 
   describe('NPC entities from 社交.关系', () => {
-    it('adds non-普通 NPCs as npc type', () => {
+    it('adds non-普通 NPCs as npc type with 生平+外貌 summary', () => {
       const sm = makeSM({
         relationships: [
-          { 名称: '张三', 类型: '重点', 与玩家关系: '师父', 当前外貌状态: '鹤发童颜，道骨仙风' },
-          { 名称: '李四', 类型: '重点', 与玩家关系: '同门', 当前外貌状态: '年轻道士' },
+          { 名称: '张三', 类型: '重点', 与玩家关系: '师父', 背景: '昔年剑圣，归隐山林', 外貌描述: '鹤发童颜，道骨仙风' },
+          { 名称: '李四', 类型: '重点', 与玩家关系: '同门', 外貌描述: '年轻道士' },
         ],
       });
       const entities = builder.build([], sm, PATHS);
       expect(entities.find((e) => e.name === '张三')?.type).toBe('npc');
-      expect(entities.find((e) => e.name === '张三')?.summary).toBe('鹤发童颜，道骨仙风');
+      // summary = 背景（生平）；外貌描述
+      expect(entities.find((e) => e.name === '张三')?.summary).toBe('昔年剑圣，归隐山林；鹤发童颜，道骨仙风');
       expect(entities.find((e) => e.name === '李四')?.type).toBe('npc');
+      expect(entities.find((e) => e.name === '李四')?.summary).toBe('年轻道士');
     });
 
     it('skips 普通 NPCs', () => {
@@ -104,12 +111,23 @@ describe('EntityBuilder (2026-04-14 双源重构)', () => {
       expect(entities.some((e) => e.name === '未分类NPC')).toBe(true);
     });
 
-    it('uses 当前内心想法 as description fallback', () => {
+    it('summary = 生平+外貌 and EXCLUDES 内心想法 (transient state)', () => {
       const sm = makeSM({
-        relationships: [{ 名称: '某NPC', 类型: '重点', 当前内心想法: '心事重重' }],
+        relationships: [{ 名称: '某NPC', 类型: '重点', 背景: '出身将门', 外貌描述: '面如冠玉', 内心想法: '心事重重' }],
       });
       const entities = builder.build([], sm, PATHS);
-      expect(entities.find((e) => e.name === '某NPC')?.summary).toBe('心事重重');
+      const summary = entities.find((e) => e.name === '某NPC')?.summary ?? '';
+      expect(summary).toBe('出身将门；面如冠玉');
+      // 内心想法 是瞬时状态，绝不进入 Engram 实体 summary
+      expect(summary).not.toContain('心事重重');
+    });
+
+    it('falls back to 描述 only when 背景 and 外貌描述 are both empty', () => {
+      const sm = makeSM({
+        relationships: [{ 名称: '某NPC', 类型: '重点', 描述: '镇上的铁匠' }],
+      });
+      const entities = builder.build([], sm, PATHS);
+      expect(entities.find((e) => e.name === '某NPC')?.summary).toBe('镇上的铁匠');
     });
 
     it('skips NPCs without 名称', () => {

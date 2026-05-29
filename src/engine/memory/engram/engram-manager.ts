@@ -1,4 +1,5 @@
 // Architecture: docs/architecture/engram-v2-graphiti-alignment.md
+// App doc: docs/user-guide/pages/game-relationship-graph.md
 /**
  * Engram 管理器 — V2 Graphiti 对齐架构（2026-04-27 重构）
  *
@@ -100,6 +101,10 @@ export class EngramManager {
   private readonly gameTimePath: string;
   private readonly npcNameField: string;
   private readonly npcTypeField: string;
+  /** NPC summary 来源字段名（M-3：注入给 EntityBuilder，避免硬编码中文字段名） */
+  private readonly npcBackgroundField: string;
+  private readonly npcAppearanceField: string;
+  private readonly npcDescriptionField: string;
 
   /**
    * 获取当前活跃存档的 profileId + slotId
@@ -121,6 +126,9 @@ export class EngramManager {
       gameTime?: string;
       npcNameField?: string;
       npcTypeField?: string;
+      npcBackgroundField?: string;
+      npcAppearanceField?: string;
+      npcDescriptionField?: string;
     },
     getActiveSlot?: () => { profileId: string; slotId: string } | null,
   ) {
@@ -132,6 +140,9 @@ export class EngramManager {
     this.gameTimePath = pathOverrides?.gameTime ?? '世界.时间';
     this.npcNameField = pathOverrides?.npcNameField ?? '名称';
     this.npcTypeField = pathOverrides?.npcTypeField ?? '类型';
+    this.npcBackgroundField = pathOverrides?.npcBackgroundField ?? '背景';
+    this.npcAppearanceField = pathOverrides?.npcAppearanceField ?? '外貌描述';
+    this.npcDescriptionField = pathOverrides?.npcDescriptionField ?? '描述';
     this.vectorStore = new VectorStore();
     this.embedder = new Embedder(aiService);
     this.getActiveSlot = getActiveSlot ?? (() => null);
@@ -284,6 +295,11 @@ export class EngramManager {
     const entityPaths = {
       playerName: this.playerNamePath,
       relationships: this.relationshipsPath,
+      npcDescriptionFields: {
+        background: this.npcBackgroundField,
+        appearance: this.npcAppearanceField,
+        description: this.npcDescriptionField,
+      },
     };
     const entities = this.entityBuilder.build(allEvents, stateManager, entityPaths, {
       includeAllNpcTypes: options?.includeAllNpcTypes,

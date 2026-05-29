@@ -182,41 +182,9 @@ describe('useCharacterEditor', () => {
       expect(mockState.get('角色.身体.身高')).toBe(175);
     });
 
-    it('adds a custom body part', () => {
-      const editor = useCharacterEditor();
-      const result = editor.addBodyPart({ 部位名称: '耳朵', 敏感度: 15, 开发度: 5 });
-      expect(result.ok).toBe(true);
-      const parts = mockState.get<Array<{ 部位名称: string }>>('角色.身体.身体部位');
-      expect(parts).toHaveLength(6);
-    });
-
-    it('rejects empty body part name', () => {
-      const editor = useCharacterEditor();
-      const result = editor.addBodyPart({ 部位名称: '', 敏感度: 0, 开发度: 0 });
-      expect(result.ok).toBe(false);
-    });
-
-    it('prevents removing required body parts (first 4)', () => {
-      const editor = useCharacterEditor();
-      const result = editor.removeBodyPart(0);
-      expect(result.ok).toBe(false);
-      expect(result.error?.code).toBe('FIELD_INVALID');
-    });
-
-    it('allows removing custom body parts (index >= 4)', () => {
-      const editor = useCharacterEditor();
-      const result = editor.removeBodyPart(4);
-      expect(result.ok).toBe(true);
-      const parts = mockState.get<Array<{ 部位名称: string }>>('角色.身体.身体部位');
-      expect(parts).toHaveLength(4);
-    });
-
-    it('updates a body part', () => {
-      const editor = useCharacterEditor();
-      const result = editor.updateBodyPart(0, { 部位名称: '嘴', 敏感度: 50, 开发度: 30 });
-      expect(result.ok).toBe(true);
-      const parts = mockState.get<Array<{ 敏感度: number }>>('角色.身体.身体部位');
-      expect(parts![0].敏感度).toBe(50);
-    });
+    // H-2: body parts / 敏感点 / 纹身 / 子宫 are now edited as a local draft in
+    // CharacterDetailsPanel's body modal and committed in one updateBody() call
+    // (matching the NPC editor's batch-save pattern). The previous per-index
+    // addBodyPart/removeBodyPart/updateBodyPart methods were removed as unused.
   });
 });

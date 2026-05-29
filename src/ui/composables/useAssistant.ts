@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-assistant.md
 /**
  * useAssistant — Vue composable wrapping AssistantService for Vue components
  *
@@ -144,6 +145,21 @@ export function useAssistant() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings.value)); } catch { /* ignore */ }
   }
 
+  // ─── World-builder mode helpers (Story 3) ─────────
+
+  /**
+   * Story 3: recommended default context attachments for world-builder
+   * free-chat (relationships / locations / world description). Delegates to
+   * the service-owned AttachmentBuilder so the UI doesn't hardcode scopes.
+   */
+  function suggestWorldBuilderAttachments(paths: {
+    relationships: string;
+    locations: string;
+    worldDescription: string;
+  }): AttachmentSpec[] {
+    return service!.suggestWorldBuilderAttachments(paths);
+  }
+
   // ─── Derived ──────────────────────────────────────
 
   const messages = computed<AssistantMessage[]>(() => session.value.messages);
@@ -163,5 +179,6 @@ export function useAssistant() {
     rollback,
     refreshSession,
     updateSettings,
+    suggestWorldBuilderAttachments,
   };
 }

@@ -36,6 +36,74 @@ import type {
  * 采用不可变风格：每个 Stage 返回新的 context 对象（浅拷贝 + 修改字段），
  * 避免跨阶段的隐式副作用。Runner 用返回值替换 ctx 引用。
  */
+/**
+ * 阶段间临时数据袋（`PipelineContext.meta`）。
+ *
+ * 保留 `[key: string]: unknown` 索引签名以兼容前向扩展与任意键访问；下方已知字段
+ * 提供类型，让常用键无需 `as` 断言即可获得类型安全（L-1：原为裸 `Record<string,unknown>`）。
+ * 新增跨阶段字段时，优先在此登记类型而非依赖断言。
+ */
+export interface PipelineMeta {
+  [key: string]: unknown;
+
+  // ── 子管线分派标志（GameOrchestrator 读取） ──
+  /** 短期记忆已满 → 触发 MemorySummaryPipeline */
+  pendingSummary?: boolean;
+  /** 到达心跳周期 → 触发 WorldHeartbeatPipeline */
+  pendingHeartbeat?: boolean;
+  /** 到达剧情评估点 → 触发 PlotEvaluationPipeline */
+  pendingPlotEval?: boolean;
+  /**
+   * 私密档案补全报告（CommandExecutionStage → GameOrchestrator）。
+   * 类型留 `unknown` 以避免与 command-execution 形成 import 环；消费侧自行断言。
+   */
+  pendingPrivacyRepair?: unknown;
+
+  // ── Enhanced Opening（Story 0） ──
+  /** 增强开局标记：ImageService 跳过 + PostProcess/ContextAssembly flow override */
+  isEnhancedOpening?: boolean;
+  /** Phase D 知识边，编排器 Phase F 注入合成 parsedResponse.knowledgeFacts */
+  openingFacts?: Array<{ fact: string; sourceEntity: string; targetEntity: string }>;
+  /** splitGen step1 的 flow 注册键覆盖（camelCase） */
+  step1FlowOverride?: string;
+  /** splitGen step2 的 flow 注册键覆盖（camelCase） */
+  step2FlowOverride?: string;
+
+  // ── 分步生成 / CoT（AICallStage） ──
+  /** 分步生成开关 */
+  splitGen?: boolean;
+  /** 第 2 步预组装消息列表 */
+  splitStep2Messages?: AIMessage[];
+  /** 第 2 步消息来源标签 */
+  splitStep2Sources?: string[];
+  /** 思维链捕获开关 */
+  cotEnabled?: boolean;
+  /** 将 step1 thinking 注入 step2 */
+  cotInjectStep2?: boolean;
+  /** CoT 裁判开关（ContextAssembly 写、读） */
+  cotJudgeEnabled?: boolean;
+  /** step2 原始响应（PostProcess 消费） */
+  rawResponseStep2?: string;
+  /** 推理内容已摄入标记（ReasoningIngestStage） */
+  reasoningIngested?: boolean;
+
+  // ── 调试透传（AICallStage → debug recorder） ──
+  debugVariables?: Record<string, string>;
+  debugRoundNumber?: number;
+
+  // ── 环境块（ContextAssembly → BodyPolish） ──
+  environmentBlock?: string;
+  worldEventContext?: string;
+
+  // ── 身体润色结果（BodyPolishStage） ──
+  polishApplied?: boolean;
+  /** 是否为手动触发的润色（PostProcess 消费） */
+  polishManual?: boolean;
+  polishOriginalText?: string;
+  polishModel?: string;
+  polishDurationMs?: number;
+}
+
 export interface PipelineContext {
   /** 用户输入文本（PreProcessStage 可能 prepend 了 action queue 内容） */
   userInput: string;
@@ -118,8 +186,11 @@ export interface PipelineContext {
    *   由编排器 Phase F 注入到合成 parsedResponse.knowledgeFacts（Impl-Phase 2）
    * - step1FlowOverride?: string — splitGen step1 的 flow 注册键覆盖（camelCase，Impl-Phase 2）
    * - step2FlowOverride?: string — splitGen step2 的 flow 注册键覆盖（camelCase，Impl-Phase 2）
+   *
+   * L-1（2026-05-28）：类型由裸 `Record<string,unknown>` 升级为 `PipelineMeta`
+   * （索引签名 + 已知字段类型化），常用键不再需要 `as` 断言。
    */
-  meta: Record<string, unknown>;
+  meta: PipelineMeta;
 }
 
 /** 管线阶段接口 — 每个 Stage 实现此接口 */

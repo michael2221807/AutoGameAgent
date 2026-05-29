@@ -115,6 +115,8 @@ function makePromptAssembler(): { assemble: ReturnType<typeof vi.fn> } {
   return { assemble: vi.fn(() => ({ messages: [], messageSources: [] })) };
 }
 
+const NSFW_SECTION_FIXTURE = '   - **私密信息**（NSFW 模式已开启，必填）— 嵌套对象，含身体部位/性取向/性渴望程度等字段。';
+
 function makeGamePack(): Record<string, unknown> {
   return {
     promptFlows: {
@@ -124,6 +126,11 @@ function makeGamePack(): Record<string, unknown> {
       openingEnhancedD: { id: 'openingEnhancedD', modules: [] },
       openingEnhancedStep1: { id: 'openingEnhancedStep1', modules: [] },
       openingEnhancedStep2: { id: 'openingEnhancedStep2', modules: [] },
+    },
+    // GamePack.prompts is a non-optional Record<string,string> at runtime (pack-loader fills it).
+    // C-1: the NSFW private-profile fragment is pack-resident; engine reads it for Phase C.
+    prompts: {
+      openingEnhancedCNsfw: NSFW_SECTION_FIXTURE,
     },
   };
 }
@@ -295,6 +302,64 @@ describe('Phase A-D output structure and state writes', () => {
     );
     const npc = npcPushes[0][1] as Record<string, unknown>;
     expect(npc).not.toHaveProperty('私密信息');
+  });
+
+  it('Phase C injects NSFW section and retains 私密信息 when nsfwMode=true (C-1)', async () => {
+    const npcWithNsfw = JSON.stringify({
+      npcs: [{ '名称': '王五', '描述': '...', '私密信息': { '是否为处女/处男': true } }],
+    });
+    const ai = makeAiService([PHASE_A_RESPONSE, PHASE_B_RESPONSE, npcWithNsfw, PHASE_D_RESPONSE]);
+    const pa = makePromptAssembler();
+    const { pipeline, sm } = makePipeline({ ai, pa });
+
+    await pipeline.execute(makeDefaultOptions({ nsfwMode: true }));
+
+    // (a) NSFW_SECTION variable is non-empty (pack fragment injected) for Phase C
+    const cCall = pa.assemble.mock.calls.find(
+      (c: unknown[]) => (c[0] as { id?: string })?.id === 'openingEnhancedC',
+    );
+    expect(cCall).toBeDefined();
+    const cVars = cCall![1] as Record<string, string>;
+    // I-2: assert the engine pulled the exact pack fragment through (proves gamePack.prompts wiring,
+    // not a tautology against a hardcoded substring).
+    expect(cVars.NSFW_SECTION).toBe(NSFW_SECTION_FIXTURE);
+
+    // (b) AI-generated 私密信息 is RETAINED (not stripped) when nsfwMode=true
+    const npcPushes = sm.push.mock.calls.filter(
+      (c: unknown[]) => c[0] === DEFAULT_ENGINE_PATHS.relationships,
+    );
+    const npc = npcPushes[0][1] as Record<string, unknown>;
+    expect(npc).toHaveProperty('私密信息');
+  });
+
+  it('Phase C passes empty NSFW_SECTION when nsfwMode=false (C-1)', async () => {
+    const pa = makePromptAssembler();
+    const { pipeline } = makePipeline({ pa });
+
+    await pipeline.execute(makeDefaultOptions({ nsfwMode: false }));
+
+    const cCall = pa.assemble.mock.calls.find(
+      (c: unknown[]) => (c[0] as { id?: string })?.id === 'openingEnhancedC',
+    );
+    expect(cCall).toBeDefined();
+    const cVars = cCall![1] as Record<string, string>;
+    expect(cVars.NSFW_SECTION).toBe('');
+  });
+
+  it('Phase D injects relationDensity into prompt variables (M-1)', async () => {
+    const pa = makePromptAssembler();
+    const { pipeline } = makePipeline({ pa });
+
+    await pipeline.execute(makeDefaultOptions({
+      settings: { ...DEFAULT_ENHANCED_OPENING_SETTINGS, relationDensity: 'dense' },
+    }));
+
+    const dCall = pa.assemble.mock.calls.find(
+      (c: unknown[]) => (c[0] as { id?: string })?.id === 'openingEnhancedD',
+    );
+    expect(dCall).toBeDefined();
+    const dVars = dCall![1] as Record<string, string>;
+    expect(dVars.RELATION_DENSITY).toBe('dense');
   });
 
   it('Phase D extracts and normalizes knowledge_facts', async () => {

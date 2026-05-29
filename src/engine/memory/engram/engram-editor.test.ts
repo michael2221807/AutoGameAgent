@@ -76,15 +76,18 @@ function createMockEngramManager(): EngramManagerLike & {
   withWriteLock: ReturnType<typeof vi.fn>;
   vectorizePending: ReturnType<typeof vi.fn>;
   deleteEdgeVectors: ReturnType<typeof vi.fn>;
+  deleteEntityVectors: ReturnType<typeof vi.fn>;
 } {
   return {
     withWriteLock: vi.fn(async (fn: () => unknown) => fn()),
     vectorizePending: vi.fn(async () => ({ vectorized: 0 })),
     deleteEdgeVectors: vi.fn(async () => {}),
+    deleteEntityVectors: vi.fn(async () => {}),
   } as unknown as EngramManagerLike & {
     withWriteLock: ReturnType<typeof vi.fn>;
     vectorizePending: ReturnType<typeof vi.fn>;
     deleteEdgeVectors: ReturnType<typeof vi.fn>;
+    deleteEntityVectors: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -370,6 +373,8 @@ describe('EngramEditor', () => {
       const result = await editor.renameEntity('Alice', 'Alice');
       expect(result.entity.name).toBe('Alice');
       expect(result.updatedEdgeCount).toBe(0);
+      // No-op rename must not touch entity vectors (pins the `trimmed !== oldName` guard, L-2).
+      expect(mgr.deleteEntityVectors).not.toHaveBeenCalled();
     });
 
     it('does not call deleteEdgeVectors when no edges affected', async () => {

@@ -49,6 +49,7 @@
     "imageNaiTransformerPreset",
     "fieldRepair",
     "openingEnhancedA", "openingEnhancedB", "openingEnhancedC", "openingEnhancedD",
+    "openingEnhancedCNsfw",
     "openingEnhancedStep1", "openingEnhancedStep2",
     "plotDirective", "plotEvaluationStep2", "plotDecompose",
     "edgeReview", "entityEnrich",

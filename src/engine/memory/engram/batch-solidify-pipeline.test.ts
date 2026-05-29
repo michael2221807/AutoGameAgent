@@ -23,10 +23,14 @@ const PATHS: BatchSolidifyPaths = {
   locations: '世界.地点信息',
   engramMemory: '系统.扩展.engramMemory',
   playerName: '角色.基础信息.姓名',
+  roundNumber: '元数据.回合序号',
   npcNameField: '名称',
   npcTypeField: '类型',
   npcTypeExclude: '普通',
+  npcAppearanceField: '外貌描述',
+  npcDescriptionField: '描述',
   locationNameField: '名称',
+  locationDescriptionField: '描述',
   narrativeHistory: '元数据.叙事历史',
 };
 
@@ -358,6 +362,61 @@ describe('EngramBatchSolidifyPipeline', () => {
     expect(result.skipped).toBe(1);
     expect(result.skippedDetails[0]).toEqual(
       expect.objectContaining({ reason: 'both_endpoints_unknown' }),
+    );
+  });
+
+  // M-4 (2026-05-28): a single-endpoint edge — one real entity + one AI-hallucinated
+  // name absent from the post-backfill world set — must be rejected at validation, so
+  // bulkCreateEdges never auto-stubs a permanent vectorized phantom entity for it.
+  it('skips single-endpoint edges (one real + one hallucinated) — no phantom reaches bulkCreateEdges', async () => {
+    const sm = createMockStateManager({
+      relationships: [makeNpc('张三'), makeNpc('李四')],
+      entities: [],
+      edges: [],
+    });
+
+    (mockAiService.generate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      JSON.stringify({
+        knowledge_facts: [
+          // valid: both endpoints are real state-tree NPCs
+          { source_entity: '张三', target_entity: '李四', fact: '张三和李四是同门师兄弟，自幼一起在山门习武修行' },
+          // single-endpoint hallucination: 张三 is real, 幻影宗 exists nowhere in the world data
+          { source_entity: '张三', target_entity: '幻影宗', fact: '张三年少时曾被神秘的幻影宗收为记名弟子' },
+        ],
+      }),
+    );
+
+    // Echo back exactly the validated edges passed in, so we can inspect the filter.
+    let receivedEdges: Array<{ sourceEntity: string; targetEntity: string }> = [];
+    (mockEngramEditor.bulkCreateEdges as ReturnType<typeof vi.fn>).mockImplementation(
+      async (edges: Array<{ sourceEntity: string; targetEntity: string }>) => {
+        receivedEdges = edges;
+        return { created: edges, skipped: [] };
+      },
+    );
+
+    const pipeline = new EngramBatchSolidifyPipeline({
+      aiService: mockAiService,
+      stateManager: sm,
+      engramEditor: mockEngramEditor,
+      engramManager: mockEngramManager,
+      paths: PATHS,
+    });
+
+    const result = await pipeline.run();
+
+    // Only the both-endpoints-known edge survives validation → reaches bulkCreateEdges.
+    expect(receivedEdges).toHaveLength(1);
+    expect(receivedEdges[0]).toEqual(
+      expect.objectContaining({ sourceEntity: '张三', targetEntity: '李四' }),
+    );
+    // The single-endpoint hallucination never reaches bulkCreateEdges → no auto-stub phantom.
+    expect(receivedEdges.some((e) => e.targetEntity === '幻影宗')).toBe(false);
+    expect(result.created).toBe(1);
+
+    // Recorded as a validation skip with the precise single-endpoint reason.
+    expect(result.skippedDetails).toEqual(
+      expect.arrayContaining([expect.objectContaining({ reason: 'endpoint_unknown' })]),
     );
   });
 

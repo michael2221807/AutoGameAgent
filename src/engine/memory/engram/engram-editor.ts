@@ -28,6 +28,7 @@ export interface EngramManagerLike {
   withWriteLock<T>(fn: () => T | Promise<T>): Promise<T>;
   vectorizePending(stateManager: StateManager): Promise<{ vectorized: number }>;
   deleteEdgeVectors(edgeIds: string[]): Promise<void>;
+  deleteEntityVectors(names: string[]): Promise<void>;
 }
 
 // ─── Engram state shape (matches engram-manager.ts private interface) ───
@@ -287,20 +288,26 @@ export class EngramEditor {
         }
       }
 
-      // Update entity
+      // Update entity. Reset is_embedded: the entity vector is keyed by name,
+      // so a rename orphans the old-name vector and leaves the new name with
+      // none — re-embed it next round so retrieval can still find it.
       const entity: EngramEntity = {
         ...engram.entities[idx],
         name: trimmed,
         source: 'user',
         userEditedAtRound: this.getCurrentRound(),
+        is_embedded: false,
       };
       engram.entities[idx] = entity;
       engram.meta.lastUpdated = Date.now();
       this.saveEngram(engram);
 
-      // Clean old edge vectors (fire-and-forget)
+      // Clean old edge vectors + the stale old-name entity vector.
       if (oldEdgeIds.length > 0) {
         await this.engramManager.deleteEdgeVectors(oldEdgeIds);
+      }
+      if (trimmed !== oldName) {
+        await this.engramManager.deleteEntityVectors([oldName]);
       }
 
       return { entity, updatedEdgeCount };
@@ -347,6 +354,9 @@ export class EngramEditor {
       if (removedEdgeIds.length > 0) {
         await this.engramManager.deleteEdgeVectors(removedEdgeIds);
       }
+      // Immediately drop the deleted entity's vector instead of waiting for the
+      // next-round trimToMatchEvents self-heal (L-2: consume deleteEntityVectors).
+      await this.engramManager.deleteEntityVectors([name]);
 
       return { deletedEdgeIds: removedEdgeIds };
     });

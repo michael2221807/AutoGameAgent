@@ -191,7 +191,7 @@
 
   "engram.batchSolidify.title": "Engram Coverage",
   "engram.batchSolidify.buttonLabel": "Batch Solidify",
-  "engram.batchSolidify.buttonTooltip": "Scan world data and fill missing Engram graph",
+  "engram.batchSolidify.buttonTooltip": "Scan world data and fill the missing Engram graph. Recommended workflow: batch-solidify first, then manually refine entities and knowledge edges.",
   "engram.batchSolidify.progress.scanning": "Scanning world data...",
   "engram.batchSolidify.progress.generating": "Generating knowledge edges...",
   "engram.batchSolidify.progress.applying": "Applying changes...",

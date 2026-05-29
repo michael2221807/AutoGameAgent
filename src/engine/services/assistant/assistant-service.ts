@@ -1,4 +1,5 @@
 // Archived plan: docs/status/archive/plan-assistant-utility-2026-04-14.md
+// App doc: docs/user-guide/pages/game-assistant.md
 /**
  * AssistantService — Assistant utility 顶层编排
  *
@@ -25,6 +26,7 @@ import type {
   AssistantSession,
   AssistantSettings,
   AssistantSystemKind,
+  AttachmentSpec,
   ConversationStore,
   InjectResult,
   PayloadDraft,
@@ -191,6 +193,21 @@ export class AssistantService {
   /** 是否有可撤销的注入 */
   canRollbackInject(): boolean {
     return this.lastInjectSnapshot !== null;
+  }
+
+  /**
+   * Story 3: 为"世界构建模式"自由对话推荐默认 context attachments
+   * （关系网 / 地点 / 世界描述），让 AI 在生成世界数据时拿到现有世界状态。
+   *
+   * 引擎不硬编码游戏专属路径——由 UI 层（DEFAULT_ENGINE_PATHS）传入。
+   * 委托给内部 AttachmentBuilder，使其 helper 被真实消费。
+   */
+  suggestWorldBuilderAttachments(paths: {
+    relationships: string;
+    locations: string;
+    worldDescription: string;
+  }): AttachmentSpec[] {
+    return this.attachmentBuilder.suggestWorldBuilderAttachments(paths);
   }
 
   /** 当前生效 game pack —— 装配新 pack 时由 outer service 调用 */

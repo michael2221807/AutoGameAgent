@@ -2,7 +2,6 @@
   "character.tab.basic": "Basic",
   "character.tab.attributes": "Attributes",
   "character.tab.relations": "Relations",
-  "character.tab.achievements": "Achievements",
   "character.tab.body": "Body",
   "character.tab.playerImage": "Player Image",
 
@@ -61,8 +60,6 @@
   "character.body.devLevel": "Development Level",
   "character.body.empty": "No body data available",
 
-  "character.achievements.icon": "🏆",
-  "character.achievements.placeholder": "Achievement system not yet available",
 
   "character.image.statsTotal": "{n} images",
   "character.image.statsLabel.total": "Total Images",
@@ -246,8 +243,15 @@
   "character.toast.fieldUpdated": "Updated",
   "character.toast.talentAdded": "Talent added",
   "character.toast.talentRemoved": "Talent removed",
-  "character.body.edit.partNameRequired": "Body part name is required",
-  "character.body.edit.invalidIndex": "Invalid body part index",
-  "character.body.edit.cannotRemoveRequired": "Cannot remove required body part",
+  "character.body.edit.partName": "Body part name",
+  "character.body.edit.featureDescription": "Feature description",
+  "character.body.edit.specialMark": "Special mark",
+  "character.body.edit.addBodyPart": "Add body part",
+  "character.body.edit.inseminationRecords": "Insemination records",
+  "character.body.edit.recordDate": "Date",
+  "character.body.edit.recordDesc": "Description",
+  "character.body.edit.addRecord": "Add record",
+  "character.body.edit.addSensitivePoint": "Add sensitive point",
+  "character.body.edit.addTattoo": "Add tattoo / mark",
   "character.edit.invalidVitalMax": "Maximum value must be at least 1"
 }

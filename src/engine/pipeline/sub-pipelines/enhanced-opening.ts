@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/creation.md
 /**
  * Enhanced Opening Pipeline — orchestrates Phase A-G of Story 0.
  *
@@ -361,13 +362,26 @@ async function executePhaseC(ctx: PhaseContext): Promise<string> {
   ctx.options.onProgress('phaseC', 0);
 
   const playerProfile = buildPlayerProfileString(ctx);
+  // C-1: NSFW private-profile section is pack-resident content (engine/content separation —
+  // the Chinese 私密信息 field text lives in the pack, not in engine code). When nsfwMode is on,
+  // inject the pack's openingEnhancedCNsfw fragment so the AI generates the 私密信息 nested object;
+  // otherwise leave it empty (and strip any 私密信息 below).
+  let nsfwSection = '';
+  if (ctx.options.nsfwMode) {
+    nsfwSection = ctx.gamePack.prompts['openingEnhancedCNsfw'] ?? '';
+    if (!nsfwSection) {
+      // I-3: make the degradation observable — without the pack fragment the AI generates NPCs
+      // with no 私密信息, forcing Phase G PrivacyProfileRepair to backfill every one of them.
+      console.warn('[EnhancedOpening] Phase C: nsfwMode=true but "openingEnhancedCNsfw" prompt is missing/empty in the pack — NPCs will be generated without private profiles; Phase G PrivacyProfileRepair will have to backfill all of them.');
+    }
+  }
   const variables: Record<string, string> = {
     WORLD_DESCRIPTION: ctx.worldDescription,
     LOCATIONS_LIST: ctx.locationNames.join('、'),
     PLAYER_PROFILE: playerProfile,
     NPC_MIN: String(ctx.options.settings.npcRange[0]),
     NPC_MAX: String(ctx.options.settings.npcRange[1]),
-    NSFW_SECTION: '',
+    NSFW_SECTION: nsfwSection,
   };
 
   const { messages, generationId } = assembleFlowMessages(
@@ -393,7 +407,11 @@ async function executePhaseC(ctx: PhaseContext): Promise<string> {
   const npcs = validateNpcs(parsed);
 
   for (const npc of npcs) {
-    delete npc['私密信息'];
+    // C-1: only strip 私密信息 when NSFW is off. When on, keep the AI-generated private profile;
+    // Phase G PrivacyProfileRepair backfills any fields the AI left incomplete.
+    if (!ctx.options.nsfwMode) {
+      delete npc['私密信息'];
+    }
     if (!Array.isArray(npc['记忆'])) npc['记忆'] = [];
     if (!Array.isArray(npc['关系网变量'])) npc['关系网变量'] = [];
 
@@ -422,6 +440,10 @@ async function executePhaseD(ctx: PhaseContext): Promise<NormalizedKnowledgeFact
     PLAYER_DESCRIPTION: playerDesc,
     EDGE_MIN: String(ctx.options.settings.edgeRange[0]),
     EDGE_MAX: String(ctx.options.settings.edgeRange[1]),
+    // M-1: relationship-network density (sparse/medium/dense, from D22 advanced settings).
+    // Engine passes the raw enum token; the pack prompt (openingEnhancedD.md) explains each
+    // level and references {{RELATION_DENSITY}} — keeps density semantics on the pack side.
+    RELATION_DENSITY: ctx.options.settings.relationDensity,
   };
 
   const { messages, generationId } = assembleFlowMessages(

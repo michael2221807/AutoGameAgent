@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-character.md
 /**
  * useCharacterEditor — CRUD composable for character fields in CharacterDetailsPanel.
  *
@@ -9,7 +10,7 @@
  */
 import { useGameState } from '@/ui/composables/useGameState';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
-import type { EditorResult, BodyPartEntry } from './types';
+import type { EditorResult } from './types';
 import { emitEditorToast } from './types';
 
 interface NpcRelation {
@@ -28,14 +29,9 @@ export interface UseCharacterEditorReturn {
   removeTalent(index: number): EditorResult;
   updateTalent(index: number, talent: { 名称: string; 描述: string }): EditorResult;
   updateBody(bodyData: Record<string, unknown>): EditorResult;
-  addBodyPart(part: BodyPartEntry): EditorResult;
-  removeBodyPart(index: number): EditorResult;
-  updateBodyPart(index: number, part: BodyPartEntry): EditorResult;
 }
 
-const REQUIRED_BODY_PART_COUNT = 4;
 const BODY_PATH = '角色.身体';
-const BODY_PARTS_PATH = '角色.身体.身体部位';
 
 export function useCharacterEditor(): UseCharacterEditorReturn {
   const { setValue, get } = useGameState();
@@ -199,75 +195,6 @@ export function useCharacterEditor(): UseCharacterEditorReturn {
     return { ok: true };
   }
 
-  function addBodyPart(part: BodyPartEntry): EditorResult {
-    if (!part.部位名称?.trim()) {
-      return {
-        ok: false,
-        error: {
-          code: 'FIELD_REQUIRED',
-          i18nKey: 'character.body.edit.partNameRequired',
-          message: 'Body part name is required',
-        },
-      };
-    }
-    const body = get<Record<string, unknown>>(BODY_PATH) ?? {};
-    const parts = (body['身体部位'] as BodyPartEntry[] | undefined) ?? [];
-    const updated = [...parts, { ...part, 部位名称: part.部位名称.trim() }];
-    setValue(BODY_PARTS_PATH, updated);
-    emitEditorToast('success', 'character.toast.fieldUpdated');
-    return { ok: true };
-  }
-
-  function removeBodyPart(index: number): EditorResult {
-    const body = get<Record<string, unknown>>(BODY_PATH) ?? {};
-    const parts = (body['身体部位'] as BodyPartEntry[] | undefined) ?? [];
-    if (index < 0 || index >= parts.length) {
-      return {
-        ok: false,
-        error: {
-          code: 'FIELD_INVALID',
-          i18nKey: 'character.body.edit.invalidIndex',
-          message: 'Invalid body part index',
-        },
-      };
-    }
-    if (index < REQUIRED_BODY_PART_COUNT) {
-      return {
-        ok: false,
-        error: {
-          code: 'FIELD_INVALID',
-          i18nKey: 'character.body.edit.cannotRemoveRequired',
-          message: 'Cannot remove required body part',
-        },
-      };
-    }
-    const updated = [...parts];
-    updated.splice(index, 1);
-    setValue(BODY_PARTS_PATH, updated);
-    emitEditorToast('success', 'character.toast.fieldUpdated');
-    return { ok: true };
-  }
-
-  function updateBodyPart(index: number, part: BodyPartEntry): EditorResult {
-    const body = get<Record<string, unknown>>(BODY_PATH) ?? {};
-    const parts = (body['身体部位'] as BodyPartEntry[] | undefined) ?? [];
-    if (index < 0 || index >= parts.length) {
-      return {
-        ok: false,
-        error: {
-          code: 'FIELD_INVALID',
-          i18nKey: 'character.body.edit.invalidIndex',
-          message: 'Invalid body part index',
-        },
-      };
-    }
-    const updated = [...parts];
-    updated[index] = { ...updated[index], ...part };
-    setValue(BODY_PARTS_PATH, updated);
-    emitEditorToast('success', 'character.toast.fieldUpdated');
-    return { ok: true };
-  }
-
   return {
     updateField,
     updateAttribute,
@@ -276,8 +203,5 @@ export function useCharacterEditor(): UseCharacterEditorReturn {
     removeTalent,
     updateTalent,
     updateBody,
-    addBodyPart,
-    removeBodyPart,
-    updateBodyPart,
   };
 }

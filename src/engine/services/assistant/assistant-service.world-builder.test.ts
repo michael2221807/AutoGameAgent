@@ -356,4 +356,25 @@ describe('AttachmentBuilder — suggestWorldBuilderAttachments', () => {
     expect(suggestions[1]).toEqual({ path: '世界.地点信息', scope: 'context' });
     expect(suggestions[2]).toEqual({ path: '世界.描述', scope: 'context' });
   });
+
+  // H-3 fix (2026-05-28): AssistantService must expose this so the UI
+  // (AssistantPanel → useAssistant) can consume it without holding a builder.
+  it('is delegated by AssistantService.suggestWorldBuilderAttachments', () => {
+    const { aiService } = makeAIService('');
+    const sm = new FakeStateManager({ 社交: { 关系: [] }, 世界: { 地点信息: [], 描述: '' } });
+    const svc = new AssistantService({
+      aiService,
+      stateManager: sm as unknown as StateManager,
+      commandExecutor: makeExec(),
+      gamePack: PACK_WITH_WORLD_BUILDER,
+    });
+
+    const paths = { relationships: '社交.关系', locations: '世界.地点信息', worldDescription: '世界.描述' };
+    const suggestions = svc.suggestWorldBuilderAttachments(paths);
+    expect(suggestions).toEqual([
+      { path: '社交.关系', scope: 'context' },
+      { path: '世界.地点信息', scope: 'context' },
+      { path: '世界.描述', scope: 'context' },
+    ]);
+  });
 });

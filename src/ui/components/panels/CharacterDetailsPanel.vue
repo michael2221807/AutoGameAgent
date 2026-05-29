@@ -8,7 +8,7 @@
  * - 社交.关系 ← 数组，每项含 名称/好感度/内心想法/在做事项 等字段
  * - 属性读取路径与现有代码一致，schema 驱动优先
  *
- * 2026-04-08 升级：英雄头像区、Tab 结构（基础/属性/关系/成就）
+ * 2026-04-08 升级：英雄头像区、Tab 结构（基础/属性/关系/身体）
  */
 import { ref, reactive, computed, inject, watch, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -864,17 +864,54 @@ function openAdvancedEditor(targetPath: string): void {
 }
 
 // ─── Story 2: Body editing helpers ───
+// H-2: body parts / 子宫 / 敏感点 / 纹身 are edited as a local draft inside this modal
+// and committed together via charEditor.updateBody() on save — mirrors the NPC editor's
+// batch-save pattern (RelationshipPanel), so "delete then cancel" cleanly discards drafts.
+
+interface BodyEditPart {
+  _id: number;
+  部位名称: string;
+  敏感度: number;
+  开发度: number;
+  特征描述: string;
+  特殊印记: string;
+}
+interface BodyEditRecord { _id: number; 日期: string; 描述: string }
+interface BodyEditUterus { 状态: string; 宫口状态: string; 内射记录: BodyEditRecord[] }
+interface BodyEditForm {
+  身高: number; 体重: number;
+  胸围: number; 腰围: number; 臀围: number;
+  胸部描述: string; 私处描述: string; 生殖器描述: string;
+  身体部位: BodyEditPart[];
+  敏感点: string[];
+  纹身与印记: string[];
+  子宫: BodyEditUterus;
+}
 
 const showBodyEditModal = ref(false);
-const bodyEditForm = ref({
+const sensitivePointDraft = ref('');
+const tattooDraft = ref('');
+// Stable keys for draftable list rows (so removing a middle row doesn't reuse DOM by index).
+let bodyDraftIdSeq = 0;
+// Raw 子宫 captured at modal-open time → save merges over this open-time snapshot (draft
+// isolation), preserving any 子宫 sub-fields not surfaced in the form.
+const bodyEditUterusRaw = ref<Record<string, unknown>>({});
+const bodyEditForm = ref<BodyEditForm>({
   身高: 0, 体重: 0,
   胸围: 0, 腰围: 0, 臀围: 0,
   胸部描述: '', 私处描述: '', 生殖器描述: '',
+  身体部位: [],
+  敏感点: [],
+  纹身与印记: [],
+  子宫: { 状态: '', 宫口状态: '', 内射记录: [] },
 });
 
 function openBodyEdit(): void {
   const b = get<Record<string, unknown>>('角色.身体') ?? {};
   const sw = (b['三围'] as Record<string, number>) ?? {};
+  const rawParts = Array.isArray(b['身体部位']) ? (b['身体部位'] as Array<Record<string, unknown>>) : [];
+  const rawUterus = (b['子宫'] as Record<string, unknown>) ?? {};
+  const rawRecords = Array.isArray(rawUterus['内射记录']) ? (rawUterus['内射记录'] as Array<Record<string, unknown>>) : [];
   bodyEditForm.value = {
     身高: (b['身高'] as number) ?? 0,
     体重: (b['体重'] as number) ?? 0,
@@ -884,12 +921,75 @@ function openBodyEdit(): void {
     胸部描述: (b['胸部描述'] as string) ?? '',
     私处描述: (b['私处描述'] as string) ?? '',
     生殖器描述: (b['生殖器描述'] as string) ?? '',
+    身体部位: rawParts.map((p) => ({
+      _id: bodyDraftIdSeq++,
+      部位名称: (p['部位名称'] as string) ?? '',
+      敏感度: (p['敏感度'] as number) ?? 0,
+      开发度: (p['开发度'] as number) ?? 0,
+      特征描述: (p['特征描述'] as string) ?? '',
+      特殊印记: (p['特殊印记'] as string) ?? '',
+    })),
+    敏感点: Array.isArray(b['敏感点']) ? (b['敏感点'] as string[]).slice() : [],
+    纹身与印记: Array.isArray(b['纹身与印记']) ? (b['纹身与印记'] as string[]).slice() : [],
+    子宫: {
+      状态: (rawUterus['状态'] as string) ?? '',
+      宫口状态: (rawUterus['宫口状态'] as string) ?? '',
+      内射记录: rawRecords.map((r) => ({ _id: bodyDraftIdSeq++, 日期: (r['日期'] as string) ?? '', 描述: (r['描述'] as string) ?? '' })),
+    },
   };
+  bodyEditUterusRaw.value = { ...rawUterus };
+  sensitivePointDraft.value = '';
+  tattooDraft.value = '';
   showBodyEditModal.value = true;
+}
+
+function addDraftBodyPart(): void {
+  bodyEditForm.value.身体部位.push({ _id: bodyDraftIdSeq++, 部位名称: '', 敏感度: 0, 开发度: 0, 特征描述: '', 特殊印记: '' });
+}
+function removeDraftBodyPart(index: number): void {
+  bodyEditForm.value.身体部位.splice(index, 1);
+}
+function addSensitivePoint(): void {
+  const v = sensitivePointDraft.value.trim();
+  if (!v) return;
+  if (!bodyEditForm.value.敏感点.includes(v)) bodyEditForm.value.敏感点.push(v);
+  sensitivePointDraft.value = '';
+}
+function removeSensitivePoint(index: number): void {
+  bodyEditForm.value.敏感点.splice(index, 1);
+}
+function addTattoo(): void {
+  const v = tattooDraft.value.trim();
+  if (!v) return;
+  if (!bodyEditForm.value.纹身与印记.includes(v)) bodyEditForm.value.纹身与印记.push(v);
+  tattooDraft.value = '';
+}
+function removeTattoo(index: number): void {
+  bodyEditForm.value.纹身与印记.splice(index, 1);
+}
+function addInseminationRecord(): void {
+  bodyEditForm.value.子宫.内射记录.push({ _id: bodyDraftIdSeq++, 日期: '', 描述: '' });
+}
+function removeInseminationRecord(index: number): void {
+  bodyEditForm.value.子宫.内射记录.splice(index, 1);
 }
 
 function saveBodyEdit(): void {
   const f = bodyEditForm.value;
+  // Drop blank body parts; trim names. Keep only the 5 known per-part fields.
+  const cleanParts = f.身体部位
+    .filter((p) => p.部位名称.trim() !== '')
+    .map((p) => ({
+      部位名称: p.部位名称.trim(),
+      敏感度: p.敏感度,
+      开发度: p.开发度,
+      特征描述: p.特征描述,
+      特殊印记: p.特殊印记,
+    }));
+  // Keep a record only if it has a date or description (drop fully-blank rows).
+  const cleanRecords = f.子宫.内射记录
+    .filter((r) => r.日期.trim() !== '' || r.描述.trim() !== '')
+    .map((r) => ({ 日期: r.日期, 描述: r.描述 }));
   charEditor.updateBody({
     身高: f.身高,
     体重: f.体重,
@@ -897,6 +997,11 @@ function saveBodyEdit(): void {
     胸部描述: f.胸部描述,
     私处描述: f.私处描述,
     生殖器描述: f.生殖器描述,
+    身体部位: cleanParts,
+    敏感点: f.敏感点.slice(),
+    纹身与印记: f.纹身与印记.slice(),
+    // Merge over the open-time 子宫 snapshot to preserve any sub-fields not in the form.
+    子宫: { ...bodyEditUterusRaw.value, 状态: f.子宫.状态, 宫口状态: f.子宫.宫口状态, 内射记录: cleanRecords },
   });
   showBodyEditModal.value = false;
 }
@@ -1197,7 +1302,7 @@ async function generatePlayerSecretPartWithReference(partKey: 'breast' | 'vagina
 
 // ─── Tab state ───
 
-type Tab = 'basic' | 'attributes' | 'relations' | 'achievements' | 'body' | 'playerImage';
+type Tab = 'basic' | 'attributes' | 'relations' | 'body' | 'playerImage';
 const activeTab = ref<Tab>('basic');
 
 const tabList = computed(() => {
@@ -1205,7 +1310,6 @@ const tabList = computed(() => {
     { id: 'basic', label: t('character.tab.basic') },
     { id: 'attributes', label: t('character.tab.attributes') },
     { id: 'relations', label: t('character.tab.relations'), count: relationList.value.length },
-    { id: 'achievements', label: t('character.tab.achievements') },
   ];
   if (nsfwEnabled.value) {
     tabs.push({ id: 'body', label: t('character.tab.body') });
@@ -1855,14 +1959,6 @@ const avatarInitial = computed<string>(() => {
         </div>
       </template>
 
-      <!-- ─── Tab: 成就 ─── -->
-      <template v-else-if="activeTab === 'achievements'">
-        <div class="achievement-placeholder">
-          <span class="achievement-icon">{{ $t('character.achievements.icon') }}</span>
-          <p>{{ $t('character.achievements.placeholder') }}</p>
-        </div>
-      </template>
-
       <!-- ─── Tab: 主角生图 ─── -->
       <template v-else-if="activeTab === 'playerImage'">
         <!-- Stats card -->
@@ -2272,6 +2368,80 @@ const avatarInitial = computed<string>(() => {
         <div class="form-group-s2">
           <label class="form-label-s2">{{ $t('character.body.genitalDesc') }}</label>
           <textarea v-model="bodyEditForm.生殖器描述" class="form-textarea-s2" rows="2" />
+        </div>
+
+        <!-- H-2: Body parts -->
+        <div class="body-edit-section">
+          <span class="body-edit-section-title">{{ $t('character.body.bodyParts') }}</span>
+          <div v-for="(bp, bi) in bodyEditForm.身体部位" :key="bp._id" class="bp-edit-card">
+            <div class="bp-edit-head">
+              <input v-model="bp.部位名称" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.partName')" />
+              <button type="button" class="bp-edit-remove" :aria-label="$t('common.actions.delete')" @click="removeDraftBodyPart(bi)">×</button>
+            </div>
+            <textarea v-model="bp.特征描述" class="form-textarea-s2" rows="2" :placeholder="$t('character.body.edit.featureDescription')" />
+            <input v-model="bp.特殊印记" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.specialMark')" />
+            <div class="form-row-s2">
+              <div class="form-group-s2">
+                <label class="form-label-s2">{{ $t('character.body.sensitivity') }} ({{ bp.敏感度 }})</label>
+                <input v-model.number="bp.敏感度" type="range" min="0" max="100" class="bp-edit-range" />
+              </div>
+              <div class="form-group-s2">
+                <label class="form-label-s2">{{ $t('character.body.development') }} ({{ bp.开发度 }})</label>
+                <input v-model.number="bp.开发度" type="range" min="0" max="100" class="bp-edit-range" />
+              </div>
+            </div>
+          </div>
+          <button type="button" class="bp-edit-add" @click="addDraftBodyPart">+ {{ $t('character.body.edit.addBodyPart') }}</button>
+        </div>
+
+        <!-- H-2: Uterus -->
+        <div class="body-edit-section">
+          <span class="body-edit-section-title">{{ $t('character.body.uterus') }}</span>
+          <div class="form-row-s2">
+            <div class="form-group-s2">
+              <label class="form-label-s2">{{ $t('character.body.uterusStatus') }}</label>
+              <input v-model="bodyEditForm.子宫.状态" type="text" class="form-input-s2" />
+            </div>
+            <div class="form-group-s2">
+              <label class="form-label-s2">{{ $t('character.body.uterusCervix') }}</label>
+              <input v-model="bodyEditForm.子宫.宫口状态" type="text" class="form-input-s2" />
+            </div>
+          </div>
+          <span class="form-label-s2">{{ $t('character.body.edit.inseminationRecords') }}</span>
+          <div v-for="(rec, ri) in bodyEditForm.子宫.内射记录" :key="rec._id" class="record-edit-row">
+            <input v-model="rec.日期" type="text" class="form-input-s2 record-edit-date" :placeholder="$t('character.body.edit.recordDate')" />
+            <input v-model="rec.描述" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.recordDesc')" />
+            <button type="button" class="bp-edit-remove" :aria-label="$t('common.actions.delete')" @click="removeInseminationRecord(ri)">×</button>
+          </div>
+          <button type="button" class="bp-edit-add" @click="addInseminationRecord">+ {{ $t('character.body.edit.addRecord') }}</button>
+        </div>
+
+        <!-- H-2: Sensitive points -->
+        <div class="body-edit-section">
+          <span class="body-edit-section-title">{{ $t('character.body.sensitivePoints') }}</span>
+          <div v-if="bodyEditForm.敏感点.length" class="tag-edit-row">
+            <span v-for="(s, si) in bodyEditForm.敏感点" :key="si" class="tag-edit-chip">
+              {{ s }}<button type="button" class="tag-edit-x" :aria-label="$t('common.actions.delete')" @click="removeSensitivePoint(si)">×</button>
+            </span>
+          </div>
+          <div class="tag-edit-add">
+            <input v-model="sensitivePointDraft" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.addSensitivePoint')" @keyup.enter="addSensitivePoint" />
+            <AgaButton variant="secondary" @click="addSensitivePoint">{{ $t('common.actions.add') }}</AgaButton>
+          </div>
+        </div>
+
+        <!-- H-2: Tattoos / marks -->
+        <div class="body-edit-section">
+          <span class="body-edit-section-title">{{ $t('character.body.tattoos') }}</span>
+          <div v-if="bodyEditForm.纹身与印记.length" class="tag-edit-row">
+            <span v-for="(t, ti) in bodyEditForm.纹身与印记" :key="ti" class="tag-edit-chip">
+              {{ t }}<button type="button" class="tag-edit-x" :aria-label="$t('common.actions.delete')" @click="removeTattoo(ti)">×</button>
+            </span>
+          </div>
+          <div class="tag-edit-add">
+            <input v-model="tattooDraft" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.addTattoo')" @keyup.enter="addTattoo" />
+            <AgaButton variant="secondary" @click="addTattoo">{{ $t('common.actions.add') }}</AgaButton>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -3013,26 +3183,6 @@ const avatarInitial = computed<string>(() => {
   opacity: 0.5;
 }
 
-/* ── Achievement placeholder ── */
-.achievement-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 160px;
-  color: var(--color-text-secondary, #8888a0);
-  opacity: 0.5;
-}
-
-.achievement-icon {
-  font-size: 2rem;
-}
-
-.achievement-placeholder p {
-  font-size: 0.85rem;
-}
-
 /* ── Badge ── */
 .badge {
   display: inline-flex;
@@ -3707,4 +3857,28 @@ const avatarInitial = computed<string>(() => {
 .btn-edit-body:hover { background: color-mix(in oklch, var(--color-sage-400) 16%, transparent); }
 .btn-edit-body--nsfw { color: #e879a0; background: rgba(232, 121, 160, 0.08); border-color: rgba(232, 121, 160, 0.25); }
 .btn-edit-body--nsfw:hover { background: rgba(232, 121, 160, 0.16); }
+
+/* H-2: Body modal — parts / uterus / sensitive points / tattoos editing */
+.body-edit-section { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid color-mix(in oklch, var(--color-border) 60%, transparent); }
+.body-edit-section-title { font-size: 0.8rem; font-weight: 600; color: #e879a0; }
+.bp-edit-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 8px; background: rgba(232, 121, 160, 0.05); border: 1px solid rgba(232, 121, 160, 0.18); }
+.bp-edit-head { display: flex; align-items: center; gap: 8px; }
+.bp-edit-head .form-input-s2 { flex: 1; }
+.bp-edit-remove { flex: none; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; line-height: 1; color: #e879a0; background: rgba(232, 121, 160, 0.1); border: 1px solid rgba(232, 121, 160, 0.25); border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.bp-edit-remove:hover { background: rgba(232, 121, 160, 0.22); }
+.bp-edit-add { align-self: flex-start; padding: 5px 12px; font-size: 0.8rem; color: #e879a0; background: rgba(232, 121, 160, 0.08); border: 1px dashed rgba(232, 121, 160, 0.35); border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.bp-edit-add:hover { background: rgba(232, 121, 160, 0.16); }
+.bp-edit-range { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; background: color-mix(in oklch, var(--color-border) 80%, transparent); outline: none; cursor: pointer; }
+.bp-edit-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #e879a0; border: 2px solid var(--color-bg, #1a1a22); cursor: pointer; }
+.bp-edit-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #e879a0; border: 2px solid var(--color-bg, #1a1a22); cursor: pointer; }
+.bp-edit-range::-moz-range-track { height: 6px; border-radius: 3px; background: color-mix(in oklch, var(--color-border) 80%, transparent); }
+.record-edit-row { display: flex; align-items: center; gap: 8px; }
+.record-edit-row .form-input-s2 { flex: 1; }
+.record-edit-date { flex: none !important; width: 96px; }
+.tag-edit-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-edit-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; font-size: 0.8rem; color: var(--color-text); background: rgba(232, 121, 160, 0.1); border: 1px solid rgba(232, 121, 160, 0.25); border-radius: 999px; }
+.tag-edit-x { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; line-height: 1; color: #e879a0; background: transparent; border: none; border-radius: 50%; cursor: pointer; }
+.tag-edit-x:hover { background: rgba(232, 121, 160, 0.2); }
+.tag-edit-add { display: flex; align-items: center; gap: 8px; }
+.tag-edit-add .form-input-s2 { flex: 1; }
 </style>

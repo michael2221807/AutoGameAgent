@@ -191,7 +191,7 @@
 
   "engram.batchSolidify.title": "Engram 覆盖率",
   "engram.batchSolidify.buttonLabel": "一键批量固化",
-  "engram.batchSolidify.buttonTooltip": "扫描世界数据并补全 Engram 图谱",
+  "engram.batchSolidify.buttonTooltip": "扫描世界数据并补全 Engram 图谱。推荐工作流：先一键批量固化，再手动精修实体与知识边。",
   "engram.batchSolidify.progress.scanning": "正在扫描世界数据...",
   "engram.batchSolidify.progress.generating": "正在生成知识边...",
   "engram.batchSolidify.progress.applying": "正在应用变更...",
