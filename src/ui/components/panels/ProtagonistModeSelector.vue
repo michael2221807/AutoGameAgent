@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-save.md §2.5.1
 /**
  * ProtagonistModeSelector — fixed / template / blank picker for Game Card export (Story 5, P5).
  * Reusable by Story 7. Card-style tacit choice (Polanyi principle 1) + template editable-field list.

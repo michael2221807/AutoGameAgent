@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-save.md §2.5.1
 /**
  * Protagonist template logic — Story 5 (P4).
  *

@@ -1,4 +1,5 @@
 // Archived plan: docs/status/archive/full-backup-plan-2026-04-13.md
+// App doc: docs/user-guide/pages/game-save.md §3.2 (完整备份), §2.5 (游戏卡导出复用 collectAssetIdsFromTree)
 /**
  * 全量备份与恢复服务 — 跨模块数据导出/导入
  *

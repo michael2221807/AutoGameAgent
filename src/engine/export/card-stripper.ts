@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-save.md §2.5.2
 /**
  * Card state-tree stripper — Story 5 (P2).
  *

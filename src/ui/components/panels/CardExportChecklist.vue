@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-save.md §2.5.1
 /**
  * CardExportChecklist — the selective-export checklist for Game Card export (Story 5, P5 / U4).
  * Reusable by Story 7. Each optional item carries a one-sentence Tooltip hint (U12 consumption point).

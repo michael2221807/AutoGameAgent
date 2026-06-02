@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-save.md §2.5
 /**
  * CardExportFlow — Game Card export orchestrator (Story 5, P5).
  *

@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-save.md §2.5
 /**
  * GameCardExportService — Story 5 (P2): the single logic entry for card export,
  * reused by Story 7 (handover §8A). Pure orchestration; zero回写 to the live save
