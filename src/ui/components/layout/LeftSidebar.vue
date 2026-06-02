@@ -131,7 +131,6 @@ const BASE_SYSTEM_ITEMS = computed<PanelItem[]>(() => [
   { route: '/game/prompts',          label: t('layout.sidebar.item.prompt'),          icon: icons.prompts },
   { route: '/game/api',              label: t('layout.sidebar.item.api'),             icon: icons.api },
   { route: '/game/settings',         label: t('layout.sidebar.item.settings'),        icon: icons.settings },
-  { route: '/game/save',             label: t('layout.sidebar.item.save'),            icon: icons.save },
   { route: '/game/prompt-assembly',  label: t('layout.sidebar.item.promptAssembly'),  icon: icons.assembly },
   { route: '/game/image',            label: t('layout.sidebar.item.imageGeneration'), icon: icons.image },
   { route: '/game/engram-debug',     label: t('layout.sidebar.item.engramDebug'),     icon: icons.engram },
@@ -145,9 +144,6 @@ const panelGroups = computed<PanelGroup[]>(() => [
       { route: '/game/character',    label: t('layout.sidebar.item.characterDetail'), icon: icons.character },
       { route: '/game/inventory',    label: t('layout.sidebar.item.inventory'),       icon: icons.inventory },
       { route: '/game/relationships',label: t('layout.sidebar.item.relationships'),   icon: icons.relationships },
-      ...(engramEnabled.value
-        ? [{ route: '/game/relationship-graph', label: t('layout.sidebar.item.relationshipGraph'), icon: icons.relGraph }]
-        : []),
       { route: '/game/map',          label: t('layout.sidebar.item.map'),             icon: icons.map },
       { route: '/game/plot',         label: t('layout.sidebar.item.plot'),            icon: icons.plot },
     ],
@@ -158,6 +154,16 @@ const panelGroups = computed<PanelGroup[]>(() => [
       { route: '/game/memory',    label: t('layout.sidebar.item.memory'),    icon: icons.memory },
       { route: '/game/events',    label: t('layout.sidebar.item.events'),    icon: icons.events },
       { route: '/game/heartbeat', label: t('layout.sidebar.item.heartbeat'), icon: icons.heartbeat },
+    ],
+  },
+  {
+    // 世界编辑工具箱 — 存档 & 游戏卡 + 关系图谱(Engram 编辑/固化)。Story 5 / U13.
+    label: t('layout.sidebar.group.worldEditing'),
+    items: [
+      { route: '/game/save', label: t('layout.sidebar.item.save'), icon: icons.save },
+      ...(engramEnabled.value
+        ? [{ route: '/game/relationship-graph', label: t('layout.sidebar.item.relationshipGraph'), icon: icons.relGraph }]
+        : []),
     ],
   },
   {

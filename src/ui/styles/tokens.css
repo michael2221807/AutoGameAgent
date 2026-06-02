@@ -236,6 +236,7 @@
   --z-dropdown:  20;
   --z-modal:     50;
   --z-toast:     100;
+  --z-tooltip:   110;  /* above modals/toasts — hover hints must never be occluded */
 
   /* ─────────────────────────────────────────────────────────────
      LAYOUT — unchanged

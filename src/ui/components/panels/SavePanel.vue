@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useLocale } from '@/ui/composables/useLocale';
 import Modal from '@/ui/components/common/Modal.vue';
+import CardExportFlow from '@/ui/components/panels/CardExportFlow.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import type { SaveSlotMeta } from '@/engine/types/persistence';
 import type { GameStateTree } from '@/engine/types';
@@ -37,6 +38,9 @@ const vectorStore = inject<VectorStore>('vectorStore');
 const embedder = inject<Embedder>('embedder');
 const backupService = inject<BackupService>('backupService');
 const customPresetStore = inject<CustomPresetStore | undefined>('customPresetStore', undefined);
+
+// Story 5: game-card export modal
+const showCardExport = ref(false);
 
 // ─── Slot list ────────────────────────────────────────────────
 
@@ -929,6 +933,17 @@ const showSettings = ref(false);
         <p v-else-if="ghStatus.stage !== 'idle' && ghStatus.stage !== 'done' && ghStatus.message" class="gh-status-msg">{{ ghStatus.message }}</p>
       </div>
 
+      <!-- Story 5: game-card export — ALWAYS visible (this page's headline feature, not behind the gear) -->
+      <section class="settings-section card-export-cta">
+        <div class="card-export-cta__text">
+          <p class="settings-title">{{ $t('save.export.entryTitle') }}</p>
+          <p class="settings-hint">{{ $t('save.export.entryHint') }}</p>
+        </div>
+        <button class="btn btn--primary btn--sm card-export-cta__btn" @click="showCardExport = true">
+          {{ $t('save.export.openBtn') }}
+        </button>
+      </section>
+
       <!-- ── Settings section (toggled) ── -->
       <Transition name="cfg-expand">
         <section v-if="showSettings" class="settings-section">
@@ -957,6 +972,7 @@ const showSettings = ref(false);
           <div class="backup-row">
             <p class="settings-title">{{ $t('save.backup.sectionTitle') }}</p>
             <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.hint') }}</p>
+            <p class="settings-hint backup-hint--full-width" style="color: var(--color-amber-400);">{{ $t('save.backup.fullBackup.secretWarning') }}</p>
             <label class="backup-include-ref">
               <input type="checkbox" v-model="includeReferenceAssets" class="toggle-cb" />
               <span>{{ $t('save.backup.includeRef') }}</span>
@@ -1220,6 +1236,9 @@ const showSettings = ref(false);
         <button class="btn-modal btn-modal--danger" @click="ghDownload">{{ $t('save.github.downloadConfirmOk') }}</button>
       </template>
     </Modal>
+
+    <!-- Story 5: game-card export flow (self-contained modal) -->
+    <CardExportFlow v-model="showCardExport" />
   </div>
 </template>
 
@@ -1744,6 +1763,26 @@ const showSettings = ref(false);
   font-family: inherit;
 }
 .form-input:focus { border-color: var(--color-primary,#6366f1); }
+
+/* ── Story 5: game-card export CTA (always-visible, accented) ── */
+.card-export-cta {
+  /* override .settings-section's column so text sits left, button right */
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-sage-400) 28%, transparent);
+}
+.card-export-cta__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+.card-export-cta__btn { flex-shrink: 0; }
 
 /* ── Transitions ── */
 .cfg-expand-enter-active { transition: all 0.2s ease; }

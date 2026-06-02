@@ -106,6 +106,7 @@ import { ProfileManager } from './engine/persistence/profile-manager';
 import { SaveManager } from './engine/persistence/save-manager';
 import { migrationRegistry } from './engine/persistence/migration-registry';
 import { BackupService } from './engine/persistence/backup-service';
+import { GameCardExportService } from './engine/export/game-card-export-service';
 import { ImageAssetCache } from './engine/image/asset-cache';
 import { GitHubSyncService } from './engine/sync/github-sync';
 import { LanSyncService } from './engine/sync/lan-sync';
@@ -218,6 +219,16 @@ async function bootstrap(): Promise<void> {
     customPresetStore,
     imageAssetCacheForBackup,
     worldBookStorage,
+  );
+
+  // Story 5: game-card export service (shares backup's stores; default strip paths from DEFAULT_ENGINE_PATHS).
+  const gameCardExportService = new GameCardExportService(
+    saveManager,
+    configStore,
+    promptStorage,
+    worldBookStorage,
+    customPresetStore,
+    imageAssetCacheForBackup,
   );
 
   const packLoader = new GamePackLoader();
@@ -710,6 +721,7 @@ async function bootstrap(): Promise<void> {
   app.provide('vectorStore', vectorStore);
   app.provide('embedder', embedder);
   app.provide('backupService', backupService);
+  app.provide('gameCardExportService', gameCardExportService);
   app.provide('customPresetStore', customPresetStore);
   app.provide('worldBookStorage', worldBookStorage);
 

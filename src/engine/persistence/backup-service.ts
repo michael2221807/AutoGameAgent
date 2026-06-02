@@ -1090,7 +1090,7 @@ function extractErrorMessage(err: unknown): string {
  * - 社交.关系[].图片档案.香闺秘档.{胸部|小穴|屁穴}.assetId
  * - 系统.扩展.image.sceneArchive.当前壁纸图片ID + 生图历史[].id
  */
-function collectAssetIdsFromTree(tree: Record<string, unknown>, ids: Set<string>, includeReferenceAssets = false): void {
+export function collectAssetIdsFromTree(tree: Record<string, unknown>, ids: Set<string>, includeReferenceAssets = false): void {
   const addIfValid = (val: unknown) => {
     if (typeof val === 'string' && val.trim()) ids.add(val.trim());
   };
