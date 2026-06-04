@@ -116,25 +116,29 @@ defineExpose({
         <polyline points="6 9 12 15 18 9" />
       </svg>
     </button>
-    <div class="action-options__list" aria-hidden="false">
-      <div
-        v-for="(option, idx) in props.actionOptions"
-        :key="idx"
-        class="action-option-row"
-      >
-        <button
-          class="action-copy"
-          :title="$t('mainGame.composer.copyText')"
-          @click.stop="emit('copy-option', option)"
+    <!-- Viewport = collapse animator (clips); inner list = scroll container.
+         Splitting the two so a long option set scrolls instead of clipping. -->
+    <div class="action-options__viewport">
+      <div class="action-options__list">
+        <div
+          v-for="(option, idx) in props.actionOptions"
+          :key="idx"
+          class="action-option-row"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
-        </button>
-        <button
-          :class="['action-btn', { 'action-btn--selected': userInput === option }]"
-          @click="selectAction(option)"
-        >
-          {{ option }}
-        </button>
+          <button
+            class="action-copy"
+            :title="$t('mainGame.composer.copyText')"
+            @click.stop="emit('copy-option', option)"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+          </button>
+          <button
+            :class="['action-btn', { 'action-btn--selected': userInput === option }]"
+            @click="selectAction(option)"
+          >
+            {{ option }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -242,25 +246,54 @@ defineExpose({
   transform: rotate(-180deg);
 }
 
+/* Viewport — the collapse animator. overflow:hidden makes the max-height
+   transition read as a smooth roll-up/down. It does NOT scroll; the inner
+   list does. Keeping the animated height and the scroll height on separate
+   elements is what prevents a scrollbar flicker mid-animation.
+   NOTE: its expanded max-height must stay >= the list's max-height below. */
+.action-options__viewport {
+  max-height: 60vh;
+  opacity: 1;
+  overflow: hidden;
+  visibility: visible;
+  /* visibility flips on immediately when expanding (0s, no delay) so the
+     options re-enter the tab order / a11y tree as the roll-down starts. */
+  transition: max-height var(--duration-normal) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out),
+              visibility 0s;
+}
+.action-options--collapsed .action-options__viewport {
+  max-height: 0;
+  opacity: 0;
+  /* visibility:hidden (deferred until the roll-up finishes) takes the
+     collapsed options out of the tab order + a11y tree, so keyboard users
+     can't Tab into hidden buttons and the browser won't auto-scroll to a
+     focused-but-clipped element. The delay keeps the fade visible meanwhile. */
+  visibility: hidden;
+  pointer-events: none;
+  transition: max-height var(--duration-normal) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out),
+              visibility 0s var(--duration-normal);
+}
+
+/* List — flex-wrap layout AND the real vertical scroll container. When the
+   AI returns more options than fit in 60vh, this scrolls internally instead
+   of clipping the trailing options off the bottom (the bug this fixes — they
+   were unreachable on both mobile and desktop). overscroll-behavior:contain
+   stops scroll-chaining to the page; -webkit-overflow-scrolling gives iOS
+   momentum. The global sanctuary scrollbar (tokens.css) styles the bar. */
 .action-options__list {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.25rem var(--sidebar-right-reserve, 40px) 0.65rem var(--sidebar-left-reserve, 40px);
   max-height: 60vh;
-  opacity: 1;
-  overflow: hidden;
-  transition: max-height var(--duration-normal) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out),
-              padding-left var(--duration-open) var(--ease-droplet),
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  transition: padding-left var(--duration-open) var(--ease-droplet),
               padding-right var(--duration-open) var(--ease-droplet);
-}
-.action-options--collapsed .action-options__list {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  pointer-events: none;
 }
 
 .action-option-row {
