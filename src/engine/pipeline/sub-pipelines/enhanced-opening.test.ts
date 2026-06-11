@@ -627,3 +627,62 @@ describe('Rate-limit wait callback (CR-3.3)', () => {
     expect(nullCalls.length).toBe(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+//  Story 6 — executeImportOpening (E→F→G on a card-populated tree)
+// ═══════════════════════════════════════════════════════════════
+
+describe('executeImportOpening (Story 6 card import)', () => {
+  it('runs only Phase E→F→G (skips A-D world regen) and returns actionOptions from the tree', async () => {
+    const sm = makeStateManager({ '元数据.当前行动选项': ['探索', '修炼'] });
+    const { pipeline, go, stages } = makePipeline({ sm });
+    const onProgress = vi.fn();
+    const result = await pipeline.executeImportOpening(makeDefaultOptions({ onProgress }));
+    expect(result.success).toBe(true);
+    expect(result.phasesCompleted).toEqual(['E', 'F', 'G']);
+    expect(result.actionOptions).toEqual(['探索', '修炼']);
+    expect(go.runPostRoundForOpening).toHaveBeenCalledTimes(1); // Phase G
+    expect(stages.contextAssembly.execute as ReturnType<typeof vi.fn>).toHaveBeenCalled(); // Phase E ran
+    const phases = onProgress.mock.calls.map((c: unknown[]) => c[0]);
+    expect(phases).toContain('phaseE');
+    expect(phases).toContain('phaseG');
+    expect(phases).not.toContain('phaseA'); // A-D are skipped on import
+  });
+
+  it('Phase E failure rolls the tree back to the (card-populated) baseline', async () => {
+    const sm = makeStateManager();
+    const { stages } = makeStages();
+    (stages.aiCall.execute as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('AI E failed'));
+    const { pipeline } = makePipeline({ sm, stages });
+    const result = await pipeline.executeImportOpening(makeDefaultOptions({ onPhaseError: undefined }));
+    expect(result.success).toBe(false);
+    expect(result.phasesFailed).toBe('E');
+    expect(sm.loadTree).toHaveBeenCalled(); // rolled back to the pre-opening baseline (the card world)
+  });
+
+  it('AbortError → { success:false, cancelled:true } (⑦ skip-opening / cancel)', async () => {
+    const { stages } = makeStages();
+    (stages.aiCall.execute as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new DOMException('aborted', 'AbortError'));
+    const { pipeline } = makePipeline({ stages });
+    const result = await pipeline.executeImportOpening(makeDefaultOptions());
+    expect(result.success).toBe(false);
+    expect(result.cancelled).toBe(true);
+  });
+
+  it('rate-limit bypass: disables then restores around the opening', async () => {
+    const ai = makeAiService([]);
+    ai._rlEnabled = true;
+    const { pipeline } = makePipeline({ ai });
+    await pipeline.executeImportOpening(
+      makeDefaultOptions({ settings: { ...DEFAULT_ENHANCED_OPENING_SETTINGS, bypassRateLimitDuringOpening: true } }),
+    );
+    expect(ai.configureRateLimiter).toHaveBeenCalledWith({ enabled: false });
+    expect(ai.configureRateLimiter).toHaveBeenCalledWith({ enabled: true });
+  });
+
+  it('empty CreationChoices ({selections:{}}) does not break E→F→G', async () => {
+    const { pipeline } = makePipeline();
+    const result = await pipeline.executeImportOpening(makeDefaultOptions({ choices: { selections: {} } }));
+    expect(result.success).toBe(true);
+  });
+});

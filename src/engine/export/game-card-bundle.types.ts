@@ -202,6 +202,8 @@ export function isValidCardBundleShape(data: unknown): data is GameCardBundle {
   if (typeof m['title'] !== 'string' || m['title'].trim() === '') return false;
   if (typeof m['packId'] !== 'string') return false;
   if (typeof m['formatVersion'] !== 'number') return false;
+  // packVersion is optional but, when present, MUST be a string (compareVersions consumes it).
+  if (m['packVersion'] !== undefined && typeof m['packVersion'] !== 'string') return false;
 
   const prot = o['protagonist'];
   if (typeof prot !== 'object' || prot === null) return false;

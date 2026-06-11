@@ -4,6 +4,7 @@
   "home.buttons.newCharacter": "New Character",
   "home.buttons.continueGame": "Continue Game",
   "home.buttons.manageSaves": "Manage Saves",
+  "home.buttons.importCard": "Import Game Card",
   "home.buttons.apiConfig": "API Configuration",
   "home.buttons.settings": "Settings",
   "home.buttons.cloudSync": "Cloud Save",

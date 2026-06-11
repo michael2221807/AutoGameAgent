@@ -251,6 +251,25 @@ describe('gzip compress/decompress', () => {
     const compressed = await gzipCompress(input);
     expect(await gzipDecompress(compressed)).toBe(input);
   });
+
+  it('maxBytes default (Infinity) keeps legacy unbounded behavior', async () => {
+    const input = 'A'.repeat(50_000);
+    const compressed = await gzipCompress(input);
+    expect(await gzipDecompress(compressed)).toBe(input);          // no arg
+    expect(await gzipDecompress(compressed, Infinity)).toBe(input); // explicit Infinity
+  });
+
+  it('★maxBytes cap rejects a zip-bomb (decompressed > limit → throws)', async () => {
+    const input = 'A'.repeat(2_000_000);          // ~2MB decompressed, tiny compressed
+    const compressed = await gzipCompress(input);
+    await expect(gzipDecompress(compressed, 1_000)).rejects.toThrow(/exceeds limit/);
+  });
+
+  it('maxBytes cap allows output within the limit', async () => {
+    const input = 'hello 数据 🎮';
+    const compressed = await gzipCompress(input);
+    expect(await gzipDecompress(compressed, 1_000_000)).toBe(input); // bounded reader path still correct
+  });
 });
 
 // ─── sha256 ───

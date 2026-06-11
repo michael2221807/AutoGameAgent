@@ -32,6 +32,7 @@ import { useEngineStateStore } from '@/engine/stores/engine-state';
 import Modal from '@/ui/components/common/Modal.vue';
 import APIPanel from '@/ui/components/panels/APIPanel.vue';
 import SettingsPanel from '@/ui/components/panels/SettingsPanel.vue';
+import CardImportFlow from '@/ui/components/panels/CardImportFlow.vue';
 import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
 import { eventBus } from '@/engine/core/event-bus';
 import { useLocale } from '@/ui/composables/useLocale';
@@ -67,6 +68,12 @@ const loadError = ref<string | null>(null);
  */
 const showApiModal = ref(false);
 const showSettingsModal = ref(false);
+const showImportCard = ref(false);
+
+/** Re-list profiles so a freshly-imported save appears immediately (Story 6 SC-UI-A). */
+function onCardImported(): void {
+  if (profileManager) profiles.value = profileManager.listProfiles();
+}
 
 // ─── Computed helpers ─────────────────────────────────────────
 
@@ -370,6 +377,12 @@ onMounted(async () => {
       <button class="btn btn-secondary" @click="goToManagement" :disabled="isLoading">
         {{ $t('home.buttons.manageSaves') }}
       </button>
+      <button class="btn btn-secondary" @click="showImportCard = true" :disabled="isLoading">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3" />
+        </svg>
+        {{ $t('home.buttons.importCard') }}
+      </button>
     </nav>
 
     <!--
@@ -482,6 +495,9 @@ onMounted(async () => {
         <SettingsPanel />
       </div>
     </Modal>
+
+    <!-- Story 6: Game-card import (self-contained Modal inside) -->
+    <CardImportFlow v-model="showImportCard" @imported="onCardImported" />
 
     <!-- Cloud Sync modal -->
     <Modal v-model="showSyncModal" width="420px">
@@ -757,6 +773,12 @@ onMounted(async () => {
 }
 
 .btn-secondary {
+  /* inline-flex so the import button's icon + label vertically center with a consistent gap
+     (matches the .btn-ghost row); harmless for the text-only "manage saves" button. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   background: var(--color-surface);
   color: var(--color-text);
   border-color: var(--color-border);

@@ -212,6 +212,44 @@ export class WorldBookStorage {
     return data.entries.length;
   }
 
+  /**
+   * Delete ALL built-in prompt overrides for a single pack (per-pack, unlike clearAll).
+   * Used by Story 6 card-import undo / failure-rollback to revert a card's built-in overrides
+   * exactly: clear the pack's entries, then re-import the pre-import snapshot.
+   */
+  async clearBuiltinOverrides(packId: string): Promise<void> {
+    const db = await this.getDB();
+    const prefix = `${packId}:`;
+    const tx = db.transaction('builtin-prompts', 'readwrite');
+    // Read keys INSIDE the transaction (no TOCTOU window vs a concurrent write).
+    const keys = await tx.store.getAllKeys();
+    for (const key of keys) {
+      if (String(key).startsWith(prefix)) await tx.store.delete(key);
+    }
+    await tx.done;
+  }
+
+  /**
+   * Atomic per-pack REPLACE of built-in overrides in a SINGLE transaction (Story 6 import undo /
+   * rollback): delete the pack's existing entries then put the snapshot's entries, so a mid-restore
+   * failure aborts the tx and rolls back rather than leaving the pack half-reverted.
+   */
+  async replaceBuiltinOverrides(packId: string, data: BuiltinPromptExportData): Promise<void> {
+    const db = await this.getDB();
+    const prefix = `${packId}:`;
+    const tx = db.transaction('builtin-prompts', 'readwrite');
+    const keys = await tx.store.getAllKeys();
+    for (const key of keys) {
+      if (String(key).startsWith(prefix)) await tx.store.delete(key);
+    }
+    if (data?.entries && Array.isArray(data.entries)) {
+      for (const entry of data.entries) {
+        await tx.store.put(entry, `${packId}:${entry.slotId}`);
+      }
+    }
+    await tx.done;
+  }
+
   // ─── Clear All ────────────────────────────────────────────
 
   async clearAll(): Promise<void> {

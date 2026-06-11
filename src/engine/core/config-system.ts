@@ -111,6 +111,22 @@ export class ConfigStore {
   }
 
   /**
+   * Atomic clear-then-import in a SINGLE transaction (Story 6 import undo / failure-rollback).
+   * Unlike clear()+importAll() (two separate txs, where a mid-restore failure can leave the global
+   * overlays store permanently empty), a put failure here aborts the whole tx and rolls the store
+   * back to its pre-replace contents — never an empty store.
+   */
+  async replaceAll(overlays: ConfigOverlay[]): Promise<void> {
+    const db = await this.getDB();
+    const tx = db.transaction('overlays', 'readwrite');
+    await tx.store.clear();
+    for (const o of overlays) {
+      await tx.store.put(o, `${o.packId}:${o.domainId}`);
+    }
+    await tx.done;
+  }
+
+  /**
    * 清空所有配置覆盖（全量备份恢复前使用）
    *
    * 删除整个 overlays store 的所有条目，不删除数据库本身。

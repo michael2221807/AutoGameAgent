@@ -147,6 +147,36 @@ export class ImageAssetCache {
   }
 }
 
+/** Delimiter between an import namespace and the original asset id. */
+const ASSET_NAMESPACE_DELIM = '::';
+
+/**
+ * Namespace an asset id under an import namespace (the new profile id, or card id) so
+ * an imported card's images cannot silently overwrite the player's existing assets.
+ *
+ * `ImageAssetCache.store` keys by `asset.id`, and `importEntries` re-keys via the
+ * entry's `metadata.id` (it calls `store(entry.metadata, blob)`), so a card whose
+ * asset id collides with a player's asset would clobber it on a global `put`. Importing
+ * under a namespaced id avoids that.
+ *
+ * Pure, and idempotent FOR THE SAME namespace: re-namespacing an id already prefixed
+ * with `<namespace>::` is a no-op. Calling with a DIFFERENT namespace NESTS a second
+ * prefix (`ns2::ns1::id`) — so P4 `rewriteAssetRefs` must use one stable namespace per import.
+ *
+ * NOTE for callers (Story 6 P4 `rewriteAssetRefs`): when you namespace an imported asset
+ * you MUST rewrite BOTH `entry.id` AND `entry.metadata.id` (the latter is the actual IDB
+ * put key) AND every reference to the original id inside the merged state tree.
+ *
+ * @param namespace   Stable per-import namespace (new profile id or card id). Required.
+ * @param originalId  The card's original asset id.
+ * @returns `"<namespace>::<originalId>"`, or `originalId` unchanged if already namespaced.
+ */
+export function namespacedAssetId(namespace: string, originalId: string): string {
+  const prefix = `${namespace}${ASSET_NAMESPACE_DELIM}`;
+  if (originalId.startsWith(prefix)) return originalId;
+  return `${prefix}${originalId}`;
+}
+
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

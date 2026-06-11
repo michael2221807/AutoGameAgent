@@ -159,9 +159,36 @@ export async function gzipCompress(data: string): Promise<Blob> {
   return new Response(stream).blob();
 }
 
-export async function gzipDecompress(blob: Blob): Promise<string> {
-  const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Response(stream).text();
+/**
+ * Decompress a gzip blob to text.
+ *
+ * @param maxBytes Optional decompressed-size ceiling (default Infinity = unbounded, the legacy
+ *   behavior for backup/sync). The card-import path passes a bound to defend against a zip-bomb
+ *   (a small compressed blob that balloons to GBs and OOMs the tab) on an untrusted .aga-card file.
+ */
+export async function gzipDecompress(blob: Blob, maxBytes = Infinity): Promise<string> {
+  if (maxBytes === Infinity) {
+    // Fast path — unchanged legacy behavior for trusted internal callers (backup/github-sync).
+    const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream).text();
+  }
+  const reader = blob.stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error('decompressed size exceeds limit');
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { merged.set(c, off); off += c.byteLength; }
+  return new TextDecoder().decode(merged);
 }
 
 // ─── Hashing ───

@@ -8,6 +8,13 @@
  * 应从本文件导入类型，不再直接依赖 engram-manager.ts 的类型导出。
  */
 
+/**
+ * Engram 状态 schema 版本 —— 单一事实来源。
+ * engram-manager 与 Story 6 卡导入（engram-import）共用，避免魔法数漂移。
+ * 注：bump 时 `EngramManager` 会在 solidify 时 `Math.max` 兜底，loadEngram 缺省回退 1。
+ */
+export const ENGRAM_SCHEMA_VERSION = 5;
+
 /** Engram 检索模式 */
 export type EngramRetrievalMode = 'legacy' | 'hybrid';
 

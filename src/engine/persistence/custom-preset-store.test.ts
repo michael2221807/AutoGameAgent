@@ -628,3 +628,124 @@ describe('CR-2026-04-14 P2-1：bulkAppend 批量追加', () => {
     expect(added).toHaveLength(2);
   });
 });
+
+// ─── Story 6 P1：appendPreservingIds（卡导入 OD-J 保 id 原语） ──────
+
+describe('Story 6 P1：appendPreservingIds 保 id append-if-absent', () => {
+  it('保留入参的 id 原样（不重生）—— 卡 角色 引用靠它解析', async () => {
+    const s = new CustomPresetStore();
+    const cardId = 'user_card_origin_42';
+    const added = await s.appendPreservingIds('tianming', {
+      origins: [
+        { id: cardId, source: 'user', createdAt: 111, generatedBy: 'manual', name: '寒门子弟' },
+      ],
+    });
+    expect(added).toHaveLength(1);
+    expect(added[0].id).toBe(cardId); // ★ 与 bulkAppend 的关键区别：不重生 id
+    const list = await s.get('tianming', 'origins');
+    expect(list[0].id).toBe(cardId);
+    expect(list[0].name).toBe('寒门子弟');
+  });
+
+  it('不抹玩家既有预设（append 到既有列表，与 replaceAll 区别）', async () => {
+    const s = new CustomPresetStore();
+    const mine = await s.add('tianming', 'worlds', { name: '我的世界' });
+    await s.appendPreservingIds('tianming', {
+      worlds: [
+        { id: 'user_card_w1', source: 'user', createdAt: 1, generatedBy: 'manual', name: '卡世界' },
+      ],
+    });
+    const list = await s.get('tianming', 'worlds');
+    expect(list).toHaveLength(2);
+    expect(list.find((e) => e.id === mine.id)).toBeDefined(); // 玩家的还在
+    expect(list.find((e) => e.id === 'user_card_w1')).toBeDefined(); // 卡的也在
+  });
+
+  it('append-if-absent：玩家已有同 id → 跳过（不产生重复）', async () => {
+    const s = new CustomPresetStore();
+    const shared = 'user_shared_id_1';
+    await s.appendPreservingIds('tianming', {
+      worlds: [{ id: shared, source: 'user', createdAt: 1, generatedBy: 'manual', name: '首次' }],
+    });
+    const added2 = await s.appendPreservingIds('tianming', {
+      worlds: [{ id: shared, source: 'user', createdAt: 2, generatedBy: 'manual', name: '二次（应跳过）' }],
+    });
+    expect(added2).toHaveLength(0); // 已存在 → 不追加
+    const list = await s.get('tianming', 'worlds');
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe('首次'); // 保留既有，不被覆盖
+  });
+
+  it('幂等：重复导入同一张卡不产生重复条目', async () => {
+    const s = new CustomPresetStore();
+    const card = {
+      origins: [{ id: 'user_c_o1', source: 'user' as const, createdAt: 1, generatedBy: 'manual' as const, name: 'O' }],
+      talents: [{ id: 'user_c_t1', source: 'user' as const, createdAt: 1, generatedBy: 'manual' as const, name: 'T' }],
+    };
+    await s.appendPreservingIds('tianming', card);
+    await s.appendPreservingIds('tianming', card); // 再导入一次
+    expect(await s.get('tianming', 'origins')).toHaveLength(1);
+    expect(await s.get('tianming', 'talents')).toHaveLength(1);
+  });
+
+  it('卡自身列表内同 id 重复 → 保留首次出现', async () => {
+    const s = new CustomPresetStore();
+    const dup = 'user_dup_x';
+    const added = await s.appendPreservingIds('tianming', {
+      worlds: [
+        { id: dup, source: 'user', createdAt: 1, generatedBy: 'manual', name: 'first' },
+        { id: dup, source: 'user', createdAt: 2, generatedBy: 'manual', name: 'second' },
+      ],
+    });
+    expect(added).toHaveLength(1);
+    expect(added[0].name).toBe('first');
+  });
+
+  it('缺 id 的脏条目被跳过（无 id 无法保 id 语义）', async () => {
+    const s = new CustomPresetStore();
+    const added = await s.appendPreservingIds('tianming', {
+      worlds: [
+        // @ts-expect-error 故意省 id
+        { source: 'user', createdAt: 1, generatedBy: 'manual', name: 'no-id' },
+        { id: 'user_ok', source: 'user', createdAt: 1, generatedBy: 'manual', name: 'ok' },
+      ],
+    });
+    expect(added).toHaveLength(1);
+    expect(added[0].id).toBe('user_ok');
+  });
+
+  it('规范化 source/createdAt/generatedBy 但保留 id', async () => {
+    const s = new CustomPresetStore();
+    const before = Date.now();
+    const added = await s.appendPreservingIds('tianming', {
+      worlds: [
+        // source 错、缺 createdAt、generatedBy 非法 —— 但 id 必须保留
+        { id: 'user_keepme', source: 'pack' as never, generatedBy: 'weird' as never, name: 'X' } as unknown as CustomPresetEntry,
+      ],
+    });
+    expect(added[0].id).toBe('user_keepme'); // id 保留
+    expect(added[0].source).toBe('user'); // 强制 user
+    expect(added[0].generatedBy).toBe('manual'); // 非法 → manual
+    expect(added[0].createdAt).toBeGreaterThanOrEqual(before); // 缺 → 补当前时间
+  });
+
+  it('空入参/全跳过时不写 IDB', async () => {
+    const s = new CustomPresetStore();
+    const before = await s.load('tianming');
+    const added = await s.appendPreservingIds('tianming', { worlds: [] });
+    expect(added).toEqual([]);
+    const after = await s.load('tianming');
+    expect(after.meta.lastUpdated).toBe(before.meta.lastUpdated); // 未触发写入
+  });
+
+  it('不同 preset type 隔离追加', async () => {
+    const s = new CustomPresetStore();
+    await s.appendPreservingIds('tianming', {
+      origins: [{ id: 'user_o', source: 'user', createdAt: 1, generatedBy: 'manual', name: 'O' }],
+      talents: [{ id: 'user_t', source: 'user', createdAt: 1, generatedBy: 'manual', name: 'T' }],
+    });
+    expect(await s.get('tianming', 'origins')).toHaveLength(1);
+    expect(await s.get('tianming', 'talents')).toHaveLength(1);
+    expect(await s.get('tianming', 'worlds')).toHaveLength(0);
+  });
+});

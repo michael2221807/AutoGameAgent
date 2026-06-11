@@ -719,6 +719,121 @@ export class EnhancedOpeningPipeline {
   }
 
   /**
+   * Story 6 card import — generate the opening narrative on a state tree that ALREADY
+   * holds the card's world. Runs ONLY Phase E (narrative) → F (persist + postprocess) → G
+   * (post-round sub-pipelines, writes 元数据.当前行动选项), skipping the from-scratch A–D
+   * world generation.
+   *
+   * Why no world reconstruction is needed: Phase E generates from `stateManager.toSnapshot()`
+   * (the card's populated tree), not from `phaseCtx.worldDescription/npcSummaryList` (those are
+   * only passed between A–D). `openingFacts` is [] — the card's engram is already written into
+   * the tree by the import pipeline (P3), so it is NOT re-injected here. `options.choices` is
+   * unused by E–F–G (only A–D read it); the caller passes an empty CreationChoices.
+   *
+   * On any failure the tree is rolled back to the pre-opening baseline. This method does NOT
+   * touch the creation-flow `execute` above (zero regression risk to character creation).
+   */
+  async executeImportOpening(options: EnhancedOpeningOptions): Promise<EnhancedOpeningResult> {
+    const baselineSnapshot = this.stateManager.toSnapshot();
+    const phasesCompleted: string[] = [];
+
+    const savedRlEnabled = this.aiService.rateLimiterEnabled;
+    if (options.settings.bypassRateLimitDuringOpening && savedRlEnabled) {
+      this.aiService.configureRateLimiter({ enabled: false });
+    }
+
+    let rateLimitActive = false;
+    let rateLimitCleanup: (() => void) | null = null;
+    if (options.onRateLimitWait) {
+      const handler = (payload: unknown) => {
+        if (!payload || typeof payload !== 'object') return;
+        const p = payload as Record<string, unknown>;
+        if (p.id !== 'rate-limiter-queue') return;
+        const params = p.i18nParams as Record<string, unknown> | undefined;
+        const seconds = typeof params?.seconds === 'number' ? params.seconds : null;
+        rateLimitActive = true;
+        options.onRateLimitWait?.(seconds);
+      };
+      eventBus.on('ui:toast', handler);
+      rateLimitCleanup = () => eventBus.off('ui:toast', handler);
+    }
+    const wrappedOnProgress = (phase: string, progress: number) => {
+      if (rateLimitActive) { rateLimitActive = false; options.onRateLimitWait?.(null); }
+      options.onProgress(phase, progress);
+    };
+    const effectiveOptions: EnhancedOpeningOptions = { ...options, onProgress: wrappedOnProgress };
+
+    const phaseCtx: PhaseContext = {
+      stateManager: this.stateManager,
+      aiService: this.aiService,
+      promptAssembler: this.promptAssembler,
+      gamePack: this.gamePack,
+      paths: this.paths,
+      options: effectiveOptions,
+      worldDescription: '',  // unused by E–F–G (Phase E reads the world from the state snapshot)
+      locationNames: [],
+      npcSummaryList: '',
+      openingFacts: [],      // card engram already in the tree (import P3) — do not re-inject
+    };
+
+    let runningPhase = '';
+    const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
+      runningPhase = phase;
+      while (true) {
+        try {
+          return await fn();
+        } catch (err) {
+          if (isAbortError(err)) throw err;
+          if (!options.onPhaseError) throw err;
+          const action = await options.onPhaseError({
+            phase,
+            reason: err instanceof Error ? err.message : String(err),
+            availableActions: ['retry', 'exit'],
+          });
+          if (action === 'retry') continue;
+          throw err;
+        }
+      }
+    };
+
+    try {
+      effectiveOptions.onProgress('phaseE', 0);
+      const phaseEResult = await runPhase('E', () => this.executePhaseE(phaseCtx));
+      phasesCompleted.push('E');
+
+      effectiveOptions.onProgress('phaseF', 0);
+      const phaseFCtx = await runPhase('F', () => this.executePhaseF(phaseCtx, phaseEResult));
+      phasesCompleted.push('F');
+      effectiveOptions.onProgress('phaseF', 100);
+
+      effectiveOptions.onProgress('phaseG', 0);
+      await runPhase('G', () => this.gameOrchestrator.runPostRoundForOpening(phaseFCtx, this.stateManager));
+      phasesCompleted.push('G');
+      effectiveOptions.onProgress('phaseG', 100);
+
+      const actionOpts = this.stateManager.get<string[]>('元数据.当前行动选项') ?? [];
+      return { success: true, phasesCompleted, actionOptions: actionOpts };
+    } catch (err) {
+      this.stateManager.loadTree(baselineSnapshot);
+      if (isAbortError(err)) {
+        return { success: false, cancelled: true, phasesCompleted, actionOptions: [] };
+      }
+      return {
+        success: false,
+        phasesCompleted,
+        phasesFailed: runningPhase || undefined,
+        failureReason: err instanceof Error ? err.message : String(err),
+        actionOptions: [],
+      };
+    } finally {
+      if (options.settings.bypassRateLimitDuringOpening && savedRlEnabled) {
+        this.aiService.configureRateLimiter({ enabled: true });
+      }
+      rateLimitCleanup?.();
+    }
+  }
+
+  /**
    * Phase E: manual splitGen — ContextAssembly + AICall + BodyPolish.
    * Skips PreProcess (avoids roundNumber 0→1), ResponseRepair, ReasoningIngest, Render.
    */

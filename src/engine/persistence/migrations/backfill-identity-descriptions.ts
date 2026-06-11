@@ -65,10 +65,18 @@ export function createBackfillIdentityDescriptionsMigration(
           if (typeof item === 'string') {
             return { '名称': item, '描述': talentMap.get(item) ?? '' };
           }
-          if (isValidObj(item) && hasName(item)) {
-            return item;
+          if (isValidObj(item)) {
+            // Already an object (current {名称,描述} shape, possibly empty-named). Keep named ones
+            // as-is; normalize the fields otherwise. NEVER String(item) → that corrupts an
+            // empty-named talent to '[object Object]' (the import's '0' stamp re-runs this migration).
+            if (hasName(item)) return item;
+            const o = item as Record<string, unknown>;
+            return {
+              '名称': typeof o['名称'] === 'string' ? o['名称'] : '',
+              '描述': typeof o['描述'] === 'string' ? o['描述'] : '',
+            };
           }
-          return { '名称': String(item ?? ''), '描述': '' };
+          return { '名称': String(item ?? ''), '描述': '' }; // non-object, non-string scalar fallback
         }));
       }
       if (identityObj && '天赋描述' in identityObj) delete identityObj['天赋描述'];

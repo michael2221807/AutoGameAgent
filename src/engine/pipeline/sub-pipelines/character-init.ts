@@ -22,6 +22,7 @@
  * 对应 STEP-02 §5.1 Character Creation Finalization。
  */
 import { set as _set } from 'lodash-es';
+import { buildSchemaDefaultTree } from '../state-defaults';
 import {
   emitPromptAssemblyDebug,
   emitPromptResponseDebug,
@@ -293,10 +294,10 @@ export class CharacterInitPipeline {
    * 4. form 字段按 key 写入（form 的 key 本身是 dot-path，不依赖 statePath）
    */
   private buildInitialState(choices: CreationChoices): Record<string, unknown> {
-    const state: Record<string, unknown> = {};
-
     // ── 1. 从 stateSchema 提取默认值 ──
-    this.extractDefaultsFromSchema(this.gamePack.stateSchema, state, '');
+    // 复用共享原语 buildSchemaDefaultTree（与 Story 6 卡导入同一套默认构建逻辑，
+    // 防止"创角默认树"与"导入默认底树"漂移）。
+    const state = buildSchemaDefaultTree(this.gamePack.stateSchema);
 
     // ── 2. 按 statePath + valueField 路由 selections ──
     const stepsById = new Map(this.gamePack.creationFlow.steps.map((s) => [s.id, s]));
@@ -406,94 +407,6 @@ export class CharacterInitPipeline {
     }
 
     return value;
-  }
-
-  /**
-   * 从 JSON Schema 中递归提取默认值
-   *
-   * §4.1d 修复（2026-04-11）：
-   * 原实现遇到 `{ type: 'object', default: {}, properties: {...} }` 时，
-   * 只使用顶层 `default`（空对象），**丢弃**嵌套 property 的 default。
-   *
-   * 例如 tianming schema 里 `角色.身份.先天六维`：
-   * ```json
-   * "先天六维": {
-   *   "type": "object",
-   *   "default": {},
-   *   "properties": {
-   *     "体质": { "type": "number", "default": 5 },
-   *     ...
-   *   }
-   * }
-   * ```
-   * 旧实现输出 `先天六维: {}`；新实现输出 `先天六维: {体质:5, 直觉:5, ...}`。
-   *
-   * 算法：
-   * 1. 对象字段：先用 `default`（或 `{}`）作为 base，再递归填充 **缺失的** 嵌套属性默认值
-   * 2. 非对象字段有 default：用 default（但只在 target 中尚无此 key 时写入，保护父级已填值）
-   * 3. 非对象、无 default：跳过（原始行为保持）
-   *
-   * 这个递归**非破坏性**：如果 target 中已经有某个 key（来自父级 default），
-   * 递归不会覆盖它。这保证了"显式父级 default > 子属性 default"的优先级。
-   */
-  private extractDefaultsFromSchema(
-    schema: Record<string, unknown>,
-    target: Record<string, unknown>,
-    _prefix: string,
-  ): void {
-    const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
-    if (!properties) return;
-
-    for (const [key, propSchema] of Object.entries(properties)) {
-      // CR-R21: 显式检测 $ref 并警告 —— 当前 pack schema 不使用 $ref，
-      // 但若将来某字段改用 { "$ref": "#/definitions/X" } 引用，本函数会
-      // 静默跳过（因为 type 不是 'object' 且没有 properties），导致该字段
-      // 的默认值永远不被写入。此处警告开发者 —— 实现 $ref 解析需要扩展
-      // schema resolver，不应被悄悄忽略。
-      if ('$ref' in propSchema && typeof propSchema.$ref === 'string') {
-        console.warn(
-          `[CharacterInit] extractDefaultsFromSchema: field "${key}" uses $ref=${propSchema.$ref} — ` +
-          '$ref is not supported; default will not be populated. Inline the definition or implement $ref resolution.',
-        );
-        continue;
-      }
-
-      const hasOwnDefault = propSchema.default !== undefined;
-      const isObject = propSchema.type === 'object' && !!propSchema.properties;
-
-      if (isObject) {
-        // 对象字段：合并 default + 嵌套属性默认值
-        //
-        // 若 target 中已有该 key 且是对象（来自父级 default 的预填），就在它之上递归补齐；
-        // 否则用 default（或 {}）起步，递归填充缺失项。
-        let base: Record<string, unknown>;
-        const existing = target[key];
-        if (
-          key in target &&
-          existing !== null &&
-          typeof existing === 'object' &&
-          !Array.isArray(existing)
-        ) {
-          base = existing as Record<string, unknown>;
-        } else if (hasOwnDefault && propSchema.default !== null && typeof propSchema.default === 'object') {
-          base = structuredClone(propSchema.default) as Record<string, unknown>;
-        } else {
-          base = {};
-        }
-
-        this.extractDefaultsFromSchema(propSchema as Record<string, unknown>, base, key);
-
-        // 只有当填充后有内容或本来就有 default 时才写入，避免在 target 上塞空壳
-        if (hasOwnDefault || Object.keys(base).length > 0 || key in target) {
-          target[key] = base;
-        }
-      } else if (hasOwnDefault && !(key in target)) {
-        // 非对象字段（数字/字符串/数组/布尔）有 default 且 target 中尚无 → 直接写入
-        // `!(key in target)` 保护父级已填的值不被覆盖
-        target[key] = structuredClone(propSchema.default);
-      }
-      // 非对象且无 default → 跳过（原始行为保持）
-    }
   }
 
   /** 调用 AI 生成世界背景描述 */

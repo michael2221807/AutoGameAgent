@@ -384,6 +384,72 @@ export class CustomPresetStore {
   }
 
   /**
+   * 追加多条预设到既有数据，**保留入参的 id**，按 id append-if-absent（Story 6 卡导入 OD-J）
+   *
+   * 与既有两个方法的关键区别（三者都不可混用）：
+   * - `replaceAll`：**抹掉**玩家既有预设 → 卡导入不能用（会删玩家自定义）。
+   * - `bulkAppend`：**重新生成** id → 卡导入不能用（卡的 `角色` 可能按 id 引用某预设，
+   *   重生 id 会让引用悬空，origin/天赋等解析失败）。
+   * - 本方法：保留卡 preset 的 id 原样，仅当该 id 在玩家同类型列表中**尚不存在**时才追加，
+   *   既不抹玩家、也不破卡引用。
+   *
+   * 规则：
+   * - id 原样保留（不重生）；source 强制 'user'、createdAt 缺则补、generatedBy 非 'ai' 视为 'manual'。
+   * - 玩家既有同 id → 跳过（append-if-absent，幂等：重复导入同卡不产生重复条目）。
+   * - 卡自身列表内同 id 重复 → 保留首次出现。
+   * - 缺 id 的脏条目 → 跳过并告警（无 id 无法保 id 语义，且会破引用一致性）。
+   *
+   * @returns 实际新增的条目（含被保留的原 id），按入参顺序
+   */
+  async appendPreservingIds(
+    packId: string,
+    presetsByType: Record<string, CustomPresetEntry[]>,
+  ): Promise<CustomPresetEntry[]> {
+    return this.withWriteLock(async () => {
+      const data = await this.load(packId);
+      const added: CustomPresetEntry[] = [];
+      const now = Date.now();
+      for (const [presetType, list] of Object.entries(presetsByType)) {
+        if (!Array.isArray(list) || list.length === 0) continue;
+        const existing = Array.isArray(data.presets[presetType])
+          ? data.presets[presetType]
+          : [];
+        const seen = new Set(existing.map((e) => e.id));
+        for (const raw of list) {
+          if (!raw || typeof raw !== 'object') continue;
+          const rawId = typeof raw.id === 'string' ? raw.id : '';
+          if (!rawId) {
+            console.warn(
+              `[CustomPresetStore] appendPreservingIds: 跳过缺 id 的条目 in pack "${packId}" type "${presetType}"`,
+            );
+            continue;
+          }
+          // append-if-absent：玩家或卡自身已有同 id → 跳过（保 id 语义下的去重）
+          if (seen.has(rawId)) continue;
+          const entry: CustomPresetEntry = {
+            ...raw,
+            id: rawId, // 原样保留卡的 id —— 卡 角色 引用靠它解析
+            source: 'user',
+            createdAt:
+              typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt)
+                ? raw.createdAt
+                : now,
+            generatedBy: raw.generatedBy === 'ai' ? 'ai' : 'manual',
+          };
+          seen.add(rawId);
+          existing.push(entry);
+          added.push(entry);
+        }
+        data.presets[presetType] = existing;
+      }
+      if (added.length > 0) {
+        await this.save(data);
+      }
+      return added;
+    });
+  }
+
+  /**
    * 清除某 pack 的全部用户预设
    *
    * 用于：

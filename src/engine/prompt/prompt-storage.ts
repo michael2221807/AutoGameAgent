@@ -102,6 +102,21 @@ export class PromptStorage {
   }
 
   /**
+   * Atomic clear-then-import in a SINGLE transaction (Story 6 import undo / failure-rollback) —
+   * a put failure aborts the tx and rolls back to the pre-replace contents instead of leaving the
+   * prompts store empty (unlike clear()+importAll() in two separate txs).
+   */
+  async replaceAll(entries: Array<{ key: string; value: unknown }>): Promise<void> {
+    const db = await this.getDB();
+    const tx = db.transaction('prompts', 'readwrite');
+    await tx.store.clear();
+    for (const entry of entries) {
+      await tx.store.put(entry.value, entry.key);
+    }
+    await tx.done;
+  }
+
+  /**
    * 清空所有 prompt 覆盖（全量备份恢复前使用）
    *
    * 删除整个 prompts store 的所有条目，之后 importAll 可得到与备份一致的状态。

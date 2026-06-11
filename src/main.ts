@@ -107,6 +107,7 @@ import { SaveManager } from './engine/persistence/save-manager';
 import { migrationRegistry } from './engine/persistence/migration-registry';
 import { BackupService } from './engine/persistence/backup-service';
 import { GameCardExportService } from './engine/export/game-card-export-service';
+import { GameCardImportService } from './engine/export/game-card-import-service';
 import { ImageAssetCache } from './engine/image/asset-cache';
 import { GitHubSyncService } from './engine/sync/github-sync';
 import { LanSyncService } from './engine/sync/lan-sync';
@@ -230,6 +231,7 @@ async function bootstrap(): Promise<void> {
     customPresetStore,
     imageAssetCacheForBackup,
   );
+
 
   const packLoader = new GamePackLoader();
   let pack = null;
@@ -679,8 +681,8 @@ async function bootstrap(): Promise<void> {
 
   // ── CharacterInitPipeline + EnhancedOpeningPipeline (Story 0) ──
   // Created after GameOrchestrator so enhanced opening can access orchestrator.createStagesForOpening()
+  let enhancedOpeningPipeline: import('./engine/pipeline/sub-pipelines/enhanced-opening').EnhancedOpeningPipeline | undefined;
   if (pack) {
-    let enhancedOpeningPipeline: import('./engine/pipeline/sub-pipelines/enhanced-opening').EnhancedOpeningPipeline | undefined;
     if (orchestrator) {
       const { EnhancedOpeningPipeline } = await import('./engine/pipeline/sub-pipelines/enhanced-opening');
       const openingStages = orchestrator.createStagesForOpening();
@@ -710,6 +712,37 @@ async function bootstrap(): Promise<void> {
     );
   }
 
+  // Story 6: game-card import service — Stage-2 deps wired here (all stores now constructed).
+  // getPack defaults to the bootstrap singleton; activateSave bridges to the Pinia engineState
+  // (engine code must not import the store); runOpening reuses EnhancedOpeningPipeline Phase E–F–G.
+  const { DEFAULT_ENHANCED_OPENING_SETTINGS } = await import('./engine/pipeline/sub-pipelines/enhanced-opening');
+  const openingPipelineForImport = enhancedOpeningPipeline;
+  const gameCardImportService = new GameCardImportService(undefined, {
+    stateManager,
+    saveManager,
+    profileManager,
+    imageAssetCache: imageAssetCacheForBackup,
+    customPresetStore,
+    worldBookStorage,
+    configStore,
+    promptStorage,
+    engramManager,
+    hasEmbedder: () => aiService.getConfigForUsage('embedding') !== undefined,
+    activateSave: (tree, pkgId, profileId, slotId) =>
+      engineStateStore.loadGame(tree, pkgId, profileId, slotId),
+    runOpening: openingPipelineForImport
+      ? (args) =>
+          openingPipelineForImport.executeImportOpening({
+            settings: DEFAULT_ENHANCED_OPENING_SETTINGS,
+            nsfwMode: args.nsfwMode,
+            choices: { selections: {} },
+            // No abort: ⑦ is non-cancelable in the UI, so a never-aborting signal is intentional.
+            abortSignal: args.abortSignal ?? new AbortController().signal,
+            onProgress: args.onProgress ?? (() => {}),
+          })
+      : undefined,
+  });
+
   const actionQueueStore = useActionQueueStore();
   actionQueueStore.loadFromLocalStorage();
 
@@ -722,6 +755,7 @@ async function bootstrap(): Promise<void> {
   app.provide('embedder', embedder);
   app.provide('backupService', backupService);
   app.provide('gameCardExportService', gameCardExportService);
+  app.provide('gameCardImportService', gameCardImportService);
   app.provide('customPresetStore', customPresetStore);
   app.provide('worldBookStorage', worldBookStorage);
 

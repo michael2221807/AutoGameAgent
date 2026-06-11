@@ -4,6 +4,7 @@
   "home.buttons.newCharacter": "新建角色",
   "home.buttons.continueGame": "继续游戏",
   "home.buttons.manageSaves": "管理存档",
+  "home.buttons.importCard": "导入游戏卡",
   "home.buttons.apiConfig": "API 配置",
   "home.buttons.settings": "设置",
   "home.buttons.cloudSync": "云存档",

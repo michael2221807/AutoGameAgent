@@ -71,7 +71,9 @@ export function compareVersions(a: string, b: string): number {
 }
 
 function parseVersion(v: string): number[] {
-  if (!v) return [0];
+  // typeof guard: an untrusted card's cardMeta.packVersion could be a number/array at runtime
+  // (the field is typed string but JSON is untyped) — keep compareVersions TOTAL, never throw.
+  if (typeof v !== 'string' || !v) return [0];
   return v.split('.').map((p) => {
     const n = parseInt(p, 10);
     return Number.isFinite(n) ? n : 0;

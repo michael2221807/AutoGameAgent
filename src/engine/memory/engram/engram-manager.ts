@@ -42,6 +42,7 @@ export type {
   EngramWriteSnapshot,
 } from './engram-types';
 export { DEFAULT_ENGRAM_CONFIG } from './engram-types';
+import { ENGRAM_SCHEMA_VERSION } from './engram-types';
 import type {
   EngramConfig,
   EngramTrimConfig,
@@ -79,7 +80,7 @@ interface PrunedData {
 type NpcRelationshipEntry = Record<string, unknown>;
 
 /** 当前 engramMemory schema 版本 —— v3 = KnowledgeEdge, v4 = EngramEdge (V2 Graphiti) */
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = ENGRAM_SCHEMA_VERSION;
 
 export class EngramManager {
   private eventBuilder = new EventBuilder();

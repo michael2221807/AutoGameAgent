@@ -63,6 +63,15 @@ describe('backfill-identity-descriptions migration (nested objects)', () => {
     expect(_get(result, '角色.身份.天赋')).toEqual([{ '名称': '天命主角', '描述': '已有' }]);
   });
 
+  it('★空名天赋对象不被 stringify 成 "[object Object]"（FIX#6：导入 \'0\' 戳重跑迁移）', () => {
+    const data = { 角色: { 身份: { 天赋: [{ '名称': '御剑', '描述': 'kept' }, { '名称': '', '描述': '' }] } } };
+    const result = migration.migrate(data);
+    expect(_get(result, '角色.身份.天赋')).toEqual([
+      { '名称': '御剑', '描述': 'kept' },
+      { '名称': '', '描述': '' }, // 归一化，绝不出现 '[object Object]'
+    ]);
+  });
+
   it('cleans up old parallel description fields', () => {
     const data = {
       角色: {
