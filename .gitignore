@@ -34,7 +34,12 @@ skills-lock.json
 # E2E tests — screenshots and artifacts are local-only
 e2e/screenshots/
 e2e/test-results/
+e2e/smoke.spec.ts
+.playwright-mcp/
 
 # Local reference only
 docs/
 CLAUDE.md
+
+# Unrelated side projects living in this worktree
+comfyui-llm-prompt-enhancer/
