@@ -49,7 +49,9 @@ function toggle(field: keyof ExportFlags): void {
           @change="toggle(item.field)"
         />
         <span class="ckl-label">{{ t(`save.export.checklist.${item.key}.label`) }}</span>
-        <Tooltip :text="t(`save.export.checklist.${item.key}.hint`)">
+        <!-- `?` sits at the row's right edge (flex:1 label) — open the bubble leftward so a
+             wide hint never overflows the modal's right boundary (no horizontal scrollbar). -->
+        <Tooltip :text="t(`save.export.checklist.${item.key}.hint`)" position="left">
           <span class="ckl-info" aria-hidden="true">?</span>
         </Tooltip>
       </label>

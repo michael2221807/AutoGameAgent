@@ -267,6 +267,24 @@ describe('assembleAndPersist — 无 embedder 降级', () => {
   });
 });
 
+describe('assembleAndPersist — 开场降级（opening non-fatal）', () => {
+  it('runOpening 抛错 → openingDegraded=true，导入仍成功（存档已建）', async () => {
+    const { deps, spies } = makeDeps({ runOpening: vi.fn(async () => { throw new Error('未配置可用的 API'); }) });
+    const svc = new GameCardImportService(() => mockPack, deps);
+    const res = await svc.importCard(await makeCardBlob(validBundle()), baseOpts);
+    expect(res.ok).toBe(true);
+    expect(res.ok && res.openingDegraded).toBe(true);
+    expect(spies.saveGame).toHaveBeenCalled(); // 非致命：存档照常持久化
+  });
+
+  it('runOpening 成功 → openingDegraded=false', async () => {
+    const { deps } = makeDeps();
+    const svc = new GameCardImportService(() => mockPack, deps);
+    const res = await svc.importCard(await makeCardBlob(validBundle()), baseOpts);
+    expect(res.ok && res.openingDegraded).toBe(false);
+  });
+});
+
 // ─── SC-13 回滚 ──────────────────────────────────────────────────
 
 describe('assembleAndPersist — SC-13 回滚', () => {

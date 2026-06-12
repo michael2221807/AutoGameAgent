@@ -12,6 +12,8 @@ const props = defineProps<{
   mode: ProtagonistMode;
   /** Editable field dot-paths (relative to 角色), template mode only. */
   editableFields: string[];
+  /** Story 7 (U13): restrict pickable modes (save-to-card passes ['fixed','template'] — blank is rejected by import). */
+  allowedModes?: ProtagonistMode[];
 }>();
 
 const emit = defineEmits<{
@@ -26,6 +28,11 @@ const MODES: { value: ProtagonistMode; icon: string }[] = [
   { value: 'template', icon: '📝' },
   { value: 'blank', icon: '✨' },
 ];
+
+const visibleModes = computed(() => {
+  const allowed = props.allowedModes;
+  return allowed ? MODES.filter((m) => allowed.includes(m.value)) : MODES;
+});
 
 /** Whitelist-only editable options (mirrors buildDefaultProtagonistPolicy.editableWhitelist). */
 const EDITABLE_OPTIONS: { path: string; labelKey: string }[] = [
@@ -55,7 +62,7 @@ function toggleField(path: string): void {
   <div class="pms">
     <div class="pms-cards" role="radiogroup" :aria-label="t('save.export.protagonist.sectionTitle')">
       <button
-        v-for="m in MODES"
+        v-for="m in visibleModes"
         :key="m.value"
         type="button"
         class="pms-card"

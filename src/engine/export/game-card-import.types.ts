@@ -120,6 +120,12 @@ export interface ImportSuccess {
    * the ⑦/⑧ "检索受限" notice (U7/OD-E). Never blocks the import.
    */
   retrievalDegraded: boolean;
+  /**
+   * True when the opening narrative could not be generated (the AI call threw — e.g. no usable
+   * LLM API configured). The save is still created; the first main round will fill the narrative.
+   * Drives a success-screen hint so a blank opening never looks like a silent failure.
+   */
+  openingDegraded: boolean;
   /** Present only when the card and installed pack versions differ (U3/OD-F). */
   packVersionDrift?: PackVersionDrift;
   /**

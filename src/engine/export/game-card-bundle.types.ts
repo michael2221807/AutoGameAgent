@@ -175,6 +175,12 @@ export interface ExportOptions {
    * Story 5 fills this with all edge ids; Story 7 fills it with its D5 AI-classification result.
    */
   selectedEdgeIds: Set<string>;
+  /**
+   * Story 7 (D5): when true, every selected edge is stamped `core: true` in the
+   * exported bundle copy (never written back to the source save). Default false
+   * (Story 5 behavior: edges carry their existing core value unchanged).
+   */
+  markSelectedEdgesCore?: boolean;
   checklist: ExportFlags;
 }
 

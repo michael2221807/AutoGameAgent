@@ -1,12 +1,18 @@
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-save.md §2.5
 /**
- * CardExportFlow — Game Card export orchestrator (Story 5, P5).
+ * CardExportFlow — Game Card export orchestrator (Story 5 P5; Story 7 target mode).
  *
  * Single scrolling flow inside a Modal: coverage gate → protagonist → metadata →
- * checklist → preview → download. Reusable shape for Story 7: a `pre-classify` slot
- * sits between the gate and the options so Story 7 can inject its edge-classification
- * panel and feed the same `selectedEdgeIds`.
+ * checklist → preview → download.
+ *
+ * Story 7 (save-to-card): pass `target` to export ANY persisted save instead of
+ * the active session. Target mode loads the save read-only, computes coverage /
+ * counts / names from that tree, SKIPS the pre-export flush (flushing the live
+ * state over a non-active save would corrupt it — G2), restricts protagonist
+ * modes to fixed/template (U13), and stamps selected edges core:true (D5).
+ * The `pre-classify` slot receives the save's edges/entities/worldBrief and the
+ * owner feeds the confirmed id set back via `edgeIdsOverride`.
  */
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -15,6 +21,7 @@ import { useGameState } from '@/ui/composables/useGameState';
 import Modal from '@/ui/components/common/Modal.vue';
 import ProtagonistModeSelector from '@/ui/components/panels/ProtagonistModeSelector.vue';
 import CardExportChecklist from '@/ui/components/panels/CardExportChecklist.vue';
+import CardStripPreview from '@/ui/components/panels/CardStripPreview.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { inject } from 'vue';
 import type { GameStateTree } from '@/engine/types';
@@ -22,6 +29,10 @@ import type { SaveManager } from '@/engine/persistence/save-manager';
 import type { ProfileManager } from '@/engine/persistence/profile-manager';
 import type { EngramEditor, CoverageStats } from '@/engine/memory/engram/engram-editor';
 import type { GameCardExportService } from '@/engine/export/game-card-export-service';
+import type { ImageAssetCache } from '@/engine/image/asset-cache';
+import type { EngramEdge } from '@/engine/memory/engram/knowledge-edge';
+import type { EngramEntity } from '@/engine/memory/engram/entity-builder';
+import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import {
   CARD_FORMAT_VERSION,
   type ProtagonistMode,
@@ -29,9 +40,25 @@ import {
   type ExportOptions,
 } from '@/engine/export/game-card-bundle.types';
 
-const props = defineProps<{ modelValue: boolean }>();
+const props = defineProps<{
+  modelValue: boolean;
+  /** Story 7: convert THIS persisted save instead of the active session (read-only; skips flush). */
+  target?: { profileId: string; slotId: string };
+  /** Story 7: confirmed edge id set from the pre-classify slot owner; null/absent = all edges. */
+  edgeIdsOverride?: Set<string> | null;
+}>();
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void;
+}>();
+
+defineSlots<{
+  /** U7 contract: save data down; the confirmed id set returns via the edgeIdsOverride prop. */
+  'pre-classify'(props: {
+    edges: EngramEdge[];
+    entities: EngramEntity[];
+    worldBrief: string;
+    loading: boolean;
+  }): unknown;
 }>();
 
 const { t } = useI18n();
@@ -42,6 +69,7 @@ const gameCardExportService = inject<GameCardExportService>('gameCardExportServi
 const engramEditor = inject<EngramEditor>('engramEditor');
 const saveManager = inject<SaveManager>('saveManager');
 const profileManager = inject<ProfileManager>('profileManager');
+const imageAssetCache = inject<ImageAssetCache | undefined>('imageAssetCache', undefined);
 
 // ─── Form state ───────────────────────────────────────────────
 const mode = ref<ProtagonistMode>('fixed');
@@ -53,9 +81,18 @@ const tags = ref<string[]>([]);
 const tagDraft = ref('');
 const cover = ref('');            // base64
 const coverError = ref('');
+const coverFileName = ref('');
 const flags = ref<ExportFlags>(defaultFlags());
 const coverage = ref<CoverageStats | null>(null);
 const exporting = ref(false);
+
+// ─── Story 7 target mode state ────────────────────────────────
+const sourceTree = ref<Record<string, unknown> | null>(null);
+const loadingTree = ref(false);
+const missingImageCount = ref(0);
+// Monotonic open-generation guard: an in-flight loadGame whose generation no
+// longer matches the latest open is stale and must not mutate state (HIGH #1).
+let openGeneration = 0;
 
 function defaultFlags(): ExportFlags {
   return {
@@ -83,6 +120,7 @@ function resetForm(): void {
   tagDraft.value = '';
   cover.value = '';
   coverError.value = '';
+  coverFileName.value = '';
   flags.value = defaultFlags();
 }
 
@@ -90,11 +128,47 @@ function resetForm(): void {
 watch(
   () => props.modelValue,
   (open) => {
+    openGeneration++;
     if (!open) return;
     resetForm();
-    coverage.value = engramEditor ? engramEditor.getCoverageStats() : null;
+    sourceTree.value = null;
+    missingImageCount.value = 0;
+    if (props.target) {
+      void openForTarget(openGeneration);
+    } else {
+      coverage.value = engramEditor ? engramEditor.getCoverageStats() : null;
+      void refreshMissingImages(asRecord(store.toSnapshot()));
+    }
   },
+  // immediate so the Story 7 path works when this component is mounted via
+  // `v-if="modelValue && target"` (already-true on mount); the Story 5 always-mounted
+  // case fires once with open=false and early-returns harmlessly.
+  { immediate: true },
 );
+
+/** Target mode open: async read-only load of the persisted save (hardening F5).
+ *  `gen` pins this call to one open; a close/reopen bumps openGeneration and any
+ *  late-resolving prior load becomes a no-op (HIGH #1 race guard). */
+async function openForTarget(gen: number): Promise<void> {
+  if (!saveManager || !props.target) return;
+  loadingTree.value = true;
+  coverage.value = null;
+  try {
+    const tree = await saveManager.loadGame(props.target.profileId, props.target.slotId);
+    if (gen !== openGeneration) return; // modal closed or reopened mid-flight → discard
+    if (!tree) throw new Error(`save missing: ${props.target.profileId}/${props.target.slotId}`);
+    sourceTree.value = tree as unknown as Record<string, unknown>;
+    coverage.value = engramEditor ? engramEditor.getCoverageStatsForTree(sourceTree.value) : null;
+    void refreshMissingImages(sourceTree.value);
+  } catch (err) {
+    if (gen !== openGeneration) return;
+    console.warn('[CardExportFlow] failed to load target save:', err);
+    eventBus.emit('ui:toast', { type: 'error', i18nKey: 'save.toCard.loadFailed', message: t('save.toCard.loadFailed') });
+    close();
+  } finally {
+    if (gen === openGeneration) loadingTree.value = false;
+  }
+}
 
 const gatePass = computed(
   () =>
@@ -103,22 +177,81 @@ const gatePass = computed(
     coverage.value.missingLocationNames.length === 0,
 );
 
-const fixedNameMissing = computed(() => mode.value === 'fixed' && !String(store.characterName ?? '').trim());
-
-const canExport = computed(
-  () => gatePass.value && title.value.trim() !== '' && !fixedNameMissing.value && !exporting.value,
+// ─── Target save metadata (Story 7) ───────────────────────────
+const targetSlotMeta = computed(() =>
+  props.target ? profileManager?.getSlotMeta(props.target.profileId, props.target.slotId) : undefined,
 );
 
-// ─── Preview counts (from the live snapshot) ──────────────────
+const targetCharacterName = computed(() => {
+  if (!props.target) return '';
+  const fromMeta = targetSlotMeta.value?.characterName;
+  if (typeof fromMeta === 'string' && fromMeta.trim()) return fromMeta;
+  // Fallback when slot meta lacks the name: read it from the loaded tree. This UI-layer
+  // path mirrors the protagonist name field (角色.基础信息.姓名); if the pack renames it,
+  // slotMeta.characterName above remains the primary, schema-stable source.
+  const v = rec(rec((sourceTree.value ?? {})['角色'])?.['基础信息'])?.['姓名'];
+  return typeof v === 'string' ? v : '';
+});
+
+const fixedNameMissing = computed(() =>
+  mode.value === 'fixed' &&
+  !(props.target ? targetCharacterName.value.trim() : String(store.characterName ?? '').trim()),
+);
+
+const canExport = computed(
+  () =>
+    gatePass.value && title.value.trim() !== '' && !fixedNameMissing.value && !exporting.value &&
+    !loadingTree.value && (!props.target || sourceTree.value !== null),
+);
+
+// ─── Preview source: target tree (Story 7) or the live snapshot (Story 5) ──
+const previewSnap = computed<Record<string, unknown>>(() =>
+  props.target ? (sourceTree.value ?? {}) : asRecord(store.toSnapshot()),
+);
+
 const counts = computed(() => {
-  const snap = asRecord(store.toSnapshot());
+  const snap = previewSnap.value;
   return {
     npc: coverage.value?.totalNpcs ?? 0,
     loc: coverage.value?.totalLocations ?? 0,
-    edge: edgeIdsFrom(snap).size,
+    edge: props.edgeIdsOverride ? props.edgeIdsOverride.size : edgeIdsFrom(snap).size,
     img: countSelectedImages(snap),
   };
 });
+
+// ─── pre-classify slot data (Story 7, U7) ─────────────────────
+const sourceEdges = computed<EngramEdge[]>(() => {
+  const engram = rec(rec(rec(previewSnap.value['系统'])?.['扩展'])?.['engramMemory']);
+  const v2 = engram?.['v2Edges'];
+  return Array.isArray(v2) ? (v2 as EngramEdge[]) : [];
+});
+
+const sourceEntities = computed<EngramEntity[]>(() => {
+  const engram = rec(rec(rec(previewSnap.value['系统'])?.['扩展'])?.['engramMemory']);
+  const ents = engram?.['entities'];
+  return Array.isArray(ents) ? (ents as EngramEntity[]) : [];
+});
+
+const worldBrief = computed<string>(() => {
+  let cur: unknown = previewSnap.value;
+  for (const seg of DEFAULT_ENGINE_PATHS.worldDescription.split('.')) {
+    cur = rec(cur)?.[seg];
+  }
+  return typeof cur === 'string' ? cur : '';
+});
+
+// ─── Missing-image warning (U16) ──────────────────────────────
+async function refreshMissingImages(snap: Record<string, unknown>): Promise<void> {
+  if (!imageAssetCache) { missingImageCount.value = 0; return; }
+  try {
+    const ids = collectSelectedImageIds(snap);
+    if (ids.size === 0) { missingImageCount.value = 0; return; }
+    const cached = new Set((await imageAssetCache.listAll()).map((a) => a.id));
+    missingImageCount.value = [...ids].filter((id) => !cached.has(id)).length;
+  } catch {
+    missingImageCount.value = 0; // warning is best-effort, never blocks the flow
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────
 function asRecord(v: unknown): Record<string, unknown> {
@@ -156,6 +289,24 @@ function countSelectedImages(snap: Record<string, unknown>): number {
   return n;
 }
 
+/** Same field walk as countSelectedImages, but collecting unique ids (missing-image check, U16). */
+function collectSelectedImageIds(snap: Record<string, unknown>): Set<string> {
+  const ids = new Set<string>();
+  const sel = ['已选头像图片ID', '已选立绘图片ID', '已选背景图片ID'];
+  const player = rec(rec(snap['角色'])?.['图片档案']);
+  for (const f of sel) if (typeof player?.[f] === 'string' && player[f]) ids.add(player[f] as string);
+  const rels = rec(snap['社交'])?.['关系'];
+  if (Array.isArray(rels)) {
+    for (const npc of rels) {
+      const arc = rec(rec(npc)?.['图片档案']);
+      for (const f of sel) if (typeof arc?.[f] === 'string' && arc[f]) ids.add(arc[f] as string);
+    }
+  }
+  const scene = rec(rec(rec(rec(snap['系统'])?.['扩展'])?.['image'])?.['sceneArchive']);
+  if (typeof scene?.['当前壁纸图片ID'] === 'string' && scene['当前壁纸图片ID']) ids.add(scene['当前壁纸图片ID'] as string);
+  return ids;
+}
+
 // ─── Tags + cover ─────────────────────────────────────────────
 function addTag(): void {
   const v = tagDraft.value.trim();
@@ -167,7 +318,10 @@ function removeTag(tag: string): void {
 }
 function onCover(e: Event): void {
   coverError.value = '';
-  const file = (e.target as HTMLInputElement).files?.[0];
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  // Reset the native input so re-picking the same file still fires change.
+  input.value = '';
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) {
     coverError.value = t('save.export.meta.coverTooLarge');
@@ -182,9 +336,16 @@ function onCover(e: Event): void {
       return;
     }
     cover.value = result;
+    coverFileName.value = file.name;
   };
   reader.onerror = () => { coverError.value = t('save.export.meta.coverInvalidType'); };
   reader.readAsDataURL(file);
+}
+
+function clearCover(): void {
+  cover.value = '';
+  coverFileName.value = '';
+  coverError.value = '';
 }
 
 // ─── Gate navigation ──────────────────────────────────────────
@@ -198,31 +359,49 @@ function close(): void { emit('update:modelValue', false); }
 
 async function doExport(): Promise<void> {
   if (!canExport.value || !gameCardExportService || !saveManager) return;
-  const pid = activeProfileId.value;
-  const slot = activeSlotId.value;
-  const packId = activePackId.value ?? '';
+  const pid = props.target?.profileId ?? activeProfileId.value;
+  const slot = props.target?.slotId ?? activeSlotId.value;
   if (!pid || !slot) return;
 
   exporting.value = true;
   try {
-    // Flush the live state so exportCard reads a consistent persisted snapshot.
-    const snapshot = store.toSnapshot() as GameStateTree;
-    const slotMeta = profileManager?.getProfile(pid)?.slots[slot];
-    await saveManager.saveGame(pid, slot, snapshot, {
-      slotId: slot,
-      slotName: slotMeta?.slotName ?? slot,
-      lastSavedAt: new Date().toISOString(),
-      packId: slotMeta?.packId ?? packId,
-      packVersion: slotMeta?.packVersion ?? '',
-      characterName: store.characterName,
-      currentLocation: store.currentLocation,
-      gameTime: store.gameTime,
-      saveType: 'manual',
-    });
+    let packId: string;
+    let packVersion: string | undefined;
+    let selectedEdgeIds: Set<string>;
 
-    // Story 5: include ALL edge ids (creative-card edges = world setup). Story 7 will inject a
-    // filtered set via its classification panel (handover §8A reuse seam — service is source-agnostic).
-    const selectedEdgeIds = edgeIdsFrom(asRecord(snapshot));
+    if (props.target) {
+      // Story 7: the target save is already persisted — NO flush (flushing the live
+      // session over a non-active save would corrupt it, G2). Pack identity comes
+      // from the target slot meta only — never fall back to the active pack (U14/G7).
+      const slotMeta = targetSlotMeta.value;
+      if (!slotMeta?.packId) {
+        eventBus.emit('ui:toast', { type: 'error', i18nKey: 'save.toCard.packIdMissing', message: t('save.toCard.packIdMissing') });
+        return;
+      }
+      packId = slotMeta.packId;
+      packVersion = slotMeta.packVersion;
+      // Confirmed set from the classification panel (U7); fall back to all edges.
+      selectedEdgeIds = props.edgeIdsOverride ?? edgeIdsFrom(sourceTree.value ?? {});
+    } else {
+      // Story 5: flush the live state so exportCard reads a consistent persisted snapshot.
+      packId = activePackId.value ?? '';
+      const snapshot = store.toSnapshot() as GameStateTree;
+      const slotMeta = profileManager?.getProfile(pid)?.slots[slot];
+      await saveManager.saveGame(pid, slot, snapshot, {
+        slotId: slot,
+        slotName: slotMeta?.slotName ?? slot,
+        lastSavedAt: new Date().toISOString(),
+        packId: slotMeta?.packId ?? packId,
+        packVersion: slotMeta?.packVersion ?? '',
+        characterName: store.characterName,
+        currentLocation: store.currentLocation,
+        gameTime: store.gameTime,
+        saveType: 'manual',
+      });
+      packVersion = slotMeta?.packVersion;
+      // Story 5: include ALL edge ids (creative-card edges = world setup).
+      selectedEdgeIds = edgeIdsFrom(asRecord(snapshot));
+    }
 
     const now = new Date().toISOString();
     const options: ExportOptions = {
@@ -241,9 +420,11 @@ async function doExport(): Promise<void> {
         createdAt: now,
         updatedAt: now,
         packId,
-        packVersion: slotMeta?.packVersion, // Story 6 import uses this for cross-version drift warnings
+        packVersion, // Story 6 import uses this for cross-version drift warnings
       },
       selectedEdgeIds,
+      // D5: every edge the author confirmed into the card is a world setting → core:true (copy only).
+      markSelectedEdgesCore: props.target ? true : undefined,
       checklist: flags.value,
     };
 
@@ -282,11 +463,14 @@ function downloadBlob(blob: Blob, name: string): void {
 <template>
   <Modal
     :model-value="modelValue"
-    :title="t('save.export.modalTitle')"
+    :title="t(props.target ? 'save.toCard.modalTitle' : 'save.export.modalTitle')"
     width="640px"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="cef">
+      <!-- Story 7: async target-save loading state -->
+      <p v-if="loadingTree" class="cef-loading">{{ t('save.toCard.loading') }}</p>
+
       <!-- ① Coverage gate -->
       <div
         v-if="coverage"
@@ -315,8 +499,15 @@ function downloadBlob(blob: Blob, name: string): void {
         </template>
       </div>
 
-      <!-- Story 7 injects its edge-classification panel here -->
-      <slot name="pre-classify" :selected-edge-ids="counts.edge" />
+      <!-- Story 7 injects its edge-classification panel here (U7 slot contract:
+           edges/entities/worldBrief down, confirmed Set back via edgeIdsOverride prop) -->
+      <slot
+        name="pre-classify"
+        :edges="sourceEdges"
+        :entities="sourceEntities"
+        :world-brief="worldBrief"
+        :loading="loadingTree"
+      />
 
       <template v-if="gatePass">
         <!-- ② Protagonist -->
@@ -325,6 +516,7 @@ function downloadBlob(blob: Blob, name: string): void {
           <ProtagonistModeSelector
             v-model:mode="mode"
             v-model:editable-fields="editableFields"
+            :allowed-modes="props.target ? (['fixed', 'template'] as ProtagonistMode[]) : undefined"
           />
           <p v-if="fixedNameMissing" class="cef-warn">{{ t('save.export.protagonist.fixedEmptyName') }}</p>
         </section>
@@ -351,15 +543,19 @@ function downloadBlob(blob: Blob, name: string): void {
               <input v-model="tagDraft" class="cef-input cef-input--tag" type="text" :placeholder="t('save.export.meta.tagsPlaceholder')" @keydown.enter.prevent="addTag" />
             </div>
           </label>
-          <label class="cef-field">
+          <div class="cef-field">
             <span class="cef-field__label">{{ t('save.export.meta.coverLabel') }}</span>
             <div class="cef-cover">
               <img v-if="cover" :src="cover" class="cef-cover__thumb" alt="" />
-              <input type="file" accept="image/*" class="cef-file" @change="onCover" />
-              <button v-if="cover" type="button" class="cef-cover__clear" @click="cover = ''">{{ t('save.export.meta.coverClear') }}</button>
+              <label class="cef-filebtn">
+                <input type="file" accept="image/*" @change="onCover" />
+                <span>{{ t('save.export.meta.coverPick') }}</span>
+              </label>
+              <span class="cef-filename" :title="coverFileName">{{ coverFileName || t('save.export.meta.coverNone') }}</span>
+              <button v-if="cover" type="button" class="cef-cover__clear" @click="clearCover">{{ t('save.export.meta.coverClear') }}</button>
             </div>
             <p v-if="coverError" class="cef-warn">{{ coverError }}</p>
-          </label>
+          </div>
         </section>
 
         <!-- ④ Checklist -->
@@ -368,15 +564,16 @@ function downloadBlob(blob: Blob, name: string): void {
           <CardExportChecklist v-model="flags" />
         </section>
 
-        <!-- ⑤ Preview -->
+        <!-- ⑤ Strip preview (U12: kept / cleared / reset, shared by both modes) -->
         <section class="cef-sec">
           <h3 class="cef-sec__title">{{ t('save.export.preview.sectionTitle') }}</h3>
-          <p class="cef-prev cef-prev--pack">{{ t('save.export.preview.willPack', { npc: counts.npc, loc: counts.loc, edge: counts.edge, img: counts.img }) }}</p>
-          <p class="cef-prev cef-prev--strip">{{ t('save.export.preview.willStrip') }}</p>
-          <div class="cef-never">
-            <p class="cef-never__title">{{ t('save.export.neverExport.title') }}</p>
-            <p class="cef-never__items">{{ t('save.export.neverExport.items') }}</p>
-          </div>
+          <CardStripPreview
+            :counts="{ npc: counts.npc, loc: counts.loc, img: counts.img }"
+            :edge-count="counts.edge"
+            :flags="flags"
+            :missing-image-count="missingImageCount"
+            :target-mode="Boolean(props.target)"
+          />
         </section>
       </template>
     </div>
@@ -394,8 +591,7 @@ function downloadBlob(blob: Blob, name: string): void {
 .cef { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 /* Prevent any control from overflowing the modal body (no horizontal scrollbar). */
 .cef :where(input, textarea, select) { box-sizing: border-box; max-width: 100%; }
-.cef :where(p, h3) { overflow-wrap: anywhere; }
-.cef-file { max-width: 100%; }
+.cef :where(p, h3, span) { overflow-wrap: anywhere; }
 
 .cef-gate {
   display: flex;
@@ -474,9 +670,39 @@ function downloadBlob(blob: Blob, name: string): void {
 }
 .cef-input--tag { flex: 1; min-width: 120px; }
 
-.cef-cover { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.cef-cover__thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius-sm); }
-.cef-file { font-size: 0.82rem; color: var(--color-text-secondary); }
+.cef-cover { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.cef-cover__thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius-sm); flex-shrink: 0; }
+/* Custom file picker — native input visually hidden, label acts as the button. */
+.cef-filebtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  color: var(--color-text);
+  background: color-mix(in oklch, var(--color-bg) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-text) 14%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: box-shadow 0.16s var(--ease-out), background 0.16s var(--ease-out);
+}
+.cef-filebtn:hover { box-shadow: inset 0 0 0 1.5px color-mix(in oklch, var(--color-sage-400) 50%, transparent); }
+.cef-filebtn input[type="file"] {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+.cef-filename {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cef-cover__clear {
   padding: 4px 10px;
   font-size: 0.8rem;
@@ -490,18 +716,7 @@ function downloadBlob(blob: Blob, name: string): void {
 
 .cef-warn { margin: 6px 0 0; font-size: 0.8rem; color: var(--color-amber-400); }
 
-.cef-prev { margin: 0 0 6px; font-size: 0.84rem; line-height: 1.5; }
-.cef-prev--pack { color: var(--color-text); }
-.cef-prev--strip { color: var(--color-text-secondary); }
-.cef-never {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-text) 5%, transparent);
-  opacity: 0.85;
-}
-.cef-never__title { margin: 0 0 2px; font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); }
-.cef-never__items { margin: 0; font-size: 0.8rem; color: var(--color-text-secondary); }
+.cef-loading { margin: 0; font-size: 0.86rem; color: var(--color-text-secondary); }
 
 .btn-modal {
   padding: 8px 18px;

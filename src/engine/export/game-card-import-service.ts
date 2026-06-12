@@ -396,6 +396,7 @@ export class GameCardImportService {
 
       // 8. Opening (Phase E–F–G on the card-populated tree). Non-fatal: a failure leaves the
       //    narrative empty but the save is still created (first main-round will fill it).
+      let openingDegraded = false;
       if (d.runOpening) {
         const nsfwMode = d.stateManager.get<boolean>('系统.nsfwMode') === true;
         try {
@@ -405,7 +406,9 @@ export class GameCardImportService {
             abortSignal: options.abortSignal,
           });
         } catch {
-          /* degraded opening — non-fatal */
+          // Surface this instead of swallowing it silently: the user would otherwise enter a
+          // game with a blank narrative and no idea why (typically an unconfigured/failing LLM API).
+          openingDegraded = true;
         }
       }
 
@@ -444,6 +447,7 @@ export class GameCardImportService {
         slotId,
         cardTitle: bundle.cardMeta.title,
         retrievalDegraded,
+        openingDegraded,
         packVersionDrift,
         globalChangesApplied: globalBackup.hasChanges,
       };

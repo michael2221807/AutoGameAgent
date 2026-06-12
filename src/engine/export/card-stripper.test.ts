@@ -34,6 +34,7 @@ function flags(overrides: Partial<ExportFlags> = {}): ExportFlags {
 function makeTree(): Record<string, unknown> {
   return {
     元数据: {
+      回合序号: 50,
       叙事历史: [{ round: 1, text: 'narration' }],
       推理历史: [{ round: 1 }],
       剧情规划: { plan: 'inner-plan' },
@@ -109,6 +110,7 @@ function makeTree(): Record<string, unknown> {
 describe('stripStateTreeForCard — always-strip subtrees', () => {
   it('deletes all gameplay-history paths', () => {
     const out = stripStateTreeForCard(makeTree(), PATHS, flags(), 'fixed');
+    expect(getByPath(out, '元数据.回合序号')).toBeUndefined(); // turn counter is play progress (schema default 0 on import)
     expect(getByPath(out, '元数据.叙事历史')).toBeUndefined();
     expect(getByPath(out, '元数据.推理历史')).toBeUndefined();
     expect(getByPath(out, '元数据.剧情规划')).toBeUndefined();

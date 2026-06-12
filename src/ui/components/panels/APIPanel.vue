@@ -70,6 +70,7 @@ const USAGE_TYPE_CATEGORIES: Record<UsageType, AssignCategory> = {
   assistant: 'utility',
   world_builder: 'utility',
   engram_batch_solidify: 'repair',
+  card_edge_classify: 'repair',
 };
 
 function getUsageTypeMeta(key: UsageType): UsageTypeMeta {

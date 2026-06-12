@@ -1194,6 +1194,108 @@ describe('EngramEditor', () => {
     });
   });
 
+  // ─── Coverage Stats (tree variant, Story 7 save-to-card) ───
+
+  describe('getCoverageStatsForTree', () => {
+    function buildTree(opts?: {
+      engram?: EngramStateData;
+      relationships?: Array<Record<string, unknown>>;
+      locations?: unknown;
+    }): Record<string, unknown> {
+      return {
+        '系统': { '扩展': { engramMemory: opts?.engram ?? createEngramState() } },
+        '社交': { '关系': opts?.relationships ?? [] },
+        '世界': { '地点信息': opts?.locations ?? {} },
+      };
+    }
+
+    it('matches getCoverageStats exactly for identical data (equivalence)', () => {
+      const engram = createEngramState({
+        entities: [
+          makeEntity('Alice'),
+          makeEntity('东城茶馆', { type: 'location' }),
+        ],
+        v2Edges: [
+          makeEdge('Alice', '东城茶馆', 'Alice 常驻东城茶馆经营情报生意', { source: 'opening' }),
+          makeEdge('Alice', 'Bob', 'Alice 与 Bob 是旧识，曾在北境共事多年'),
+        ],
+      });
+      const relationships = [{ '名称': 'Alice' }, { '名称': 'Bob' }];
+
+      sm = createMockStateManager({ engram, relationships });
+      editor = new EngramEditor(sm, mgr);
+      const liveStats = editor.getCoverageStats();
+
+      const treeStats = editor.getCoverageStatsForTree(
+        buildTree({ engram, relationships }),
+      );
+
+      expect(treeStats).toEqual(liveStats);
+      expect(treeStats.totalNpcs).toBe(2);
+      expect(treeStats.npcsWithEntity).toBe(1);
+      expect(treeStats.totalEdges).toBe(2);
+      expect(treeStats.edgesBySource.opening).toBe(1);
+      expect(treeStats.edgesBySource.legacy).toBe(1); // source 'ai' counts as legacy
+    });
+
+    it('counts location coverage from a Record-shaped 世界.地点信息', () => {
+      sm = createMockStateManager();
+      editor = new EngramEditor(sm, mgr);
+
+      const tree = buildTree({
+        engram: createEngramState({
+          entities: [makeEntity('东城茶馆', { type: 'location' })],
+        }),
+        locations: {
+          loc1: { '名称': '东城茶馆' },
+          loc2: { '名称': '北境关隘' },
+        },
+      });
+
+      const stats = editor.getCoverageStatsForTree(tree);
+      expect(stats.totalLocations).toBe(2);
+      expect(stats.locationsWithEntity).toBe(1);
+      expect(stats.missingLocationNames).toEqual(['北境关隘']);
+    });
+
+    it('handles a tree without engram/relationships paths gracefully', () => {
+      sm = createMockStateManager();
+      editor = new EngramEditor(sm, mgr);
+
+      const stats = editor.getCoverageStatsForTree({});
+      expect(stats.totalNpcs).toBe(0);
+      expect(stats.coveragePercent).toBe(100);
+      expect(stats.totalEdges).toBe(0);
+    });
+
+    it('respects pathOverrides when reading the tree', () => {
+      sm = createMockStateManager();
+      editor = new EngramEditor(sm, mgr, {
+        relationships: 'social.npcs',
+        npcNameField: 'customName',
+      });
+
+      const stats = editor.getCoverageStatsForTree({
+        '系统': { '扩展': { engramMemory: createEngramState({ entities: [makeEntity('Alice')] }) } },
+        social: { npcs: [{ customName: 'Alice' }, { customName: 'Bob' }] },
+      });
+      expect(stats.totalNpcs).toBe(2);
+      expect(stats.npcsWithEntity).toBe(1);
+      expect(stats.missingNpcNames).toEqual(['Bob']);
+    });
+
+    it('does not read from the live StateManager', () => {
+      sm = createMockStateManager({
+        relationships: [{ '名称': 'LiveOnlyNpc' }],
+      });
+      editor = new EngramEditor(sm, mgr);
+
+      const stats = editor.getCoverageStatsForTree(buildTree());
+      expect(stats.totalNpcs).toBe(0);
+      expect((sm.get as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+    });
+  });
+
   // ─── OQ-3 Signature Extension (FactBuilder) — tested via bulkCreateEdges ───
 
   describe('OQ-3 FactBuilder signature extension via bulkCreateEdges', () => {

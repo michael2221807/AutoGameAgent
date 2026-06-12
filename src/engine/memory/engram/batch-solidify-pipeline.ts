@@ -213,42 +213,54 @@ interface ParsedAIOutput {
   descriptions: ParsedEntityDesc[];
 }
 
-function parseAIResponse(raw: string): ParsedAIOutput {
+/**
+ * Tolerant JSON extraction shared across batch AI pipelines (Story 4 solidify,
+ * Story 7 card edge classify): scan candidate '{' start positions from the END
+ * of the raw response and return the first JSON.parse-able value accepted by
+ * `accept`. Survives thinking tags, prose preambles and code fences.
+ */
+export function parseLooseJson<T>(raw: string, accept: (v: unknown) => v is T): T | null {
   const openBraces: number[] = [];
   for (let i = 0; i < raw.length; i++) {
     if (raw[i] === '{') openBraces.push(i);
   }
 
   for (let i = openBraces.length - 1; i >= 0; i--) {
-    const start = openBraces[i];
-    const candidate = raw.slice(start);
+    const candidate = raw.slice(openBraces[i]);
     const closeIdx = candidate.lastIndexOf('}');
     if (closeIdx < 0) continue;
 
     try {
-      const parsed = JSON.parse(candidate.slice(0, closeIdx + 1)) as {
-        knowledge_facts?: ParsedFact[];
-        entity_descriptions?: ParsedEntityDesc[];
-      };
-      if (!Array.isArray(parsed.knowledge_facts)) continue;
-
-      const facts = parsed.knowledge_facts.filter(
-        f =>
-          f &&
-          typeof f.source_entity === 'string' &&
-          typeof f.target_entity === 'string' &&
-          typeof f.fact === 'string',
-      );
-      const descriptions = (parsed.entity_descriptions ?? []).filter(
-        d => d && typeof d.name === 'string' && typeof d.summary === 'string' && d.summary.trim(),
-      );
-      return { facts, descriptions };
+      const parsed: unknown = JSON.parse(candidate.slice(0, closeIdx + 1));
+      if (accept(parsed)) return parsed;
     } catch {
       continue;
     }
   }
 
-  return { facts: [], descriptions: [] };
+  return null;
+}
+
+function parseAIResponse(raw: string): ParsedAIOutput {
+  const parsed = parseLooseJson(
+    raw,
+    (v): v is { knowledge_facts: ParsedFact[]; entity_descriptions?: ParsedEntityDesc[] } =>
+      v !== null && typeof v === 'object' &&
+      Array.isArray((v as { knowledge_facts?: unknown }).knowledge_facts),
+  );
+  if (!parsed) return { facts: [], descriptions: [] };
+
+  const facts = parsed.knowledge_facts.filter(
+    f =>
+      f &&
+      typeof f.source_entity === 'string' &&
+      typeof f.target_entity === 'string' &&
+      typeof f.fact === 'string',
+  );
+  const descriptions = (parsed.entity_descriptions ?? []).filter(
+    d => d && typeof d.name === 'string' && typeof d.summary === 'string' && d.summary.trim(),
+  );
+  return { facts, descriptions };
 }
 
 // ─── Validation (UNCHANGED) ───

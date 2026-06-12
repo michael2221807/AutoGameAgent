@@ -71,7 +71,12 @@ export class GameCardExportService {
     const flags = options.checklist;
 
     // 1. Engram extracted from the ORIGINAL tree (before strip), then NSFW-redacted if needed.
-    const engram = this.extractEngram(original, options.selectedEdgeIds, flags.containsNsfw);
+    const engram = this.extractEngram(
+      original,
+      options.selectedEdgeIds,
+      flags.containsNsfw,
+      options.markSelectedEdgesCore === true,
+    );
 
     // 2. Trim the state tree (deep-cloned inside; engramMemory cleared to avoid double-carry, G5;
     //    blank protagonist mode also drops 角色 — see card-stripper).
@@ -142,6 +147,7 @@ export class GameCardExportService {
     tree: Record<string, unknown>,
     selectedEdgeIds: Set<string>,
     includeNsfw: boolean,
+    markSelectedEdgesCore: boolean,
   ): { entities: EngramEntity[]; knowledgeEdges: EngramEdge[] } {
     const engramState = getByPath(tree, this.stripPaths.engramMemory);
     const rawEntities = isRecord(engramState) && Array.isArray(engramState['entities'])
@@ -150,14 +156,18 @@ export class GameCardExportService {
       ? (engramState['v2Edges'] as EngramEdge[]) : [];
 
     // Drop events + legacy relations + vectors; reset is_embedded (import re-embeds).
+    // Story 7 (D5): retained edges are world-setting by author confirmation → stamp core
+    // on the exported COPY only (the source save is never touched, SC-8).
     let entities = rawEntities.map((e) => ({ ...e, is_embedded: false }));
     let knowledgeEdges = rawEdges
       .filter((e) => e && selectedEdgeIds.has(e.id))
-      .map((e) => ({ ...e, is_embedded: false }));
+      .map((e) => (markSelectedEdgesCore ? { ...e, is_embedded: false, core: true } : { ...e, is_embedded: false }));
 
     // NSFW re-leak guard (SC-9): when adult content is excluded, scrub private text from
     // free-text engram fields. Entity summaries are 背景+外貌描述 by construction (clean),
     // but edge facts are AI-generated free text → drop any edge mentioning stripped private text.
+    // Note: edge.episodes carries event IDs (not human-readable text, see knowledge-edge.ts) so it
+    // is intentionally not scrubbed; if a future code path stores free-form text there, extend this.
     if (!includeNsfw) {
       // Best-effort scrub: drop edges / blank summaries that echo materialized private text.
       // Heuristic (substring) — paraphrased NSFW in AI-generated edge facts can't be fully caught;

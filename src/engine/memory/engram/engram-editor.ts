@@ -131,6 +131,16 @@ function normalizeLocationRecords(raw: unknown): Array<Record<string, unknown>> 
   return [];
 }
 
+/** Dot-path read over a plain tree (no StateManager) — for save-agnostic analytics. */
+function readTreePath(root: unknown, path: string): unknown {
+  let cur: unknown = root;
+  for (const seg of path.split('.')) {
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur;
+}
+
 // ─── EngramEditor ───
 
 export class EngramEditor {
@@ -692,13 +702,39 @@ export class EngramEditor {
   // ─── Analytics (read-only, no write lock — best-effort / eventually consistent) ───
 
   getCoverageStats(): CoverageStats {
-    const engram = this.loadEngram();
+    return this.computeCoverage(
+      this.loadEngram(),
+      this.stateManager.get<unknown>(this.relationshipsPath),
+      this.stateManager.get<unknown>(this.locationsPath),
+    );
+  }
+
+  /**
+   * Save-agnostic variant (Story 7 save-to-card): same coverage stats computed
+   * from an arbitrary persisted state tree (e.g. a non-active save returned by
+   * SaveManager.loadGame) instead of the live StateManager. Shares paths/field
+   * config and the exact computation with getCoverageStats().
+   */
+  getCoverageStatsForTree(tree: Record<string, unknown>): CoverageStats {
+    return this.computeCoverage(
+      this.normalizeEngram(readTreePath(tree, this.engramPath)),
+      readTreePath(tree, this.relationshipsPath),
+      readTreePath(tree, this.locationsPath),
+    );
+  }
+
+  private computeCoverage(
+    engram: EngramStateData,
+    rawRelationships: unknown,
+    rawLocations: unknown,
+  ): CoverageStats {
     const properEntities = engram.entities.filter(e => !e._pendingEnrichment);
     const properEntityNames = new Set(properEntities.map(e => e.name));
 
     // NPC coverage (exclude npcTypeExclude='普通', consistent with EntityBuilder entity-builder.ts:131)
-    const raw = this.stateManager.get<Array<Record<string, unknown>>>(this.relationshipsPath);
-    const relationships = Array.isArray(raw) ? raw : [];
+    const relationships = Array.isArray(rawRelationships)
+      ? (rawRelationships as Array<Record<string, unknown>>)
+      : [];
 
     const npcNames: string[] = [];
     for (const npc of relationships) {
@@ -711,7 +747,6 @@ export class EngramEditor {
     const missingNpcNames = npcNames.filter(n => !properEntityNames.has(n));
 
     // Location coverage — 世界.地点信息 is Record<id, LocationItem>, not array
-    const rawLocations = this.stateManager.get<unknown>(this.locationsPath);
     const locationRecords = normalizeLocationRecords(rawLocations);
 
     const locationNames: string[] = [];
@@ -775,7 +810,14 @@ export class EngramEditor {
   }
 
   private loadEngram(): EngramStateData {
-    const raw = this.stateManager.get<Partial<EngramStateData>>(this.engramPath);
+    return this.normalizeEngram(this.stateManager.get<Partial<EngramStateData>>(this.engramPath));
+  }
+
+  private normalizeEngram(rawValue: unknown): EngramStateData {
+    const raw =
+      rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
+        ? (rawValue as Partial<EngramStateData>)
+        : undefined;
     if (raw && Array.isArray(raw.events)) {
       return {
         events: raw.events,

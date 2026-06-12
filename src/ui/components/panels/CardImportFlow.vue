@@ -66,7 +66,7 @@ const optIns = ref<Set<GlobalOptInFlag>>(new Set());
 // progress + result
 const importing = ref(false);
 const openingPhase = ref('');
-const result = ref<{ profileId: string; slotId: string; retrievalDegraded: boolean; globalChangesApplied: boolean } | null>(null);
+const result = ref<{ profileId: string; slotId: string; retrievalDegraded: boolean; openingDegraded: boolean; globalChangesApplied: boolean } | null>(null);
 const undone = ref(false);   // global-changes undone on the success screen
 const undoing = ref(false);
 const undoFailed = ref(false);
@@ -356,6 +356,7 @@ async function doImport(): Promise<void> {
         profileId: res.profileId,
         slotId: res.slotId,
         retrievalDegraded: res.retrievalDegraded,
+        openingDegraded: res.openingDegraded,
         globalChangesApplied: res.globalChangesApplied,
       };
       stage.value = 'success';
@@ -618,6 +619,7 @@ const errorText = computed(() => (errorCode.value ? t(`save.import.card.error.${
         <h3 class="cif-h" data-stage-focus tabindex="-1">{{ t('save.import.card.success.title') }}</h3>
         <p class="cif-body">{{ t('save.import.card.success.line', { title: cardMeta?.title }) }}</p>
         <p v-if="result?.retrievalDegraded" class="cif-banner cif-banner--amber" role="note">{{ t('save.import.card.success.degraded') }}</p>
+        <p v-if="result?.openingDegraded" class="cif-banner cif-banner--amber" role="note">{{ t('save.import.card.success.openingDegraded') }}</p>
         <!-- Reversible global overwrite (user request): one-click undo of any global settings this import changed. -->
         <div v-if="result?.globalChangesApplied" class="cif-undo-wrap">
           <template v-if="!undone">

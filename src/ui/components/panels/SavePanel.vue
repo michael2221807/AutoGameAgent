@@ -17,6 +17,7 @@ import { useGameState } from '@/ui/composables/useGameState';
 import { useLocale } from '@/ui/composables/useLocale';
 import Modal from '@/ui/components/common/Modal.vue';
 import CardExportFlow from '@/ui/components/panels/CardExportFlow.vue';
+import SaveToCardFlow from '@/ui/components/panels/SaveToCardFlow.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import type { SaveSlotMeta } from '@/engine/types/persistence';
 import type { GameStateTree } from '@/engine/types';
@@ -41,6 +42,20 @@ const customPresetStore = inject<CustomPresetStore | undefined>('customPresetSto
 
 // Story 5: game-card export modal
 const showCardExport = ref(false);
+
+// Story 7: save-to-card wizard (any saved slot of the current profile)
+const showToCard = ref(false);
+const toCardTarget = ref<{ profileId: string; slotId: string } | null>(null);
+
+function openToCard(slotId: string): void {
+  const pid = activeProfileId.value;
+  if (!pid) return;
+  toCardTarget.value = { profileId: pid, slotId };
+  showToCard.value = true;
+}
+
+// Clear the target once the wizard closes so a stale slot can never re-mount the flow.
+watch(showToCard, (open) => { if (!open) toCardTarget.value = null; });
 
 // ─── Slot list ────────────────────────────────────────────────
 
@@ -1083,6 +1098,12 @@ const showSettings = ref(false);
               :title="$t('save.slot.export')"
             >{{ $t('save.slot.export') }}</button>
             <button
+              class="action-btn action-btn--tocard"
+              type="button"
+              :disabled="!slot.lastSavedAt"
+              @click="openToCard(slot.slotId)"
+            >{{ $t('save.slot.toCard') }}</button>
+            <button
               v-if="vectorStore && embedder"
               class="action-btn action-btn--rebuild"
               type="button"
@@ -1239,6 +1260,7 @@ const showSettings = ref(false);
 
     <!-- Story 5: game-card export flow (self-contained modal) -->
     <CardExportFlow v-model="showCardExport" />
+    <SaveToCardFlow v-model="showToCard" :target="toCardTarget" />
   </div>
 </template>
 
@@ -1667,6 +1689,7 @@ const showSettings = ref(false);
 .action-btn--save:hover:not(:disabled)    { color: var(--color-success,#22c55e); border-color: var(--color-success,#22c55e); background: color-mix(in oklch, var(--color-success) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-success) 15%, transparent); }
 .action-btn--load:hover:not(:disabled)    { color: var(--color-primary,#6366f1); border-color: var(--color-primary,#6366f1); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
 .action-btn--export:hover:not(:disabled)  { color: var(--color-sage-300); border-color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-300) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-300) 15%, transparent); }
+.action-btn--tocard:hover:not(:disabled)  { color: var(--color-amber-400); border-color: var(--color-amber-400); background: color-mix(in oklch, var(--color-amber-400) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-amber-400) 15%, transparent); }
 .action-btn--rebuild:hover:not(:disabled) { color: #a78bfa; border-color: #a78bfa; background: rgba(167,139,250,0.08); }
 .action-btn--delete:hover:not(:disabled)  { color: var(--color-danger,#ef4444); border-color: var(--color-danger,#ef4444); background: color-mix(in oklch, var(--color-danger) 8%, transparent); }
 

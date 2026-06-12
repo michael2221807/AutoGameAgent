@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GameCardExportService } from './game-card-export-service';
-import { gzipDecompress } from '../sync/chunked-bundle-packer';
+import { gzipDecompress, sha256String } from '../sync/chunked-bundle-packer';
 import { isValidCardBundleShape, type ExportFlags, type ExportOptions, type GameCardBundle } from './game-card-bundle.types';
 import { SETTINGS_EXPORT_WHITELIST, SETTINGS_EXPORT_DENYLIST } from './settings-export-whitelist';
 import { createMockLocalStorage } from '@/engine/__test-utils__/local-storage.mock';
@@ -213,6 +213,41 @@ describe('GameCardExportService.exportCard', () => {
     // engramMemory removed from the carried state tree (no double-carry).
     const ext = (bundle.stateTree['系统'] as Record<string, unknown>)['扩展'] as Record<string, unknown>;
     expect(ext['engramMemory']).toBeUndefined();
+  });
+
+  it('Story 7 (D5): markSelectedEdgesCore stamps core:true on every exported edge — copy only', async () => {
+    const captured: { ids?: Set<string> } = {};
+    const tree = makeTree();
+    const svc = makeService(tree, captured);
+    // containsNsfw:true keeps edge-nsfw (which has NO core in the fixture) → both
+    // pre-cored and core-less edges are exercised by the stamp.
+    const { bundle, checksum } = await svc.exportCard('p1', 'auto', makeOptions({
+      markSelectedEdgesCore: true,
+      checklist: makeFlags({ containsNsfw: true }),
+    }));
+
+    expect(bundle.engram.knowledgeEdges.length).toBe(2); // edge-keep + edge-nsfw
+    expect(bundle.engram.knowledgeEdges.every((e) => e.core === true)).toBe(true);
+
+    // Source tree untouched (stamp lives on the exported copy only — SC-8).
+    const ext = (tree['系统'] as Record<string, unknown>)['扩展'] as Record<string, unknown>;
+    const mem = ext['engramMemory'] as Record<string, unknown>;
+    const srcEdges = mem['v2Edges'] as Array<Record<string, unknown>>;
+    expect(srcEdges.find((e) => e['id'] === 'edge-nsfw')?.['core']).toBeUndefined();
+
+    // Checksum was computed AFTER stamping (import-side recompute must match).
+    expect(await sha256String(JSON.stringify(bundle))).toBe(checksum);
+  });
+
+  it('default (flag omitted): edge core values pass through unchanged', async () => {
+    const captured: { ids?: Set<string> } = {};
+    const svc = makeService(makeTree(), captured);
+    const { bundle } = await svc.exportCard('p1', 'auto', makeOptions({
+      checklist: makeFlags({ containsNsfw: true }),
+    }));
+    const byId = new Map(bundle.engram.knowledgeEdges.map((e) => [e.id, e]));
+    expect(byId.get('edge-keep')?.core).toBe(true);      // pre-existing core preserved
+    expect(byId.get('edge-nsfw')?.core).toBeUndefined(); // absent stays absent
   });
 
   it('keeps NSFW edges/private text when adult content IS included — but still no secrets', async () => {

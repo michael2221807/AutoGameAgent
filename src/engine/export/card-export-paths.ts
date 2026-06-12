@@ -1,3 +1,4 @@
+// App doc: docs/user-guide/pages/game-save.md §2.5.3
 /**
  * Card-export strip/keep/reset path config — Story 5 (P2).
  *
@@ -91,6 +92,7 @@ export function buildDefaultCardStripPaths(p: EnginePathConfig = DEFAULT_ENGINE_
   const npc = p.npcFieldNames;
   return {
     gameplayHistory: [
+      p.roundNumber,                              // 元数据.回合序号 — turn counter is play progress, not world setup (schema default 0 restored on import)
       p.narrativeHistory,                         // 元数据.叙事历史
       p.reasoningHistory,                         // 元数据.推理历史
       p.storyPlan,                                // 元数据.剧情规划

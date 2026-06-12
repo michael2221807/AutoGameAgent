@@ -756,6 +756,8 @@ async function bootstrap(): Promise<void> {
   app.provide('backupService', backupService);
   app.provide('gameCardExportService', gameCardExportService);
   app.provide('gameCardImportService', gameCardImportService);
+  // Story 7: card-export preview checks referenced images against the global cache (missing-image warning).
+  app.provide('imageAssetCache', imageAssetCacheForBackup);
   app.provide('customPresetStore', customPresetStore);
   app.provide('worldBookStorage', worldBookStorage);
 
