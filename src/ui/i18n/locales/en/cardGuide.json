@@ -1,0 +1,74 @@
+{
+  "cardGuide.title": "Game Card Creation Guide",
+  "cardGuide.ariaPanel": "Card writing guide",
+  "cardGuide.modeHint": "Card-writing mode: play controls are hidden so you can focus on creating. Switch back to play anytime from the top bar.",
+  "cardGuide.enterHint": "Tip: flip the top-bar switch to card-writing mode to hide play controls and focus on creating.",
+  "cardGuide.backToPlay": "Back to play mode",
+  "cardGuide.enterWorldBuilding": "Enter card-writing mode",
+
+  "cardGuide.compare.colPlay": "🎮 Play mode",
+  "cardGuide.compare.colWB": "✏️ Card-writing mode",
+  "cardGuide.compare.howToSwitch": "The mode badge in the top bar always shows the current mode — click it to switch; you can also switch here.",
+  "cardGuide.compare.row1.label": "What you're doing",
+  "cardGuide.compare.row1.play": "Playing the story of this world; the AI drives the plot forward",
+  "cardGuide.compare.row1.wb": "Building and editing this world into a shareable game card",
+  "cardGuide.compare.row2.label": "Bottom input",
+  "cardGuide.compare.row2.play": "The \"advance the story\" input box is shown",
+  "cardGuide.compare.row2.wb": "Hidden (card-writing doesn't advance turns)",
+  "cardGuide.compare.row3.label": "AI assistant",
+  "cardGuide.compare.row3.play": "Ordinary chat assistant",
+  "cardGuide.compare.row3.wb": "Defaults to card-writing mode: batch-create NPCs and whole regions",
+  "cardGuide.compare.row4.label": "Editing tools",
+  "cardGuide.compare.row4.play": "All available (mainly for viewing)",
+  "cardGuide.compare.row4.wb": "All available (mainly for editing) + the guide walks you through",
+
+  "cardGuide.section.what.title": "What is a game card?",
+  "cardGuide.section.what.body": "A game card (.aga-card) is a shareable world save: it packs your worldbuilding, NPCs, locations, relationship web and plot into one file, so others can import it and start their own story in your world. You can build one from scratch, or convert a save you've played into a clean card.",
+
+  "cardGuide.section.flow.title": "Recommended creation flow",
+  "cardGuide.stepLabel": "Step {n}",
+
+  "cardGuide.step1.title": "Start a session",
+  "cardGuide.step1.body": "Pick a world and character and complete a normal opening — this generates the world skeleton that becomes your starting point.",
+
+  "cardGuide.step2.title": "Plan the world",
+  "cardGuide.step2.body": "Before you start, think through what your world needs:",
+  "cardGuide.step2.bullet1": "Which key characters? (5-15 NPCs recommended)",
+  "cardGuide.step2.bullet2": "Which key locations? (3-10 regions recommended)",
+  "cardGuide.step2.bullet3": "What is the relationship web between characters?",
+  "cardGuide.step2.bullet4": "What main or side plots are there?",
+  "cardGuide.step2.bullet5": "What is the tone and the rules of the world?",
+
+  "cardGuide.step3.title": "Add NPCs",
+  "cardGuide.step3.body": "Add characters in the Relationships panel. Recommended: batch-generate with the AI assistant then fine-tune; you can also create them one by one.",
+  "cardGuide.step3.cta": "Go add NPCs",
+
+  "cardGuide.step4.title": "Build the map",
+  "cardGuide.step4.body": "Add locations in the Map panel and plan the hierarchy and connections.",
+  "cardGuide.step4.cta": "Go build the map",
+
+  "cardGuide.step5.title": "Set plot direction",
+  "cardGuide.step5.body": "Configure main/side directions in the Plot panel to give the AI a narrative compass.",
+  "cardGuide.step5.cta": "Go set the plot",
+
+  "cardGuide.step6.title": "Generate portraits",
+  "cardGuide.step6.body": "Use image generation to create portraits for the protagonist and key NPCs, making the card more immersive.",
+  "cardGuide.step6.cta": "Go generate portraits",
+
+  "cardGuide.step7.title": "Solidify Engram (let the AI remember your setup)",
+  "cardGuide.step7.body": "⚠️ After the opening, the Engram memory graph is empty! You must solidify before exporting, or the importer's AI won't retrieve your setup.",
+  "cardGuide.step7.bullet1": "[Required] First click \"Batch Solidify\" to auto-generate entities and edges from world data.",
+  "cardGuide.step7.bullet2": "[Recommended] Then manually fine-tune key relationship edges to fill in implicit relations the AI missed.",
+  "cardGuide.step7.bullet3": "[Recommended] Mark core edges to highlight the most important worldbuilding facts.",
+  "cardGuide.step7.bullet4": "Order: batch-generate first → then manually refine, to avoid the batch overwriting manual edits.",
+  "cardGuide.step7.cta": "Go solidify Engram",
+
+  "cardGuide.step8.title": "Export the game card",
+  "cardGuide.step8.body": "Fill in the card info, choose the protagonist mode, and export the .aga-card. The system auto-checks Engram coverage before export — if any NPC/location lacks data, solidify first.",
+  "cardGuide.step8.cta": "Go export",
+
+  "cardGuide.section.advanced.title": "Advanced tips",
+  "cardGuide.advanced.saveToCard": "Convert an existing save into a game card: in the Save panel, click \"To Card\" on any save — the system strips play progress, AI-assists edge classification, then reuses the export flow.",
+  "cardGuide.advanced.aiCommands": "AI assistant card-writing commands: in card-writing mode the assistant can batch-generate NPCs and whole regions, and write directly into Engram.",
+  "cardGuide.advanced.testing": "Test your card: after exporting, use the import flow to playtest in a new save and confirm the protagonist mode, opening narrative and retrieval all work as expected."
+}

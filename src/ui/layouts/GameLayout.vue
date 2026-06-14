@@ -36,13 +36,39 @@
 
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-overview.md
+import { watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import TopBar from '@/ui/components/layout/TopBar.vue';
 import LeftSidebar from '@/ui/components/layout/LeftSidebar.vue';
 import RightSidebar from '@/ui/components/layout/RightSidebar.vue';
 import MobileNavBar from '@/ui/components/layout/MobileNavBar.vue';
 import { useSidebarDrawer } from '@/ui/composables/useSidebarDrawer';
+import { useEngineStateStore } from '@/engine/stores/engine-state';
+import { useSessionMode } from '@/ui/composables/useSessionMode';
 
 const { isMobile, leftOpen, rightOpen, closeAll } = useSidebarDrawer();
+
+/*
+ * Story 9 — session-mode (play / worldBuilding) initialization point.
+ * GameLayout is the session root (mounted for the whole /game session), so
+ * the watchers here outlive any sub-panel mount/unmount.
+ *   1. When the active save slot changes (load / switch), sync the reactive
+ *      mode from that slot's persisted metadata.
+ *   2. When entering worldBuilding mode, auto-open the card-writing guide
+ *      panel (design 行1071 / U9). Guard against re-push and stealing nav.
+ */
+const engineState = useEngineStateStore();
+const route = useRoute();
+const router = useRouter();
+const { isWorldBuilding, syncFromActiveSlot } = useSessionMode();
+
+watch(() => engineState.activeSlotId, () => syncFromActiveSlot(), { immediate: true });
+
+watch(isWorldBuilding, (wb, prev) => {
+  if (wb && !prev && route.path !== '/game/card-guide') {
+    router.push('/game/card-guide').catch(() => {/* navigation guard / duplicate — ignore */});
+  }
+});
 </script>
 
 <style scoped>

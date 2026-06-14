@@ -27,6 +27,7 @@ import FestivalEditModal from '@/ui/components/panels/FestivalEditModal.vue';
 import EnvironmentArrayEditorModal from '@/ui/components/panels/EnvironmentArrayEditorModal.vue';
 import { useAssistant } from '@/ui/composables/useAssistant';
 import { useGameState } from '@/ui/composables/useGameState';
+import { useSessionMode } from '@/ui/composables/useSessionMode';
 import { useConfig } from '@/ui/composables/useConfig';
 import { getPathLabel } from '@/ui/composables/useStateTreeNavigation';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
@@ -373,6 +374,24 @@ function clearWorldBuilderAttachments(): void {
 function reseedWorldBuilderContext(): void {
   if (isWorldBuilderMode.value) applyWorldBuilderAttachments();
 }
+
+/*
+ * Story 9 — when the SESSION enters worldBuilding mode, default the assistant
+ * into its (Story 3) worldBuilderMode so card-writing starts with batch tools
+ * + world context ready (design 行1072).
+ *
+ * ⚠️ DISTINCT CONCEPTS (do NOT merge): `sessionType` (per-save, persisted) vs
+ * `worldBuilderMode` (assistant panel, localStorage). The session only "raises"
+ * the assistant mode on entry; the user can still toggle worldBuilderMode off
+ * manually, and switching the session back to play does NOT force it off.
+ */
+const { isWorldBuilding: isWorldBuildingSession } = useSessionMode();
+watch(isWorldBuildingSession, (wb) => {
+  if (wb && !settings.value.worldBuilderMode) {
+    updateSettings({ worldBuilderMode: true });
+    applyWorldBuilderAttachments();
+  }
+}, { immediate: true });
 
 const inputPlaceholder = computed(() =>
   isWorldBuilderMode.value ? t('assistant.worldBuilder.placeholder') : t('assistant.input.placeholder'),

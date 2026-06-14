@@ -8,6 +8,16 @@
  */
 
 /**
+ * 会话模式（Story 9 / D17）
+ * - 'play': 游玩模式（默认）
+ * - 'worldBuilding': 写卡模式（造世界/做游戏卡）
+ *
+ * 纯 UI 层可见性开关：引擎管线**不读**此字段，仅 UI 据此调整控件可见性。
+ * 缺省 / 旧存档（undefined）一律视为 'play'。不进入 GameStateTree，不进 .aga-card。
+ */
+export type SessionType = 'play' | 'worldBuilding';
+
+/**
  * 存档槽位元数据
  * 轻量数据，用于存档列表的快速展示（无需加载完整状态树）
  */
@@ -34,6 +44,11 @@ export interface SaveSlotMeta {
   saveSize?: number;
   /** 存档类型：手动、回合前快照、时间点、退出前 */
   saveType?: 'manual' | 'pre-round' | 'timepoint' | 'exit' | 'auto';
+  /**
+   * 会话模式（Story 9 / D17）：'play' 游玩 | 'worldBuilding' 写卡。
+   * UI 层可见性开关，引擎管线不读。缺省 / 旧存档视为 'play'。
+   */
+  sessionType?: SessionType;
 }
 
 /**

@@ -55,6 +55,7 @@ import {
 } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
+import { useSessionMode } from '@/ui/composables/useSessionMode';
 import type { EventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -124,6 +125,9 @@ interface ChatMessage {
 
 const { t } = useI18n();
 const { useValue } = useGameState();
+// Story 9 — in worldBuilding mode the player isn't advancing turns, so the
+// turn-advancement controls (composer, live streaming indicator) are hidden.
+const { isWorldBuilding } = useSessionMode();
 const eventBus = inject<EventBus>('eventBus');
 
 // ─── Reactive state ───────────────────────────────────────────
@@ -1020,8 +1024,10 @@ watch(
       <!--
         Streaming indicator: shown during AI generation.
         Displays accumulated text + elapsed timer + animated typing dots.
+        Story 9: suppressed in worldBuilding mode. Safe because the composer (the
+        only turn-submission entry) is hidden there, so a round cannot start.
       -->
-      <div v-if="isGenerating" class="message message--assistant message--streaming">
+      <div v-if="isGenerating && !isWorldBuilding" class="message message--assistant message--streaming">
         <div class="message-bubble">
           <div v-if="streamingText" class="message-text"><FormattedText :text="streamingText" :npc-names="npcNameList" :npc-data="npcDataList" /></div>
           <div class="streaming-meta">
@@ -1058,7 +1064,9 @@ watch(
       </Transition>
     </div>
 
+    <!-- Story 9: hidden in worldBuilding mode (no turn advancement while building the world). -->
     <GameComposer
+      v-if="!isWorldBuilding"
       ref="composerRef"
       :action-options="actionOptions"
       :is-generating="isGenerating"

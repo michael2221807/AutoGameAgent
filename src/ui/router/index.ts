@@ -29,6 +29,7 @@ const routes = [
       { path: 'save', name: 'Save', component: () => import('../components/panels/SavePanel.vue') },
       { path: 'prompt-assembly', name: 'PromptAssembly', component: () => import('../components/panels/PromptAssemblyPanel.vue') },
       { path: 'relationship-graph', name: 'RelationshipGraph', component: () => import('../components/panels/EngramEditorPanel.vue') },
+      { path: 'card-guide',     name: 'CardGuide',     component: () => import('../components/panels/CardWritingGuidePanel.vue') },
       { path: 'engram-debug',   name: 'EngramDebug',   component: () => import('../components/panels/EngramDebugPanel.vue') },
       { path: 'image',          name: 'Image',         component: () => import('../components/panels/ImagePanel.vue') },
       { path: 'plot',           name: 'Plot',          component: () => import('../components/panels/PlotPanel.vue') },

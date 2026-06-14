@@ -12,6 +12,7 @@
  * - 完整备份导出 / 恢复（BackupService）
  */
 import { ref, watch, onUnmounted, inject } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useLocale } from '@/ui/composables/useLocale';
@@ -42,6 +43,20 @@ const customPresetStore = inject<CustomPresetStore | undefined>('customPresetSto
 
 // Story 5: game-card export modal
 const showCardExport = ref(false);
+
+// Story 9: the card-writing guide's "导出" step deep-links here via
+// ?action=export. Open the export flow, then consume the query so navigating
+// back to /game/save later doesn't spuriously re-open it.
+const route = useRoute();
+const router = useRouter();
+watch(() => route.query.action, (raw) => {
+  // route.query values are string | string[] | null — narrow to a single string.
+  const action = Array.isArray(raw) ? raw[0] : raw;
+  if (action === 'export') {
+    showCardExport.value = true;
+    router.replace({ path: route.path, query: {} }).catch(() => { /* duplicate nav — ignore */ });
+  }
+}, { immediate: true });
 
 // Story 7: save-to-card wizard (any saved slot of the current profile)
 const showToCard = ref(false);

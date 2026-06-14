@@ -20,6 +20,7 @@ import api from './api.json';
 import save from './save.json';
 import engine from './engine.json';
 import inventory from './inventory.json';
+import cardGuide from './cardGuide.json';
 
 export default {
   ...common,
@@ -44,4 +45,5 @@ export default {
   ...save,
   ...engine,
   ...inventory,
+  ...cardGuide,
 };

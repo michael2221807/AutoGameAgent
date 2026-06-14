@@ -9,7 +9,7 @@
     it provides orientation context without competing with the main
     game content for focal attention.
   -->
-  <header class="topbar" role="banner" :aria-label="$t('layout.topbar.ariaHeader')">
+  <header class="topbar" :class="{ 'topbar--writing': isWorldBuilding }" role="banner" :aria-label="$t('layout.topbar.ariaHeader')">
     <!-- ── Left: navigation + identity ── -->
     <div class="topbar__left">
       <button
@@ -84,6 +84,27 @@
 
     <!-- ── Right: actions ── -->
     <div class="topbar__right">
+      <!--
+        Session mode badge + toggle (Story 9 v2): play ⇄ worldBuilding. Hidden
+        until a save slot is active. A LABELED pill (not an icon) so the current
+        mode is unmistakable on every panel; clicking toggles. Renders the shared
+        SessionModeBadge — the exact same visual the card-writing guide uses, so
+        the persistent indicator and the guide read as one system (PM P-A 联动).
+        Uses :title (not the Tooltip component) for consistency with the sibling
+        toolbar action icons and to avoid an extra tab-stop around a <button>.
+      -->
+      <button
+        v-if="engineState.activeSlotId"
+        class="topbar__mode-toggle"
+        :title="isWorldBuilding ? $t('layout.topbar.modeToggleWorldBuildingTooltip') : $t('layout.topbar.modeTogglePlayTooltip')"
+        :aria-label="$t('layout.topbar.modeToggleAria')"
+        :aria-pressed="isWorldBuilding"
+        :disabled="isModePersisting"
+        @click="handleModeToggle"
+      >
+        <SessionModeBadge :mode="isWorldBuilding ? 'worldBuilding' : 'play'" size="sm" />
+      </button>
+
       <!-- Fullscreen toggle -->
       <button
         class="topbar__btn"
@@ -158,6 +179,8 @@ import { useI18n } from 'vue-i18n';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { eventBus } from '@/engine/core/event-bus';
 import Modal from '@/ui/components/common/Modal.vue';
+import SessionModeBadge from '@/ui/components/shared/SessionModeBadge.vue';
+import { useSessionMode } from '@/ui/composables/useSessionMode';
 import type { SaveManager } from '@/engine/persistence/save-manager';
 import type { GameStateTree } from '@/engine/types';
 
@@ -165,6 +188,16 @@ const router = useRouter();
 const { t } = useI18n();
 const engineState = useEngineStateStore();
 const saveManager = inject<SaveManager>('saveManager');
+
+// Story 9 — session mode toggle (play ⇄ worldBuilding). Persisted per-slot via composable.
+const { isWorldBuilding, isPersisting: isModePersisting, toggle: toggleSessionMode } = useSessionMode();
+async function handleModeToggle(): Promise<void> {
+  try {
+    await toggleSessionMode();
+  } catch {
+    /* persistence failure toast already emitted by useSessionMode */
+  }
+}
 
 const isSaving = ref(false);
 const isGenerating = ref(false);
@@ -627,6 +660,41 @@ function handleQuickSave(): void {
 
 .topbar__btn--saving {
   color: var(--color-sage-400);
+}
+
+/*
+ * Story 9 v2 — session mode toggle is a LABELED pill (wraps SessionModeBadge),
+ * not a square icon button. Transparent wrapper; the badge supplies the colour
+ * so the writing-mode beacon is unmistakable on every panel.
+ */
+.topbar__mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  margin-right: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+@media (hover: hover) {
+  .topbar__mode-toggle:hover:not(:disabled) { opacity: 0.85; }
+}
+.topbar__mode-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+}
+.topbar__mode-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/*
+ * Writing-mode global cue: the top bar's bottom edge turns sage so EVERY panel
+ * (the bar is always visible) carries a quiet "you are authoring" signal,
+ * reinforcing the lit badge. Resolves the v1 "mode is invisible on most panels".
+ */
+.topbar--writing {
+  border-bottom-color: color-mix(in oklch, var(--color-sage-400) 55%, transparent);
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--color-sage-400) 22%, transparent);
 }
 
 .topbar__spin {

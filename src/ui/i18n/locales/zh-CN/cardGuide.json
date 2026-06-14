@@ -1,0 +1,74 @@
+{
+  "cardGuide.title": "游戏卡创作指南",
+  "cardGuide.ariaPanel": "写卡攻略",
+  "cardGuide.modeHint": "写卡模式：游玩控件已隐藏，专注创作；随时点顶栏切回游玩。",
+  "cardGuide.enterHint": "提示：点顶栏开关切到写卡模式，可隐藏游玩控件、专注创作。",
+  "cardGuide.backToPlay": "切回游玩模式",
+  "cardGuide.enterWorldBuilding": "进入写卡模式",
+
+  "cardGuide.compare.colPlay": "🎮 游玩模式",
+  "cardGuide.compare.colWB": "✏️ 写卡模式",
+  "cardGuide.compare.howToSwitch": "顶栏的模式徽章会一直显示当前模式，点它即可切换；这里也能切。",
+  "cardGuide.compare.row1.label": "你在做什么",
+  "cardGuide.compare.row1.play": "玩这个世界的故事，AI 带你推进剧情",
+  "cardGuide.compare.row1.wb": "搭建、编辑这个世界，做成可分享的游戏卡",
+  "cardGuide.compare.row2.label": "底部输入区",
+  "cardGuide.compare.row2.play": "有「推进剧情」输入框",
+  "cardGuide.compare.row2.wb": "隐藏（写卡不推进剧情）",
+  "cardGuide.compare.row3.label": "AI 助手",
+  "cardGuide.compare.row3.play": "普通对话助手",
+  "cardGuide.compare.row3.wb": "默认写卡模式：批量造 NPC、整片区域",
+  "cardGuide.compare.row4.label": "编辑工具",
+  "cardGuide.compare.row4.play": "都能用（以查看为主）",
+  "cardGuide.compare.row4.wb": "都能用（以编辑为主）+ 攻略全程指引",
+
+  "cardGuide.section.what.title": "什么是游戏卡？",
+  "cardGuide.section.what.body": "游戏卡（.aga-card）是一份可分享的世界存档：把你搭好的世界观、NPC、地点、关系网和剧情打包成一个文件，别人导入后就能直接在你的世界里开始自己的故事。你可以从零搭建，也可以把玩过的存档转成一张干净的卡。",
+
+  "cardGuide.section.flow.title": "推荐创作流程",
+  "cardGuide.stepLabel": "第 {n} 步",
+
+  "cardGuide.step1.title": "开局",
+  "cardGuide.step1.body": "先选择世界和角色，完成一次正常开局——这会生成世界骨架，作为你创作的起点。",
+
+  "cardGuide.step2.title": "构思世界观",
+  "cardGuide.step2.body": "动手之前，先想清楚你的世界需要：",
+  "cardGuide.step2.bullet1": "哪些重要人物？（建议 5-15 个 NPC）",
+  "cardGuide.step2.bullet2": "哪些关键地点？（建议 3-10 个区域）",
+  "cardGuide.step2.bullet3": "人物之间的关系网是怎样的？",
+  "cardGuide.step2.bullet4": "有什么主线或支线剧情？",
+  "cardGuide.step2.bullet5": "世界的基调和规则是什么？",
+
+  "cardGuide.step3.title": "补充 NPC",
+  "cardGuide.step3.body": "在社交关系面板中添加人物。推荐用 AI 助手批量生成后再微调，也可以逐个手动新建。",
+  "cardGuide.step3.cta": "去补充 NPC",
+
+  "cardGuide.step4.title": "构建地图",
+  "cardGuide.step4.body": "在地图面板中添加地点，规划层级结构与连接关系。",
+  "cardGuide.step4.cta": "去构建地图",
+
+  "cardGuide.step5.title": "设置剧情导向",
+  "cardGuide.step5.body": "在剧情面板中配置主线/支线方向，给 AI 一个叙事罗盘。",
+  "cardGuide.step5.cta": "去设置剧情",
+
+  "cardGuide.step6.title": "生成立绘",
+  "cardGuide.step6.body": "用图像生成功能为主角和关键 NPC 生成立绘，让卡更有代入感。",
+  "cardGuide.step6.cta": "去生成立绘",
+
+  "cardGuide.step7.title": "固化 Engram（让 AI 记住你的设定）",
+  "cardGuide.step7.body": "⚠️ 开局后 Engram 记忆图谱是空的！导出前必须固化，否则导入方的 AI 检索不到你的设定。",
+  "cardGuide.step7.bullet1": "【必做】先点「一键批量固化」，从世界数据自动生成实体与关系边。",
+  "cardGuide.step7.bullet2": "【推荐】再手动微调关键关系边，补上 AI 遗漏的隐含关系。",
+  "cardGuide.step7.bullet3": "【推荐】标记核心边，圈出最重要的世界观设定。",
+  "cardGuide.step7.bullet4": "顺序：先批量生成 → 再手动精修，避免批量覆盖手动编辑。",
+  "cardGuide.step7.cta": "去固化 Engram",
+
+  "cardGuide.step8.title": "导出游戏卡",
+  "cardGuide.step8.body": "填写卡信息、选择主角模式，导出 .aga-card。导出前系统会自动检查 Engram 覆盖率——若有 NPC/地点缺少对应数据，需先完成固化。",
+  "cardGuide.step8.cta": "去导出",
+
+  "cardGuide.section.advanced.title": "进阶技巧",
+  "cardGuide.advanced.saveToCard": "从现有存档转为游戏卡：在存档面板中点任意存档的「转卡」，系统会剥离游玩进度、AI 辅助筛选 Engram 边，再复用导出流程。",
+  "cardGuide.advanced.aiCommands": "AI 助手写卡命令：在写卡模式下，助手可批量生成 NPC、整片区域，并直接写入 Engram。",
+  "cardGuide.advanced.testing": "测试你的卡：导出后用导入流程在新存档里试玩，确认主角模式、开场叙事与检索效果符合预期。"
+}
