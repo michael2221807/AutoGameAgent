@@ -21,6 +21,7 @@ const { isLoaded, useValue, setValue } = useGameState();
 const plotStore = usePlotStore();
 const plotEditor = usePlotEditor();
 const plotDecomposer = inject<PlotDecomposer | null>('plotDecomposer', null);
+const plotEvaluation = inject<import('@/engine/plot/plot-evaluation-pipeline').PlotEvaluationPipeline | null>('plotEvaluation', null);
 
 const plotState = useValue<PlotDirectionState | undefined>(DEFAULT_ENGINE_PATHS.plotDirection);
 const currentRound = useValue<number>(DEFAULT_ENGINE_PATHS.roundNumber);
@@ -397,7 +398,16 @@ const pendingConfirmNode = computed(() => {
 
 function confirmAdvancement(): void {
   plotStore.confirmNodeAdvancement();
+  // Push the `confirmed` flag into the state tree first…
   persist();
+  // …then advance the node right away so the player sees it complete + the
+  // next node activate immediately, instead of waiting for the next main round.
+  // Falls back to the deferred path (pipeline consumes the flag next round) if
+  // the evaluation pipeline isn't available (e.g. no active game pack).
+  if (plotEvaluation) {
+    plotEvaluation.applyConfirmedAdvancement();
+    eventBus.emit('engine:request-save');
+  }
 }
 
 function rejectAdvancement(): void {

@@ -1,4 +1,5 @@
 // Design: docs/design/plot-direction-system.md
+// App doc: docs/user-guide/pages/game-plot.md
 /**
  * Plot Direction System — Evaluation Sub-Pipeline
  *
@@ -73,16 +74,16 @@ export class PlotEvaluationPipeline {
     }
 
     // ── 0. Check for pending player confirmation (GAP-03 review fix) ──
+    // Shared with the immediate UI path (applyConfirmedAdvancement) so both
+    // advance identically. A confirmed-and-matched node consumes this round's
+    // evaluation; a stale confirmation is discarded and normal evaluation runs.
     if (state.pendingConfirmation?.confirmed) {
-      const pc = state.pendingConfirmation;
-      if (pc.nodeId === node.id) {
-        this.advanceNode(state, arc, node, round);
-        state.pendingConfirmation = null;
+      const advanced = this.consumeConfirmation(state, arc, node, round);
+      if (advanced) {
         // Write back and return — this round's evaluation is consumed by the advancement
         this.stateManager.set(this.paths.plotDirection, state, 'system');
         return true;
       }
-      state.pendingConfirmation = null;
     }
 
     // Read and clear transient evaluation
@@ -271,6 +272,69 @@ export class PlotEvaluationPipeline {
         发生时间: timeStr,
       }, 'system');
     }
+  }
+
+  /**
+   * Consume a confirmed player confirmation against the given working state.
+   *
+   * Returns true and advances the node when the confirmation is both
+   * `confirmed` and still points at the active node; otherwise discards a
+   * stale/mismatched confirmation and returns false. Always mutates `state`
+   * in place — the caller is responsible for writing `state` back.
+   *
+   * Shared by both the per-round `execute()` step-0 and the immediate UI path
+   * (`applyConfirmedAdvancement`) so the two never diverge.
+   */
+  private consumeConfirmation(
+    state: PlotDirectionState,
+    arc: PlotArc,
+    node: PlotNode | null,
+    round: number,
+  ): boolean {
+    const pc = state.pendingConfirmation;
+    if (!pc?.confirmed) return false;
+    if (node && pc.nodeId === node.id) {
+      this.advanceNode(state, arc, node, round);
+      state.pendingConfirmation = null;
+      return true;
+    }
+    // Stale or mismatched confirmation — discard it so the gate cannot re-stick.
+    state.pendingConfirmation = null;
+    return false;
+  }
+
+  /**
+   * Immediately apply a player-confirmed critical-node advancement.
+   *
+   * Called from the UI (PlotPanel confirmation gate) the instant the player
+   * clicks "确认完成", so the node completes and the next node activates
+   * right away — instead of silently waiting for the next main round's
+   * `execute()` to consume the `confirmed` flag (which looked like the button
+   * did nothing). Reuses `consumeConfirmation`/`advanceNode`, so onComplete /
+   * onActivate side-effects and next-node activation are identical to the
+   * deferred path. Idempotent: a stale confirmation is cleared, not advanced.
+   *
+   * @returns true if a node was advanced, false otherwise.
+   */
+  applyConfirmedAdvancement(): boolean {
+    const rawState = this.stateManager.get<PlotDirectionState>(this.paths.plotDirection);
+    if (!rawState || rawState.activeArcIndex == null) return false;
+
+    const state = _cloneDeep(rawState);
+    const arcIdx = state.activeArcIndex;
+    if (arcIdx == null) return false;
+    const arc = state.arcs[arcIdx];
+    if (!arc || arc.status !== 'active') return false;
+    if (!state.pendingConfirmation?.confirmed) return false;
+
+    const node = arc.nodes.find((n: PlotNode) => n.status === 'active') ?? null;
+    const round = this.stateManager.get<number>(this.paths.roundNumber) ?? 0;
+
+    const advanced = this.consumeConfirmation(state, arc, node, round);
+    // Write back whether we advanced or just cleared a stale confirmation,
+    // so the gate closes and the UI store re-syncs from the state tree.
+    this.stateManager.set(this.paths.plotDirection, state, 'system');
+    return advanced;
   }
 
   private advanceNode(state: PlotDirectionState, arc: PlotArc, node: PlotNode, round: number): void {
