@@ -23,6 +23,13 @@ export class LanSyncService {
 
   /** Check if the LAN relay endpoint is available (dev server running) */
   async isAvailable(): Promise<boolean> {
+    // The /api/lan-save relay only exists in the Vite dev server (see the
+    // lanSaveRelay middleware in vite.config.ts). On a production build such as
+    // GitHub Pages there is no such endpoint, so a relative OPTIONS probe just
+    // resolves against the Pages origin and 405s — confusing noise that looks
+    // like the cloud-save calling the wrong API. Skip the request entirely:
+    // the feature is dev-only, so it is definitionally unavailable in prod.
+    if (!import.meta.env.DEV) return false;
     try {
       const res = await fetch('/api/lan-save', { method: 'OPTIONS' });
       return res.status === 204 || res.ok;
