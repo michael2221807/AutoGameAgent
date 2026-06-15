@@ -35,45 +35,136 @@ export class ChecksumError extends Error {
 // ─── Constants ───
 
 const TARGET_CHUNK_BYTES = 20_000_000;
+// The state has no natural array to split on, so a very large state is sliced
+// from its serialized JSON string (UTF-16 code units, kept below
+// TARGET_CHUNK_BYTES so even all-CJK content stays a safe size per gzip call).
+// Small states keep the single legacy `state` chunk.
+const STATE_SLICE_CHARS = 8_000_000;
 const ENGINE_VERSION = '0.1.0';
 
 // ─── Public API ───
 
-export async function pack(json: string): Promise<PackResult> {
+/**
+ * Streaming packer — yields each compressed chunk as it is produced, then
+ * returns the manifest. This is the memory-bounded core: a caller that uploads
+ * and releases each yielded chunk never holds the whole chunk set in memory.
+ *
+ * Why this exists (2026-06-14): a ~110MB save OOM'd the eager `pack()` because
+ * the source JSON string, the parsed object, AND every compressed chunk were
+ * all alive at once. The gzip step (`new Response(compressionStream).blob()`)
+ * then failed allocation and Chrome rethrew it as `TypeError: Failed to fetch`.
+ * To cut the peak this generator:
+ *   1. accepts a Blob so the source string is generator-local and freed after
+ *      parse (the caller never has to retain it);
+ *   2. drops the source string immediately once parsed;
+ *   3. `shift()`s each image off the source array so processed assets become
+ *      GC-able instead of being pinned until the end;
+ *   4. yields each chunk so the caller can PUT + release it one at a time.
+ *
+ * @param source the bundle JSON as a string (legacy/test callers) or a Blob
+ *   (preferred for large bundles — keeps the decoded string out of the caller).
+ */
+export async function* packChunks(
+  source: string | Blob,
+): AsyncGenerator<{ path: string; blob: Blob }, ChunkManifest, void> {
+  let json: string;
+  let totalSizeBytes: number;
+  if (typeof source === 'string') {
+    json = source;
+    totalSizeBytes = json.length; // approximate (UTF-16 code units) for legacy/test callers
+  } else {
+    totalSizeBytes = source.size; // exact UTF-8 byte length
+    json = await source.text();
+    // Release the source Blob immediately — only the decoded string is needed
+    // now. With the caller also dropping its reference this frees ~100MB+
+    // before the parse/compress peak.
+    source = '';
+  }
   const bundleChecksum = await sha256String(json);
-  const parsed = JSON.parse(json) as Record<string, unknown>;
+  let parsed = JSON.parse(json) as Record<string, unknown>;
+  // Release the (potentially 100MB+) source string before the compress phase.
+  json = '';
 
   const hadImages = 'imageAssets' in parsed;
   const imageAssets = (hadImages ? parsed.imageAssets : []) as unknown[];
-  // Only extract from state when there are actual images to chunk separately
-  if (hadImages && imageAssets.length > 0) delete parsed.imageAssets;
+  // Extract images to their own chunks, but leave an EMPTY `imageAssets: []`
+  // placeholder in the state so the key keeps its ORIGINAL position. On unpack
+  // the rebuilt array is assigned back to this existing key (in-place update,
+  // order preserved). If we deleted it and re-appended at the end, the bundle
+  // key order would shift relative to any keys that follow `imageAssets` in the
+  // export (worldBooks / builtinPromptOverrides), the whole-bundle SHA-256
+  // would never match, and the cloud save would be permanently undownloadable.
+  if (hadImages && imageAssets.length > 0) parsed.imageAssets = [];
 
-  const chunks = new Map<string, Blob>();
   const entries: ChunkEntry[] = [];
 
-  const stateJson = JSON.stringify(parsed);
-  const stateEntry = await compressChunk('state', 'v2/state.gz', stateJson);
-  chunks.set(stateEntry.path, stateEntry.blob);
-  entries.push(stateEntry.entry);
+  let stateJson = JSON.stringify(parsed);
+  // The parsed object is no longer needed (state is serialized; images are held
+  // separately) — drop it so its ~tens of MB don't sit in the compress peak.
+  parsed = {};
+
+  // Compress the state. Small states stay a single legacy `state` chunk (so
+  // existing manifests/tests are unchanged); large states are sliced into
+  // byte-safe `state-N` pieces so no single gzip `new Blob([...])` call handles
+  // the whole 50MB+ at once (that monolithic alloc is what threw "Failed to
+  // fetch"). chunkError attributes a failure to the exact piece + its size.
+  if (stateJson.length <= STATE_SLICE_CHARS) {
+    const e = await compressChunk('state', 'v2/state.gz', stateJson).catch(
+      (err: unknown) => { throw chunkError('state', stateJson.length, imageAssets.length, err); },
+    );
+    entries.push(e.entry);
+    yield { path: e.path, blob: e.blob };
+  } else {
+    let si = 0;
+    let pos = 0;
+    while (pos < stateJson.length) {
+      let end = Math.min(pos + STATE_SLICE_CHARS, stateJson.length);
+      // Never split a surrogate pair: a lone half corrupts UTF-8 on blob-encode.
+      if (end < stateJson.length) {
+        const c = stateJson.charCodeAt(end);
+        if (c >= 0xDC00 && c <= 0xDFFF) end++;
+      }
+      const piece = stateJson.slice(pos, end);
+      const e = await compressChunk(`state-${si}`, `v2/state-${si}.gz`, piece).catch(
+        (err: unknown) => { throw chunkError(`state-${si}`, piece.length, imageAssets.length, err); },
+      );
+      entries.push(e.entry);
+      yield { path: e.path, blob: e.blob };
+      pos = end;
+      si++;
+    }
+  }
+  // Release the serialized state (~tens of MB) before the image phase — it was
+  // being held all the way through image compression for no reason, inflating
+  // the peak that the image-chunk gzip allocation has to fit under.
+  stateJson = '';
 
   if (imageAssets.length > 0) {
     let currentBatch: unknown[] = [];
     let currentSize = 0;
     let chunkIndex = 0;
 
-    for (const asset of imageAssets) {
+    const flush = async (): Promise<{ path: string; blob: Blob }> => {
+      const batchJson = JSON.stringify(currentBatch);
+      const count = currentBatch.length;
+      const imgEntry = await compressChunk(
+        `img-${chunkIndex}`, `v2/img-${chunkIndex}.gz`, batchJson,
+      ).catch((err: unknown) => { throw chunkError(`img-${chunkIndex}`, batchJson.length, count, err); });
+      entries.push(imgEntry.entry);
+      chunkIndex++;
+      currentBatch = [];
+      currentSize = 0;
+      return { path: imgEntry.path, blob: imgEntry.blob };
+    };
+
+    // Drain via shift() (not for…of) so each processed asset can be GC'd
+    // incrementally rather than being held in the array until the end.
+    while (imageAssets.length > 0) {
+      const asset = imageAssets.shift();
       const assetSize = JSON.stringify(asset).length;
 
       if (currentSize + assetSize > TARGET_CHUNK_BYTES && currentBatch.length > 0) {
-        const imgEntry = await compressChunk(
-          `img-${chunkIndex}`, `v2/img-${chunkIndex}.gz`,
-          JSON.stringify(currentBatch),
-        );
-        chunks.set(imgEntry.path, imgEntry.blob);
-        entries.push(imgEntry.entry);
-        chunkIndex++;
-        currentBatch = [];
-        currentSize = 0;
+        yield await flush();
       }
 
       currentBatch.push(asset);
@@ -81,25 +172,35 @@ export async function pack(json: string): Promise<PackResult> {
     }
 
     if (currentBatch.length > 0) {
-      const imgEntry = await compressChunk(
-        `img-${chunkIndex}`, `v2/img-${chunkIndex}.gz`,
-        JSON.stringify(currentBatch),
-      );
-      chunks.set(imgEntry.path, imgEntry.blob);
-      entries.push(imgEntry.entry);
+      yield await flush();
     }
   }
 
-  const manifest: ChunkManifest = {
+  return {
     manifestVersion: 2,
     createdAt: new Date().toISOString(),
     engineVersion: ENGINE_VERSION,
-    totalSizeBytes: json.length,
+    totalSizeBytes,
     bundleChecksum,
     chunks: entries,
   };
+}
 
-  return { manifest, chunks };
+/**
+ * Eager packer — collects every chunk into a Map and returns it with the
+ * manifest. Thin wrapper over {@link packChunks}; kept for callers/tests that
+ * want the whole set at once. For large bundles prefer streaming via
+ * `packChunks` so chunks are not all held in memory simultaneously.
+ */
+export async function pack(json: string): Promise<PackResult> {
+  const chunks = new Map<string, Blob>();
+  const gen = packChunks(json);
+  let res = await gen.next();
+  while (!res.done) {
+    chunks.set(res.value.path, res.value.blob);
+    res = await gen.next();
+  }
+  return { manifest: res.value, chunks };
 }
 
 export async function unpack(
@@ -117,10 +218,22 @@ export async function unpack(
     }
   }
 
-  // Decompress state
-  const stateEntry = manifest.chunks.find(e => e.name === 'state');
-  if (!stateEntry) throw new ChecksumError('缺少 state 分块');
-  const stateJson = await gzipDecompress(chunks.get(stateEntry.path)!);
+  // Decompress state — either a single legacy `state` chunk or split
+  // `state-0`,`state-1`,… pieces concatenated back in order.
+  const stateEntries = manifest.chunks
+    .filter(e => e.name === 'state' || /^state-\d+$/.test(e.name))
+    .sort((a, b) => stateOrder(a.name) - stateOrder(b.name));
+  if (stateEntries.length === 0) throw new ChecksumError('缺少 state 分块');
+  // A valid manifest has EITHER one legacy `state` OR a `state-N` set, never
+  // both. Both present means a corrupt/straddled manifest — fail loudly rather
+  // than concatenate inconsistent pieces.
+  if (stateEntries.some(e => e.name === 'state') && stateEntries.some(e => e.name !== 'state')) {
+    throw new ChecksumError('state 分块同时存在单块与分片，manifest 不一致');
+  }
+  let stateJson = '';
+  for (const entry of stateEntries) {
+    stateJson += await gzipDecompress(chunks.get(entry.path)!);
+  }
   const stateObj = JSON.parse(stateJson) as Record<string, unknown>;
 
   // Decompress and merge image chunks (ordered by manifest)
@@ -154,9 +267,36 @@ export async function unpack(
 
 // ─── Compression ───
 
+/**
+ * Gzip a string to a Blob.
+ *
+ * Drives the CompressionStream explicitly via reader/writer instead of
+ * `new Blob([data]).stream() → new Response(stream).blob()`. The Response/Body
+ * path threw an opaque `TypeError: Failed to fetch` on large inputs for some
+ * users (the Fetch machinery, not raw OOM); the explicit form avoids both the
+ * intermediate Blob and the Fetch consumer, and releases the writer/reader
+ * deterministically so nothing accumulates across many chunks. The bytes fed to
+ * the CompressionStream are the same UTF-8 encoding `new Blob([data])` would
+ * produce, so the gzip output is byte-identical (roundtrip/checksum preserved).
+ */
 export async function gzipCompress(data: string): Promise<Blob> {
-  const stream = new Blob([data]).stream().pipeThrough(new CompressionStream('gzip'));
-  return new Response(stream).blob();
+  const cs = new CompressionStream('gzip');
+  const reader = cs.readable.getReader();
+  const parts: Uint8Array[] = [];
+  // Drain the compressed output concurrently with writing so a large single
+  // write cannot deadlock on backpressure.
+  const pump = (async () => {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+    }
+  })();
+  const writer = cs.writable.getWriter();
+  await writer.write(new TextEncoder().encode(data));
+  await writer.close();
+  await pump;
+  return new Blob(parts);
 }
 
 /**
@@ -269,11 +409,37 @@ export async function sha256Blob(blob: Blob): Promise<string> {
 
 // ─── Internal ───
 
+/** Order key for state chunks: legacy single `state` sorts before any `state-N`. */
+function stateOrder(name: string): number {
+  if (name === 'state') return -1;
+  const m = /^state-(\d+)$/.exec(name);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/** Attribute a chunk compression failure to its name + uncompressed size. */
+function chunkError(name: string, uncompressedBytes: number, itemCount: number, err: unknown): Error {
+  const mb = (uncompressedBytes / 1_048_576).toFixed(1);
+  const raw = err instanceof Error ? err.message : String(err);
+  return new Error(`分块 ${name}（未压缩 ${mb}MB，${itemCount} 项）压缩失败：${raw}`);
+}
+
 async function compressChunk(
   name: string, path: string, json: string,
 ): Promise<{ entry: ChunkEntry; blob: Blob; path: string }> {
-  const blob = await gzipCompress(json);
-  const checksum = await sha256Blob(blob);
+  // Tag which sub-step fails so an opaque "Failed to fetch" points at gzip vs
+  // sha256 instead of just "compression".
+  let blob: Blob;
+  try {
+    blob = await gzipCompress(json);
+  } catch (err) {
+    throw new Error(`gzip: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let checksum: string;
+  try {
+    checksum = await sha256Blob(blob);
+  } catch (err) {
+    throw new Error(`sha256: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   return {
     path,

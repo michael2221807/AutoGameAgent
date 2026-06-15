@@ -96,27 +96,63 @@ export class GitHubSyncService {
     const { owner, repo } = this.resolveTarget();
 
     emit('uploading', '正在导出存档…');
-    const exportBlob = await this.backup.exportAll();
-    const json = await exportBlob.text();
+    let json: string;
+    try {
+      const exportBlob = await this.backup.exportAll();
+      json = await exportBlob.text();
+    } catch (err) {
+      throw stageError('导出存档', err);
+    }
 
+    // Compress the ENTIRE bundle into chunks FIRST, before any network upload.
+    // This is the original (proven) ordering: all CompressionStream work happens
+    // up front in one phase, then a separate upload phase does the fetches.
+    // Interleaving compression with fetch() PUTs (the streaming variant) caused
+    // "Failed to fetch" mid-run on large saves and, worse, left orphan chunks +
+    // an un-updated manifest when compression failed after some chunks were
+    // already uploaded. Eager packing means a compression failure throws BEFORE
+    // anything is written — the cloud copy is never touched.
     emit('uploading', '正在压缩…');
-    const { manifest, chunks } = await pack(json);
+    let manifest: ChunkManifest;
+    let chunks: Map<string, Blob>;
+    try {
+      ({ manifest, chunks } = await pack(json));
+    } catch (err) {
+      throw stageError(`压缩存档（约 ${Math.round(json.length / 1_048_576)}MB）`, err);
+    }
     const total = chunks.size;
 
-    // Batch-fetch existing file SHAs to avoid per-file 404s
-    const existingFiles = await this.listV2Files(owner, repo);
+    // Batch-fetch existing file SHAs (chunks at a shared path are updated in place).
+    let existingFiles: Array<{ path: string; sha: string }>;
+    try {
+      existingFiles = await this.listV2Files(owner, repo);
+    } catch (err) {
+      throw stageError('读取云端文件列表', err);
+    }
     const shaMap = new Map(existingFiles.map(f => [f.path, f.sha]));
 
     let i = 0;
     for (const [path, blob] of chunks) {
       i++;
       emit('uploading', `正在上传分块 ${i}/${total}…`);
-      await this.uploadFile(owner, repo, path, await blobToBase64(blob), shaMap.get(path));
+      try {
+        await this.uploadFile(owner, repo, path, await blobToBase64(blob), shaMap.get(path));
+      } catch (err) {
+        throw stageError(`上传分块 ${path}`, err);
+      }
     }
 
+    // The manifest is written LAST so it is the commit point: if any chunk PUT
+    // above fails, the cloud still has the OLD manifest pointing at OLD chunks,
+    // so a partial upload can never be silently downloaded as wrong data (it
+    // fails loudly via the per-chunk SHA-256 check on download).
     emit('uploading', '正在更新索引…');
-    const manifestJson = JSON.stringify(manifest, null, 2);
-    await this.uploadFile(owner, repo, MANIFEST_PATH, utf8ToBase64(manifestJson), shaMap.get(MANIFEST_PATH));
+    try {
+      const manifestJson = JSON.stringify(manifest, null, 2);
+      await this.uploadFile(owner, repo, MANIFEST_PATH, utf8ToBase64(manifestJson), shaMap.get(MANIFEST_PATH));
+    } catch (err) {
+      throw stageError('更新云端索引', err);
+    }
 
     // Cleanup stale chunks using the already-fetched listing
     this.cleanupStaleFromList(owner, repo, manifest, existingFiles);
@@ -423,6 +459,24 @@ export class ApiError extends Error {
 
 function fmtErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Wrap a stage failure so the surfaced message names the failing step.
+ *
+ * `fetch()` (and `Response.blob()` over a failed CompressionStream) throws a
+ * bare `TypeError: Failed to fetch` with no HTTP status and no Network-tab
+ * entry — useless on its own. Prefixing the stage + a likely-cause hint turns
+ * it into something actionable, while preserving the original stack.
+ */
+function stageError(stage: string, err: unknown): Error {
+  const raw = err instanceof Error ? err.message : String(err);
+  const hint = /failed to fetch/i.test(raw)
+    ? '（网络中断、被浏览器/扩展拦截，或存档过大导致内存不足）'
+    : '';
+  const wrapped = new Error(`${stage}失败：${raw}${hint}`);
+  if (err instanceof Error && err.stack) wrapped.stack = err.stack;
+  return wrapped;
 }
 
 function utf8ToBase64(str: string): string {

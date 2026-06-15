@@ -203,6 +203,8 @@ describe('upload — progress callbacks', () => {
   });
 
   it('chunk progress shows correct N/total format', async () => {
+    // Eager upload compresses everything first, so the chunk total is known and
+    // progress is "i/N".
     const backup = createMockBackup();
     const sync = new GitHubSyncService(backup as never);
     const statuses: SyncStatus[] = [];
@@ -400,8 +402,10 @@ describe('upload — chunk contents are valid gzipped data', () => {
 
     expect(parsed.version).toBe(1);
     expect(parsed.profiles.p1).toBeDefined();
-    // imageAssets should NOT be in state (extracted to img chunks)
-    expect(parsed.imageAssets).toBeUndefined();
+    // imageAssets content is extracted to img chunks, but an empty placeholder
+    // stays in state to preserve the key's original position (order-stable
+    // reassembly → bundle checksum matches even with trailing keys).
+    expect(parsed.imageAssets).toEqual([]);
   });
 
   it('image chunk can be decoded back to valid JSON array', async () => {

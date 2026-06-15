@@ -1,8 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pack, unpack, gzipCompress, gzipDecompress,
+  pack, packChunks, unpack, gzipCompress, gzipDecompress,
   sha256, sha256String, sha256Blob, ChecksumError,
 } from './chunked-bundle-packer';
+import type { ChunkManifest } from './chunked-bundle-packer';
+
+async function collectChunks(
+  gen: AsyncGenerator<{ path: string; blob: Blob }, ChunkManifest, void>,
+): Promise<{ manifest: ChunkManifest; chunks: Map<string, Blob> }> {
+  const chunks = new Map<string, Blob>();
+  let res = await gen.next();
+  while (!res.done) {
+    chunks.set(res.value.path, res.value.blob);
+    res = await gen.next();
+  }
+  return { manifest: res.value, chunks };
+}
 
 // ─── Realistic mock that mirrors a real BackupBundle ───
 
@@ -359,6 +372,128 @@ describe('pack — manifest structure', () => {
     const expectedHash = await sha256String(json);
     const { manifest } = await pack(json);
     expect(manifest.bundleChecksum).toBe(expectedHash);
+  });
+});
+
+// ─── packChunks: streaming parity (memory-bounded large-save path) ───
+
+describe('packChunks — streaming generator', () => {
+  it('yields the same chunk paths as eager pack(), in order', async () => {
+    const json = makeRealisticBundle({ imageCount: 12, imageSize: 5000 });
+    const eager = await pack(json);
+    const streamed = await collectChunks(packChunks(json));
+
+    expect([...streamed.chunks.keys()]).toEqual([...eager.chunks.keys()]);
+    expect(streamed.manifest.chunks.map(c => c.name))
+      .toEqual(eager.manifest.chunks.map(c => c.name));
+    expect(streamed.manifest.bundleChecksum).toBe(eager.manifest.bundleChecksum);
+    expect(streamed.manifest.totalSizeBytes).toBe(eager.manifest.totalSizeBytes);
+  });
+
+  it('accepts a Blob source and roundtrips identically', async () => {
+    const json = makeRealisticBundle({ imageCount: 8, imageSize: 4000 });
+    const blob = new Blob([json], { type: 'application/json' });
+
+    const { manifest, chunks } = await collectChunks(packChunks(blob));
+    // The Blob path must yield the exact same checksum as the string path.
+    expect(manifest.bundleChecksum).toBe(await sha256String(json));
+
+    const restored = await unpack(manifest, chunks);
+    expect(JSON.parse(restored)).toEqual(JSON.parse(json));
+  });
+
+  it('produces multiple image chunks for a large bundle and unpacks cleanly', async () => {
+    // ~60k chars/image * 12 ≈ comfortably over the 20MB chunk target only with
+    // big images; use enough to force at least 2 image chunks deterministically.
+    const json = makeRealisticBundle({ imageCount: 6, imageSize: 4_000_000 });
+    const { manifest, chunks } = await collectChunks(packChunks(json));
+
+    const imgChunks = manifest.chunks.filter(c => c.name.startsWith('img-'));
+    expect(imgChunks.length).toBeGreaterThanOrEqual(2);
+
+    const restored = await unpack(manifest, chunks);
+    expect(JSON.parse(restored)).toEqual(JSON.parse(json));
+  });
+
+  it('state-only bundle (no images) yields a single chunk', async () => {
+    const json = makeRealisticBundle({ noImageAssets: true });
+    const { manifest, chunks } = await collectChunks(packChunks(json));
+    expect(chunks.size).toBe(1);
+    expect(manifest.chunks).toHaveLength(1);
+    expect(manifest.chunks[0].name).toBe('state');
+  });
+
+  it('splits a very large state into multiple state-N chunks and roundtrips', async () => {
+    // Force a >8M-char state by stuffing big non-image fields into the bundle,
+    // so the state JSON alone exceeds STATE_SLICE_CHARS (the real-world failure:
+    // a 50MB state that gzip'd in one Blob and OOM'd). Keep `imageAssets` LAST —
+    // unpack re-appends it at the end, so the original must match (null,2 fmt).
+    const base = JSON.parse(makeRealisticBundle({ imageCount: 2 })) as Record<string, unknown>;
+    const imgs = base.imageAssets;
+    delete base.imageAssets;
+    base.bigBlobA = '甲'.repeat(5_000_000);      // multi-byte CJK
+    base.bigBlobB = 'B'.repeat(5_000_000);        // ascii
+    base.bigBlobC = '😀'.repeat(2_500_000);       // surrogate pairs → boundary test
+    base.imageAssets = imgs;
+    const json = JSON.stringify(base, null, 2);
+
+    const { manifest, chunks } = await collectChunks(packChunks(json));
+
+    const stateParts = manifest.chunks.filter(c => /^state-\d+$/.test(c.name));
+    expect(stateParts.length).toBeGreaterThanOrEqual(2);
+    expect(manifest.chunks.some(c => c.name === 'state')).toBe(false);
+    // images still chunked alongside the split state
+    expect(manifest.chunks.some(c => c.name.startsWith('img-'))).toBe(true);
+
+    const restored = await unpack(manifest, chunks);
+    expect(JSON.parse(restored)).toEqual(base);
+  });
+
+  it('eager pack() also splits large state and unpacks identically', async () => {
+    const base = JSON.parse(makeRealisticBundle({ noImageAssets: true })) as Record<string, unknown>;
+    base.huge = '世界'.repeat(5_000_000); // ~10M chars of CJK
+    const json = JSON.stringify(base, null, 2);
+
+    const { manifest, chunks } = await pack(json);
+    expect(manifest.chunks.filter(c => /^state-\d+$/.test(c.name)).length).toBeGreaterThanOrEqual(2);
+    expect(JSON.parse(await unpack(manifest, chunks))).toEqual(base);
+  });
+
+  it('preserves imageAssets key position when keys follow it (worldBooks etc.)', async () => {
+    // Mirror the REAL export key order from backup-service.exportAll: imageAssets
+    // is NOT last — worldBooks + builtinPromptOverrides follow it. Before the
+    // placeholder fix, unpack re-appended imageAssets at the end → key order
+    // shifted → whole-bundle SHA-256 mismatch → unpack THREW → cloud save
+    // undownloadable. unpack returning at all here proves both checksum layers
+    // passed; `toBe(json)` proves byte-identical reassembly.
+    const bundle = {
+      version: 1,
+      exportedAt: '2026-06-15T00:00:00Z',
+      profiles: { p1: { name: 'A' } },
+      saves: { 'p1/auto': { 角色: { 姓名: '甲' } } },
+      vectors: {},
+      imageAssets: [
+        { id: 'i1', metadata: { id: 'i1', backend: 'novelai', createdAt: 1 }, base64: 'A'.repeat(800), mimeType: 'image/png' },
+      ],
+      worldBooks: { version: 1, entries: [{ key: 'w', value: '世界书' }] },
+      builtinPromptOverrides: { version: 1, entries: [{ id: 'o1', text: '覆盖' }] },
+    };
+    const json = JSON.stringify(bundle, null, 2);
+
+    const { manifest, chunks } = await pack(json);
+    const restored = await unpack(manifest, chunks);
+    expect(restored).toBe(json);
+  });
+
+  it('throws if a manifest mixes legacy state and split state-N (loud, not silent)', async () => {
+    const json = makeRealisticBundle({ imageCount: 1 });
+    const { manifest, chunks } = await pack(json); // single 'state'
+    // Forge a corrupt manifest that also references a state-0 (duplicate state).
+    const stateChunk = manifest.chunks.find(c => c.name === 'state')!;
+    const corrupt = { ...manifest, chunks: [...manifest.chunks, { ...stateChunk, name: 'state-0', path: 'v2/state-0.gz' }] };
+    const corruptChunks = new Map(chunks);
+    corruptChunks.set('v2/state-0.gz', chunks.get(stateChunk.path)!);
+    await expect(unpack(corrupt, corruptChunks)).rejects.toThrow(/不一致/);
   });
 });
 
