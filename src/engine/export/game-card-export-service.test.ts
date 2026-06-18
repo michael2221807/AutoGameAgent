@@ -355,6 +355,21 @@ describe('GameCardExportService.exportCard', () => {
     expect(bundle.opening).toEqual({ firstRoundSetup: '' });
   });
 
+  // ─── D7: opening-style hint ───
+  it('writes the trimmed firstRoundSetup hint into bundle.opening (fixed/template, D7)', async () => {
+    const captured: { ids?: Set<string> } = {};
+    const svc = makeService(makeTree(), captured);
+    const { bundle } = await svc.exportCard('p1', 'auto', makeOptions({ firstRoundSetup: '  以第一人称、悬疑基调展开  ' }));
+    expect(bundle.opening).toEqual({ firstRoundSetup: '以第一人称、悬疑基调展开' });
+  });
+
+  it('omits bundle.opening for fixed/template when no hint is supplied (D7)', async () => {
+    const captured: { ids?: Set<string> } = {};
+    const svc = makeService(makeTree(), captured);
+    const { bundle } = await svc.exportCard('p1', 'auto', makeOptions());
+    expect(bundle.opening).toBeUndefined();
+  });
+
   it('throws when the save slot does not exist', async () => {
     const captured: { ids?: Set<string> } = {};
     const svc = makeService(null, captured);

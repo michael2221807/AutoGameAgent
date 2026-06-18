@@ -81,6 +81,11 @@ export interface EnhancedOpeningOptions {
   onStreamChunk?: (chunk: string) => void;
   onPhaseError?: (info: PhaseErrorInfo) => Promise<PhaseErrorAction>;
   onRateLimitWait?: (seconds: number | null) => void;
+  /**
+   * D7 (card import only): optional author hint that steers the opening narrative style.
+   * Surfaced to the Phase E1 prompt via `OPENING_SETUP_HINT`. New-game openings leave it unset.
+   */
+  firstRoundSetup?: string;
 }
 
 export interface EnhancedOpeningResult {
@@ -860,6 +865,9 @@ export class EnhancedOpeningPipeline {
         isEnhancedOpening: true,
         step1FlowOverride: 'openingEnhancedStep1',
         step2FlowOverride: 'openingEnhancedStep2',
+        // D7: author opening-style hint (card import only) → surfaced to the E1 prompt
+        // via the OPENING_SETUP_HINT variable. Empty for new-game openings.
+        openingSetupHint: phaseCtx.options.firstRoundSetup?.trim() ?? '',
       },
     };
 

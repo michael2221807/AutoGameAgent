@@ -39,10 +39,10 @@
   "home.github.disconnect": "Disconnect",
   "home.github.disconnectButton": "Disconnect",
   "home.github.copyTokenButton": "Copy Token",
-  "home.cloudStatus.hasArchive": "Cloud archive",
+  "home.cloudStatus.hasArchive": "Cloud save",
   "home.cloudStatus.updatedAt": "Updated at {date}",
   "home.cloudStatus.unknownTime": "Unknown time",
-  "home.cloudStatus.noArchive": "No archive in cloud",
+  "home.cloudStatus.noArchive": "No cloud save",
   "home.cloudStatus.uploadToSync": "Upload to sync across devices",
   "home.cloudStatus.checking": "Checking cloud…"
 }

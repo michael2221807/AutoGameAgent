@@ -962,9 +962,10 @@ watch(
         </button>
       </div>
 
-      <!-- Empty state when no messages exist yet -->
+      <!-- Empty state when no messages exist yet (Story 9: writing-mode copy must not
+           tell the user to "type an action" — the composer is hidden in that mode). -->
       <div v-if="displayMessages.length === 0 && !isGenerating" class="empty-chat">
-        <p class="empty-text">{{ $t('mainGame.empty.text') }}</p>
+        <p class="empty-text">{{ isWorldBuilding ? $t('mainGame.empty.worldBuilding') : $t('mainGame.empty.text') }}</p>
       </div>
 
       <!-- Message bubbles (each assistant preceded by a RoundDivider, except the opening one) -->
@@ -1076,6 +1077,13 @@ watch(
       @cancel-generation="cancelGeneration"
       @request-rollback="showRollbackConfirm = true"
     />
+    <!-- Story 9 (JOURNEY-2 fix): writing-mode replacement for the hidden composer.
+         Explains why the input is gone and offers a one-click path to the guide, so a user
+         who resumes / navigates back to the main panel in worldBuilding mode is not stranded. -->
+    <div v-else class="wb-composer-notice">
+      <p class="wb-composer-notice__text">{{ $t('mainGame.worldBuilding.composerHint') }}</p>
+      <router-link to="/game/card-guide" class="wb-composer-notice__btn">{{ $t('mainGame.worldBuilding.openGuide') }}</router-link>
+    </div>
 
     <!-- ── Rollback confirmation modal ── -->
     <Modal v-model="showRollbackConfirm" :title="$t('mainGame.rollback.modalTitle')">
@@ -1299,6 +1307,38 @@ watch(
   color: var(--color-text-umber);
   letter-spacing: 0.08em;
   text-align: center;
+}
+
+/* Story 9: writing-mode replacement for the hidden GameComposer. */
+.wb-composer-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem 0.875rem;
+  padding: 0.75rem 1.25rem;
+  text-align: center;
+}
+.wb-composer-notice__text {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.875rem;
+  color: var(--color-text-umber);
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+.wb-composer-notice__btn {
+  flex-shrink: 0;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--color-sage-400);
+  background: var(--color-sage-tint, rgba(140, 170, 140, 0.12));
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.wb-composer-notice__btn:hover {
+  background: var(--color-sage-tint-strong, rgba(140, 170, 140, 0.22));
 }
 
 /* ── Message bubbles ──────────────────────────────────────────

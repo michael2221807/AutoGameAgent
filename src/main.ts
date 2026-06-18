@@ -739,6 +739,7 @@ async function bootstrap(): Promise<void> {
             // No abort: ⑦ is non-cancelable in the UI, so a never-aborting signal is intentional.
             abortSignal: args.abortSignal ?? new AbortController().signal,
             onProgress: args.onProgress ?? (() => {}),
+            firstRoundSetup: args.firstRoundSetup, // D7: author opening-style hint
           })
       : undefined,
   });

@@ -120,6 +120,10 @@ export class ContextAssemblyStage implements PipelineStage {
     const actionMode = (this.stateManager.get<string>('系统.actionOptions.mode') ?? 'action') as 'action' | 'story';
     const actionPace = (this.stateManager.get<string>('系统.actionOptions.pace') ?? 'fast') as 'fast' | 'slow';
     const customActionPrompt = this.stateManager.get<string>('系统.actionOptions.customPrompt') ?? '';
+    // D7: author opening-style hint (card import Phase E only; absent for every other call).
+    const openingSetupHint = typeof ctx.meta['openingSetupHint'] === 'string'
+      ? (ctx.meta['openingSetupHint'] as string).trim()
+      : '';
 
     const defaultPaceSlow = '## 节奏提示\n\n当前节奏为**慢节奏**：倾向于生成更细腻、更思考性的选项，鼓励观察、对话、深度互动；避免催促性的推进动作。';
     const defaultPaceFast = '## 节奏提示\n\n当前节奏为**快节奏**：倾向于生成推进剧情的选项，鼓励明确的行动和决策；避免纯观察或等待。';
@@ -258,6 +262,12 @@ export class ContextAssemblyStage implements PipelineStage {
       ACTION_PACE_HINT: paceHint,
       CUSTOM_ACTION_PROMPT: customActionPrompt
         ? (this.pack.engineFragments?.customActionHeader ?? '## 自定义附加要求\n\n{content}').replace('{content}', customActionPrompt)
+        : '',
+
+      // D7: author opening-style hint (card import only). Framed block when present, empty otherwise
+      // (mirrors CUSTOM_ACTION_PROMPT). Surfaced to the Phase E1 prompt via {{OPENING_SETUP_HINT}}.
+      OPENING_SETUP_HINT: openingSetupHint
+        ? (this.pack.engineFragments?.openingSetupHintHeader ?? '## 作者开场提示（请据此把握开场叙事的风格与基调）\n\n{content}').replace('{content}', openingSetupHint)
         : '',
 
       // ── CoT plugin variables (Sprint CoT-2) ──

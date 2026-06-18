@@ -85,6 +85,8 @@ const coverFileName = ref('');
 const flags = ref<ExportFlags>(defaultFlags());
 const coverage = ref<CoverageStats | null>(null);
 const exporting = ref(false);
+/** D7: optional author hint that steers the AI-generated opening on import (fixed/template). */
+const firstRoundSetup = ref('');
 
 // ─── Story 7 target mode state ────────────────────────────────
 const sourceTree = ref<Record<string, unknown> | null>(null);
@@ -122,6 +124,7 @@ function resetForm(): void {
   coverError.value = '';
   coverFileName.value = '';
   flags.value = defaultFlags();
+  firstRoundSetup.value = '';
 }
 
 // ─── Coverage gate ────────────────────────────────────────────
@@ -177,6 +180,31 @@ const gatePass = computed(
     coverage.value.missingLocationNames.length === 0,
 );
 
+/** EMPTY-1: a save with zero NPCs AND zero locations passes gatePass vacuously
+ *  (the coverage check only asks "do existing entities have a node"). Treat it as a
+ *  distinct state so the green "graph complete" pass is never shown for a content-less card. */
+const isEmptyWorld = computed(
+  () => coverage.value !== null && coverage.value.totalNpcs === 0 && coverage.value.totalLocations === 0,
+);
+
+/** Three-way gate state for the banner: pass / empty / incomplete. */
+const gateState = computed<'pass' | 'empty' | 'incomplete'>(() => {
+  if (isEmptyWorld.value) return 'empty';
+  return gatePass.value ? 'pass' : 'incomplete';
+});
+
+/**
+ * JOURNEY-1 (PM decision A): whether the export form unlocks.
+ * - Active session (Story 5 导出): HARD gate — D18 coverage + non-empty world.
+ * - Target save (Story 7 转卡): the coverage gate is a NON-BLOCKING warning. The
+ *   solidify tool only reaches the active session, so blocking a non-active save would be
+ *   an unsatisfiable dead-end, contradicting Story 7's "any save → card" success criterion.
+ *   Once the read-only load resolves (coverage !== null) the form is available.
+ */
+const canProceed = computed(() =>
+  props.target ? coverage.value !== null : gatePass.value && !isEmptyWorld.value,
+);
+
 // ─── Target save metadata (Story 7) ───────────────────────────
 const targetSlotMeta = computed(() =>
   props.target ? profileManager?.getSlotMeta(props.target.profileId, props.target.slotId) : undefined,
@@ -200,7 +228,7 @@ const fixedNameMissing = computed(() =>
 
 const canExport = computed(
   () =>
-    gatePass.value && title.value.trim() !== '' && !fixedNameMissing.value && !exporting.value &&
+    canProceed.value && title.value.trim() !== '' && !fixedNameMissing.value && !exporting.value &&
     !loadingTree.value && (!props.target || sourceTree.value !== null),
 );
 
@@ -354,6 +382,12 @@ function goSolidify(): void {
   void router.push('/game/relationship-graph');
 }
 
+/** EMPTY-1: empty world has nothing to solidify — send the author to build it first. */
+function goBuildWorld(): void {
+  emit('update:modelValue', false);
+  void router.push('/game/card-guide');
+}
+
 // ─── Export ───────────────────────────────────────────────────
 function close(): void { emit('update:modelValue', false); }
 
@@ -425,6 +459,8 @@ async function doExport(): Promise<void> {
       selectedEdgeIds,
       // D5: every edge the author confirmed into the card is a world setting → core:true (copy only).
       markSelectedEdgesCore: props.target ? true : undefined,
+      // D7: optional author hint to steer the import-time opening (fixed/template only).
+      firstRoundSetup: mode.value !== 'blank' ? (firstRoundSetup.value.trim() || undefined) : undefined,
       checklist: flags.value,
     };
 
@@ -471,30 +507,50 @@ function downloadBlob(blob: Blob, name: string): void {
       <!-- Story 7: async target-save loading state -->
       <p v-if="loadingTree" class="cef-loading">{{ t('save.toCard.loading') }}</p>
 
-      <!-- ① Coverage gate -->
+      <!-- ① Coverage gate — pass / empty-world / incomplete.
+           Target mode (Story 7 转卡): incomplete + empty are NON-BLOCKING warnings (PM decision A);
+           active mode (Story 5 导出): they hard-block with an actionable CTA. -->
       <div
         v-if="coverage"
         class="cef-gate"
-        :class="gatePass ? 'cef-gate--pass' : 'cef-gate--fail'"
+        :class="{
+          'cef-gate--pass': gateState === 'pass',
+          'cef-gate--warn': props.target && gateState !== 'pass',
+          'cef-gate--fail': !props.target && gateState !== 'pass',
+        }"
       >
-        <template v-if="gatePass">
+        <!-- pass -->
+        <template v-if="gateState === 'pass'">
           <span class="cef-gate__icon">✓</span>
           <div>
             <p class="cef-gate__title">{{ t('save.export.gate.pass') }}</p>
             <p class="cef-gate__detail">{{ t('save.export.gate.passDetail', { npc: coverage.totalNpcs, loc: coverage.totalLocations }) }}</p>
           </div>
         </template>
+
+        <!-- empty world (no NPCs / no locations) -->
+        <template v-else-if="gateState === 'empty'">
+          <span class="cef-gate__icon">!</span>
+          <div class="cef-gate__body">
+            <p class="cef-gate__title">{{ props.target ? t('save.toCard.gateWarnEmptyTitle') : t('save.export.gate.emptyTitle') }}</p>
+            <p class="cef-gate__detail">{{ props.target ? t('save.toCard.gateWarnHint') : t('save.export.gate.emptyDetail') }}</p>
+            <button v-if="!props.target" type="button" class="cef-gate__btn" @click="goBuildWorld">{{ t('save.export.gate.goBuildWorld') }}</button>
+          </div>
+        </template>
+
+        <!-- incomplete coverage -->
         <template v-else>
           <span class="cef-gate__icon">!</span>
           <div class="cef-gate__body">
-            <p class="cef-gate__title">{{ t('save.export.gate.fail') }}</p>
+            <p class="cef-gate__title">{{ props.target ? t('save.toCard.gateWarnTitle') : t('save.export.gate.fail') }}</p>
             <p v-if="coverage.missingNpcNames.length" class="cef-gate__detail">
               {{ t('save.export.gate.failNpc', { names: coverage.missingNpcNames.join('、') }) }}
             </p>
             <p v-if="coverage.missingLocationNames.length" class="cef-gate__detail">
               {{ t('save.export.gate.failLoc', { names: coverage.missingLocationNames.join('、') }) }}
             </p>
-            <button type="button" class="cef-gate__btn" @click="goSolidify">{{ t('save.export.gate.goSolidify') }}</button>
+            <p v-if="props.target" class="cef-gate__detail cef-gate__hint">{{ t('save.toCard.gateWarnHint') }}</p>
+            <button v-else type="button" class="cef-gate__btn" @click="goSolidify">{{ t('save.export.gate.goSolidify') }}</button>
           </div>
         </template>
       </div>
@@ -509,7 +565,7 @@ function downloadBlob(blob: Blob, name: string): void {
         :loading="loadingTree"
       />
 
-      <template v-if="gatePass">
+      <template v-if="canProceed">
         <!-- ② Protagonist -->
         <section class="cef-sec">
           <h3 class="cef-sec__title">{{ t('save.export.protagonist.sectionTitle') }}</h3>
@@ -535,6 +591,12 @@ function downloadBlob(blob: Blob, name: string): void {
           <label class="cef-field">
             <span class="cef-field__label">{{ t('save.export.meta.authorLabel') }}</span>
             <input v-model="author" class="cef-input" type="text" :placeholder="t('save.export.meta.authorPlaceholder')" />
+          </label>
+          <!-- D7: optional author hint to steer the AI-generated opening on import (fixed/template). -->
+          <label v-if="mode !== 'blank'" class="cef-field">
+            <span class="cef-field__label">{{ t('save.export.meta.openingHintLabel') }}</span>
+            <textarea v-model="firstRoundSetup" class="cef-input cef-input--area" rows="2" :placeholder="t('save.export.meta.openingHintPlaceholder')" />
+            <span class="cef-field__help">{{ t('save.export.meta.openingHintHelp') }}</span>
           </label>
           <label class="cef-field">
             <span class="cef-field__label">{{ t('save.export.meta.tagsLabel') }}</span>
@@ -615,8 +677,12 @@ function downloadBlob(blob: Blob, name: string): void {
 }
 .cef-gate--pass .cef-gate__icon { background: var(--color-sage-400); }
 .cef-gate--fail .cef-gate__icon { background: var(--color-amber-400); }
+/* Target-mode (Story 7) non-blocking warning — softer amber than the active-mode hard block. */
+.cef-gate--warn { background: color-mix(in oklch, var(--color-amber-400) 8%, transparent); }
+.cef-gate--warn .cef-gate__icon { background: var(--color-amber-400); }
 .cef-gate__title { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--color-text); }
 .cef-gate__detail { margin: 4px 0 0; font-size: 0.8rem; color: var(--color-text-secondary); }
+.cef-gate__hint { font-style: italic; opacity: 0.85; }
 .cef-gate__btn {
   margin-top: 8px;
   padding: 6px 12px;
@@ -638,6 +704,7 @@ function downloadBlob(blob: Blob, name: string): void {
 
 .cef-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
 .cef-field__label { font-size: 0.82rem; color: var(--color-text-secondary); }
+.cef-field__help { font-size: 0.74rem; color: var(--color-text-secondary); opacity: 0.75; }
 .cef-input {
   width: 100%;
   padding: 8px 10px;

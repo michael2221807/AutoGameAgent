@@ -68,7 +68,7 @@
   "cardGuide.step8.cta": "Go export",
 
   "cardGuide.section.advanced.title": "Advanced tips",
-  "cardGuide.advanced.saveToCard": "Convert an existing save into a game card: in the Save panel, click \"To Card\" on any save — the system strips play progress, AI-assists edge classification, then reuses the export flow.",
+  "cardGuide.advanced.saveToCard": "Convert an existing save into a game card: in the Save panel, click \"Make Card\" on any save — the system strips play progress, AI-assists edge classification, then reuses the export flow.",
   "cardGuide.advanced.aiCommands": "AI assistant card-writing commands: in card-writing mode the assistant can batch-generate NPCs and whole regions, and write directly into Engram.",
   "cardGuide.advanced.testing": "Test your card: after exporting, use the import flow to playtest in a new save and confirm the protagonist mode, opening narrative and retrieval all work as expected."
 }

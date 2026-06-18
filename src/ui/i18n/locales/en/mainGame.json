@@ -3,6 +3,9 @@
   "mainGame.status.gameStart": "Game Start",
   "mainGame.status.aiThinking": "AI thinking…",
   "mainGame.empty.text": "The game hasn't started yet — enter your first action",
+  "mainGame.empty.worldBuilding": "Card-writing mode: build your world here — turns don't advance. Open the Card Guide to start.",
+  "mainGame.worldBuilding.composerHint": "Turns don't advance in card-writing mode. Keep editing your world, or open the Card Guide.",
+  "mainGame.worldBuilding.openGuide": "Open Card Guide",
 
   "mainGame.toast.copiedToClipboard": "Copied to clipboard",
   "mainGame.toast.copyFailed": "Copy failed",

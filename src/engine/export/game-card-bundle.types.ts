@@ -181,6 +181,12 @@ export interface ExportOptions {
    * (Story 5 behavior: edges carry their existing core value unchanged).
    */
   markSelectedEdgesCore?: boolean;
+  /**
+   * D7: optional author hint that steers the AI-generated opening narrative on import.
+   * Written to `bundle.opening.firstRoundSetup`; consumed by the import opening pipeline
+   * (Phase E). Only meaningful for fixed/template modes (blank is import-rejected).
+   */
+  firstRoundSetup?: string;
   checklist: ExportFlags;
 }
 

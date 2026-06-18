@@ -3,6 +3,9 @@
   "mainGame.status.gameStart": "游戏开始",
   "mainGame.status.aiThinking": "AI 思考中…",
   "mainGame.empty.text": "游戏尚未开始，输入你的第一个行动",
+  "mainGame.empty.worldBuilding": "写卡模式：在这里构建你的世界，不推进回合。打开写卡攻略开始。",
+  "mainGame.worldBuilding.composerHint": "写卡模式下不推进回合。继续编辑世界，或打开写卡攻略。",
+  "mainGame.worldBuilding.openGuide": "打开写卡攻略",
 
   "mainGame.toast.copiedToClipboard": "已复制到剪贴板",
   "mainGame.toast.copyFailed": "复制失败",

@@ -283,6 +283,26 @@ describe('assembleAndPersist — 开场降级（opening non-fatal）', () => {
     const res = await svc.importCard(await makeCardBlob(validBundle()), baseOpts);
     expect(res.ok && res.openingDegraded).toBe(false);
   });
+
+  // ─── D7: opening-style hint flows from bundle.opening to runOpening ───
+  it('bundle.opening.firstRoundSetup 透传给 runOpening（D7）', async () => {
+    const { deps, spies } = makeDeps();
+    const svc = new GameCardImportService(() => mockPack, deps);
+    const bundle = validBundle({ opening: { firstRoundSetup: '以第一人称、悬疑基调展开' } });
+    await svc.importCard(await makeCardBlob(bundle), baseOpts);
+    expect(spies.runOpening).toHaveBeenCalledWith(
+      expect.objectContaining({ firstRoundSetup: '以第一人称、悬疑基调展开' }),
+    );
+  });
+
+  it('无 opening 字段时 runOpening 收到 firstRoundSetup=undefined（D7）', async () => {
+    const { deps, spies } = makeDeps();
+    const svc = new GameCardImportService(() => mockPack, deps);
+    await svc.importCard(await makeCardBlob(validBundle()), baseOpts);
+    expect(spies.runOpening).toHaveBeenCalledWith(
+      expect.objectContaining({ firstRoundSetup: undefined }),
+    );
+  });
 });
 
 // ─── SC-13 回滚 ──────────────────────────────────────────────────

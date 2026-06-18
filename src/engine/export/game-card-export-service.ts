@@ -128,7 +128,9 @@ export class GameCardExportService {
       apiTemplate,
       imageAssets: imageAssets.length > 0 ? imageAssets : undefined,
       customPresets: customPresets && Object.keys(customPresets).length > 0 ? customPresets : undefined,
-      opening: options.protagonist.mode === 'blank' ? { firstRoundSetup: '' } : undefined,
+      // D7: carry the author's opening-style hint (any mode) so import can steer the opening.
+      // blank mode keeps the legacy empty-string marker even when no hint is supplied.
+      opening: this.buildOpening(options),
       exportFlags: flags,
     };
 
@@ -139,6 +141,15 @@ export class GameCardExportService {
     const blob = await gzipCompress(envelope);
 
     return { blob, checksum, bundle };
+  }
+
+  // ─── Opening hint (D7) ─────────────────────────────────────────
+
+  /** Opening hint travels when the author supplied one; blank keeps its legacy empty marker. */
+  private buildOpening(options: ExportOptions): { firstRoundSetup: string } | undefined {
+    const hint = options.firstRoundSetup?.trim() ?? '';
+    if (hint) return { firstRoundSetup: hint };
+    return options.protagonist.mode === 'blank' ? { firstRoundSetup: '' } : undefined;
   }
 
   // ─── Engram ────────────────────────────────────────────────────

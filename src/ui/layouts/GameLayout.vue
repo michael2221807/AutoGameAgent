@@ -64,11 +64,18 @@ const { isWorldBuilding, syncFromActiveSlot } = useSessionMode();
 
 watch(() => engineState.activeSlotId, () => syncFromActiveSlot(), { immediate: true });
 
+// `immediate` so RESUMING a save whose sessionType is already 'worldBuilding'
+// also surfaces the guide (design 行1071 lists it as a state of being IN worldBuilding,
+// not only the play→worldBuilding transition). The slot-sync watcher above is declared
+// first and runs synchronously, so sessionType is settled before this fires.
+// `!prev` covers both: the live play→worldBuilding flip (prev=false) and the
+// immediate resume fire (prev=undefined). MainGamePanel also shows an in-panel
+// writing-mode notice as a safety net if the user navigates back to it (JOURNEY-2).
 watch(isWorldBuilding, (wb, prev) => {
   if (wb && !prev && route.path !== '/game/card-guide') {
     router.push('/game/card-guide').catch(() => {/* navigation guard / duplicate — ignore */});
   }
-});
+}, { immediate: true });
 </script>
 
 <style scoped>

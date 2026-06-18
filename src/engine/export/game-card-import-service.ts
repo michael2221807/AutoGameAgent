@@ -112,6 +112,8 @@ export interface ImportServiceDeps {
     nsfwMode: boolean;
     onProgress?: (phase: string, progress: number) => void;
     abortSignal?: AbortSignal;
+    /** D7: optional author hint from bundle.opening.firstRoundSetup — steers the opening style. */
+    firstRoundSetup?: string;
   }) => Promise<{ success: boolean }>;
 }
 
@@ -404,6 +406,7 @@ export class GameCardImportService {
             nsfwMode,
             onProgress: options.onOpeningProgress,
             abortSignal: options.abortSignal,
+            firstRoundSetup: bundle.opening?.firstRoundSetup,
           });
         } catch {
           // Surface this instead of swallowing it silently: the user would otherwise enter a
