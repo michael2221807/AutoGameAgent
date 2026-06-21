@@ -96,6 +96,7 @@
       <button
         v-if="engineState.activeSlotId"
         class="topbar__mode-toggle"
+        data-testid="mode-toggle"
         :title="isWorldBuilding ? $t('layout.topbar.modeToggleWorldBuildingTooltip') : $t('layout.topbar.modeTogglePlayTooltip')"
         :aria-label="$t('layout.topbar.modeToggleAria')"
         :aria-pressed="isWorldBuilding"

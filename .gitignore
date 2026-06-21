@@ -35,6 +35,7 @@ skills-lock.json
 e2e/screenshots/
 e2e/test-results/
 e2e/smoke.spec.ts
+playwright-report/
 .playwright-mcp/
 
 # Local reference only

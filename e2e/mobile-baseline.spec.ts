@@ -1,13 +1,22 @@
 /**
- * Mobile adaptation visual regression baseline.
+ * Mobile adaptation screenshot CAPTURE (NOT golden visual regression).
  *
- * Captures screenshots at three viewport sizes (desktop-1920, mobile-390,
- * mobile-360) for key pages. Run `npx playwright test --update-snapshots`
- * once to create the golden files, then subsequent runs compare against them.
+ * Captures full-page screenshots at three viewport sizes (desktop-1920, mobile-390,
+ * mobile-360) for key pages as a manual eyeballing aid + a crash check (page renders,
+ * #app visible). It deliberately does NOT use Playwright's `toHaveScreenshot()` golden
+ * comparison — there is no pass/fail pixel diff. Golden visual-regression gating is not
+ * adopted (see docs/design/e2e-testing-framework-design.md §7 decision 3); adopting it
+ * would need Docker-normalized baselines + a binary-diff review workflow.
  *
  * Phase 0.4 of docs/design/mobile-adaptation-plan.md.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/base';
+import { disableApi } from './fixtures/disable-api';
+
+// Guarded + offline by construction (apiGuard via base + disableApi before boot).
+test.beforeEach(async ({ page }) => {
+  await disableApi(page);
+});
 
 test.describe('Visual regression baseline — Home', () => {
   test('homepage renders without crash', async ({ page }) => {

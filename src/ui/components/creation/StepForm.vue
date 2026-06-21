@@ -136,6 +136,7 @@ defineExpose({ hasValidationErrors });
         <input
           v-if="field.type === 'text'"
           :id="`field-${field.key}`"
+          :data-testid="`creation-field-${field.key}`"
           :value="asString(formData[field.key])"
           type="text"
           class="form-input"

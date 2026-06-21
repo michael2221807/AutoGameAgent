@@ -146,7 +146,7 @@ function emitCurrent(): void {
       <button class="helper-btn" @click="resetAttributes" :title="$t('creation.attributes.reset')">
         {{ $t('creation.attributes.reset') }}
       </button>
-      <button class="helper-btn" @click="balanceAttributes" :title="$t('creation.attributes.balance')">
+      <button class="helper-btn" data-testid="creation-attr-balance" @click="balanceAttributes" :title="$t('creation.attributes.balance')">
         {{ $t('creation.attributes.balance') }}
       </button>
       <button class="helper-btn" @click="randomizeAttributes" :title="$t('creation.attributes.randomize')">

@@ -579,6 +579,7 @@ function goHome(): void {
       <button
         v-if="!isLastStep"
         class="btn btn-primary"
+        data-testid="creation-next"
         :disabled="!canProceed || isFinalizing"
         @click="onNext"
       >
@@ -588,6 +589,7 @@ function goHome(): void {
       <button
         v-else
         class="btn btn-success"
+        data-testid="creation-start"
         :disabled="!canProceed || isFinalizing"
         @click="onFinalize"
       >

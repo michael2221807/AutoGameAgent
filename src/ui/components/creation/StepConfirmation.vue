@@ -344,6 +344,7 @@ onMounted(() => {
         </div>
         <button
           class="toggle-switch"
+          data-testid="creation-enhanced-toggle"
           :class="{ active: enhancedOpening }"
           role="switch"
           :aria-checked="enhancedOpening"

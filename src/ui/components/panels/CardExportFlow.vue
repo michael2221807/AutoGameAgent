@@ -582,7 +582,7 @@ function downloadBlob(blob: Blob, name: string): void {
           <h3 class="cef-sec__title">{{ t('save.export.meta.sectionTitle') }}</h3>
           <label class="cef-field">
             <span class="cef-field__label">{{ t('save.export.meta.titleLabel') }} *</span>
-            <input v-model="title" class="cef-input" type="text" :placeholder="t('save.export.meta.titlePlaceholder')" />
+            <input v-model="title" class="cef-input" type="text" data-testid="card-export-title" :placeholder="t('save.export.meta.titlePlaceholder')" />
           </label>
           <label class="cef-field">
             <span class="cef-field__label">{{ t('save.export.meta.descLabel') }}</span>
@@ -642,7 +642,7 @@ function downloadBlob(blob: Blob, name: string): void {
 
     <template #footer>
       <button type="button" class="btn-modal btn-modal--secondary" @click="close">{{ t('save.export.cancel') }}</button>
-      <button type="button" class="btn-modal btn-modal--primary" :disabled="!canExport" @click="doExport">
+      <button type="button" class="btn-modal btn-modal--primary" data-testid="card-export-submit" :disabled="!canExport" @click="doExport">
         {{ exporting ? t('save.export.exporting') : t('save.export.exportBtn') }}
       </button>
     </template>

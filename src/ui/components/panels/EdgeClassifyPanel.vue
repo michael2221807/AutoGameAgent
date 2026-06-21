@@ -239,7 +239,7 @@ function cancelClassify(): void {
       <!-- global bulk selection -->
       <div class="ecp-bulk">
         <span class="ecp-bulk__label">{{ t('save.toCard.classify.bulkLabel') }}</span>
-        <button type="button" class="ecp-chip" @click="selectAll">{{ t('save.toCard.classify.selectAll') }}</button>
+        <button type="button" class="ecp-chip" data-testid="edge-select-all" @click="selectAll">{{ t('save.toCard.classify.selectAll') }}</button>
         <button type="button" class="ecp-chip" @click="selectNone">{{ t('save.toCard.classify.selectNone') }}</button>
         <button type="button" class="ecp-chip" @click="invertAll">{{ t('save.toCard.classify.invert') }}</button>
       </div>

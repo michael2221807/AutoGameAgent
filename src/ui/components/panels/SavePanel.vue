@@ -890,7 +890,7 @@ const showSettings = ref(false);
       <header class="panel-header">
         <h2 class="panel-title">{{ $t('save.title') }}</h2>
         <div class="header-actions">
-          <button class="btn btn--ghost btn--sm" @click="showSettings = !showSettings" :class="{ 'btn--ghost-active': showSettings }" :title="$t('save.settingsTitle')">
+          <button class="btn btn--ghost btn--sm" data-testid="save-settings-toggle" @click="showSettings = !showSettings" :class="{ 'btn--ghost-active': showSettings }" :title="$t('save.settingsTitle')">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
           </button>
           <button class="btn btn--primary btn--sm" type="button" @click="openNewSlotModal">{{ $t('save.newSlot') }}</button>
@@ -1009,11 +1009,11 @@ const showSettings = ref(false);
             </label>
             <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.includeRefHint') }}</p>
             <div class="backup-btns">
-              <button class="btn btn--secondary btn--sm" :disabled="isExportingBackup" @click="exportFullBackup">
+              <button class="btn btn--secondary btn--sm" data-testid="backup-export" :disabled="isExportingBackup" @click="exportFullBackup">
                 <span v-if="isExportingBackup" class="spinner" />
                 {{ isExportingBackup ? $t('save.backup.exportBusy') : $t('save.backup.exportBtn') }}
               </button>
-              <button class="btn btn--secondary btn--sm" :disabled="isImportingBackup" @click="openImportFilePicker">
+              <button class="btn btn--secondary btn--sm" data-testid="backup-import" :disabled="isImportingBackup" @click="openImportFilePicker">
                 <span v-if="isImportingBackup" class="spinner" />
                 {{ isImportingBackup ? $t('save.backup.restoreBusy') : $t('save.backup.restoreBtn') }}
               </button>
@@ -1080,6 +1080,7 @@ const showSettings = ref(false);
         <div
           v-for="slot in slots"
           :key="slot.slotId"
+          :data-testid="`save-slot-${slot.slotId}`"
           :class="['slot-card', { 'slot-card--active': isActiveSlot(slot.slotId) }]"
         >
           <div class="slot-header">
@@ -1115,6 +1116,7 @@ const showSettings = ref(false);
             <button
               class="action-btn action-btn--tocard"
               type="button"
+              :data-testid="`save-slot-tocard-${slot.slotId}`"
               :disabled="!slot.lastSavedAt"
               @click="openToCard(slot.slotId)"
             >{{ $t('save.slot.toCard') }}</button>
@@ -1234,7 +1236,7 @@ const showSettings = ref(false);
             <li>{{ $t('save.import.warningFullList4') }}</li>
           </ul>
           <label class="import-acknowledge">
-            <input type="checkbox" v-model="fullImportAcknowledged" />
+            <input type="checkbox" v-model="fullImportAcknowledged" data-testid="backup-acknowledge" />
             <span>{{ $t('save.import.acknowledge') }}</span>
           </label>
         </div>
@@ -1252,6 +1254,7 @@ const showSettings = ref(false);
         >{{ $t('save.import.cancel') }}</button>
         <button
           class="btn"
+          data-testid="backup-confirm"
           :class="pendingImportInfo?.bundleType === 'full' ? 'btn--danger' : 'btn--primary'"
           :disabled="isImportingBackup || (pendingImportInfo?.bundleType === 'full' && !fullImportAcknowledged)"
           @click="executeImport"

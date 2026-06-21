@@ -467,7 +467,7 @@ const errorText = computed(() => (errorCode.value ? t(`save.import.card.error.${
           <p class="cif-drop__main">{{ t('save.import.card.upload.dropHere') }}</p>
           <button type="button" class="cif-drop__btn" @click.stop="pickFile">{{ t('save.import.card.upload.pick') }}</button>
           <p class="cif-drop__hint">{{ t('save.import.card.upload.accept') }}</p>
-          <input ref="fileInput" type="file" accept=".aga-card" class="cif-file" @change="onFileInput" />
+          <input ref="fileInput" type="file" accept=".aga-card" class="cif-file" data-testid="card-import-file" @change="onFileInput" />
         </div>
         <p class="cif-note">{{ t('save.import.card.upload.note') }}</p>
         <p v-if="reading" class="cif-reading">{{ t('save.import.card.upload.reading') }}</p>
@@ -648,7 +648,7 @@ const errorText = computed(() => (errorCode.value ? t(`save.import.card.error.${
       <!-- ③ preview -->
       <template v-else-if="stage === 'preview'">
         <button type="button" class="btn-modal btn-modal--secondary" @click="close">{{ t('save.import.card.actions.cancel') }}</button>
-        <button type="button" class="btn-modal btn-modal--primary" @click="fromPreview">{{ t('save.import.card.actions.continue') }}</button>
+        <button type="button" class="btn-modal btn-modal--primary" data-testid="card-import-next" @click="fromPreview">{{ t('save.import.card.actions.continue') }}</button>
       </template>
       <!-- ④ nsfw -->
       <template v-else-if="stage === 'nsfw'">
@@ -658,7 +658,7 @@ const errorText = computed(() => (errorCode.value ? t(`save.import.card.error.${
       <!-- ⑤ protagonist -->
       <template v-else-if="stage === 'protagonist'">
         <button type="button" class="btn-modal btn-modal--secondary" @click="backTo('preview')">{{ t('save.import.card.actions.back') }}</button>
-        <button type="button" class="btn-modal btn-modal--primary" :disabled="templateNameMissing" @click="stage = 'global'">{{ t('save.import.card.actions.continue') }}</button>
+        <button type="button" class="btn-modal btn-modal--primary" data-testid="card-import-next" :disabled="templateNameMissing" @click="stage = 'global'">{{ t('save.import.card.actions.continue') }}</button>
       </template>
       <!-- ⑤c blank reject -->
       <template v-else-if="stage === 'blankRejected'">
@@ -667,12 +667,12 @@ const errorText = computed(() => (errorCode.value ? t(`save.import.card.error.${
       <!-- ⑥ global -->
       <template v-else-if="stage === 'global'">
         <button type="button" class="btn-modal btn-modal--secondary" @click="backTo('protagonist')">{{ t('save.import.card.actions.back') }}</button>
-        <button type="button" class="btn-modal btn-modal--primary" @click="doImport">{{ t('save.import.card.actions.import') }}</button>
+        <button type="button" class="btn-modal btn-modal--primary" data-testid="card-import-submit" @click="doImport">{{ t('save.import.card.actions.import') }}</button>
       </template>
       <!-- ⑧ success -->
       <template v-else-if="stage === 'success'">
         <button type="button" class="btn-modal btn-modal--secondary" @click="stayHome">{{ t('save.import.card.actions.stay') }}</button>
-        <button type="button" class="btn-modal btn-modal--primary" @click="enterGame">{{ t('save.import.card.actions.enter') }}</button>
+        <button type="button" class="btn-modal btn-modal--primary" data-testid="card-import-enter" @click="enterGame">{{ t('save.import.card.actions.enter') }}</button>
       </template>
       <!-- ✕ error -->
       <template v-else-if="stage === 'error'">
