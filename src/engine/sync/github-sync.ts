@@ -18,7 +18,7 @@
  */
 
 import type { BackupService } from '../persistence/backup-service';
-import { pack, unpack, type ChunkManifest } from './chunked-bundle-packer';
+import { packChunks, unpack, type ChunkManifest } from './chunked-bundle-packer';
 
 // ─── 常量 ───
 
@@ -96,33 +96,16 @@ export class GitHubSyncService {
     const { owner, repo } = this.resolveTarget();
 
     emit('uploading', '正在导出存档…');
-    let json: string;
+    let exportBlob: Blob;
     try {
-      const exportBlob = await this.backup.exportAll();
-      json = await exportBlob.text();
+      exportBlob = await this.backup.exportAll();
     } catch (err) {
       throw stageError('导出存档', err);
     }
+    const approxMB = Math.round(exportBlob.size / 1_048_576);
 
-    // Compress the ENTIRE bundle into chunks FIRST, before any network upload.
-    // This is the original (proven) ordering: all CompressionStream work happens
-    // up front in one phase, then a separate upload phase does the fetches.
-    // Interleaving compression with fetch() PUTs (the streaming variant) caused
-    // "Failed to fetch" mid-run on large saves and, worse, left orphan chunks +
-    // an un-updated manifest when compression failed after some chunks were
-    // already uploaded. Eager packing means a compression failure throws BEFORE
-    // anything is written — the cloud copy is never touched.
-    emit('uploading', '正在压缩…');
-    let manifest: ChunkManifest;
-    let chunks: Map<string, Blob>;
-    try {
-      ({ manifest, chunks } = await pack(json));
-    } catch (err) {
-      throw stageError(`压缩存档（约 ${Math.round(json.length / 1_048_576)}MB）`, err);
-    }
-    const total = chunks.size;
-
-    // Batch-fetch existing file SHAs (chunks at a shared path are updated in place).
+    // Batch-fetch existing file SHAs (chunks at a shared path are updated in
+    // place). Must run BEFORE the first chunk PUT, so it is fetched up front.
     let existingFiles: Array<{ path: string; sha: string }>;
     try {
       existingFiles = await this.listV2Files(owner, repo);
@@ -131,16 +114,47 @@ export class GitHubSyncService {
     }
     const shaMap = new Map(existingFiles.map(f => [f.path, f.sha]));
 
-    let i = 0;
-    for (const [path, blob] of chunks) {
-      i++;
-      emit('uploading', `正在上传分块 ${i}/${total}…`);
+    // STREAMING pack + upload: compress ONE chunk, PUT it, release it, then
+    // compress the next — memory stays bounded to ~one chunk instead of holding
+    // the whole compressed set. The eager pack() held every compressed chunk in a
+    // Map and OOM-crashed the tab on 110MB+ base64-image saves; feeding the Blob
+    // (not exportBlob.text()) also keeps the decoded JSON string generator-local
+    // so the caller never holds a second ~100MB copy.
+    //
+    // Safe to stream now — the two reasons it was once reverted to eager are both
+    // resolved: (1) the gzip "Failed to fetch" that forced eager ordering was
+    // fixed by the reader/writer gzipCompress rewrite; (2) the manifest is still
+    // written LAST as the commit point, so a mid-stream compression OR network
+    // failure leaves the OLD manifest → OLD chunks intact (download stays correct
+    // via the per-chunk SHA-256 check); any new chunks already PUT are harmless
+    // orphans removed by the next successful upload's cleanupStaleFromList.
+    emit('uploading', '正在压缩并上传…');
+    const gen = packChunks(exportBlob);
+    let res: IteratorResult<{ path: string; blob: Blob }, ChunkManifest>;
+    try {
+      res = await gen.next();
+    } catch (err) {
+      throw stageError(`压缩存档（约 ${approxMB}MB）`, err);
+    }
+    let uploaded = 0;
+    while (!res.done) {
+      const { path, blob } = res.value;
+      uploaded++;
+      emit('uploading', `正在压缩并上传分块 ${uploaded}…`);
       try {
         await this.uploadFile(owner, repo, path, await blobToBase64(blob), shaMap.get(path));
       } catch (err) {
         throw stageError(`上传分块 ${path}`, err);
       }
+      // Advance the generator only after the current chunk is uploaded + released,
+      // so the next chunk's compression peak never overlaps a retained prior chunk.
+      try {
+        res = await gen.next();
+      } catch (err) {
+        throw stageError(`压缩存档（约 ${approxMB}MB）`, err);
+      }
     }
+    const manifest = res.value;
 
     // The manifest is written LAST so it is the commit point: if any chunk PUT
     // above fails, the cloud still has the OLD manifest pointing at OLD chunks,

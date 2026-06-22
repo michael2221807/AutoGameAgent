@@ -31,13 +31,19 @@ export class PromptStorage {
   /** 获取（或首次打开）DB 连接 */
   private getDB(): Promise<IDBPDatabase> {
     if (!this.dbPromise) {
-      this.dbPromise = openDB(DB_NAME, 1, {
+      const opening = openDB(DB_NAME, 1, {
         upgrade(db) {
           if (!db.objectStoreNames.contains('prompts')) {
             db.createObjectStore('prompts');
           }
         },
+        // 连接被浏览器异常关闭（存储驱逐 / 另一标签页 deleteDatabase）时丢弃
+        // 缓存句柄，下一次 getDB() 自动重开，而非一直拿着死句柄报错。
+        terminated: () => { if (this.dbPromise === opening) this.dbPromise = null; },
       });
+      // open 自身失败时不要把 rejected promise 永久缓存。
+      opening.catch(() => { if (this.dbPromise === opening) this.dbPromise = null; });
+      this.dbPromise = opening;
     }
     return this.dbPromise;
   }

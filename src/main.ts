@@ -105,6 +105,7 @@ import type { ComputedFieldConfig, ThresholdTriggerConfig, IntegrityRule, Effect
 import { ProfileManager } from './engine/persistence/profile-manager';
 import { SaveManager } from './engine/persistence/save-manager';
 import { migrationRegistry } from './engine/persistence/migration-registry';
+import { requestPersistentStorage } from './engine/persistence/idb-adapter';
 import { BackupService } from './engine/persistence/backup-service';
 import { GameCardExportService } from './engine/export/game-card-export-service';
 import { GameCardImportService } from './engine/export/game-card-import-service';
@@ -862,6 +863,11 @@ async function bootstrap(): Promise<void> {
 
   app.mount('#app');
   eventBus.emit('engine:initialized', { packId: pack?.manifest.id ?? null });
+
+  // 申请持久化存储：避免本源 IndexedDB 在磁盘紧张 / LRU 驱逐下被浏览器自动清空。
+  // 放在 mount 之后，保证授予被拒时的警告 toast 能被已挂载的 Toast 组件显示。
+  // 不 await —— 申请结果不阻断后续启动逻辑。
+  void requestPersistentStorage();
 
   // Load world books when a game profile becomes active (fixes: first round with empty books)
   const engineState = useEngineStateStore();

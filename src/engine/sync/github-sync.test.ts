@@ -196,15 +196,15 @@ describe('upload — progress callbacks', () => {
     const messages = statuses.map(s => s.message);
 
     expect(statuses[0]).toEqual({ stage: 'uploading', message: '正在导出存档…' });
-    expect(messages.some(m => m === '正在压缩…')).toBe(true);
-    expect(messages.some(m => m.includes('正在上传分块'))).toBe(true);
+    expect(messages.some(m => m === '正在压缩并上传…')).toBe(true);
+    expect(messages.some(m => m.includes('正在压缩并上传分块'))).toBe(true);
     expect(messages.some(m => m === '正在更新索引…')).toBe(true);
     expect(statuses[statuses.length - 1]).toEqual({ stage: 'done', message: '上传完成' });
   });
 
-  it('chunk progress shows correct N/total format', async () => {
-    // Eager upload compresses everything first, so the chunk total is known and
-    // progress is "i/N".
+  it('chunk progress shows a running per-chunk count', async () => {
+    // Streaming upload compresses + PUTs one chunk at a time, so the total chunk
+    // count is not known up front — progress is a running "分块 N" counter.
     const backup = createMockBackup();
     const sync = new GitHubSyncService(backup as never);
     const statuses: SyncStatus[] = [];
@@ -213,11 +213,11 @@ describe('upload — progress callbacks', () => {
 
     const chunkMsgs = statuses
       .map(s => s.message)
-      .filter(m => m.includes('正在上传分块'));
+      .filter(m => m.includes('正在压缩并上传分块'));
 
     expect(chunkMsgs.length).toBeGreaterThanOrEqual(2); // state + img
-    expect(chunkMsgs[0]).toMatch(/正在上传分块 1\/\d+…/);
-    expect(chunkMsgs[1]).toMatch(/正在上传分块 2\/\d+…/);
+    expect(chunkMsgs[0]).toMatch(/正在压缩并上传分块 1…/);
+    expect(chunkMsgs[1]).toMatch(/正在压缩并上传分块 2…/);
   });
 });
 

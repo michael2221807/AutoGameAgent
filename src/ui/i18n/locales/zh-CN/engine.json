@@ -17,7 +17,8 @@
       "imageTasksRecovered": "{count} 个图像生成任务因页面刷新中断",
       "missingMidTermMemory": "AI 未按要求输出本回合中期记忆 (round {round})，已插入占位",
       "fieldRepairFailed": "字段补齐/记忆维护失败（不影响本回合）",
-      "missingFieldsDetected": "检测到 {count} 项缺失的扩展字段，将自动补齐"
+      "missingFieldsDetected": "检测到 {count} 项缺失的扩展字段，将自动补齐",
+      "storageNotPersisted": "浏览器未授予持久化存储，存档可能在空间不足时被自动清除，请及时进行云备份"
     },
     "progress": {
       "stage": "[{name}]",

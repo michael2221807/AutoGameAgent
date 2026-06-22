@@ -5,6 +5,7 @@
  * 仅在开发模式下可用（Vite dev server 提供 /api/lan-save 端点）。
  * GitHub Pages 上此功能不可用（无 dev server），UI 会自动隐藏。
  */
+// App doc: docs/user-guide/cloud-sync.md（方式三：内网中继）· docs/user-guide/pages/game-save.md §3.3
 
 import type { BackupService } from '../persistence/backup-service';
 
@@ -44,7 +45,9 @@ export class LanSyncService {
     const res = await fetch('/api/lan-save', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: await blob.text(),
+      // Pass the Blob directly — fetch streams its bytes, so we avoid
+      // materializing the entire (~100MB+) bundle as a JS string via .text().
+      body: blob,
     });
     if (!res.ok) throw new Error(`LAN 上传失败: ${res.status}`);
     return res.json() as Promise<{ size: number; updatedAt: string }>;

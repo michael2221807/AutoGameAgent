@@ -26,7 +26,7 @@ export class WorldBookStorage {
 
   private getDB(): Promise<IDBPDatabase> {
     if (!this.dbPromise) {
-      this.dbPromise = openDB(DB_NAME, DB_VERSION, {
+      const opening = openDB(DB_NAME, DB_VERSION, {
         upgrade(db) {
           if (!db.objectStoreNames.contains('worldbooks')) {
             db.createObjectStore('worldbooks');
@@ -38,7 +38,13 @@ export class WorldBookStorage {
             db.createObjectStore('preset-groups');
           }
         },
+        // 连接被浏览器异常关闭（存储驱逐 / 另一标签页 deleteDatabase）时丢弃
+        // 缓存句柄，下一次 getDB() 自动重开，而非一直拿着死句柄报错。
+        terminated: () => { if (this.dbPromise === opening) this.dbPromise = null; },
       });
+      // open 自身失败时不要把 rejected promise 永久缓存。
+      opening.catch(() => { if (this.dbPromise === opening) this.dbPromise = null; });
+      this.dbPromise = opening;
     }
     return this.dbPromise;
   }

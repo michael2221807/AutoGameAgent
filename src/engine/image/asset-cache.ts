@@ -6,20 +6,33 @@
  *
  * Schema: single object store `image-assets`, keyed by asset ID.
  * Each entry stores: { id, blob, metadata }.
+ *
+ * 连接生命周期加固（2026-06-21）：注册 onclose/onversionchange 在连接被浏览器
+ * 异常关闭（存储驱逐 / 另一标签页 deleteDatabase）时丢弃句柄；所有操作经
+ * `withRetry` 包裹，遇「连接已关闭」类错误自动重开一次再试，而非永久报错到刷新为止。
  */
+// App doc: docs/user-guide/pages/game-save.md §3.2 (数据持久化与浏览器驱逐) · docs/user-guide/pages/image.md
 import type { ImageAsset } from './types';
 
 const DB_NAME = 'aga_image_cache';
 const DB_VERSION = 1;
 const STORE_NAME = 'image-assets';
 
+/** 连接被关闭后用于触发 withRetry 一次重连的可重试错误 */
+function closedConnectionError(): DOMException {
+  return new DOMException('Image cache connection is closed', 'InvalidStateError');
+}
+
 export class ImageAssetCache {
   private db: IDBDatabase | null = null;
+  /** in-flight open() 去重 —— 避免并发/重试时重复 indexedDB.open() 泄漏连接句柄 */
+  private openingPromise: Promise<void> | null = null;
 
   async open(): Promise<void> {
     if (this.db) return;
+    if (this.openingPromise) return this.openingPromise;
 
-    return new Promise((resolve, reject) => {
+    this.openingPromise = new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onupgradeneeded = () => {
@@ -30,29 +43,58 @@ export class ImageAssetCache {
       };
 
       request.onsuccess = () => {
-        this.db = request.result;
+        const db = request.result;
+        // 连接被浏览器异常关闭（存储驱逐 / 另一标签页 deleteDatabase）→ 丢弃句柄，下次重开。
+        db.onclose = () => { if (this.db === db) this.db = null; };
+        // 另一标签页要求升级/删库 → 主动关闭让出，并丢弃句柄，避免阻塞对方。
+        db.onversionchange = () => { db.close(); if (this.db === db) this.db = null; };
+        this.db = db;
         resolve();
       };
 
       request.onerror = () => reject(request.error);
-    });
+    }).finally(() => { this.openingPromise = null; });
+
+    return this.openingPromise;
+  }
+
+  /** 遇「连接已关闭/被删」类错误时丢弃句柄并重开一次再试 */
+  private async withRetry<T>(fn: (db: IDBDatabase) => Promise<T>): Promise<T> {
+    await this.open();
+    try {
+      // this.db 可能在 open() 之后、fn() 之前被 onversionchange 置空 —— 显式读出校验，
+      // null 时抛可重试错误，而不是把 null 传进 .transaction()。
+      const db = this.db;
+      if (!db) throw closedConnectionError();
+      return await fn(db);
+    } catch (err) {
+      if (
+        err instanceof DOMException &&
+        (err.name === 'InvalidStateError' || err.name === 'NotFoundError')
+      ) {
+        this.db = null;
+        await this.open();
+        const db = this.db;
+        if (!db) throw closedConnectionError();
+        return fn(db);
+      }
+      throw err;
+    }
   }
 
   async store(asset: ImageAsset, blob: Blob): Promise<void> {
-    await this.open();
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(STORE_NAME, 'readwrite');
+    return this.withRetry((db) => new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       store.put({ id: asset.id, blob, metadata: asset });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
-    });
+    }));
   }
 
   async retrieve(assetId: string): Promise<{ blob: Blob; metadata: ImageAsset } | null> {
-    await this.open();
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(STORE_NAME, 'readonly');
+    return this.withRetry((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.get(assetId);
       request.onsuccess = () => {
@@ -60,24 +102,22 @@ export class ImageAssetCache {
         resolve(result ? { blob: result.blob, metadata: result.metadata } : null);
       };
       request.onerror = () => reject(request.error);
-    });
+    }));
   }
 
   async delete(assetId: string): Promise<void> {
-    await this.open();
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(STORE_NAME, 'readwrite');
+    return this.withRetry((db) => new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       store.delete(assetId);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
-    });
+    }));
   }
 
   async listAll(): Promise<ImageAsset[]> {
-    await this.open();
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(STORE_NAME, 'readonly');
+    return this.withRetry((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
       request.onsuccess = () => {
@@ -85,18 +125,17 @@ export class ImageAssetCache {
         resolve(entries.map((e) => e.metadata));
       };
       request.onerror = () => reject(request.error);
-    });
+    }));
   }
 
   async clear(): Promise<void> {
-    await this.open();
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(STORE_NAME, 'readwrite');
+    return this.withRetry((db) => new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       store.clear();
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
-    });
+    }));
   }
 
   /**
@@ -105,30 +144,32 @@ export class ImageAssetCache {
    */
   async exportByIds(assetIds: Set<string>): Promise<Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }>> {
     if (assetIds.size === 0) return [];
-    await this.open();
-    const results: Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }> = [];
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const request = store.openCursor();
-      const pending: Promise<void>[] = [];
+    return this.withRetry((db) => {
+      // results 在 fn 内部声明 —— 重试时从空数组重新开始，避免重复累积。
+      const results: Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }> = [];
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.openCursor();
+        const pending: Promise<void>[] = [];
 
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (cursor) {
-          const entry = cursor.value as { id: string; blob: Blob; metadata: ImageAsset };
-          if (assetIds.has(entry.id)) {
-            pending.push(
-              blobToBase64(entry.blob).then((base64) => {
-                results.push({ id: entry.id, metadata: entry.metadata, base64, mimeType: entry.blob.type || 'image/png' });
-              }),
-            );
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (cursor) {
+            const entry = cursor.value as { id: string; blob: Blob; metadata: ImageAsset };
+            if (assetIds.has(entry.id)) {
+              pending.push(
+                blobToBase64(entry.blob).then((base64) => {
+                  results.push({ id: entry.id, metadata: entry.metadata, base64, mimeType: entry.blob.type || 'image/png' });
+                }),
+              );
+            }
+            cursor.continue();
           }
-          cursor.continue();
-        }
-      };
-      tx.oncomplete = () => { Promise.all(pending).then(() => resolve(results)).catch(reject); };
-      tx.onerror = () => reject(tx.error);
+        };
+        tx.oncomplete = () => { Promise.all(pending).then(() => resolve(results)).catch(reject); };
+        tx.onerror = () => reject(tx.error);
+      });
     });
   }
 
