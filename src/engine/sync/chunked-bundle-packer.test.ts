@@ -397,9 +397,31 @@ describe('packChunks — streaming generator', () => {
     const { manifest, chunks } = await collectChunks(packChunks(blob));
     // The Blob path must yield the exact same checksum as the string path.
     expect(manifest.bundleChecksum).toBe(await sha256String(json));
+    // ...and report totalSizeBytes in the SAME unit as the string path
+    // (json.length, UTF-16 code units) — NOT the Blob's UTF-8 byte size — so the
+    // displayed cloud "存档大小" does not jump when upload() feeds a Blob.
+    expect(manifest.totalSizeBytes).toBe(json.length);
 
     const restored = await unpack(manifest, chunks);
     expect(JSON.parse(restored)).toEqual(JSON.parse(json));
+  });
+
+  it('reports totalSizeBytes consistently for string vs Blob even with CJK content (no size-display jump)', async () => {
+    // Regression (2026-06-23): feeding a Blob once measured totalSizeBytes as the
+    // UTF-8 byte size, which for CJK is ~3x the UTF-16 code-unit count — making the
+    // cloud "存档大小" jump (a real user report: ~120000KB → ~165800KB, +38%) on the
+    // first post-streaming upload even though the stored chunks were byte-identical.
+    const json = JSON.stringify({ note: '修真世界纪元'.repeat(2000), pad: 'asciiPADDING'.repeat(1000) });
+    const blob = new Blob([json], { type: 'application/json' });
+    // Sanity: this mixed CJK+ASCII content really does differ between the two measures.
+    expect(blob.size).toBeGreaterThan(json.length);
+
+    const fromString = await collectChunks(packChunks(json));
+    const fromBlob = await collectChunks(packChunks(blob));
+
+    expect(fromString.manifest.totalSizeBytes).toBe(json.length);
+    expect(fromBlob.manifest.totalSizeBytes).toBe(json.length); // NOT blob.size (UTF-8)
+    expect(fromBlob.manifest.totalSizeBytes).toBe(fromString.manifest.totalSizeBytes);
   });
 
   it('produces multiple image chunks for a large bundle and unpacks cleanly', async () => {

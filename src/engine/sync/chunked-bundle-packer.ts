@@ -68,18 +68,24 @@ export async function* packChunks(
   source: string | Blob,
 ): AsyncGenerator<{ path: string; blob: Blob }, ChunkManifest, void> {
   let json: string;
-  let totalSizeBytes: number;
   if (typeof source === 'string') {
     json = source;
-    totalSizeBytes = json.length; // approximate (UTF-16 code units) for legacy/test callers
   } else {
-    totalSizeBytes = source.size; // exact UTF-8 byte length
     json = await source.text();
     // Release the source Blob immediately — only the decoded string is needed
     // now. With the caller also dropping its reference this frees ~100MB+
     // before the parse/compress peak.
     source = '';
   }
+  // `totalSizeBytes` is a DISPLAY-ONLY uncompressed-size estimate (getCloudInfo
+  // renders it as "云端 … KB"). Measure it as `json.length` (UTF-16 code units) for
+  // BOTH string and Blob inputs so the streaming Blob path reports the SAME number
+  // the legacy eager string path always did. Using the Blob's UTF-8 `.size` here
+  // counted each CJK char as 3 bytes vs 1, which made the displayed save size jump
+  // on the first upload after switching upload() to feed a Blob — alarming and
+  // inconsistent with every previously-uploaded save, even though the stored data
+  // (chunks + checksums) is byte-identical.
+  const totalSizeBytes = json.length;
   const bundleChecksum = await sha256String(json);
   let parsed = JSON.parse(json) as Record<string, unknown>;
   // Release the (potentially 100MB+) source string before the compress phase.
