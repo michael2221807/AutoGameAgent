@@ -78,6 +78,9 @@
   "plot.node.tierGuiding": "Tier {tier} guiding",
 
   "plot.arc.newArcBtn": "New Arc",
+  "plot.arc.switcherLabel": "Switch plot arc",
+  "plot.arc.untitled": "Untitled arc",
+  "plot.arc.activeBlocked": "An arc is already active. Complete or abandon it before activating another.",
   "plot.gauge.editBtn": "Edit",
   "plot.gauge.deleteBtn": "Delete",
 

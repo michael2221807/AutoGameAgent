@@ -78,6 +78,9 @@
   "plot.node.tierGuiding": "Tier {tier} 引导中",
 
   "plot.arc.newArcBtn": "新建弧线",
+  "plot.arc.switcherLabel": "剧情弧线切换",
+  "plot.arc.untitled": "未命名弧线",
+  "plot.arc.activeBlocked": "已有活跃弧线，请先完成或放弃当前弧线再激活新弧线",
   "plot.gauge.editBtn": "编辑",
   "plot.gauge.deleteBtn": "删除",
 

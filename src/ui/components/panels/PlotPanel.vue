@@ -36,8 +36,21 @@ const evaluatingFromState = useValue<boolean | undefined>(
   DEFAULT_ENGINE_PATHS.plotDirection + '._evaluating',
 );
 
+// Which arc the panel currently shows. Explicit user navigation (arc switcher,
+// or auto-select after creating a new arc) wins over the active-arc default.
+// Without this, a 2nd arc created after the first completed was invisible —
+// displayArc always fell back to arcs[0]. Keyed by id so it survives state
+// reloads (rollback / import / save load). Declared before the immediate watch
+// below because that watch reads it on setup.
+const selectedArcId = ref<string | null>(null);
+
 watch(plotState, (v) => {
   plotStore.loadFromState(v);
+  // Drop a selection that no longer resolves (e.g. after import / rollback /
+  // loading a different game) so displayArc falls back cleanly.
+  if (selectedArcId.value && !plotStore.arcs.some(a => a.id === selectedArcId.value)) {
+    selectedArcId.value = null;
+  }
 }, { immediate: true });
 
 watch(evalLogFromState, (logs) => {
@@ -82,6 +95,10 @@ async function createArc(): Promise<void> {
   showCreateArc.value = false;
 
   const arc = plotStore.createArc(title, synopsis);
+  // Switch the panel to the new arc immediately so the player sees decompose
+  // progress and the AI-generated nodes land on it — instead of the view
+  // staying stuck on the previously-displayed arc (arcs[0]).
+  selectedArcId.value = arc.id;
   persist();
 
   // AI decomposition runs in background with progress shown in main panel
@@ -121,15 +138,35 @@ async function createArc(): Promise<void> {
 }
 
 const displayArc = computed<PlotArc | null>(() => {
+  if (selectedArcId.value) {
+    const sel = plotStore.arcs.find(a => a.id === selectedArcId.value);
+    if (sel) return sel;
+  }
   if (activeArc.value) return activeArc.value;
   return plotStore.arcs[0] ?? null;
 });
+
+function selectArc(arcId: string): void {
+  selectedArcId.value = arcId;
+}
 
 function activateCurrentArc(): void {
   const arc = displayArc.value;
   if (!arc) return;
   const ok = plotStore.activateArc(arc.id, currentRound.value ?? 0);
-  if (ok) persist();
+  if (ok) {
+    persist();
+  } else {
+    // The activate button only shows for draft/abandoned arcs with nodes, so the
+    // only realistic failure is the single-active-arc constraint. Surface it
+    // instead of silently no-opping (otherwise the button looks broken).
+    eventBus.emit('ui:toast', {
+      type: 'info',
+      i18nKey: 'plot.arc.activeBlocked',
+      message: 'An arc is already active. Complete or abandon it before activating another.',
+      duration: 3500,
+    });
+  }
 }
 
 function abandonCurrentArc(): void {
@@ -137,12 +174,14 @@ function abandonCurrentArc(): void {
   if (!arc) return;
   plotStore.abandonArc(arc.id);
   persist();
-  persist();
 }
 
 function deleteCurrentArc(): void {
   const arc = displayArc.value;
   if (!arc || arc.status === 'active') return;
+  // Clear the selection before mutating the store so displayArc never briefly
+  // points at a just-removed arc id.
+  if (selectedArcId.value === arc.id) selectedArcId.value = null;
   plotStore.deleteArc(arc.id);
   persist();
 }
@@ -438,6 +477,21 @@ function rejectAdvancement(): void {
 
       <!-- Active Arc Display -->
       <template v-if="displayArc">
+        <!-- Arc switcher: browse/switch between multiple arcs (single-active still enforced) -->
+        <nav v-if="plotStore.arcs.length >= 2" class="arc-switcher" :aria-label="$t('plot.arc.switcherLabel')">
+          <button
+            v-for="arc in plotStore.arcs"
+            :key="arc.id"
+            type="button"
+            :class="['arc-chip', { 'arc-chip--selected': arc.id === displayArc.id }]"
+            :title="arc.title || $t('plot.arc.untitled')"
+            @click="selectArc(arc.id)"
+          >
+            <span :class="['arc-chip__dot', `arc-chip__dot--${arc.status}`]" />
+            <span class="arc-chip__title">{{ arc.title || $t('plot.arc.untitled') }}</span>
+          </button>
+        </nav>
+
         <section class="arc-header">
           <div class="arc-title-row">
             <template v-if="editingArcTitle">
@@ -808,6 +862,62 @@ function rejectAdvancement(): void {
 }
 .header-btn:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* Arc Switcher — horizontal chip strip for multi-arc navigation */
+.arc-switcher {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+.arc-switcher::-webkit-scrollbar { height: 4px; }
+.arc-switcher::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+.arc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 160px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary, #8888a0);
+  font-size: 12px;
+  font-family: var(--font-serif-cjk, serif);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.arc-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text, #e0e0e6);
+}
+.arc-chip--selected {
+  background: rgba(140, 184, 140, 0.14);
+  color: var(--color-text, #e0e0e6);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-sage-400) 35%, transparent);
+}
+.arc-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--color-text-secondary, #8888a0);
+}
+.arc-chip__dot--draft     { background: rgba(255, 255, 255, 0.35); }
+.arc-chip__dot--active    { background: var(--color-sage-400, #8cb88c); box-shadow: 0 0 5px color-mix(in oklch, var(--color-sage-400) 50%, transparent); }
+.arc-chip__dot--completed { background: var(--color-amber-400, #f59e0b); }
+.arc-chip__dot--abandoned { background: var(--color-danger, #c0392b); }
+.arc-chip__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Arc Header */
