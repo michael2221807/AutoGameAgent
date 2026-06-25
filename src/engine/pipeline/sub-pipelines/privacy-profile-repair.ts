@@ -27,6 +27,7 @@
 import type { StateManager } from '../../core/state-manager';
 import type { CommandExecutor } from '../../core/command-executor';
 import type { AIService } from '../../ai/ai-service';
+import { AI_SETTINGS_STORAGE_KEY } from '../../ai/ai-service';
 import type { AIMessage } from '../../ai/types';
 import type { ResponseParser } from '../../ai/response-parser';
 import type { PromptAssembler } from '../../prompt/prompt-assembler';
@@ -46,7 +47,7 @@ import {
 } from '../../validators/privacy-profile-validator';
 
 /** 重试次数读取 — 与 GameOrchestrator.readAISettings 约定同一个 localStorage key */
-const MAX_RETRIES_KEY = 'aga_ai_settings';
+const MAX_RETRIES_KEY = AI_SETTINGS_STORAGE_KEY;
 const DEFAULT_MAX_RETRIES = 1;
 
 function readMaxRetries(): number {

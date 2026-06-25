@@ -4,7 +4,8 @@
  *
  * B.1.1 真实连通测试：status dot（idle/testing/ok/error）+ 延迟显示
  * B.1.2 模型列表拉取：编辑 Modal 中"获取模型"按钮 + datalist 选择
- * B.1.3 功能分配增强：必选/可选功能分组，可选功能含开关（关闭时置灰）
+ * B.1.3 功能分配：按类别分组的 usageType → API 指派（per-usageType ON/OFF 开关列已移除——
+ *        曾为死控件，引擎不读 aga_feature_toggles；功能开关由 SettingsPanel 负责）
  * B.1.4 AI 生成全局设置：流式输出开关 + 最大重试次数
  */
 // App doc: docs/user-guide/pages/home.md §1.3.1
@@ -16,7 +17,7 @@ import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
 import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { API_PROVIDER_PRESETS } from '@/engine/ai/types';
-import { inferImageBackendFromUrl } from '@/engine/ai/ai-service';
+import { inferImageBackendFromUrl, AI_SETTINGS_STORAGE_KEY } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
 import type { APIConfig, APIProviderType, UsageType, APICategory } from '@/engine/ai/types';
 
@@ -93,7 +94,13 @@ const CATEGORY_ORDER: AssignCategory[] = [
   'narrative', 'world_memory', 'npc_social', 'plot', 'repair', 'image', 'rag', 'utility',
 ];
 
-// ─── Optional feature toggles (B.1.3) ───
+// ─── Feature toggles (preset snapshot only) ───
+//
+// The per-usageType ON/OFF switch column was removed from the assignment modal: it
+// was a dead control (the engine never reads `aga_feature_toggles`; real feature
+// on/off lives in SettingsPanel via dedicated keys). `featureToggles` is retained
+// solely so assignment presets can snapshot/restore the feature on/off state that
+// SettingsPanel owns (see onSavePreset / onApplyPreset).
 
 const FEATURE_TOGGLES_KEY = 'aga_feature_toggles';
 
@@ -107,27 +114,6 @@ function loadFeatureToggles(): Record<string, boolean> {
 
 const featureToggles = ref<Record<string, boolean>>(loadFeatureToggles());
 
-const ALWAYS_ON_TYPES: Set<UsageType> = new Set([
-  'main', 'memory_summary', 'world_generation', 'event_generation',
-  'instruction_generation', 'embedding', 'rerank',
-]);
-
-function isFeatureEnabled(type: UsageType): boolean {
-  if (ALWAYS_ON_TYPES.has(type)) return true;
-  return featureToggles.value[type] !== false;
-}
-
-function toggleFeature(type: UsageType): void {
-  featureToggles.value[type] = !isFeatureEnabled(type);
-  try {
-    localStorage.setItem(FEATURE_TOGGLES_KEY, JSON.stringify(featureToggles.value));
-  } catch { /* ignore */ }
-}
-
-function isToggleable(type: UsageType): boolean {
-  return !ALWAYS_ON_TYPES.has(type);
-}
-
 function typesForCategory(cat: AssignCategory): UsageType[] {
   return (Object.entries(USAGE_TYPE_CATEGORIES) as [UsageType, AssignCategory][])
     .filter(([, c]) => c === cat)
@@ -136,7 +122,8 @@ function typesForCategory(cat: AssignCategory): UsageType[] {
 
 // ─── AI generation settings (B.1.4) ───
 
-const AI_SETTINGS_KEY = 'aga_ai_settings';
+// Single source of truth for the key shared with SettingsPanel (see ai-service.ts).
+const AI_SETTINGS_KEY = AI_SETTINGS_STORAGE_KEY;
 
 function loadAISettings() {
   try {
@@ -161,7 +148,13 @@ const privacyRepairRetries = ref<number>(
 
 function saveAISettings() {
   try {
+    // Read-merge: `aga_ai_settings` is co-owned with SettingsPanel (lowLoadMode /
+    // lowLoadMaxRequests). A full-object overwrite here would silently drop those
+    // keys on every toggle. Preserve any co-tenant keys and only write the 4 fields
+    // this panel owns. (Mirrors SettingsPanel.saveLowLoadSettings's read-merge.)
+    const existing = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) ?? '{}') as Record<string, unknown>;
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify({
+      ...existing,
       streaming: streamingEnabled.value,
       splitGen: splitGenEnabled.value,
       maxRetries: maxRetries.value,
@@ -642,7 +635,11 @@ function onApplyPreset(): void {
     }
   }
 
-  featureToggles.value = { ...preset.featureToggles };
+  // Merge over current toggles instead of full-replace: an older preset (saved
+  // before a newer toggle key existed) does not carry that key, and a full-replace
+  // would drop it — silently flipping the newer feature back to its default. Keep
+  // current values for keys the preset doesn't mention.
+  featureToggles.value = { ...featureToggles.value, ...preset.featureToggles };
   try {
     localStorage.setItem(FEATURE_TOGGLES_KEY, JSON.stringify(featureToggles.value));
   } catch { /* ignore */ }
@@ -1153,28 +1150,15 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
               :class="['assign-row', { 'assign-row--stale': staleAssignmentTypes.has(type) }]"
               :title="staleAssignmentTypes.has(type) ? $t('api.preset.staleHint') : undefined"
             >
-              <div class="assign-label-with-toggle">
-                <button
-                  v-if="isToggleable(type)"
-                  role="switch"
-                  :aria-checked="isFeatureEnabled(type)"
-                  :class="['feature-toggle', { 'feature-toggle--on': isFeatureEnabled(type) }]"
-                  :title="isFeatureEnabled(type) ? $t('api.assign.featureOn') : $t('api.assign.featureOff')"
-                  @click="toggleFeature(type)"
-                >
-                  {{ isFeatureEnabled(type) ? $t('api.assign.on') : $t('api.assign.off') }}
-                </button>
-                <span
-                  :class="['assign-label', { 'assign-label--disabled': isToggleable(type) && !isFeatureEnabled(type) }]"
-                  :title="getUsageTypeMeta(type).tip"
-                >
-                  {{ getUsageTypeMeta(type).label }}
-                  <span class="assign-tip-icon">?</span>
-                </span>
-              </div>
+              <span
+                class="assign-label"
+                :title="getUsageTypeMeta(type).tip"
+              >
+                {{ getUsageTypeMeta(type).label }}
+                <span class="assign-tip-icon">?</span>
+              </span>
               <select
                 class="assign-select"
-                :disabled="isToggleable(type) && !isFeatureEnabled(type)"
                 :value="getAssignedApiId(type)"
                 @change="assignAPI(type, ($event.target as HTMLSelectElement).value)"
               >
@@ -1800,38 +1784,10 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   gap: 12px;
 }
 
-.assign-label-with-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.feature-toggle {
-  padding: 1px 8px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--color-text-secondary, #8888a0);
-  cursor: pointer;
-  transition: all 0.12s ease;
-  min-width: 30px;
-}
-.feature-toggle--on {
-  color: var(--color-success, #22c55e);
-  border-color: color-mix(in oklch, var(--color-success) 30%, transparent);
-  background: color-mix(in oklch, var(--color-success) 6%, transparent);
-}
-
 .assign-label {
   font-size: 0.82rem;
   color: var(--color-text, #e0e0e6);
   transition: opacity 0.15s ease;
-}
-
-.assign-label--disabled {
-  opacity: 0.4;
 }
 
 .assign-select {

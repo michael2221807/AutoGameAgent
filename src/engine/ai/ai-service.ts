@@ -539,3 +539,33 @@ export function inferImageBackendFromUrl(url: string): string {
   if (url.includes(':7860')) return 'sd_webui';
   return '';
 }
+
+/** localStorage key holding AI-generation settings (shared by APIPanel + SettingsPanel). */
+export const AI_SETTINGS_STORAGE_KEY = 'aga_ai_settings';
+
+/**
+ * Apply the persisted `aga_ai_settings` values that live in AIService memory
+ * (maxRetries + low-load rate limiter) to a given AIService instance.
+ *
+ * Shared by cold start (main.ts) and post full-backup import (ManagementView) so
+ * the two paths can never drift. The rate limiter is configured unconditionally —
+ * `enabled` follows `lowLoadMode`, so importing a backup with low-load OFF will
+ * explicitly disable a limiter that an earlier session had turned on.
+ *
+ * `streaming` / `splitGen` / `privacyRepairRetries` are intentionally NOT applied
+ * here: they are read live from localStorage per-call (game-orchestrator,
+ * privacy-profile-repair), so they need no in-memory sync.
+ */
+export function applyPersistedAISettings(service: AIService): void {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_STORAGE_KEY) ?? '{}') as Record<string, unknown>;
+    if (typeof saved.maxRetries === 'number') {
+      service.maxRetries = saved.maxRetries;
+    }
+    service.configureRateLimiter({
+      enabled: saved.lowLoadMode === true,
+      maxRequests: typeof saved.lowLoadMaxRequests === 'number' ? saved.lowLoadMaxRequests : 3,
+      windowMs: 60_000,
+    });
+  } catch { /* localStorage 不可用时静默忽略 */ }
+}

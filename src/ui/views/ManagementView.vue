@@ -43,6 +43,7 @@ import { adaptDemoSave } from '@/engine/persistence/demo-save-adapter';
 import type { ProfileMeta, SaveSlotMeta } from '@/engine/types/persistence';
 import type { GameStateTree } from '@/engine/types';
 import type { AIService } from '@/engine/ai/ai-service';
+import { applyPersistedAISettings } from '@/engine/ai/ai-service';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import { useActionQueueStore } from '@/engine/stores/engine-action-queue';
@@ -403,6 +404,11 @@ function syncEngineAfterBackupImport(): void {
   if (aiService) {
     aiService.setConfigs([...apiStore.apiConfigs]);
     aiService.setAssignments([...apiStore.apiAssignments]);
+    // Re-apply the imported aga_ai_settings to AIService memory (maxRetries +
+    // low-load rate limiter). Without this the in-memory limiter/retries keep the
+    // pre-import values until a full page reload, and the user can enter a game via
+    // loadSlot (no reload) right after importing — running the whole session stale.
+    applyPersistedAISettings(aiService);
   }
   useActionQueueStore().loadFromLocalStorage();
 }

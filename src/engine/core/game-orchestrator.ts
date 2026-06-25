@@ -19,7 +19,7 @@ import { PipelineRunner } from '../pipeline/pipeline-runner';
 /** 从 localStorage 读取 AI 生成设置（每回合调用，确保设置变更立即生效） */
 function readAISettings(): { streaming: boolean; splitGen: boolean } {
   try {
-    const raw = localStorage.getItem('aga_ai_settings');
+    const raw = localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
     if (!raw) return { streaming: true, splitGen: false };
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     return {
@@ -62,6 +62,7 @@ import type { StateManager } from './state-manager';
 import type { CommandExecutor } from './command-executor';
 import type { BehaviorRunner } from '../behaviors/behavior-runner';
 import type { AIService } from '../ai/ai-service';
+import { AI_SETTINGS_STORAGE_KEY } from '../ai/ai-service';
 import type { ResponseParser } from '../ai/response-parser';
 import type { PromptAssembler } from '../prompt/prompt-assembler';
 import type { SaveManager } from '../persistence/save-manager';

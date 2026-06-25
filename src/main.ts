@@ -58,7 +58,7 @@ import { StateManager } from './engine/core/state-manager';
 import { CommandExecutor } from './engine/core/command-executor';
 import { buildMemoryPushDedupGuard } from './engine/social/memory-dedup';
 import { BehaviorRunner } from './engine/behaviors/behavior-runner';
-import { AIService } from './engine/ai/ai-service';
+import { AIService, applyPersistedAISettings } from './engine/ai/ai-service';
 import { ResponseParser } from './engine/ai/response-parser';
 import { PromptRegistry } from './engine/prompt/prompt-registry';
 import { TemplateEngine } from './engine/prompt/template-engine';
@@ -154,20 +154,8 @@ async function bootstrap(): Promise<void> {
   // ── CR-7 fix: 从 localStorage 恢复 AI 生成设置到 aiService ──
   // APIPanel 在 B.1.4 中将 maxRetries 持久化到 'aga_ai_settings'，
   // 但仅在用户主动保存时同步到 aiService。此处在启动时补做一次同步。
-  try {
-    const savedAISettings = JSON.parse(localStorage.getItem('aga_ai_settings') ?? '{}') as Record<string, unknown>;
-    if (typeof savedAISettings.maxRetries === 'number') {
-      aiService.maxRetries = savedAISettings.maxRetries;
-    }
-    if (savedAISettings.lowLoadMode === true) {
-      aiService.configureRateLimiter({
-        enabled: true,
-        maxRequests: typeof savedAISettings.lowLoadMaxRequests === 'number'
-          ? savedAISettings.lowLoadMaxRequests : 3,
-        windowMs: 60_000,
-      });
-    }
-  } catch { /* localStorage 不可用时静默忽略 */ }
+  // 共享 helper —— 与 ManagementView 全量导入后的恢复逻辑共用，避免分叉。
+  applyPersistedAISettings(aiService);
 
   // ── Low-load mode: SettingsPanel emits event → sync to aiService ──
   eventBus.on<{ enabled: boolean; maxRequests: number }>('ai:rate-limiter-config', (payload) => {

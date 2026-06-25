@@ -9,6 +9,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, inject, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { eventBus } from '@/engine/core/event-bus';
+import { AI_SETTINGS_STORAGE_KEY } from '@/engine/ai/ai-service';
 import Modal from '@/ui/components/common/Modal.vue';
 import EngramSettingsSection from '../settings/EngramSettingsSection.vue';
 import { useGameState } from '@/ui/composables/useGameState';
@@ -872,7 +873,14 @@ function loadFeatureToggles(): void {
 
 function saveFeatureToggles(): void {
   try {
-    localStorage.setItem(FEATURE_TOGGLES_KEY, JSON.stringify(featureToggles.value));
+    // Read-merge: `aga_feature_toggles` is co-owned with APIPanel, which writes
+    // panel-exclusive usageType keys (imageGen_*, world_builder, engram_batch_solidify,
+    // card_edge_classify, image*Tokenizer …). This panel's ref is loaded once on mount
+    // and (under <KeepAlive>) never refreshed, so a plain overwrite with this panel's
+    // stale, narrow shape would erase any key APIPanel added afterward. Merge over the
+    // current on-disk value to preserve foreign keys.
+    const existing = JSON.parse(localStorage.getItem(FEATURE_TOGGLES_KEY) ?? '{}') as Record<string, unknown>;
+    localStorage.setItem(FEATURE_TOGGLES_KEY, JSON.stringify({ ...existing, ...featureToggles.value }));
   } catch { /* ignore */ }
 }
 
@@ -967,7 +975,8 @@ function toggleBodyPolish(): void {
 
 const lowLoadEnabled = ref(false);
 const lowLoadMaxRequests = ref(3);
-const AI_SETTINGS_KEY_SETTINGS = 'aga_ai_settings';
+// Single source of truth for the key shared with APIPanel (see ai-service.ts).
+const AI_SETTINGS_KEY_SETTINGS = AI_SETTINGS_STORAGE_KEY;
 
 function loadLowLoadSettings(): void {
   try {

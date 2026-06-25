@@ -178,10 +178,6 @@
   "api.assign.mismatch": "category mismatch",
   "api.assign.done": "Done",
   "api.assign.updated": "Assignment updated",
-  "api.assign.featureOn": "Enabled — click to disable",
-  "api.assign.featureOff": "Disabled — click to enable",
-  "api.assign.on": "On",
-  "api.assign.off": "Off",
 
   "api.preset.new": "New Preset",
   "api.preset.apply": "Apply",

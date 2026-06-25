@@ -178,10 +178,6 @@
   "api.assign.mismatch": "类别不匹配",
   "api.assign.done": "完成",
   "api.assign.updated": "分配已更新",
-  "api.assign.featureOn": "已启用 — 点击关闭",
-  "api.assign.featureOff": "已关闭 — 点击启用",
-  "api.assign.on": "开",
-  "api.assign.off": "关",
 
   "api.preset.new": "新建预设",
   "api.preset.apply": "应用",
