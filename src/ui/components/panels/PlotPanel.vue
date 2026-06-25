@@ -1069,8 +1069,12 @@ function rejectAdvancement(): void {
 
 /* Nodes */
 .nodes-section {
-  flex: 1;
-  min-height: 0;
+  /* Take natural content height and never shrink. The panel itself scrolls
+     (.plot-panel: overflow-y: auto), so the node list must not be flex-shrunk
+     below its content — otherwise, with many nodes, the list overflows its box
+     and visually stacks on top of the .confirm-gate / .eval-log-section that
+     follow it in the column. */
+  flex-shrink: 0;
 }
 
 /* Confirmation Gate */
