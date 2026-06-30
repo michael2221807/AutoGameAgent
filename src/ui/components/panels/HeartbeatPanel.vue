@@ -11,6 +11,8 @@ import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 
 const { t } = useI18n();
 
@@ -112,16 +114,17 @@ function toggleEntry(id: string): void {
         <!-- Enable/disable toggle -->
         <div class="config-row">
           <span class="config-label">{{ t('heartbeat.config.enableLabel') }}</span>
-          <button
-            :class="['toggle-btn', { 'toggle-btn--active': heartbeatEnabled }]"
-            @click="toggleHeartbeat"
-            :aria-pressed="!!heartbeatEnabled"
-          >
-            <span class="toggle-track">
-              <span class="toggle-thumb" />
-            </span>
-            <span class="toggle-text">{{ heartbeatEnabled ? t('heartbeat.config.enabled') : t('heartbeat.config.disabled') }}</span>
-          </button>
+          <div class="toggle-cell">
+            <span
+              :class="['toggle-text', { 'toggle-text--active': heartbeatEnabled }]"
+              aria-hidden="true"
+            >{{ heartbeatEnabled ? t('heartbeat.config.enabled') : t('heartbeat.config.disabled') }}</span>
+            <AgaToggle
+              :modelValue="!!heartbeatEnabled"
+              :label="t('heartbeat.config.enableLabel')"
+              @update:modelValue="() => toggleHeartbeat()"
+            />
+          </div>
         </div>
 
         <!-- Period setting -->
@@ -136,7 +139,7 @@ function toggleEntry(id: string): void {
               class="period-input"
             />
             <span class="period-unit">{{ t('heartbeat.config.periodUnit') }}</span>
-            <button class="btn-sm" @click="updatePeriod">{{ t('heartbeat.config.apply') }}</button>
+            <AgaButton variant="primary" size="sm" @click="updatePeriod">{{ t('heartbeat.config.apply') }}</AgaButton>
           </div>
         </div>
 
@@ -223,10 +226,32 @@ function toggleEntry(id: string): void {
 /* ── Cards ── */
 .config-card,
 .history-card {
+  position: relative;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  border: none;
   border-radius: 10px;
+}
+.config-card::before,
+.history-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .card-title {
@@ -262,52 +287,20 @@ function toggleEntry(id: string): void {
   color: var(--color-text-secondary, #8888a0);
 }
 
-/* ── Toggle button ── */
-.toggle-btn {
+/* ── Toggle cell ── */
+.toggle-cell {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-secondary, #8888a0);
-}
-
-.toggle-track {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  transition: background 0.2s ease;
-}
-
-.toggle-btn--active .toggle-track {
-  background: var(--color-primary, #6366f1);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: var(--color-text-bone);
-  border-radius: 50%;
-  transition: transform 0.2s ease;
-}
-
-.toggle-btn--active .toggle-thumb {
-  transform: translateX(16px);
 }
 
 .toggle-text {
   font-size: 0.78rem;
   font-weight: 500;
+  color: var(--color-text-secondary);
 }
-.toggle-btn--active .toggle-text {
-  color: var(--color-primary, #6366f1);
+.toggle-text--active {
+  color: var(--color-sage-400);
 }
 
 /* ── Period input ── */
@@ -331,28 +324,12 @@ function toggleEntry(id: string): void {
   text-align: center;
 }
 .period-input:focus {
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
 }
 
 .period-unit {
   font-size: 0.75rem;
   color: var(--color-text-secondary, #8888a0);
-}
-
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-primary, #6366f1);
-  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-sage-400) 25%, transparent);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn-sm:hover {
-  background: var(--color-primary, #6366f1);
-  color: var(--color-text-bone);
 }
 
 /* ── Status indicator ── */
@@ -477,7 +454,7 @@ function toggleEntry(id: string): void {
   font-size: 0.65rem;
   font-weight: 700;
   color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1);
+  background: color-mix(in oklch, var(--color-sage-400) 80%, transparent);
   border-radius: 9px;
 }
 

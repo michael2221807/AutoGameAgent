@@ -14,6 +14,8 @@ import type { PlotDecomposer } from '@/engine/plot/plot-decomposer';
 import Modal from '@/ui/components/common/Modal.vue';
 import GaugeBar from './plot/GaugeBar.vue';
 import PlotNodeList from './plot/PlotNodeList.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
 
 import { usePlotEditor } from '@/ui/composables/editors';
 
@@ -313,6 +315,16 @@ const editingMaxRounds = ref<number | undefined>(undefined);
 const editingImportance = ref<'critical' | 'skippable'>('critical');
 const editingCompletionMode = ref<import('@/engine/plot/types').CompletionMode>('hint_only');
 
+const importanceOptions = computed(() => [
+  { label: t('plot.node.importance.critical'), value: 'critical' },
+  { label: t('plot.node.importance.skippable'), value: 'skippable' },
+]);
+const completionModeOptions = computed(() => [
+  { label: t('plot.node.completionMode.hintOnly'), value: 'hint_only' },
+  { label: t('plot.node.completionMode.hintAndGauges'), value: 'hint_and_gauges' },
+  { label: t('plot.node.completionMode.gaugesOnly'), value: 'gauges_only' },
+]);
+
 watch(selectedNode, (n) => {
   if (n) {
     editingDirective.value = n.directive;
@@ -467,11 +479,12 @@ function rejectAdvancement(): void {
           {{ $t('plot.title') }}
         </h2>
         <div class="header-actions">
-          <button
-            class="header-btn"
-            :title="$t('plot.arc.newArcBtn')"
-            @click="showCreateArc = true"
-          >+</button>
+          <Tooltip :text="$t('plot.arc.newArcBtn')" interactive>
+            <button
+              class="header-btn"
+              @click="showCreateArc = true"
+            >+</button>
+          </Tooltip>
         </div>
       </header>
 
@@ -506,9 +519,11 @@ function rejectAdvancement(): void {
               />
             </template>
             <template v-else>
-              <h3 class="arc-title arc-title--editable" @click="startEditArcTitle" :title="$t('plot.arc.editTitle')">
-                {{ displayArc.title }} <span class="arc-edit-icon">✏</span>
-              </h3>
+              <Tooltip :text="$t('plot.arc.editTitle')">
+                <h3 class="arc-title arc-title--editable" @click="startEditArcTitle">
+                  {{ displayArc.title }} <span class="arc-edit-icon">✏</span>
+                </h3>
+              </Tooltip>
             </template>
             <span :class="['arc-status', `arc-status--${displayArc.status}`]">
               {{ displayArc.status }}
@@ -524,12 +539,16 @@ function rejectAdvancement(): void {
               @blur="commitArcSynopsis"
             />
           </template>
-          <p v-else-if="displayArc.synopsis" class="arc-synopsis arc-synopsis--editable" @click="startEditArcSynopsis" :title="$t('plot.arc.editSynopsis')">
-            {{ displayArc.synopsis }} <span class="arc-edit-icon">✏</span>
-          </p>
-          <p v-else class="arc-synopsis arc-synopsis--empty" @click="startEditArcSynopsis" :title="$t('plot.arc.editSynopsis')">
-            {{ $t('plot.arc.synopsisPlaceholder') }} <span class="arc-edit-icon">✏</span>
-          </p>
+          <Tooltip v-else-if="displayArc.synopsis" :text="$t('plot.arc.editSynopsis')">
+            <p class="arc-synopsis arc-synopsis--editable" @click="startEditArcSynopsis">
+              {{ displayArc.synopsis }} <span class="arc-edit-icon">✏</span>
+            </p>
+          </Tooltip>
+          <Tooltip v-else :text="$t('plot.arc.editSynopsis')">
+            <p class="arc-synopsis arc-synopsis--empty" @click="startEditArcSynopsis">
+              {{ $t('plot.arc.synopsisPlaceholder') }} <span class="arc-edit-icon">✏</span>
+            </p>
+          </Tooltip>
 
           <div class="arc-actions">
             <button
@@ -556,7 +575,9 @@ function rejectAdvancement(): void {
         <section class="gauges-section">
           <div class="gauges-header">
             <span class="gauges-label">{{ $t('plot.gauge.title') }}</span>
-            <button class="header-btn" :title="$t('plot.gauge.addTitle')" @click="showAddGauge = true">+</button>
+            <Tooltip :text="$t('plot.gauge.addTitle')" interactive>
+              <button class="header-btn" @click="showAddGauge = true">+</button>
+            </Tooltip>
           </div>
           <div
             v-for="gauge in displayArc.gauges"
@@ -565,8 +586,12 @@ function rejectAdvancement(): void {
           >
             <GaugeBar :gauge="gauge" />
             <div class="gauge-item__actions">
-              <button class="gauge-action-btn" :title="$t('plot.gauge.editBtn')" @click="startEditGauge(gauge)">&#9998;</button>
-              <button class="gauge-action-btn gauge-action-btn--remove" :title="$t('plot.gauge.deleteBtn')" @click="removeGauge(gauge.id)">&times;</button>
+              <Tooltip :text="$t('plot.gauge.editBtn')" interactive>
+                <button class="gauge-action-btn" @click="startEditGauge(gauge)">&#9998;</button>
+              </Tooltip>
+              <Tooltip :text="$t('plot.gauge.deleteBtn')" interactive>
+                <button class="gauge-action-btn gauge-action-btn--remove" @click="removeGauge(gauge.id)">&times;</button>
+              </Tooltip>
             </div>
           </div>
           <p v-if="displayArc.gauges.length === 0" class="empty-hint">{{ $t('plot.gauge.empty') }}</p>
@@ -710,18 +735,19 @@ function rejectAdvancement(): void {
           <div class="detail-row">
             <label class="form-label form-label--inline">
               {{ $t('plot.node.importance') }}
-              <select v-model="editingImportance" class="form-select">
-                <option value="critical">{{ $t('plot.node.importance.critical') }}</option>
-                <option value="skippable">{{ $t('plot.node.importance.skippable') }}</option>
-              </select>
+              <AgaSelect
+                :model-value="editingImportance"
+                :options="importanceOptions"
+                @update:model-value="v => editingImportance = v as 'critical' | 'skippable'"
+              />
             </label>
             <label class="form-label form-label--inline">
               {{ $t('plot.node.completionMode') }}
-              <select v-model="editingCompletionMode" class="form-select">
-                <option value="hint_only">{{ $t('plot.node.completionMode.hintOnly') }}</option>
-                <option value="hint_and_gauges">{{ $t('plot.node.completionMode.hintAndGauges') }}</option>
-                <option value="gauges_only">{{ $t('plot.node.completionMode.gaugesOnly') }}</option>
-              </select>
+              <AgaSelect
+                :model-value="editingCompletionMode"
+                :options="completionModeOptions"
+                @update:model-value="v => editingCompletionMode = v as import('@/engine/plot/types').CompletionMode"
+              />
             </label>
             <label class="form-label form-label--inline">
               {{ $t('plot.node.maxRounds') }}
@@ -848,7 +874,8 @@ function rejectAdvancement(): void {
 
 .header-btn {
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--color-border-subtle, rgba(255,255,255,0.08));
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
   border-radius: 6px;
   color: var(--color-text, #e0e0e6);
   font-size: 16px;
@@ -1205,7 +1232,8 @@ function rejectAdvancement(): void {
   box-sizing: border-box;
   width: 100%;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--color-border);
   border-radius: 6px;
   padding: 8px 10px;
   color: var(--color-text, #e0e0e6);
@@ -1213,11 +1241,11 @@ function rejectAdvancement(): void {
   font-family: var(--font-serif-cjk, serif);
   resize: vertical;
   outline: none;
-  transition: border-color 0.15s;
+  transition: box-shadow 0.15s;
 }
 .form-input:focus,
 .form-textarea:focus {
-  border-color: var(--color-sage-400, #8cb88c);
+  box-shadow: inset 0 0 0 1px var(--color-sage-400);
 }
 
 .confirm-text {
@@ -1276,19 +1304,6 @@ function rejectAdvancement(): void {
 .form-label--inline {
   flex: 1;
   min-width: 100px;
-}
-.form-select {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
-  padding: 6px 8px;
-  color: var(--color-text, #e0e0e6);
-  font-size: 12px;
-  width: 100%;
-  outline: none;
-}
-.form-select:focus {
-  border-color: var(--color-sage-400, #8cb88c);
 }
 .form-input--narrow {
   width: 100%;

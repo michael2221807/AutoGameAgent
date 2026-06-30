@@ -7,6 +7,10 @@ import { useEngineStateStore } from '@/engine/stores/engine-state';
 import type { WorldBookStorage } from '@/engine/prompt/world-book-storage';
 import type { WorldBook, WorldBookEntry, WorldBookEntryType, WorldBookScope, WorldBookEntryShape, WorldBookExportData } from '@/engine/prompt/world-book';
 import { isSTLorebook, convertSTLorebook } from '@/engine/prompt/st-lorebook-converter';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 const engineState = useEngineStateStore();
@@ -23,11 +27,13 @@ const SCOPE_OPTIONS: Array<{ value: WorldBookScope; labelKey: string }> = [
   { value: 'recall', labelKey: 'prompt.scope.recall' },
 ];
 
+// Type badge accents draw from the design-token palette (sage/amber/info/success)
+// instead of legacy hardcoded hexes, so badges stay theme-consistent.
 const TYPE_OPTIONS: Array<{ value: WorldBookEntryType; labelKey: string; color: string }> = [
-  { value: 'world_lore', labelKey: 'prompt.type.worldLore', color: '#60a5fa' },
-  { value: 'system_rule', labelKey: 'prompt.type.systemRule', color: '#a78bfa' },
-  { value: 'command_rule', labelKey: 'prompt.type.commandRule', color: '#fb923c' },
-  { value: 'output_rule', labelKey: 'prompt.type.outputRule', color: '#22d3ee' },
+  { value: 'world_lore', labelKey: 'prompt.type.worldLore', color: 'var(--color-info)' },
+  { value: 'system_rule', labelKey: 'prompt.type.systemRule', color: 'var(--color-sage-400)' },
+  { value: 'command_rule', labelKey: 'prompt.type.commandRule', color: 'var(--color-amber-400)' },
+  { value: 'output_rule', labelKey: 'prompt.type.outputRule', color: 'var(--color-success)' },
 ];
 
 const SHAPE_OPTIONS: Array<{ value: WorldBookEntryShape; labelKey: string }> = [
@@ -282,17 +288,29 @@ function importBooks() {
 // ─── Helpers ───────────────────────────────────────────────
 
 function typeColor(type: WorldBookEntryType): string {
-  return TYPE_OPTIONS.find((o) => o.value === type)?.color ?? '#888';
+  return TYPE_OPTIONS.find((o) => o.value === type)?.color ?? 'var(--color-text-muted)';
 }
+
+// ─── AgaSelect option arrays ───────────────────────────────
+const shapeSelectOptions = computed(() =>
+  SHAPE_OPTIONS.map((s) => ({ value: s.value, label: t(s.labelKey) })),
+);
+const typeSelectOptions = computed(() =>
+  TYPE_OPTIONS.map((tp) => ({ value: tp.value, label: t(tp.labelKey) })),
+);
+const injectionModeOptions = computed(() => [
+  { value: 'always', label: t('prompt.modal.injectionAlways') },
+  { value: 'match_any', label: t('prompt.modal.injectionKeyword') },
+]);
 </script>
 
 <template>
   <div class="wb-tab">
     <!-- Toolbar -->
     <div class="wb-toolbar">
-      <button class="btn btn--primary btn--sm" @click="createBook">{{ $t('prompt.worldbook.createBook') }}</button>
-      <button class="btn btn--ghost btn--sm" @click="importBooks">{{ $t('prompt.worldbook.import') }}</button>
-      <button class="btn btn--ghost btn--sm" @click="exportBooks">{{ $t('prompt.worldbook.export') }}</button>
+      <AgaButton variant="primary" size="sm" @click="createBook">{{ $t('prompt.worldbook.createBook') }}</AgaButton>
+      <AgaButton variant="ghost" size="sm" @click="importBooks">{{ $t('prompt.worldbook.import') }}</AgaButton>
+      <AgaButton variant="ghost" size="sm" @click="exportBooks">{{ $t('prompt.worldbook.export') }}</AgaButton>
     </div>
 
     <div v-if="books.length === 0" class="wb-empty">
@@ -316,11 +334,15 @@ function typeColor(type: WorldBookEntryType): string {
               @input="updateBookTitle(book, ($event.target as HTMLInputElement).value)"
               @click.stop
             />
-            <button
-              :class="['wb-toggle', { 'wb-toggle--on': book.enabled !== false }]"
-              @click.stop="toggleBookEnabled(book)"
-            >{{ book.enabled !== false ? 'ON' : 'OFF' }}</button>
-            <button class="wb-delete-btn" @click.stop="deleteBook(book.id)" :title="$t('prompt.worldbook.deleteBook')">✕</button>
+            <AgaToggle
+              :modelValue="book.enabled !== false"
+              @update:modelValue="() => toggleBookEnabled(book)"
+              :label="$t('prompt.worldbook.toggleBookEnabled')"
+              @click.stop
+            />
+            <Tooltip :text="$t('prompt.worldbook.deleteBook')" interactive>
+              <button class="wb-delete-btn" @click.stop="deleteBook(book.id)">✕</button>
+            </Tooltip>
           </div>
           <span class="wb-book-count">{{ book.entries.length }} {{ $t('prompt.worldbook.entries') }}</span>
         </div>
@@ -328,10 +350,13 @@ function typeColor(type: WorldBookEntryType): string {
         <!-- Entries of selected book -->
         <template v-if="selectedBook">
           <div class="wb-entry-list-header">
-            <select v-model="newEntryShape" class="wb-shape-select">
-              <option v-for="s in SHAPE_OPTIONS" :key="s.value" :value="s.value">{{ $t(s.labelKey) }}</option>
-            </select>
-            <button class="btn btn--ghost btn--sm" @click="createEntry">{{ $t('prompt.worldbook.createEntry') }}</button>
+            <AgaSelect
+              class="wb-shape-select"
+              :modelValue="newEntryShape"
+              :options="shapeSelectOptions"
+              @update:modelValue="v => newEntryShape = v as WorldBookEntryShape"
+            />
+            <AgaButton variant="ghost" size="sm" @click="createEntry">{{ $t('prompt.worldbook.createEntry') }}</AgaButton>
           </div>
 
           <div
@@ -341,7 +366,7 @@ function typeColor(type: WorldBookEntryType): string {
             @click="selectedEntryId = entry.id"
           >
             <span class="wb-entry-title">{{ entry.title || $t('prompt.worldbook.untitled') }}</span>
-            <span class="wb-type-badge" :style="{ background: typeColor(entry.type) + '20', color: typeColor(entry.type) }">
+            <span class="wb-type-badge" :style="{ background: `color-mix(in oklch, ${typeColor(entry.type)} 18%, transparent)`, color: typeColor(entry.type) }">
               {{ $t(TYPE_OPTIONS.find(o => o.value === entry.type)?.labelKey ?? 'prompt.type.worldLore') }}
             </span>
           </div>
@@ -361,47 +386,41 @@ function typeColor(type: WorldBookEntryType): string {
             @input="updateEntry(selectedEntry!, 'title', ($event.target as HTMLInputElement).value)"
             :placeholder="$t('prompt.worldbook.entryTitle')"
           />
-          <button
-            :class="['wb-toggle', { 'wb-toggle--on': selectedEntry.enabled !== false }]"
-            @click="toggleEntryEnabled(selectedEntry!)"
-          >{{ selectedEntry.enabled !== false ? 'ON' : 'OFF' }}</button>
-          <button class="wb-delete-btn" @click="deleteEntry(selectedEntry!.id)">{{ $t('prompt.worldbook.deleteEntry') }}</button>
+          <AgaToggle
+            :modelValue="selectedEntry.enabled !== false"
+            @update:modelValue="() => toggleEntryEnabled(selectedEntry!)"
+            :label="$t('prompt.worldbook.toggleEntryEnabled')"
+          />
+          <AgaButton variant="danger" size="sm" @click="deleteEntry(selectedEntry!.id)">{{ $t('prompt.worldbook.deleteEntry') }}</AgaButton>
         </div>
 
         <!-- Meta fields -->
         <div class="wb-meta-grid">
           <div class="wb-meta-field">
             <label class="wb-meta-label">{{ $t('prompt.worldbook.entryShape') }}</label>
-            <select
-              class="wb-meta-select"
-              :value="selectedEntry.shape ?? 'normal'"
-              @change="updateEntry(selectedEntry!, 'shape', ($event.target as HTMLSelectElement).value as WorldBookEntryShape)"
-            >
-              <option v-for="s in SHAPE_OPTIONS" :key="s.value" :value="s.value">{{ $t(s.labelKey) }}</option>
-            </select>
+            <AgaSelect
+              :modelValue="selectedEntry.shape ?? 'normal'"
+              :options="shapeSelectOptions"
+              @update:modelValue="v => updateEntry(selectedEntry!, 'shape', v as WorldBookEntryShape)"
+            />
           </div>
 
           <div class="wb-meta-field">
             <label class="wb-meta-label">{{ $t('prompt.worldbook.entryType') }}</label>
-            <select
-              class="wb-meta-select"
-              :value="selectedEntry.type"
-              @change="updateEntry(selectedEntry!, 'type', ($event.target as HTMLSelectElement).value as WorldBookEntryType)"
-            >
-              <option v-for="tp in TYPE_OPTIONS" :key="tp.value" :value="tp.value">{{ $t(tp.labelKey) }}</option>
-            </select>
+            <AgaSelect
+              :modelValue="selectedEntry.type"
+              :options="typeSelectOptions"
+              @update:modelValue="v => updateEntry(selectedEntry!, 'type', v as WorldBookEntryType)"
+            />
           </div>
 
           <div class="wb-meta-field">
             <label class="wb-meta-label">{{ $t('prompt.worldbook.injectionMode') }}</label>
-            <select
-              class="wb-meta-select"
-              :value="selectedEntry.injectionMode"
-              @change="updateEntry(selectedEntry!, 'injectionMode', ($event.target as HTMLSelectElement).value as 'always' | 'match_any')"
-            >
-              <option value="always">{{ $t('prompt.modal.injectionAlways') }}</option>
-              <option value="match_any">{{ $t('prompt.modal.injectionKeyword') }}</option>
-            </select>
+            <AgaSelect
+              :modelValue="selectedEntry.injectionMode"
+              :options="injectionModeOptions"
+              @update:modelValue="v => updateEntry(selectedEntry!, 'injectionMode', v as 'always' | 'match_any')"
+            />
           </div>
 
           <div class="wb-meta-field">
@@ -497,7 +516,7 @@ function typeColor(type: WorldBookEntryType): string {
 
 .wb-empty, .wb-empty-entries {
   font-size: 0.82rem;
-  color: var(--color-text-muted, #55556a);
+  color: var(--color-text-muted);
   text-align: center;
   padding: 24px 0;
 }
@@ -524,17 +543,15 @@ function typeColor(type: WorldBookEntryType): string {
 /* ─── Book cards ─── */
 .wb-book-card {
   padding: 8px 10px;
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-left: 3px solid var(--color-primary, #6366f1);
+  border-left: 3px solid var(--color-sage-400);
   border-radius: 8px;
-  background: rgba(99, 102, 241, 0.04);
+  background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
   cursor: pointer;
   transition: all 0.15s;
 }
-.wb-book-card:hover { background: rgba(99, 102, 241, 0.08); }
+.wb-book-card:hover { background: color-mix(in oklch, var(--color-sage-400) 9%, transparent); }
 .wb-book-card--selected {
-  border-color: var(--color-primary, #6366f1);
-  background: rgba(99, 102, 241, 0.10);
+  background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
 }
 .wb-book-card--disabled { opacity: 0.45; }
 
@@ -547,7 +564,7 @@ function typeColor(type: WorldBookEntryType): string {
   flex: 1;
   background: transparent;
   border: none;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   font-size: 0.82rem;
   font-weight: 600;
   outline: none;
@@ -555,40 +572,24 @@ function typeColor(type: WorldBookEntryType): string {
   min-width: 0;
 }
 .wb-book-title-input:focus {
-  border-bottom: 1px solid var(--color-primary, #6366f1);
+  border-bottom: 1px solid var(--color-sage-400);
 }
 .wb-book-count {
   font-size: 0.7rem;
-  color: var(--color-text-muted, #55556a);
+  color: var(--color-text-muted);
 }
 
-/* ─── Toggle + Delete ─── */
-.wb-toggle {
-  padding: 1px 8px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.04);
-  color: var(--color-text-secondary, #8888a0);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.wb-toggle--on {
-  color: var(--color-success, #22c55e);
-  border-color: rgba(34, 197, 94, 0.25);
-  background: rgba(34, 197, 94, 0.08);
-}
+/* ─── Delete ─── */
 .wb-delete-btn {
   background: none;
   border: none;
-  color: var(--color-text-muted, #55556a);
+  color: var(--color-text-muted);
   cursor: pointer;
   font-size: 0.75rem;
   padding: 2px;
   flex-shrink: 0;
 }
-.wb-delete-btn:hover { color: var(--color-danger, #ef4444); }
+.wb-delete-btn:hover { color: var(--color-danger); }
 
 /* ─── Entry list ─── */
 .wb-entry-list-header {
@@ -596,22 +597,17 @@ function typeColor(type: WorldBookEntryType): string {
   gap: 6px;
   align-items: center;
   padding: 8px 0 4px;
-  border-top: 1px solid var(--color-border, #2a2a3a);
+  border-top: 1px solid var(--color-border-subtle);
   margin-top: 4px;
 }
 .wb-shape-select {
   flex: 1;
-  padding: 4px 6px;
-  font-size: 0.72rem;
-  background: var(--color-bg, #111118);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 5px;
+  min-width: 0;
 }
 
 .wb-entry-item {
   padding: 6px 8px;
-  border-left: 3px solid var(--color-primary, #6366f1);
+  border-left: 3px solid var(--color-sage-400);
   border-radius: 4px;
   cursor: pointer;
   display: flex;
@@ -620,12 +616,12 @@ function typeColor(type: WorldBookEntryType): string {
   transition: background 0.12s;
 }
 .wb-entry-item:hover { background: rgba(255,255,255,0.04); }
-.wb-entry-item--selected { background: rgba(99, 102, 241, 0.08); }
+.wb-entry-item--selected { background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
 .wb-entry-item--disabled { opacity: 0.4; }
 
 .wb-entry-title {
   font-size: 0.78rem;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -648,7 +644,7 @@ function typeColor(type: WorldBookEntryType): string {
   gap: 10px;
   overflow-y: auto;
   padding: 12px;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   background: rgba(255,255,255,0.01);
 }
@@ -659,7 +655,7 @@ function typeColor(type: WorldBookEntryType): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-muted, #55556a);
+  color: var(--color-text-muted);
   font-size: 0.82rem;
 }
 
@@ -673,13 +669,13 @@ function typeColor(type: WorldBookEntryType): string {
   padding: 6px 10px;
   font-size: 0.88rem;
   font-weight: 600;
-  background: var(--color-bg, #111118);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-surface-input);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   outline: none;
 }
-.wb-editor-title:focus { border-color: var(--color-primary, #6366f1); }
+.wb-editor-title:focus { border-color: var(--color-sage-400); }
 
 /* ─── Meta grid ─── */
 .wb-meta-grid {
@@ -695,20 +691,20 @@ function typeColor(type: WorldBookEntryType): string {
 .wb-meta-label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.wb-meta-select, .wb-meta-input {
+.wb-meta-input {
   padding: 5px 8px;
   font-size: 0.78rem;
-  background: var(--color-bg, #111118);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-surface-input);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 5px;
   outline: none;
 }
-.wb-meta-select:focus, .wb-meta-input:focus { border-color: var(--color-primary, #6366f1); }
+.wb-meta-input:focus { border-color: var(--color-sage-400); }
 .wb-meta-input--wide { width: 100%; }
 
 /* ─── Scope checkboxes ─── */
@@ -722,10 +718,10 @@ function typeColor(type: WorldBookEntryType): string {
   align-items: center;
   gap: 4px;
   font-size: 0.72rem;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
-.wb-scope-check input { accent-color: var(--color-primary, #6366f1); }
+/* Native checkbox accent + focus ring themed globally by forms.css. */
 
 /* ─── Content editor ─── */
 .wb-content-area { flex: 1; display: flex; flex-direction: column; gap: 3px; }
@@ -735,32 +731,16 @@ function typeColor(type: WorldBookEntryType): string {
   padding: 10px;
   font-size: 0.8rem;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-border, #2a2a3a);
+  color: var(--color-text);
+  background: var(--color-surface-input);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   outline: none;
   resize: vertical;
   line-height: 1.6;
   box-sizing: border-box;
 }
-.wb-content-editor:focus { border-color: var(--color-primary, #6366f1); }
-
-/* ─── Shared btn classes (matching PromptPanel) ─── */
-.btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  border: none; border-radius: 6px; cursor: pointer;
-  font-size: 0.8rem; font-weight: 500; transition: all 0.15s ease;
-}
-.btn--sm { padding: 5px 10px; }
-.btn--primary { color: var(--color-text-bone); background: var(--color-primary, #6366f1); }
-.btn--primary:hover { background: var(--color-primary-hover, #4f46e5); }
-.btn--ghost {
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-}
-.btn--ghost:hover { color: var(--color-text, #e0e0e6); }
+.wb-content-editor:focus { border-color: var(--color-sage-400); }
 
 @media (max-width: 767px) {
   .wb-layout { grid-template-columns: 1fr; }

@@ -140,5 +140,6 @@
   "assistant.worldBuilder.cancel": "Cancel",
   "assistant.worldBuilder.quickLabel": "World Builder:",
   "assistant.toast.worldBuilderFailed": "World building failed: {error}",
-  "assistant.toast.engramDisabled": "Engram is disabled — knowledge edges were not written. Enable Engram in settings and re-inject."
+  "assistant.toast.engramDisabled": "Engram is disabled — knowledge edges were not written. Enable Engram in settings and re-inject.",
+  "assistant.attachment.remove": "Remove attachment"
 }

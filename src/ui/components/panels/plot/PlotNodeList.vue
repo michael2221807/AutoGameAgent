@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import type { PlotNode, PlotGauge, GaugeCondition, PlotEvalLog } from '@/engine/plot/types';
 
 const { t } = useI18n();
@@ -117,25 +118,27 @@ const activeNodeCurrentTier = computed(() => {
       </div>
 
       <div class="node-item__actions">
-        <button
-          class="node-action-btn node-action-btn--insert"
-          :title="$t('plot.node.insertAfter')"
-          @click.stop="emit('insert-after', idx)"
-        >+</button>
-        <button
-          v-if="node.status === 'pending'"
-          class="node-action-btn node-action-btn--remove"
-          :title="$t('plot.node.removeNode')"
-          @click.stop="emit('remove', node.id)"
-        >&times;</button>
+        <Tooltip :text="$t('plot.node.insertAfter')" interactive>
+          <button
+            class="node-action-btn node-action-btn--insert"
+            @click.stop="emit('insert-after', idx)"
+          >+</button>
+        </Tooltip>
+        <Tooltip v-if="node.status === 'pending'" :text="$t('plot.node.removeNode')" interactive>
+          <button
+            class="node-action-btn node-action-btn--remove"
+            @click.stop="emit('remove', node.id)"
+          >&times;</button>
+        </Tooltip>
       </div>
     </div>
 
-    <button
-      class="insert-btn"
-      :title="$t('plot.node.addAtEnd')"
-      @click="emit('insert-after', nodes.length - 1)"
-    >+ {{ $t('plot.node.addTitle') }}</button>
+    <Tooltip :text="$t('plot.node.addAtEnd')" interactive>
+      <button
+        class="insert-btn"
+        @click="emit('insert-after', nodes.length - 1)"
+      >+ {{ $t('plot.node.addTitle') }}</button>
+    </Tooltip>
   </div>
 </template>
 
@@ -155,7 +158,7 @@ const activeNodeCurrentTier = computed(() => {
   transition: background 0.15s;
 }
 .node-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
 }
 
 .node-item__indicator {
@@ -217,8 +220,8 @@ const activeNodeCurrentTier = computed(() => {
   font-weight: 600;
 }
 .node-item__badge--critical {
-  background: rgba(255, 160, 80, 0.15);
-  color: var(--color-amber-400, #f59e0b);
+  background: color-mix(in oklch, var(--color-amber-400) 15%, transparent);
+  color: var(--color-amber-400);
 }
 
 .node-item__goal {
@@ -244,7 +247,7 @@ const activeNodeCurrentTier = computed(() => {
 }
 
 .node-item__cond-tag {
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in oklch, var(--color-text-umber) 12%, transparent);
   padding: 1px 6px;
   border-radius: 4px;
   font-family: var(--font-mono, monospace);

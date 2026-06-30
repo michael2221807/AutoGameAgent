@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-main.md
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const ACTION_OPTIONS_COLLAPSED_KEY = 'aga_action_options_collapsed';
 
@@ -95,7 +96,6 @@ defineExpose({
       class="action-options__toggle"
       :aria-expanded="!actionOptionsCollapsed"
       :aria-label="actionOptionsCollapsed ? $t('mainGame.composer.expandActions') : $t('mainGame.composer.collapseActions')"
-      :title="actionOptionsCollapsed ? $t('mainGame.composer.expandActions') : $t('mainGame.composer.collapseActions')"
       @click="toggleActionOptionsCollapsed"
     >
       <span class="action-options__hint">
@@ -125,13 +125,15 @@ defineExpose({
           :key="idx"
           class="action-option-row"
         >
-          <button
-            class="action-copy"
-            :title="$t('mainGame.composer.copyText')"
-            @click.stop="emit('copy-option', option)"
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
-          </button>
+          <Tooltip :text="$t('mainGame.composer.copyText')" interactive>
+            <button
+              class="action-copy"
+              :aria-label="$t('mainGame.composer.copyText')"
+              @click.stop="emit('copy-option', option)"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+            </button>
+          </Tooltip>
           <button
             :class="['action-btn', { 'action-btn--selected': userInput === option }]"
             @click="selectAction(option)"
@@ -157,18 +159,22 @@ defineExpose({
     </button>
 
     <div class="input-row">
-      <button
-        class="rollback-btn"
-        :disabled="!props.canRollback"
-        :title="props.canRollback ? $t('mainGame.composer.rollbackTitle') : $t('mainGame.composer.rollbackUnavailable')"
-        :aria-label="$t('mainGame.composer.rollbackAriaLabel')"
-        @click="emit('request-rollback')"
+      <Tooltip
+        :text="props.canRollback ? $t('mainGame.composer.rollbackTitle') : $t('mainGame.composer.rollbackUnavailable')"
+        interactive
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-          <path d="M3 3v5h5" />
-        </svg>
-      </button>
+        <button
+          class="rollback-btn"
+          :disabled="!props.canRollback"
+          :aria-label="$t('mainGame.composer.rollbackAriaLabel')"
+          @click="emit('request-rollback')"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+        </button>
+      </Tooltip>
 
       <textarea
         ref="textareaRef"
@@ -180,17 +186,19 @@ defineExpose({
         @keydown="onKeydown"
         @input="autoResizeTextarea"
       />
-      <button
-        class="send-btn"
-        :disabled="!canSend"
-        @click="sendMessage"
-        :aria-label="$t('mainGame.composer.sendAriaLabel')"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <line x1="22" y1="2" x2="11" y2="13" />
-          <polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </svg>
-      </button>
+      <Tooltip :text="$t('mainGame.composer.sendAriaLabel')" interactive>
+        <button
+          class="send-btn"
+          :disabled="!canSend"
+          @click="sendMessage"
+          :aria-label="$t('mainGame.composer.sendAriaLabel')"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </Tooltip>
     </div>
   </div>
 </template>

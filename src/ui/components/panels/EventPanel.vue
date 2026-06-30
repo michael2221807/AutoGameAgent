@@ -11,6 +11,8 @@
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { useGameState } from '@/ui/composables/useGameState';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
@@ -87,11 +89,11 @@ function toggleExpand(id: string): void {
 /** Type badge color */
 function typeColor(type: string | undefined): string {
   switch (type) {
-    case '心跳': return 'var(--color-success, #22c55e)';
-    case '世界': return 'var(--color-primary, #6366f1)';
-    case '战斗': return 'var(--color-danger, #ef4444)';
-    case '剧情': return 'var(--color-sage-400, #8cb88c)';
-    default: return 'var(--color-text-secondary, #8888a0)';
+    case '心跳': return 'var(--color-success)';
+    case '世界': return 'var(--color-sage-400)';
+    case '战斗': return 'var(--color-danger)';
+    case '剧情': return 'var(--color-sage-400)';
+    default: return 'var(--color-text-secondary)';
   }
 }
 
@@ -253,11 +255,13 @@ function persist(): void {
           {{ t('event.title') }}
           <span v-if="timeline.length" class="badge">{{ timeline.length }}</span>
         </h2>
-        <button class="config-toggle" :class="{ 'config-toggle--active': configOpen }" @click="configOpen = !configOpen" :title="t('event.configToggle')">
-          <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
-            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
-          </svg>
-        </button>
+        <Tooltip :text="t('event.configToggle')" interactive>
+          <button class="config-toggle" :class="{ 'config-toggle--active': configOpen }" @click="configOpen = !configOpen">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+              <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </Tooltip>
       </header>
 
       <!-- ── Config section ── -->
@@ -307,14 +311,14 @@ function persist(): void {
           <!-- Re-roll -->
           <div class="cfg-group cfg-group--inline">
             <p class="cfg-group-title">{{ t('event.config.rerollTitle') }}</p>
-            <button class="btn btn--secondary btn--sm" @click="rerollNextEvent">{{ t('event.config.rerollBtn') }}</button>
+            <AgaButton variant="secondary" size="sm" @click="rerollNextEvent">{{ t('event.config.rerollBtn') }}</AgaButton>
           </div>
 
           <!-- Custom templates -->
           <div class="cfg-group">
             <div class="cfg-group-header">
               <p class="cfg-group-title">{{ t('event.config.customTemplateTitle') }} <span class="cfg-count">{{ customTemplates.length }}</span></p>
-              <button class="btn btn--primary btn--sm" @click="openAddForm">{{ t('event.config.addTemplate') }}</button>
+              <AgaButton variant="primary" size="sm" @click="openAddForm">{{ t('event.config.addTemplate') }}</AgaButton>
             </div>
 
             <div v-if="customTemplates.length" class="template-list">
@@ -324,11 +328,13 @@ function persist(): void {
                   <span class="template-type">{{ tpl.type }}</span>
                   <span :class="['template-impact', `template-impact--${tpl.impact}`]">{{ impactLabel(tpl.impact) }}</span>
                 </div>
-                <button class="btn-icon btn-icon--danger" :title="t('event.template.deleteBtn')" @click="confirmDelete(tpl.id)">
-                  <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
-                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                  </svg>
-                </button>
+                <Tooltip :text="t('event.template.deleteBtn')" interactive>
+                  <button class="btn-icon btn-icon--danger" @click="confirmDelete(tpl.id)">
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+                      <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                </Tooltip>
               </div>
             </div>
             <p v-else class="cfg-empty">{{ t('event.config.noTemplates') }}</p>
@@ -404,8 +410,8 @@ function persist(): void {
     </div>
     <p v-if="newTemplateError" class="form-error">{{ newTemplateError }}</p>
     <template #footer>
-      <button class="btn btn--secondary" @click="addFormOpen = false">{{ t('event.template.cancel') }}</button>
-      <button class="btn btn--primary" @click="submitAddTemplate">{{ t('event.template.confirm') }}</button>
+      <AgaButton variant="secondary" @click="addFormOpen = false">{{ t('event.template.cancel') }}</AgaButton>
+      <AgaButton variant="primary" @click="submitAddTemplate">{{ t('event.template.confirm') }}</AgaButton>
     </template>
   </Modal>
 
@@ -413,8 +419,8 @@ function persist(): void {
   <Modal v-model="showDeleteModal" :title="t('event.template.deleteTitle')" width="360px">
     <p>{{ t('event.template.deleteText') }}</p>
     <template #footer>
-      <button class="btn btn--secondary" @click="deleteTargetId = null">{{ t('event.template.cancel') }}</button>
-      <button class="btn btn--danger" @click="doDelete">{{ t('event.template.deleteBtn') }}</button>
+      <AgaButton variant="secondary" @click="deleteTargetId = null">{{ t('event.template.cancel') }}</AgaButton>
+      <AgaButton variant="danger" @click="doDelete">{{ t('event.template.deleteBtn') }}</AgaButton>
     </template>
   </Modal>
 </template>
@@ -456,7 +462,7 @@ function persist(): void {
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1);
+  background: var(--color-sage-600);
   border-radius: 10px;
 }
 
@@ -469,29 +475,47 @@ function persist(): void {
   height: 30px;
   padding: 0;
   background: transparent;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 .config-toggle:hover,
 .config-toggle--active {
-  color: var(--color-primary, #6366f1);
-  border-color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
+  border-color: var(--color-sage-400);
   background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 
 /* ── Config section ── */
 .config-section {
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid var(--color-border, #2a2a3a);
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
   border-radius: 10px;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   overflow: hidden;
+}
+/* Gradient edge (replaces hard 1px border) */
+.config-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .cfg-group {
@@ -550,16 +574,24 @@ function persist(): void {
 .cfg-input {
   width: 64px;
   padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-input);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 6px;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   font-size: 0.82rem;
   text-align: center;
 }
 .cfg-input:focus {
   outline: none;
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
+}
+/* Token-styled number spinner */
+.cfg-input[type='number']::-webkit-inner-spin-button,
+.cfg-input[type='number']::-webkit-outer-spin-button {
+  opacity: 0.5;
+  filter: invert(0.6) sepia(0.3) saturate(2) hue-rotate(70deg);
+  height: 1.4em;
 }
 
 .cfg-toggles {
@@ -573,21 +605,21 @@ function persist(): void {
   font-size: 0.75rem;
   font-weight: 500;
   border-radius: 20px;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.15s;
 }
 .type-toggle--on {
   background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
-  border-color: var(--color-primary, #6366f1);
-  color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
+  color: var(--color-sage-600);
   box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .type-toggle:hover {
-  border-color: var(--color-primary, #6366f1);
-  color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
+  color: var(--color-sage-600);
 }
 
 .cfg-empty {
@@ -611,7 +643,7 @@ function persist(): void {
   padding: 6px 8px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 7px;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
 }
 
 .template-info {
@@ -653,27 +685,6 @@ function persist(): void {
 .template-impact--高 { background: color-mix(in oklch, var(--color-danger) 12%, transparent); color: var(--color-danger); }
 
 /* ── Buttons ── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 7px 14px;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s, background 0.15s;
-}
-.btn--primary { background: var(--color-primary, #6366f1); color: var(--color-text-bone); }
-.btn--primary:hover { opacity: 0.88; }
-.btn--secondary { background: rgba(255,255,255,0.07); color: var(--color-text, #e0e0e6); }
-.btn--secondary:hover { background: rgba(255,255,255,0.12); }
-.btn--danger { background: var(--color-danger, #ef4444); color: var(--color-text-bone); }
-.btn--danger:hover { opacity: 0.88; }
-.btn--sm { padding: 4px 10px; font-size: 0.76rem; border-radius: 6px; }
-
 .btn-icon {
   display: flex;
   align-items: center;
@@ -688,7 +699,7 @@ function persist(): void {
   transition: background 0.15s;
   flex-shrink: 0;
 }
-.btn-icon--danger { color: var(--color-text-secondary, #8888a0); }
+.btn-icon--danger { color: var(--color-text-secondary); }
 .btn-icon--danger:hover { background: color-mix(in oklch, var(--color-danger) 15%, transparent); color: var(--color-danger); }
 
 /* ── Modal form fields ── */
@@ -707,10 +718,10 @@ function persist(): void {
 .form-input,
 .form-textarea {
   padding: 7px 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-input);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   font-size: 0.84rem;
   font-family: inherit;
   resize: vertical;
@@ -718,7 +729,8 @@ function persist(): void {
 .form-input:focus,
 .form-textarea:focus {
   outline: none;
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-sage-400) 30%, transparent);
 }
 .form-error {
   margin: 0 0 8px;

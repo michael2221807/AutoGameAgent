@@ -16,6 +16,8 @@ import { getPathLabel } from '@/ui/composables/useStateTreeNavigation';
 import SearchInput from '@/ui/components/common/SearchInput.vue';
 import Modal from '@/ui/components/common/Modal.vue';
 import SchemaForm from '@/ui/components/editing/SchemaForm.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 
 const { t, locale } = useI18n();
@@ -570,18 +572,18 @@ async function copyFieldValue(path: string): Promise<void> {
       <!-- ─── Header ─── -->
       <header class="panel-header">
         <div class="panel-title-group">
-          <button v-if="returnPanel" class="btn-return" @click="goBack">← {{ returnPanelLabel }}</button>
+          <AgaButton v-if="returnPanel" variant="ghost" size="sm" @click="goBack">← {{ returnPanelLabel }}</AgaButton>
           <h2 class="panel-title">{{ t('variable.title') }}</h2>
         </div>
         <div class="header-actions">
-          <button class="btn btn--ghost btn--sm" @click="showStatsModal = true" :title="t('variable.stats')">
+          <AgaButton variant="ghost" size="sm" @click="showStatsModal = true">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
             {{ t('variable.stats') }}
-          </button>
-          <button class="btn btn--primary btn--sm" @click="exportStateJson" :title="t('variable.exportJson')">
+          </AgaButton>
+          <AgaButton variant="primary" size="sm" @click="exportStateJson">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
             {{ t('variable.exportJson') }}
-          </button>
+          </AgaButton>
         </div>
       </header>
 
@@ -627,38 +629,39 @@ async function copyFieldValue(path: string): Promise<void> {
               </button>
             </template>
           </nav>
-          <button
-            v-if="selectedPath"
-            class="btn btn--ghost btn--sm"
-            :title="t('variable.breadcrumb.jsonEdit')"
-            @click="openJsonEditor(selectedPath)"
-          >
-            { } JSON
-          </button>
+          <Tooltip v-if="selectedPath" :text="t('variable.breadcrumb.jsonEdit')" interactive>
+            <AgaButton variant="ghost" size="sm" @click="openJsonEditor(selectedPath)">
+              { } JSON
+            </AgaButton>
+          </Tooltip>
         </div>
 
         <!-- Two-column layout -->
         <div :class="['gv-columns', { 'gv-columns--detail-open': !!selectedPath }]">
           <!-- Left: tree navigation -->
           <aside class="tree-nav">
-            <div
+            <Tooltip
               v-for="child in currentChildren"
               :key="child.fullPath"
-              :class="['tree-node', { 'tree-node--selected': selectedPath === child.fullPath, 'tree-node--navigable': child.type === 'object' || child.type === 'array' }]"
-              :title="child.type === 'object' ? t('variable.tree.expandFolder') : child.type === 'array' ? t('variable.tree.viewList') : t('variable.tree.editField')"
-              @click="(child.type === 'object' || child.type === 'array') ? navigateTo(child.fullPath) : startEdit({ key: child.key, path: child.fullPath, value: get(child.fullPath), type: child.type, isComplex: false, defaultValue: undefined, isDifferentFromDefault: false })"
+              :text="child.type === 'object' ? t('variable.tree.expandFolder') : child.type === 'array' ? t('variable.tree.viewList') : t('variable.tree.editField')"
+              position="right"
             >
-              <span :class="['tree-node-icon', `tree-node-icon--${child.type}`]">
-                <svg v-if="child.type === 'object'" viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/></svg>
-                <svg v-else-if="child.type === 'array'" viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M2 4a1 1 0 100-2 1 1 0 000 2zm3.75-1.5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zM3 8a1 1 0 10-2 0 1 1 0 002 0zm-1 5a1 1 0 100-2 1 1 0 000 2z"/></svg>
-                <span v-else class="tree-node-dot" :style="{ background: typeColor(child.type) }" />
-              </span>
-              <span class="tree-node-name">{{ child.displayKey }}</span>
-              <span class="tree-node-preview" :style="{ color: (child.type === 'object' || child.type === 'array') ? '#8888a0' : typeColor(child.type) }">
-                {{ child.preview }}
-              </span>
-              <span v-if="child.type === 'object' || child.type === 'array'" class="tree-node-arrow">›</span>
-            </div>
+              <div
+                :class="['tree-node', { 'tree-node--selected': selectedPath === child.fullPath, 'tree-node--navigable': child.type === 'object' || child.type === 'array' }]"
+                @click="(child.type === 'object' || child.type === 'array') ? navigateTo(child.fullPath) : startEdit({ key: child.key, path: child.fullPath, value: get(child.fullPath), type: child.type, isComplex: false, defaultValue: undefined, isDifferentFromDefault: false })"
+              >
+                <span :class="['tree-node-icon', `tree-node-icon--${child.type}`]">
+                  <svg v-if="child.type === 'object'" viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/></svg>
+                  <svg v-else-if="child.type === 'array'" viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M2 4a1 1 0 100-2 1 1 0 000 2zm3.75-1.5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zm0 5a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5zM3 8a1 1 0 10-2 0 1 1 0 002 0zm-1 5a1 1 0 100-2 1 1 0 000 2z"/></svg>
+                  <span v-else class="tree-node-dot" :style="{ background: typeColor(child.type) }" />
+                </span>
+                <span class="tree-node-name">{{ child.displayKey }}</span>
+                <span class="tree-node-preview" :style="{ color: (child.type === 'object' || child.type === 'array') ? '#8888a0' : typeColor(child.type) }">
+                  {{ child.preview }}
+                </span>
+                <span v-if="child.type === 'object' || child.type === 'array'" class="tree-node-arrow">›</span>
+              </div>
+            </Tooltip>
             <p v-if="!currentChildren.length" class="empty-hint">{{ t('variable.tree.emptyPath') }}</p>
           </aside>
 
@@ -712,33 +715,35 @@ async function copyFieldValue(path: string): Promise<void> {
 
                   <!-- Display value — double-click to edit -->
                   <template v-else>
-                    <span
-                      class="field-value"
-                      :style="{ color: typeColor(field.type) }"
-                      @dblclick="startEdit(field)"
-                      :title="t('variable.field.doubleClickEdit')"
-                    >
-                      {{ displayValue(field.value) }}
-                    </span>
+                    <Tooltip :text="t('variable.field.doubleClickEdit')">
+                      <span
+                        class="field-value"
+                        :style="{ color: typeColor(field.type) }"
+                        @dblclick="startEdit(field)"
+                      >
+                        {{ displayValue(field.value) }}
+                      </span>
+                    </Tooltip>
                   </template>
 
                   <!-- Copy button -->
-                  <button
-                    class="copy-btn"
-                    :title="t('variable.field.copyValue')"
-                    @click.stop="copyFieldValue(field.path)"
-                  >
-                    <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
-                  </button>
+                  <Tooltip :text="t('variable.field.copyValue')" interactive>
+                    <button
+                      class="copy-btn"
+                      @click.stop="copyFieldValue(field.path)"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+                    </button>
+                  </Tooltip>
                   <!-- Reset (separated, with confirmation) -->
-                  <button
-                    v-if="field.isDifferentFromDefault"
-                    class="reset-btn"
-                    :title="t('variable.field.resetDefault')"
-                    @click.stop="confirmResetField(field)"
-                  >
-                    <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
-                  </button>
+                  <Tooltip v-if="field.isDifferentFromDefault" :text="t('variable.field.resetDefault')" interactive>
+                    <button
+                      class="reset-btn"
+                      @click.stop="confirmResetField(field)"
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clip-rule="evenodd"/></svg>
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
               <p v-if="!fieldEntries.length" class="empty-hint">{{ t('variable.field.emptyFields') }}</p>
@@ -773,8 +778,8 @@ async function copyFieldValue(path: string): Promise<void> {
         </div>
       </div>
       <template #footer>
-        <button class="btn-secondary" @click="showStatsModal = false">{{ t('variable.stats.close') }}</button>
-        <button class="btn-primary" @click="exportStateJson; showStatsModal = false">{{ t('variable.exportJson') }}</button>
+        <AgaButton variant="secondary" @click="showStatsModal = false">{{ t('variable.stats.close') }}</AgaButton>
+        <AgaButton variant="primary" @click="exportStateJson; showStatsModal = false">{{ t('variable.exportJson') }}</AgaButton>
       </template>
     </Modal>
 
@@ -787,8 +792,8 @@ async function copyFieldValue(path: string): Promise<void> {
         spellcheck="false"
       />
       <template #footer>
-        <button class="btn-secondary" @click="showStringModal = false">{{ t('variable.common.cancel') }}</button>
-        <button class="btn-primary" @click="saveStringEdit">{{ t('variable.common.save') }}</button>
+        <AgaButton variant="secondary" @click="showStringModal = false">{{ t('variable.common.cancel') }}</AgaButton>
+        <AgaButton variant="primary" @click="saveStringEdit">{{ t('variable.common.save') }}</AgaButton>
       </template>
     </Modal>
 
@@ -800,8 +805,8 @@ async function copyFieldValue(path: string): Promise<void> {
         @update:value="onSchemaUpdate"
       />
       <template #footer>
-        <button class="btn-secondary" @click="showSchemaModal = false">{{ t('variable.common.cancel') }}</button>
-        <button class="btn-primary" @click="saveSchemaEdit">{{ t('variable.common.save') }}</button>
+        <AgaButton variant="secondary" @click="showSchemaModal = false">{{ t('variable.common.cancel') }}</AgaButton>
+        <AgaButton variant="primary" @click="saveSchemaEdit">{{ t('variable.common.save') }}</AgaButton>
       </template>
     </Modal>
 
@@ -811,8 +816,8 @@ async function copyFieldValue(path: string): Promise<void> {
         {{ t('variable.confirmReset.text', { path: pendingResetField.path }) }}
       </p>
       <template #footer>
-        <button class="btn-secondary" @click="cancelReset">{{ t('variable.common.cancel') }}</button>
-        <button class="btn-primary" style="background:var(--color-danger);border-color:var(--color-danger);" @click="executeResetField">{{ t('variable.confirmReset.confirm') }}</button>
+        <AgaButton variant="secondary" @click="cancelReset">{{ t('variable.common.cancel') }}</AgaButton>
+        <AgaButton variant="danger" @click="executeResetField">{{ t('variable.confirmReset.confirm') }}</AgaButton>
       </template>
     </Modal>
 
@@ -820,7 +825,7 @@ async function copyFieldValue(path: string): Promise<void> {
     <Modal v-model="showJsonEditor" :title="t('variable.jsonEditor.titlePrefix', { title: jsonEditorTitle })" width="680px">
       <div class="json-editor">
         <div class="json-toolbar">
-          <button class="btn btn--ghost btn--sm" @click="formatJsonEditor">{{ t('variable.jsonEditor.format') }}</button>
+          <AgaButton variant="ghost" size="sm" @click="formatJsonEditor">{{ t('variable.jsonEditor.format') }}</AgaButton>
           <span v-if="jsonEditorError" class="json-error-badge">{{ t('variable.jsonEditor.invalid') }}</span>
           <span v-else class="json-ok-badge">{{ t('variable.jsonEditor.valid') }}</span>
         </div>
@@ -834,8 +839,8 @@ async function copyFieldValue(path: string): Promise<void> {
         <p v-if="jsonEditorError" class="json-error-msg">{{ jsonEditorError }}</p>
       </div>
       <template #footer>
-        <button class="btn-secondary" @click="showJsonEditor = false">{{ t('variable.common.cancel') }}</button>
-        <button class="btn-primary" :disabled="!jsonEditorValid" @click="saveJsonEditor">{{ t('variable.common.save') }}</button>
+        <AgaButton variant="secondary" @click="showJsonEditor = false">{{ t('variable.common.cancel') }}</AgaButton>
+        <AgaButton variant="primary" :disabled="!jsonEditorValid" @click="saveJsonEditor">{{ t('variable.common.save') }}</AgaButton>
       </template>
     </Modal>
   </div>
@@ -863,31 +868,6 @@ async function copyFieldValue(path: string): Promise<void> {
   display: flex;
   gap: 6px;
 }
-
-/* btn helpers reused from other panels */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 500;
-  transition: all 0.15s ease;
-}
-.btn--sm { padding: 5px 10px; }
-.btn--primary {
-  color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1);
-}
-.btn--primary:hover { background: var(--color-primary-hover, #4f46e5); }
-.btn--ghost {
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-}
-.btn--ghost:hover { color: var(--color-text, #e0e0e6); }
 
 .panel-title {
   margin: 0;
@@ -984,7 +964,7 @@ async function copyFieldValue(path: string): Promise<void> {
   padding: 2px 6px;
   font-size: 0.78rem;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
   background: none;
   border: none;
   cursor: pointer;
@@ -1023,7 +1003,7 @@ async function copyFieldValue(path: string): Promise<void> {
   flex-shrink: 0;
   overflow-y: auto;
   padding: 4px;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.01);
 }
@@ -1197,6 +1177,15 @@ async function copyFieldValue(path: string): Promise<void> {
   outline: none;
   max-width: 200px;
 }
+.inline-edit::-webkit-outer-spin-button,
+.inline-edit::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.inline-edit[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 
 .string-edit-textarea {
   width: 100%;
@@ -1303,7 +1292,7 @@ async function copyFieldValue(path: string): Promise<void> {
   font-size: 0.88rem;
   font-weight: 700;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
 }
 
 /* ── Reset button ── */
@@ -1327,33 +1316,6 @@ async function copyFieldValue(path: string): Promise<void> {
   background: var(--color-warning, #f59e0b);
   color: var(--color-bg);
 }
-
-/* ── Buttons ── */
-.btn-primary {
-  padding: 6px 16px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.btn-primary:hover { background: var(--color-primary-hover, #4f46e5); }
-
-.btn-secondary {
-  padding: 6px 14px;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn-secondary:hover { color: var(--color-text, #e0e0e6); border-color: var(--color-primary, #6366f1); }
 
 /* ── Empty ── */
 .empty-hint {
@@ -1408,7 +1370,7 @@ async function copyFieldValue(path: string): Promise<void> {
   border-radius: 8px; resize: vertical;
   transition: border-color 0.15s;
 }
-.json-textarea:focus { outline: none; border-color: var(--color-primary, #6366f1); }
+.json-textarea:focus { outline: none; border-color: var(--color-sage-400); }
 .json-textarea--error { border-color: var(--color-danger) !important; }
 .json-error-msg {
   margin: 0; font-size: 0.72rem; color: var(--color-danger-hover); line-height: 1.4;
@@ -1474,6 +1436,4 @@ async function copyFieldValue(path: string): Promise<void> {
 
 /* ── Story 2: Return link + title group ── */
 .panel-title-group { display: flex; align-items: center; gap: 10px; }
-.btn-return { padding: 3px 10px; font-size: 0.75rem; color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent); border-radius: 5px; cursor: pointer; transition: all 0.15s; }
-.btn-return:hover { background: color-mix(in oklch, var(--color-sage-400) 16%, transparent); }
 </style>

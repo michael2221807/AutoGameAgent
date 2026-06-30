@@ -13,6 +13,8 @@ import { useI18n } from 'vue-i18n';
 import { usePromptDebugStore } from '@/engine/stores/engine-prompt';
 import { eventBus } from '@/engine/core/event-bus';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 
@@ -432,8 +434,8 @@ function memorySegmentsFor(index: number): MemorySegment[] {
     <header class="panel-header">
       <h2 class="panel-title">{{ $t('promptAssembly.title') }}</h2>
       <div class="header-actions">
-        <button class="btn-sm" :disabled="!hasData" @click="exportSnapshot">{{ $t('promptAssembly.exportSnapshot') }}</button>
-        <button class="btn-sm btn-sm--danger" :disabled="!hasData" @click="showClearConfirm = true">{{ $t('promptAssembly.clearAll') }}</button>
+        <AgaButton variant="secondary" size="sm" :disabled="!hasData" @click="exportSnapshot">{{ $t('promptAssembly.exportSnapshot') }}</AgaButton>
+        <AgaButton variant="danger" size="sm" :disabled="!hasData" @click="showClearConfirm = true">{{ $t('promptAssembly.clearAll') }}</AgaButton>
       </div>
     </header>
 
@@ -466,7 +468,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
         </div>
         <div v-if="thinkingText" class="summary-item">
           <span class="summary-label">CoT</span>
-          <span class="summary-value summary-value--mono" style="color: var(--color-primary, #6366f1)">{{ $t('promptAssembly.info.hasCot') }}</span>
+          <span class="summary-value summary-value--mono" style="color: var(--color-sage-400)">{{ $t('promptAssembly.info.hasCot') }}</span>
         </div>
       </div>
 
@@ -481,16 +483,19 @@ function memorySegmentsFor(index: number): MemorySegment[] {
       <section v-if="sourceBreakdown.length > 0" class="source-breakdown">
         <div class="source-breakdown-header">{{ $t('promptAssembly.source.breakdown', { count: messages.length }) }}</div>
         <div class="source-breakdown-list">
-          <span
+          <Tooltip
             v-for="row in sourceBreakdown"
             :key="row.tag"
-            class="source-breakdown-chip"
-            :style="{ color: row.display.color, borderColor: row.display.color + '55', background: row.display.color + '14' }"
-            :title="row.display.tooltip"
+            :text="row.display.tooltip"
           >
-            {{ row.display.label }}
-            <span class="source-breakdown-count">×{{ row.count }}</span>
-          </span>
+            <span
+              class="source-breakdown-chip"
+              :style="{ color: row.display.color, borderColor: row.display.color + '55', background: row.display.color + '14' }"
+            >
+              {{ row.display.label }}
+              <span class="source-breakdown-count">×{{ row.count }}</span>
+            </span>
+          </Tooltip>
         </div>
       </section>
 
@@ -515,13 +520,13 @@ function memorySegmentsFor(index: number): MemorySegment[] {
 
       <!-- ─── Toolbar ─── -->
       <div class="toolbar">
-        <button class="btn-sm" @click="expandAll">{{ $t('promptAssembly.expandAll') }}</button>
-        <button class="btn-sm" @click="collapseAll">{{ $t('promptAssembly.collapseAll') }}</button>
-        <button class="btn-sm" @click="showVariables = !showVariables">
+        <AgaButton variant="ghost" size="sm" @click="expandAll">{{ $t('promptAssembly.expandAll') }}</AgaButton>
+        <AgaButton variant="ghost" size="sm" @click="collapseAll">{{ $t('promptAssembly.collapseAll') }}</AgaButton>
+        <AgaButton variant="ghost" size="sm" @click="showVariables = !showVariables">
           {{ showVariables ? $t('promptAssembly.hideVariables') : $t('promptAssembly.showVariables') }}
-        </button>
+        </AgaButton>
         <div style="flex: 1" />
-        <button class="btn-sm" @click="copyToClipboard">{{ $t('promptAssembly.copyJson') }}</button>
+        <AgaButton variant="secondary" size="sm" @click="copyToClipboard">{{ $t('promptAssembly.copyJson') }}</AgaButton>
       </div>
 
       <!-- ─── Template variables ─── -->
@@ -556,21 +561,25 @@ function memorySegmentsFor(index: number): MemorySegment[] {
               </span>
               <span class="message-index">#{{ idx + 1 }}</span>
               <!-- 2026-04-14：消息来源标签 -->
-              <span
-                class="source-badge"
-                :style="{ color: sourceFor(idx).color, borderColor: sourceFor(idx).color + '55', background: sourceFor(idx).color + '14' }"
-                :title="sourceFor(idx).tooltip"
-              >{{ sourceFor(idx).label }}</span>
+              <Tooltip :text="sourceFor(idx).tooltip">
+                <span
+                  class="source-badge"
+                  :style="{ color: sourceFor(idx).color, borderColor: sourceFor(idx).color + '55', background: sourceFor(idx).color + '14' }"
+                >{{ sourceFor(idx).label }}</span>
+              </Tooltip>
               <!-- 若是 system 模块 + 含记忆段，横向列出所有记忆子段 -->
               <template v-if="memorySegmentsFor(idx).length > 0">
                 <span class="memory-seg-sep">·</span>
-                <span
+                <Tooltip
                   v-for="seg in memorySegmentsFor(idx)"
                   :key="seg.kind + seg.startLine"
-                  class="memory-seg-chip"
-                  :style="{ color: seg.color, borderColor: seg.color + '55', background: seg.color + '10' }"
-                  :title="`${seg.label} (${$t('promptAssembly.memory.lineRange', { start: seg.startLine + 1, end: seg.endLine + 1 })})`"
-                >{{ seg.label }}</span>
+                  :text="`${seg.label} (${$t('promptAssembly.memory.lineRange', { start: seg.startLine + 1, end: seg.endLine + 1 })})`"
+                >
+                  <span
+                    class="memory-seg-chip"
+                    :style="{ color: seg.color, borderColor: seg.color + '55', background: seg.color + '10' }"
+                  >{{ seg.label }}</span>
+                </Tooltip>
               </template>
               <span class="message-tokens">~{{ perMessageTokens[idx] }} tokens</span>
             </div>
@@ -620,8 +629,8 @@ function memorySegmentsFor(index: number): MemorySegment[] {
         {{ $t('promptAssembly.clear.text', { count: snapshots.length }) }}
       </p>
       <template #footer>
-        <button class="btn-sm" @click="showClearConfirm = false">{{ $t('promptAssembly.clear.cancel') }}</button>
-        <button class="btn-sm btn-sm--danger" @click="clearAll">{{ $t('promptAssembly.clear.confirm') }}</button>
+        <AgaButton variant="secondary" size="sm" @click="showClearConfirm = false">{{ $t('promptAssembly.clear.cancel') }}</AgaButton>
+        <AgaButton variant="danger" size="sm" @click="clearAll">{{ $t('promptAssembly.clear.confirm') }}</AgaButton>
       </template>
     </Modal>
   </div>
@@ -695,7 +704,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
    now lives alongside the prompts that produced it, so each snapshot tab
    shows "what the model reasoned about FOR THIS CALL". */
 .snapshot-cot {
-  border: 1px solid var(--color-primary, #6366f1);
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 40%, transparent);
   border-radius: var(--radius-md, 8px);
   background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
   overflow: hidden;
@@ -710,7 +719,7 @@ function memorySegmentsFor(index: number): MemorySegment[] {
   border: none;
   border-bottom: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent);
   cursor: pointer;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
   font-size: 0.82rem;
   font-weight: 600;
   transition: background 0.15s ease;
@@ -724,13 +733,13 @@ function memorySegmentsFor(index: number): MemorySegment[] {
   padding: 1px 6px;
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent);
   border-radius: 3px;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
   background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
 }
 .snapshot-cot-chevron {
   margin-left: auto;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
   opacity: 0.7;
 }
 .snapshot-cot-content {
@@ -830,22 +839,22 @@ function memorySegmentsFor(index: number): MemorySegment[] {
   font-size: 0.68rem;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 500;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 5px;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
 }
 .snapshot-tab:hover {
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   border-color: color-mix(in oklch, var(--color-sage-400) 40%, transparent);
 }
 .snapshot-tab--active {
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
   background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-  border-color: var(--color-primary, #6366f1);
+  border-color: color-mix(in oklch, var(--color-sage-400) 55%, transparent);
   box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
@@ -887,35 +896,6 @@ function memorySegmentsFor(index: number): MemorySegment[] {
   display: flex;
   gap: 6px;
   align-items: center;
-}
-
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn-sm:hover {
-  color: var(--color-text, #e0e0e6);
-  border-color: var(--color-primary, #6366f1);
-}
-.btn-sm--danger {
-  color: var(--color-danger);
-  border-color: color-mix(in oklch, var(--color-danger) 30%, transparent);
-}
-.btn-sm--danger:hover {
-  background: color-mix(in oklch, var(--color-danger) 10%, transparent);
-  border-color: var(--color-danger);
-}
-.btn-sm:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  pointer-events: none;
 }
 
 /* ── Variables section ── */

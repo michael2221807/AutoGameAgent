@@ -155,5 +155,9 @@
   "mainGame.search.placeholder": "Search keyword…",
   "mainGame.search.close": "Close search",
   "mainGame.search.noResults": "No matches found",
-  "mainGame.search.roundLabel": "Round {n}"
+  "mainGame.search.roundLabel": "Round {n}",
+  "mainGame.roundDivider.metricsTitle": "Round metadata · round {n}",
+  "mainGame.roundDivider.inputTokensLabel": "Input tokens",
+  "mainGame.roundDivider.durationLabel": "Duration",
+  "mainGame.roundDivider.outputTokensLabel": "Output tokens"
 }

@@ -69,6 +69,7 @@ import EngramRoundViewer from '@/ui/components/panels/EngramRoundViewer.vue';
 import WeatherBadge from '@/ui/components/panels/WeatherBadge.vue';
 import EnvironmentChips from '@/ui/components/panels/EnvironmentChips.vue';
 import FestivalChip from '@/ui/components/panels/FestivalChip.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import {
   findFirstAssistantIdx,
   findLatestAssistantIdx,
@@ -873,17 +874,18 @@ watch(
         <EnvironmentChips :tags="environmentTags" />
       </div>
       <div class="status-bar__right">
-        <button
-          class="search-toggle-btn"
-          :class="{ 'search-toggle-btn--active': showSearch }"
-          :title="$t('mainGame.search.toggleTitle')"
-          :aria-label="$t('mainGame.search.toggleTitle')"
-          @click="toggleSearch"
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
-            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
-          </svg>
-        </button>
+        <Tooltip :text="$t('mainGame.search.toggleTitle')" interactive>
+          <button
+            class="search-toggle-btn"
+            :class="{ 'search-toggle-btn--active': showSearch }"
+            :aria-label="$t('mainGame.search.toggleTitle')"
+            @click="toggleSearch"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
+              <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </Tooltip>
         <FestivalChip :festival="festival" />
         <span v-if="isGenerating" class="status-generating">
           {{ $t('mainGame.status.aiThinking') }}
@@ -916,9 +918,11 @@ watch(
               @keydown.escape="toggleSearch"
             />
             <span v-if="!searchFocused && searchResults.length > 0" class="search-result-count">{{ searchResults.length }}</span>
-            <button class="search-close-btn" :aria-label="$t('mainGame.search.close')" @click="toggleSearch">
-              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-            </button>
+            <Tooltip :text="$t('mainGame.search.close')" interactive>
+              <button class="search-close-btn" :aria-label="$t('mainGame.search.close')" @click="toggleSearch">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+              </button>
+            </Tooltip>
           </div>
           <template v-if="searchFocused">
             <div v-if="searchResults.length > 0" class="search-results">
@@ -999,25 +1003,34 @@ watch(
           >{{ msg.content }}</div>
           <div v-else class="message-text"><FormattedText :text="displayTextForAssistant(msg)" :npc-names="npcNameList" :npc-data="npcDataList" /></div>
 
-          <button
+          <Tooltip
             v-if="msg.role === 'assistant' && msg._delta && msg._delta.length > 0"
-            class="delta-badge"
-            :aria-label="$t('mainGame.delta.ariaLabel', { n: msg._delta.length })"
-            @click="openCommandsViewer(msg, 'delta')"
+            :text="$t('mainGame.delta.ariaLabel', { n: msg._delta.length })"
+            interactive
           >
-            Δ {{ msg._delta.length }}
-          </button>
+            <button
+              class="delta-badge"
+              :aria-label="$t('mainGame.delta.ariaLabel', { n: msg._delta.length })"
+              @click="openCommandsViewer(msg, 'delta')"
+            >
+              Δ {{ msg._delta.length }}
+            </button>
+          </Tooltip>
         </div>
         <div
           v-if="msg.role === 'assistant' && (countCjkChars(msg.content) > 0 || msg._shortTermPreview)"
           class="message-meta-bottom"
         >
           <span class="message-meta-bottom__chars">{{ $t('mainGame.meta.charCount', { n: countCjkChars(msg.content) }) }}</span>
-          <span
+          <Tooltip
             v-if="msg._shortTermPreview"
-            class="message-meta-bottom__preview"
-            :title="msg._shortTermPreview"
-          >{{ $t('mainGame.meta.memoryPreview', { text: truncate(msg._shortTermPreview, 40) }) }}</span>
+            :text="msg._shortTermPreview"
+            position="top"
+          >
+            <span
+              class="message-meta-bottom__preview"
+            >{{ $t('mainGame.meta.memoryPreview', { text: truncate(msg._shortTermPreview, 40) }) }}</span>
+          </Tooltip>
         </div>
       </div>
       </template>
@@ -1051,17 +1064,23 @@ watch(
         贴在 messages-container 可视区域的右下角。
       -->
       <Transition name="fade-scale">
-        <button
+        <Tooltip
           v-if="isUserScrolledUp || isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW"
-          class="scroll-to-bottom-btn"
-          :aria-label="$t('mainGame.scroll.ariaLabel')"
-          :title="(isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW) ? $t('mainGame.fold.jumpToLatest') : $t('mainGame.scroll.title')"
-          @click="(isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW) ? jumpToLatest() : scrollToBottom(true)"
+          class="scroll-to-bottom-tip"
+          :text="(isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW) ? $t('mainGame.fold.jumpToLatest') : $t('mainGame.scroll.title')"
+          position="left"
+          interactive
         >
-          <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
-            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v10.586l3.293-3.293a1 1 0 111.414 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L9 14.586V4a1 1 0 011-1z" clip-rule="evenodd" />
-          </svg>
-        </button>
+          <button
+            class="scroll-to-bottom-btn"
+            :aria-label="$t('mainGame.scroll.ariaLabel')"
+            @click="(isPinnedMode || tailVisibleRounds > VISIBLE_ROUND_WINDOW) ? jumpToLatest() : scrollToBottom(true)"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+              <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v10.586l3.293-3.293a1 1 0 111.414 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L9 14.586V4a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </Tooltip>
       </Transition>
     </div>
 
@@ -1158,11 +1177,18 @@ watch(
 /* ── Scroll-to-bottom floating button ──────────────────────────
  * Frosted cabin-glass pill. Right anchor follows the sidebar-reserve
  * so the button clears the right-side droplet when it expands. */
-.scroll-to-bottom-btn {
+/* Float anchor lives on the Tooltip wrapper so the button can stay static
+   inside it; the wrapper follows the sidebar-reserve droplet on the right. */
+.scroll-to-bottom-tip {
   position: absolute;
   right: calc(var(--sidebar-right-reserve, 40px) + 8px);
   bottom: 1rem;
   z-index: 20;
+  transition: right var(--duration-open) var(--ease-droplet);
+}
+
+.scroll-to-bottom-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1174,22 +1200,49 @@ watch(
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
+  /* §8: no hard 1px border on glass — a gradient ::before edge keeps the
+     translucent illusion (light-refraction rim instead of a solid line). */
+  border: none;
   box-shadow: var(--shadow-md), var(--lumi-inset-highlight);
   cursor: pointer;
-  transition: right var(--duration-open) var(--ease-droplet),
-              color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
+  transition: color var(--duration-fast) var(--ease-out),
               transform var(--duration-fast) var(--ease-out),
               box-shadow var(--duration-fast) var(--ease-out);
 }
 
+.scroll-to-bottom-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 1px;
+  background: var(--glass-edge-gradient,
+    linear-gradient(135deg,
+      color-mix(in oklch, var(--color-border) 80%, transparent),
+      transparent 60%));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
 .scroll-to-bottom-btn:hover {
   color: var(--color-sage-300);
-  border-color: color-mix(in oklch, var(--color-sage-400) 40%, transparent);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md),
               0 0 14px color-mix(in oklch, var(--color-sage-400) 22%, transparent);
+}
+
+.scroll-to-bottom-btn:hover::before {
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-sage-400) 40%, transparent),
+    transparent 60%);
 }
 
 .scroll-to-bottom-btn:focus-visible {

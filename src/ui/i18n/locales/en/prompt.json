@@ -235,5 +235,7 @@
   "prompt.worldbook.importSTSuccess": "Imported SillyTavern lorebook \"{title}\" with {count} entries",
   "prompt.worldbook.importInvalidFormat": "Invalid file format (supports AGA export and SillyTavern lorebooks)",
   "prompt.worldbook.importTooMany": "Import cannot exceed 200 entries at once",
-  "prompt.worldbook.importError": "Import failed"
+  "prompt.worldbook.importError": "Import failed",
+  "prompt.worldbook.toggleBookEnabled": "Enable/disable world book",
+  "prompt.worldbook.toggleEntryEnabled": "Enable/disable entry"
 }

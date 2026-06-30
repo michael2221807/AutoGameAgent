@@ -43,6 +43,8 @@ import type { WorldBuilderService } from '@/engine/services/world-builder/world-
 import type { WorldBuilderPaths } from '@/engine/services/world-builder/world-builder-service';
 import BatchSummaryView from '@/ui/components/assistant/BatchSummaryView.vue';
 import CustomSelect from '@/ui/components/common/CustomSelect.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const {
   messages,
@@ -541,10 +543,14 @@ function onExtractFromDescription(): void {
         <button v-if="canRollback" class="action-btn rollback" @click="onRollback">
           ↶ {{ t('assistant.rollback') }}
         </button>
-        <button class="action-btn" @click="showSettings = true" :title="t('assistant.settingsTitle')">⚙</button>
-        <button class="action-btn danger" :disabled="messages.length === 0" @click="tryClear" :title="t('assistant.clearTitle')">
-          🗑
-        </button>
+        <Tooltip :text="t('assistant.settingsTitle')" interactive>
+          <button class="action-btn" :aria-label="t('assistant.settingsTitle')" @click="showSettings = true">⚙</button>
+        </Tooltip>
+        <Tooltip :text="t('assistant.clearTitle')" interactive>
+          <button class="action-btn danger" :aria-label="t('assistant.clearTitle')" :disabled="messages.length === 0" @click="tryClear">
+            🗑
+          </button>
+        </Tooltip>
       </div>
     </header>
 
@@ -558,33 +564,36 @@ function onExtractFromDescription(): void {
     -->
     <div class="ap-quick-actions">
       <span class="qa-label">{{ t('assistant.env.quickLabel') }}</span>
-      <button
-        type="button"
-        class="qa-chip"
-        :disabled="isSending"
-        :title="t('assistant.env.weatherTitle')"
-        @click="showWeatherPicker = true"
-      >
-        {{ t('assistant.setWeather') }}
-      </button>
-      <button
-        type="button"
-        class="qa-chip"
-        :disabled="isSending"
-        :title="t('assistant.env.festivalTitle')"
-        @click="showFestivalEditor = true"
-      >
-        {{ t('assistant.setFestival') }}
-      </button>
-      <button
-        type="button"
-        class="qa-chip"
-        :disabled="isSending"
-        :title="t('assistant.env.envTagsTitle')"
-        @click="showEnvEditor = true"
-      >
-        {{ t('assistant.editEnvTags') }}
-      </button>
+      <Tooltip :text="t('assistant.env.weatherTitle')" interactive>
+        <button
+          type="button"
+          class="qa-chip"
+          :disabled="isSending"
+          @click="showWeatherPicker = true"
+        >
+          {{ t('assistant.setWeather') }}
+        </button>
+      </Tooltip>
+      <Tooltip :text="t('assistant.env.festivalTitle')" interactive>
+        <button
+          type="button"
+          class="qa-chip"
+          :disabled="isSending"
+          @click="showFestivalEditor = true"
+        >
+          {{ t('assistant.setFestival') }}
+        </button>
+      </Tooltip>
+      <Tooltip :text="t('assistant.env.envTagsTitle')" interactive>
+        <button
+          type="button"
+          class="qa-chip"
+          :disabled="isSending"
+          @click="showEnvEditor = true"
+        >
+          {{ t('assistant.editEnvTags') }}
+        </button>
+      </Tooltip>
     </div>
 
     <!-- World builder quick-actions (Story 3 Phase 4) — visible only in build mode -->
@@ -625,7 +634,9 @@ function onExtractFromDescription(): void {
           <span class="att-icon">{{ att.scope === 'target' ? '✏' : '📖' }}</span>
           <span class="att-label">{{ attachmentLabelFromPath(att.path) }}</span>
           <span class="att-scope">{{ att.scope === 'target' ? t('assistant.attachment.scopeTarget') : t('assistant.attachment.scopeContext') }}</span>
-          <button class="att-remove" @click="removeAttachment(att.path)">×</button>
+          <Tooltip :text="t('assistant.attachment.remove')" interactive>
+            <button class="att-remove" :aria-label="t('assistant.attachment.remove')" @click="removeAttachment(att.path)">×</button>
+          </Tooltip>
         </div>
       </div>
       <button class="att-add" @click="openPicker" :disabled="isSending">{{ t('assistant.addAttachment') }}</button>
@@ -760,8 +771,8 @@ function onExtractFromDescription(): void {
       <p>{{ t('assistant.clear.body') }}</p>
       <p class="confirm-hint">{{ t('assistant.clear.hint') }}</p>
       <template #footer>
-        <button class="btn btn--secondary" @click="showClearConfirm = false">{{ t('assistant.clear.cancel') }}</button>
-        <button class="btn btn--danger" @click="doClear">{{ t('assistant.clear.confirm') }}</button>
+        <AgaButton variant="secondary" @click="showClearConfirm = false">{{ t('assistant.clear.cancel') }}</AgaButton>
+        <AgaButton variant="danger" @click="doClear">{{ t('assistant.clear.confirm') }}</AgaButton>
       </template>
     </Modal>
 
@@ -800,7 +811,7 @@ function onExtractFromDescription(): void {
         </div>
       </div>
       <template #footer>
-        <button class="btn btn--primary" @click="showSettings = false">{{ t('assistant.settings.close') }}</button>
+        <AgaButton variant="primary" @click="showSettings = false">{{ t('assistant.settings.close') }}</AgaButton>
       </template>
     </Modal>
 
@@ -842,8 +853,8 @@ function onExtractFromDescription(): void {
         </div>
       </div>
       <template #footer>
-        <button class="btn btn--secondary" @click="showRegionModal = false">{{ t('assistant.worldBuilder.cancel') }}</button>
-        <button class="btn btn--primary" :disabled="!regionInstruction.trim()" @click="onGenerateRegion">{{ t('assistant.worldBuilder.regionModal.generate') }}</button>
+        <AgaButton variant="secondary" @click="showRegionModal = false">{{ t('assistant.worldBuilder.cancel') }}</AgaButton>
+        <AgaButton variant="primary" :disabled="!regionInstruction.trim()" @click="onGenerateRegion">{{ t('assistant.worldBuilder.regionModal.generate') }}</AgaButton>
       </template>
     </Modal>
 
@@ -860,8 +871,8 @@ function onExtractFromDescription(): void {
         <input v-model.number="npcCount" type="number" min="1" max="20" class="wb-number-input" />
       </div>
       <template #footer>
-        <button class="btn btn--secondary" @click="showNpcModal = false">{{ t('assistant.worldBuilder.cancel') }}</button>
-        <button class="btn btn--primary" :disabled="!npcInstruction.trim()" @click="onGenerateNpcs">{{ t('assistant.worldBuilder.npcModal.generate') }}</button>
+        <AgaButton variant="secondary" @click="showNpcModal = false">{{ t('assistant.worldBuilder.cancel') }}</AgaButton>
+        <AgaButton variant="primary" :disabled="!npcInstruction.trim()" @click="onGenerateNpcs">{{ t('assistant.worldBuilder.npcModal.generate') }}</AgaButton>
       </template>
     </Modal>
 
@@ -876,8 +887,8 @@ function onExtractFromDescription(): void {
         />
       </div>
       <template #footer>
-        <button class="btn btn--secondary" @click="showDescModal = false">{{ t('assistant.worldBuilder.cancel') }}</button>
-        <button class="btn btn--primary" :disabled="!descInstruction.trim()" @click="onExtractFromDescription">{{ t('assistant.worldBuilder.descModal.extract') }}</button>
+        <AgaButton variant="secondary" @click="showDescModal = false">{{ t('assistant.worldBuilder.cancel') }}</AgaButton>
+        <AgaButton variant="primary" :disabled="!descInstruction.trim()" @click="onExtractFromDescription">{{ t('assistant.worldBuilder.descModal.extract') }}</AgaButton>
       </template>
     </Modal>
   </div>
@@ -890,8 +901,8 @@ function onExtractFromDescription(): void {
   height: 100%;
   padding: 0 var(--sidebar-right-reserve, 40px) 0 var(--sidebar-left-reserve, 40px);
   transition: padding-left var(--duration-open) var(--ease-droplet), padding-right var(--duration-open) var(--ease-droplet);
-  background: var(--color-bg, #1a1a25);
-  color: var(--color-text, #e0e0e6);
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 /* Header */
@@ -901,7 +912,7 @@ function onExtractFromDescription(): void {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--color-border, #2a2a3a);
+  border-bottom: 1px solid var(--color-border-subtle);
   background: rgba(255, 255, 255, 0.02);
 }
 .header-left { display: flex; align-items: center; gap: 12px; }
@@ -912,16 +923,16 @@ function onExtractFromDescription(): void {
   font-size: 0.74rem;
   font-weight: 500;
 }
-.mode-tag[data-mode="A"] { background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); color: var(--color-primary, #6366f1); }
+.mode-tag[data-mode="A"] { background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); color: var(--color-sage-400); }
 .mode-tag[data-mode="B"] { background: color-mix(in oklch, var(--color-success) 15%, transparent); color: var(--color-success); }
-.history-count { font-size: 0.78rem; color: var(--color-text-secondary, #8888a0); }
+.history-count { font-size: 0.78rem; color: var(--color-text-secondary); }
 
 .header-right { display: flex; gap: 6px; }
 .action-btn {
   padding: 6px 12px;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   border-radius: 5px;
   cursor: pointer;
   font-size: 0.82rem;
@@ -942,17 +953,17 @@ function onExtractFromDescription(): void {
   flex-wrap: wrap;
   gap: 6px;
   padding: 6px 16px;
-  border-bottom: 1px solid var(--color-border, #2a2a3a);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 .qa-label {
   font-size: 0.75rem;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   margin-right: 4px;
   letter-spacing: 0.05em;
 }
 .qa-chip {
   padding: 0.3rem 0.7rem;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
   background: transparent;
   color: var(--color-text);
@@ -961,7 +972,7 @@ function onExtractFromDescription(): void {
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 .qa-chip:hover:not(:disabled) {
-  border-color: var(--color-primary);
+  border-color: var(--color-sage-400);
   transform: translateY(-1px);
   box-shadow: 0 0 8px color-mix(in oklch, var(--color-sage-400) 15%, transparent);
 }
@@ -976,11 +987,11 @@ function onExtractFromDescription(): void {
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--color-border, #2a2a3a);
+  border-bottom: 1px solid var(--color-border-subtle);
   min-height: 48px;
 }
 .att-list { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; }
-.att-empty { font-size: 0.8rem; color: var(--color-text-secondary, #8888a0); opacity: 0.7; }
+.att-empty { font-size: 0.8rem; color: var(--color-text-secondary); opacity: 0.7; }
 
 .att-chip {
   display: inline-flex;
@@ -1017,13 +1028,13 @@ function onExtractFromDescription(): void {
   flex-shrink: 0;
   padding: 5px 12px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed var(--color-border, #2a2a3a);
-  color: var(--color-text-secondary, #8888a0);
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-secondary);
   border-radius: 5px;
   cursor: pointer;
   font-size: 0.78rem;
 }
-.att-add:hover:not(:disabled) { background: color-mix(in oklch, var(--color-text-bone) 6%, transparent); color: var(--color-text, #e0e0e6); }
+.att-add:hover:not(:disabled) { background: color-mix(in oklch, var(--color-text-bone) 6%, transparent); color: var(--color-text); }
 .att-add:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Messages */
@@ -1040,7 +1051,7 @@ function onExtractFromDescription(): void {
   margin: auto;
   padding: 40px;
   text-align: center;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   font-size: 0.92rem;
   line-height: 1.6;
 }
@@ -1050,7 +1061,7 @@ function onExtractFromDescription(): void {
   padding: 10px 14px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
 }
 .msg-user { align-self: flex-end; background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent); }
 .msg-assistant { align-self: flex-start; }
@@ -1073,7 +1084,7 @@ function onExtractFromDescription(): void {
   justify-content: space-between;
   align-items: center;
   font-size: 0.74rem;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   margin-bottom: 4px;
 }
 .msg-role { font-weight: 600; }
@@ -1083,7 +1094,7 @@ function onExtractFromDescription(): void {
   word-break: break-word;
   font-size: 0.86rem;
   line-height: 1.55;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
 }
 
 .msg-attachments {
@@ -1114,8 +1125,8 @@ function onExtractFromDescription(): void {
   width: 100%;
   padding: 10px 14px;
   background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-  border: 1px solid var(--color-primary, #6366f1);
-  color: var(--color-text, #e0e0e6);
+  border: 1px solid var(--color-sage-400);
+  color: var(--color-text);
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.84rem;
@@ -1127,7 +1138,7 @@ function onExtractFromDescription(): void {
 .payload-summary {
   font-size: 0.76rem;
   font-weight: 400;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
 }
 
 .payload-status {
@@ -1136,7 +1147,7 @@ function onExtractFromDescription(): void {
   font-size: 0.78rem;
 }
 .payload-status.injected { background: color-mix(in oklch, var(--color-success) 12%, transparent); color: var(--color-success); }
-.payload-status.discarded { background: rgba(255, 255, 255, 0.04); color: var(--color-text-secondary, #8888a0); }
+.payload-status.discarded { background: rgba(255, 255, 255, 0.04); color: var(--color-text-secondary); }
 
 /* Input bar */
 .ap-input {
@@ -1144,7 +1155,7 @@ function onExtractFromDescription(): void {
   display: flex;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid var(--color-border, #2a2a3a);
+  border-top: 1px solid var(--color-border-subtle);
   background: rgba(255, 255, 255, 0.02);
 }
 
@@ -1152,8 +1163,8 @@ function onExtractFromDescription(): void {
   flex: 1;
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 0.86rem;
   font-family: inherit;
@@ -1161,12 +1172,12 @@ function onExtractFromDescription(): void {
   outline: none;
   transition: border-color 0.15s;
 }
-.input-textarea:focus { border-color: var(--color-primary, #6366f1); box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent); }
+.input-textarea:focus { border-color: var(--color-sage-400); box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent); }
 .input-textarea:disabled { opacity: 0.6; }
 
 .send-btn {
   padding: 0 24px;
-  background: var(--color-primary, #6366f1);
+  background: var(--color-sage-400);
   color: var(--color-text-bone);
   border: none;
   border-radius: 6px;
@@ -1184,20 +1195,20 @@ function onExtractFromDescription(): void {
   width: 80px;
   padding: 6px 10px;
   background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 0.84rem;
   font-family: inherit;
   outline: none;
 }
-.setting-row input[type="number"]:focus { border-color: var(--color-primary, #6366f1); }
+.setting-row input[type="number"]:focus { border-color: var(--color-sage-400); }
 .setting-row input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   width: 18px;
   height: 18px;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.05);
   cursor: pointer;
@@ -1216,22 +1227,18 @@ function onExtractFromDescription(): void {
   align-items: center;
   justify-content: center;
   font-size: 0.7rem;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
 }
-.setting-hint { font-size: 0.74rem; color: var(--color-text-secondary, #8888a0); }
+.setting-hint { font-size: 0.74rem; color: var(--color-text-secondary); }
 
-.btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.84rem; font-weight: 500; cursor: pointer; }
-.btn--primary { background: var(--color-primary, #6366f1); color: var(--color-text-bone); }
-.btn--secondary { background: rgba(255, 255, 255, 0.07); color: var(--color-text, #e0e0e6); }
-.btn--danger { background: color-mix(in oklch, var(--color-danger) 12%, transparent); color: var(--color-danger-hover); border: 1px solid color-mix(in oklch, var(--color-danger) 30%, transparent); }
-.confirm-hint { margin-top: 8px; font-size: 0.8rem; color: var(--color-text-secondary, #8888a0); }
+.confirm-hint { margin-top: 8px; font-size: 0.8rem; color: var(--color-text-secondary); }
 
 /* Mode toggle (Story 3) */
 .mode-toggle {
   display: inline-flex;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.03);
   margin-left: 8px;
 }
@@ -1239,7 +1246,7 @@ function onExtractFromDescription(): void {
   padding: 4px 14px;
   border: none;
   background: transparent;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   font-size: 0.78rem;
   font-weight: 500;
   cursor: pointer;
@@ -1248,7 +1255,7 @@ function onExtractFromDescription(): void {
 }
 .mode-seg.active {
   background: color-mix(in oklch, var(--color-sage-400) 18%, transparent);
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
 }
 .mode-seg:hover:not(.active) {
   background: rgba(255, 255, 255, 0.06);
@@ -1271,14 +1278,14 @@ function onExtractFromDescription(): void {
 .wb-form-label {
   font-size: 0.84rem;
   font-weight: 500;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
 }
 .wb-textarea {
   width: 100%;
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 0.86rem;
   font-family: inherit;
@@ -1288,7 +1295,7 @@ function onExtractFromDescription(): void {
   box-sizing: border-box;
 }
 .wb-textarea:focus {
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .wb-textarea.large { min-height: 180px; }
@@ -1307,7 +1314,7 @@ function onExtractFromDescription(): void {
 .wb-config-label {
   font-size: 0.84rem;
   font-weight: 500;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   min-width: 100px;
 }
 .wb-config-toggle {
@@ -1317,7 +1324,7 @@ function onExtractFromDescription(): void {
   cursor: pointer;
   font-size: 0.84rem;
   font-weight: 500;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   min-width: 100px;
 }
 .wb-config-line .wb-number-input {
@@ -1328,7 +1335,7 @@ function onExtractFromDescription(): void {
   -webkit-appearance: none;
   width: 18px;
   height: 18px;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.05);
   cursor: pointer;
@@ -1347,7 +1354,7 @@ function onExtractFromDescription(): void {
   align-items: center;
   justify-content: center;
   font-size: 0.7rem;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
 }
 .wb-select,
 .wb-number-input {
@@ -1355,8 +1362,8 @@ function onExtractFromDescription(): void {
   max-width: 240px;
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 0.84rem;
   font-family: inherit;
@@ -1372,12 +1379,12 @@ function onExtractFromDescription(): void {
   cursor: pointer;
 }
 .wb-select option {
-  background: var(--color-bg, #1a1a25);
-  color: var(--color-text, #e0e0e6);
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 .wb-select:focus,
 .wb-number-input:focus {
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 

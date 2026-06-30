@@ -235,5 +235,7 @@
   "prompt.worldbook.importSTSuccess": "已导入 SillyTavern 世界书「{title}」，共 {count} 个条目",
   "prompt.worldbook.importInvalidFormat": "导入文件格式无效（支持 AGA 导出格式和 SillyTavern 世界书）",
   "prompt.worldbook.importTooMany": "单次导入不能超过 200 个条目",
-  "prompt.worldbook.importError": "导入失败"
+  "prompt.worldbook.importError": "导入失败",
+  "prompt.worldbook.toggleBookEnabled": "启用/停用世界书",
+  "prompt.worldbook.toggleEntryEnabled": "启用/停用条目"
 }

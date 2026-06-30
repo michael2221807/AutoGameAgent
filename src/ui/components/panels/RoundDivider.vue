@@ -22,6 +22,7 @@ import {
   formatTokens,
   type DisplayMetrics,
 } from './round-divider-helpers';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 interface Props {
   /** Which round this divider precedes. */
@@ -97,99 +98,126 @@ function onBadgeClick(): void {
 
       <div class="round-divider__actions round-divider__actions--left">
         <!-- 🌐 Thinking button — shown whenever this round has CoT data (both current + past rounds). -->
-        <button
+        <Tooltip
           v-if="props.hasThinking"
-          type="button"
-          class="round-divider__icon-btn"
-          :title="$t('mainGame.roundDivider.thinkingTitle')"
-          :aria-label="$t('mainGame.roundDivider.thinkingAriaLabel')"
-          @click="$emit('view-thinking')"
+          :text="$t('mainGame.roundDivider.thinkingTitle')"
+          interactive
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A8.959 8.959 0 0 1 3 12c0-.778.099-1.533.284-2.253" />
-          </svg>
-        </button>
+          <button
+            type="button"
+            class="round-divider__icon-btn"
+            :aria-label="$t('mainGame.roundDivider.thinkingAriaLabel')"
+            @click="$emit('view-thinking')"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A8.959 8.959 0 0 1 3 12c0-.778.099-1.533.284-2.253" />
+            </svg>
+          </button>
+        </Tooltip>
         <!-- 🧠 Engram button — moved to left cluster for visual balance. -->
-        <button
+        <Tooltip
           v-if="props.hasEngram"
-          type="button"
-          class="round-divider__icon-btn round-divider__icon-btn--engram"
-          :title="$t('mainGame.roundDivider.engramTitle')"
-          :aria-label="$t('mainGame.roundDivider.engramAriaLabel')"
-          @click="$emit('view-engram')"
+          :text="$t('mainGame.roundDivider.engramTitle')"
+          interactive
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-          </svg>
-        </button>
+          <button
+            type="button"
+            class="round-divider__icon-btn round-divider__icon-btn--engram"
+            :aria-label="$t('mainGame.roundDivider.engramAriaLabel')"
+            @click="$emit('view-engram')"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
 
-      <component
-        :is="props.polish?.applied ? 'button' : 'div'"
-        class="round-divider__badge"
-        :class="{ 'round-divider__badge--clickable': props.polish?.applied }"
-        :type="props.polish?.applied ? 'button' : undefined"
-        :title="props.polish?.applied ? $t(props.showingOriginal ? 'mainGame.roundDivider.toggleToPolished' : 'mainGame.roundDivider.toggleToOriginal') : undefined"
-        :aria-pressed="props.polish?.applied ? props.showingOriginal : undefined"
-        @click="onBadgeClick"
+      <Tooltip
+        v-if="props.polish?.applied"
+        :text="$t(props.showingOriginal ? 'mainGame.roundDivider.toggleToPolished' : 'mainGame.roundDivider.toggleToOriginal')"
+        interactive
       >
+        <button
+          type="button"
+          class="round-divider__badge round-divider__badge--clickable"
+          :aria-pressed="props.showingOriginal"
+          @click="onBadgeClick"
+        >
+          <span class="round-divider__badge-main">{{ $t('mainGame.roundDivider.badge', { n: props.roundNumber }) }}</span>
+          <span class="round-divider__badge-sub">
+            {{ props.polish.manual ? $t('mainGame.roundDivider.polishManual') : $t('mainGame.roundDivider.polishAuto') }}
+            ·
+            {{ props.showingOriginal ? $t('mainGame.roundDivider.viewOriginal') : $t('mainGame.roundDivider.viewPolished') }}
+          </span>
+        </button>
+      </Tooltip>
+      <div v-else class="round-divider__badge">
         <span class="round-divider__badge-main">{{ $t('mainGame.roundDivider.badge', { n: props.roundNumber }) }}</span>
-        <span v-if="props.polish?.applied" class="round-divider__badge-sub">
-          {{ props.polish.manual ? $t('mainGame.roundDivider.polishManual') : $t('mainGame.roundDivider.polishAuto') }}
-          ·
-          {{ props.showingOriginal ? $t('mainGame.roundDivider.viewOriginal') : $t('mainGame.roundDivider.viewPolished') }}
-        </span>
-      </component>
+      </div>
 
       <div class="round-divider__actions round-divider__actions--right">
         <!-- ☰ Commands button — current round only. -->
-        <button
+        <Tooltip
           v-if="props.isCurrent && props.hasCommands"
-          type="button"
-          class="round-divider__icon-btn round-divider__icon-btn--commands"
-          :title="$t('mainGame.roundDivider.commandsTitle')"
-          :aria-label="$t('mainGame.roundDivider.commandsAriaLabel')"
-          @click="$emit('view-commands')"
+          :text="$t('mainGame.roundDivider.commandsTitle')"
+          interactive
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 6.75h16.5m-16.5 6.75h16.5" />
-          </svg>
-        </button>
+          <button
+            type="button"
+            class="round-divider__icon-btn round-divider__icon-btn--commands"
+            :aria-label="$t('mainGame.roundDivider.commandsAriaLabel')"
+            @click="$emit('view-commands')"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 6.75h16.5m-16.5 6.75h16.5" />
+            </svg>
+          </button>
+        </Tooltip>
         <!-- ⮂ Raw-response button — shown whenever this round has raw text (both current + past rounds). -->
-        <button
+        <Tooltip
           v-if="props.hasRaw"
-          type="button"
-          class="round-divider__icon-btn"
-          :title="$t('mainGame.roundDivider.rawTitle')"
-          :aria-label="$t('mainGame.roundDivider.rawAriaLabel')"
-          @click="$emit('view-raw')"
+          :text="$t('mainGame.roundDivider.rawTitle')"
+          interactive
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
-          </svg>
-        </button>
+          <button
+            type="button"
+            class="round-divider__icon-btn"
+            :aria-label="$t('mainGame.roundDivider.rawAriaLabel')"
+            @click="$emit('view-raw')"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
 
       <span class="round-divider__line" aria-hidden="true" />
     </div>
 
     <!-- Token / duration pill, only when metrics available -->
-    <div v-if="props.metrics" class="round-divider__pill" :title="`本回合元信息 · round ${props.metrics.roundNumber}`">
-      <span class="round-divider__stat round-divider__stat--input" aria-label="输入 tokens">
-        <span class="round-divider__stat-icon">↑</span>
-        <span class="round-divider__stat-value">{{ formatTokens(props.metrics.inputTokens) }}</span>
-      </span>
-      <span class="round-divider__sep" aria-hidden="true" />
-      <span class="round-divider__stat round-divider__stat--duration" aria-label="耗时">
-        <span class="round-divider__stat-icon">◷</span>
-        <span class="round-divider__stat-value">{{ formatDuration(props.metrics.durationMs) }}</span>
-      </span>
-      <span class="round-divider__sep" aria-hidden="true" />
-      <span class="round-divider__stat round-divider__stat--output" aria-label="输出 tokens">
-        <span class="round-divider__stat-icon">↓</span>
-        <span class="round-divider__stat-value">{{ formatTokens(props.metrics.outputTokens) }}</span>
-      </span>
-    </div>
+    <Tooltip
+      v-if="props.metrics"
+      :text="$t('mainGame.roundDivider.metricsTitle', { n: props.metrics.roundNumber })"
+    >
+      <div class="round-divider__pill">
+        <span class="round-divider__stat round-divider__stat--input" :aria-label="$t('mainGame.roundDivider.inputTokensLabel')">
+          <span class="round-divider__stat-icon">↑</span>
+          <span class="round-divider__stat-value">{{ formatTokens(props.metrics.inputTokens) }}</span>
+        </span>
+        <span class="round-divider__sep" aria-hidden="true" />
+        <span class="round-divider__stat round-divider__stat--duration" :aria-label="$t('mainGame.roundDivider.durationLabel')">
+          <span class="round-divider__stat-icon">◷</span>
+          <span class="round-divider__stat-value">{{ formatDuration(props.metrics.durationMs) }}</span>
+        </span>
+        <span class="round-divider__sep" aria-hidden="true" />
+        <span class="round-divider__stat round-divider__stat--output" :aria-label="$t('mainGame.roundDivider.outputTokensLabel')">
+          <span class="round-divider__stat-icon">↓</span>
+          <span class="round-divider__stat-value">{{ formatTokens(props.metrics.outputTokens) }}</span>
+        </span>
+      </div>
+    </Tooltip>
   </div>
 </template>
 

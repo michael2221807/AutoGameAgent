@@ -155,5 +155,9 @@
   "mainGame.search.placeholder": "搜索关键字…",
   "mainGame.search.close": "关闭搜索",
   "mainGame.search.noResults": "未找到匹配内容",
-  "mainGame.search.roundLabel": "第{n}回合"
+  "mainGame.search.roundLabel": "第{n}回合",
+  "mainGame.roundDivider.metricsTitle": "本回合元信息 · 第 {n} 回合",
+  "mainGame.roundDivider.inputTokensLabel": "输入 tokens",
+  "mainGame.roundDivider.durationLabel": "耗时",
+  "mainGame.roundDivider.outputTokensLabel": "输出 tokens"
 }

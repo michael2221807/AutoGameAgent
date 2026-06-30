@@ -12,16 +12,17 @@
   <header class="topbar" :class="{ 'topbar--writing': isWorldBuilding }" role="banner" :aria-label="$t('layout.topbar.ariaHeader')">
     <!-- ── Left: navigation + identity ── -->
     <div class="topbar__left">
-      <button
-        class="topbar__btn topbar__back"
-        :aria-label="$t('layout.topbar.ariaBackHome')"
-        :title="$t('layout.topbar.ariaBackHome')"
-        @click="navigateHome"
-      >
-        <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-        </svg>
-      </button>
+      <Tooltip :text="$t('layout.topbar.ariaBackHome')" interactive>
+        <button
+          class="topbar__btn topbar__back"
+          :aria-label="$t('layout.topbar.ariaBackHome')"
+          @click="navigateHome"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </Tooltip>
 
       <div class="topbar__title-group">
         <h1 class="topbar__game-title">{{ displayPackName }}</h1>
@@ -50,7 +51,6 @@
       <span
         v-if="hasGameTime"
         class="topbar__info-item topbar__time"
-        :title="localizedGameTime"
       >
         <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11" aria-hidden="true">
           <path fill-rule="evenodd" d="M8 1a7 7 0 100 14A7 7 0 008 1zm.5 3.5a.5.5 0 00-1 0V8a.5.5 0 00.146.354l2.5 2.5a.5.5 0 00.708-.708L8.5 7.793V4.5z" clip-rule="evenodd" />
@@ -62,13 +62,14 @@
       <span v-if="hasGameTime && engineState.roundNumber > 0" class="topbar__sep" aria-hidden="true">·</span>
 
       <!-- Round number -->
-      <span
+      <Tooltip
         v-if="engineState.roundNumber > 0"
-        class="topbar__info-item topbar__round"
-        :title="$t('layout.topbar.roundTooltip', { n: engineState.roundNumber })"
+        :text="$t('layout.topbar.roundTooltip', { n: engineState.roundNumber })"
       >
-        <span class="topbar__info-text">{{ $t('layout.topbar.roundText', { n: engineState.roundNumber }) }}</span>
-      </span>
+        <span class="topbar__info-item topbar__round">
+          <span class="topbar__info-text">{{ $t('layout.topbar.roundText', { n: engineState.roundNumber }) }}</span>
+        </span>
+      </Tooltip>
 
       <!-- AI status badge -->
       <span
@@ -90,67 +91,76 @@
         mode is unmistakable on every panel; clicking toggles. Renders the shared
         SessionModeBadge — the exact same visual the card-writing guide uses, so
         the persistent indicator and the guide read as one system (PM P-A 联动).
-        Uses :title (not the Tooltip component) for consistency with the sibling
-        toolbar action icons and to avoid an extra tab-stop around a <button>.
+        Explanatory mode hint routed through the unified Tooltip primitive (§8.1).
       -->
-      <button
+      <Tooltip
         v-if="engineState.activeSlotId"
-        class="topbar__mode-toggle"
-        data-testid="mode-toggle"
-        :title="isWorldBuilding ? $t('layout.topbar.modeToggleWorldBuildingTooltip') : $t('layout.topbar.modeTogglePlayTooltip')"
-        :aria-label="$t('layout.topbar.modeToggleAria')"
-        :aria-pressed="isWorldBuilding"
-        :disabled="isModePersisting"
-        @click="handleModeToggle"
+        :text="isWorldBuilding ? $t('layout.topbar.modeToggleWorldBuildingTooltip') : $t('layout.topbar.modeTogglePlayTooltip')"
+        interactive
       >
-        <SessionModeBadge :mode="isWorldBuilding ? 'worldBuilding' : 'play'" size="sm" />
-      </button>
+        <button
+          class="topbar__mode-toggle"
+          data-testid="mode-toggle"
+          :aria-label="$t('layout.topbar.modeToggleAria')"
+          :aria-pressed="isWorldBuilding"
+          :disabled="isModePersisting"
+          @click="handleModeToggle"
+        >
+          <SessionModeBadge :mode="isWorldBuilding ? 'worldBuilding' : 'play'" size="sm" />
+        </button>
+      </Tooltip>
 
       <!-- Fullscreen toggle -->
-      <button
-        class="topbar__btn"
-        :aria-label="isFullscreen ? $t('layout.topbar.ariaExitFullscreen') : $t('layout.topbar.ariaEnterFullscreen')"
-        :title="isFullscreen ? $t('layout.topbar.ariaExitFullscreen') : $t('layout.topbar.ariaEnterFullscreen')"
-        @click="toggleFullscreen"
+      <Tooltip
+        :text="isFullscreen ? $t('layout.topbar.ariaExitFullscreen') : $t('layout.topbar.ariaEnterFullscreen')"
+        interactive
       >
-        <!-- Enter fullscreen icon -->
-        <svg v-if="!isFullscreen" viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-          <path d="M3 3h5v2H5v3H3V3zm9 0h5v5h-2V5h-3V3zM3 12h2v3h3v2H3v-5zm12 3h-3v2h5v-5h-2v3z" />
-        </svg>
-        <!-- Exit fullscreen icon -->
-        <svg v-else viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-          <path d="M3 8h2V5h3V3H3v5zm9-5v2h3v3h2V3h-5zM3 12v5h5v-2H5v-3H3zm12 3h-3v2h5v-5h-2v3z" />
-        </svg>
-      </button>
+        <button
+          class="topbar__btn"
+          :aria-label="isFullscreen ? $t('layout.topbar.ariaExitFullscreen') : $t('layout.topbar.ariaEnterFullscreen')"
+          @click="toggleFullscreen"
+        >
+          <!-- Enter fullscreen icon -->
+          <svg v-if="!isFullscreen" viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+            <path d="M3 3h5v2H5v3H3V3zm9 0h5v5h-2V5h-3V3zM3 12h2v3h3v2H3v-5zm12 3h-3v2h5v-5h-2v3z" />
+          </svg>
+          <!-- Exit fullscreen icon -->
+          <svg v-else viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+            <path d="M3 8h2V5h3V3H3v5zm9-5v2h3v3h2V3h-5zM3 12v5h5v-2H5v-3H3zm12 3h-3v2h5v-5h-2v3z" />
+          </svg>
+        </button>
+      </Tooltip>
 
       <!-- Quick save -->
-      <button
-        class="topbar__btn"
-        :class="{ 'topbar__btn--saving': isSaving }"
-        :aria-label="$t('layout.topbar.ariaQuickSave')"
-        :title="$t('layout.topbar.ariaQuickSave')"
-        :disabled="isSaving"
-        @click="handleQuickSave"
-      >
-        <svg v-if="!isSaving" viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-          <path d="M5.5 2A1.5 1.5 0 004 3.5v13A1.5 1.5 0 005.5 18h9a1.5 1.5 0 001.5-1.5V6.621a1.5 1.5 0 00-.44-1.06l-3.12-3.122A1.5 1.5 0 0011.378 2H5.5zM10 12a2 2 0 100-4 2 2 0 000 4z" />
-        </svg>
-        <svg v-else class="topbar__spin" viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-          <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
-        </svg>
-      </button>
+      <Tooltip :text="$t('layout.topbar.ariaQuickSave')" interactive>
+        <button
+          class="topbar__btn"
+          :class="{ 'topbar__btn--saving': isSaving }"
+          :aria-label="$t('layout.topbar.ariaQuickSave')"
+          :disabled="isSaving"
+          @click="handleQuickSave"
+        >
+          <svg v-if="!isSaving" viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+            <path d="M5.5 2A1.5 1.5 0 004 3.5v13A1.5 1.5 0 005.5 18h9a1.5 1.5 0 001.5-1.5V6.621a1.5 1.5 0 00-.44-1.06l-3.12-3.122A1.5 1.5 0 0011.378 2H5.5zM10 12a2 2 0 100-4 2 2 0 000 4z" />
+          </svg>
+          <svg v-else class="topbar__spin" viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </Tooltip>
 
       <!-- Settings gear -->
-      <button
-        class="topbar__btn"
-        :aria-label="$t('layout.topbar.ariaSettings')"
-        :title="$t('layout.topbar.ariaSettings')"
-        @click="navigateSettings"
-      >
-        <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
-          <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
-        </svg>
-      </button>
+      <Tooltip :text="$t('layout.topbar.ariaSettings')" interactive>
+        <button
+          class="topbar__btn"
+          :aria-label="$t('layout.topbar.ariaSettings')"
+          @click="navigateSettings"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </Tooltip>
     </div>
   </header>
 
@@ -181,6 +191,7 @@ import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { eventBus } from '@/engine/core/event-bus';
 import Modal from '@/ui/components/common/Modal.vue';
 import SessionModeBadge from '@/ui/components/shared/SessionModeBadge.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { useSessionMode } from '@/ui/composables/useSessionMode';
 import type { SaveManager } from '@/engine/persistence/save-manager';
 import type { GameStateTree } from '@/engine/types';

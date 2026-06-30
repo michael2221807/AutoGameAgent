@@ -91,31 +91,23 @@
           <span class="effects-count">{{ normalizedEffects.length }}</span>
         </h3>
         <div class="effects-list">
-          <div
+          <component
+            :is="effectTipText(effect) ? Tooltip : 'div'"
             v-for="(effect, i) in normalizedEffects"
             :key="i"
-            :class="['effect-tag', effect.isDebuff ? 'effect-tag--debuff' : 'effect-tag--buff']"
-            :aria-label="`${effect.isDebuff ? $t('layout.right.ariaDebuff') : $t('layout.right.ariaBuff')}：${effect.name}`"
-            @mouseenter="showEffectTip($event, effect)"
-            @mouseleave="hideEffectTip"
-            @click.stop="toggleEffectTip($event, effect)"
+            :text="effectTipText(effect) || undefined"
+            position="bottom"
+            class="effect-tag-wrap"
           >
-            <span class="effect-tag__label">{{ effect.name }}</span>
-          </div>
+            <div
+              :class="['effect-tag', effect.isDebuff ? 'effect-tag--debuff' : 'effect-tag--buff']"
+              :aria-label="`${effect.isDebuff ? $t('layout.right.ariaDebuff') : $t('layout.right.ariaBuff')}：${effect.name}`"
+            >
+              <span class="effect-tag__label">{{ effect.name }}</span>
+            </div>
+          </component>
         </div>
       </section>
-
-      <!-- Effect tooltip — teleported to body to escape overflow clipping -->
-      <Teleport to="body">
-        <div
-          v-if="effectTip.visible"
-          class="effect-detail effect-detail--fixed"
-          :style="{ top: effectTip.y + 'px', left: effectTip.x + 'px' }"
-        >
-          <p v-if="effectTip.effect?.desc" class="effect-detail__desc">{{ effectTip.effect.desc }}</p>
-          <span v-if="effectTip.effect?.duration" class="effect-detail__dur">{{ effectTip.effect.duration }} {{ $t('layout.right.minutesUnit') }}</span>
-        </div>
-      </Teleport>
 
       <!-- ─── Attributes (collapsible) ─── -->
       <section class="status-card" :aria-label="$t('layout.right.ariaAttributes')">
@@ -169,27 +161,18 @@
       <section v-if="engineState.talents.length > 0" class="status-card" :aria-label="$t('layout.right.ariaTalents')">
         <h3 class="status-card__title">{{ $t('layout.right.talentsTitle') }}</h3>
         <div class="talent-list">
-          <span
+          <component
+            :is="t.描述 ? Tooltip : 'span'"
             v-for="t in engineState.talents"
             :key="t.名称"
-            class="talent-tag"
-            @mouseenter="showTalentTip($event, t)"
-            @mouseleave="hideTalentTip"
-            @click.stop="toggleTalentTip($event, t)"
-          >{{ t.名称 }}</span>
+            :text="t.描述 || undefined"
+            position="bottom"
+            class="talent-tag-wrap"
+          >
+            <span class="talent-tag">{{ t.名称 }}</span>
+          </component>
         </div>
       </section>
-
-      <!-- Talent tooltip — teleported to body to escape overflow clipping -->
-      <Teleport to="body">
-        <div
-          v-if="talentTip.visible"
-          class="effect-detail effect-detail--fixed"
-          :style="{ top: talentTip.y + 'px', left: talentTip.x + 'px' }"
-        >
-          <p class="effect-detail__desc">{{ talentTip.desc }}</p>
-        </div>
-      </Teleport>
 
       <!-- ─── Quick actions ─── -->
       <section class="status-card" :aria-label="$t('layout.right.ariaQuickActions')">
@@ -244,12 +227,13 @@
 
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-overview.md §4.0.3
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { eventBus } from '@/engine/core/event-bus';
 import { useSidebarDrawer } from '@/ui/composables/useSidebarDrawer';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const engineState = useEngineStateStore();
 const router = useRouter();
@@ -349,66 +333,12 @@ const normalizedEffects = computed<NormalizedEffect[]>(() => {
   return [...seen.values()];
 });
 
-// ── Effect tooltip (fixed-position, teleported to body) ─────────
-const effectTip = ref<{
-  visible: boolean;
-  x: number;
-  y: number;
-  effect: NormalizedEffect | null;
-}>({ visible: false, x: 0, y: 0, effect: null });
-
-function showEffectTip(ev: MouseEvent, effect: NormalizedEffect): void {
-  if (!effect.desc && !effect.duration) return;
-  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const tipWidth = 220;
-  let x = rect.left + rect.width / 2 - tipWidth / 2;
-  if (x < 8) x = 8;
-  if (x + tipWidth > window.innerWidth - 8) x = window.innerWidth - 8 - tipWidth;
-  effectTip.value = {
-    visible: true,
-    x,
-    y: rect.bottom + 6,
-    effect,
-  };
-}
-
-function hideEffectTip(): void {
-  effectTip.value = { visible: false, x: 0, y: 0, effect: null };
-}
-
-function toggleEffectTip(ev: MouseEvent, effect: NormalizedEffect): void {
-  if (effectTip.value.visible && effectTip.value.effect?.name === effect.name) {
-    hideEffectTip();
-  } else {
-    showEffectTip(ev, effect);
-  }
-}
-
-// ── Talent tooltip (same Teleport pattern as effect tooltip) ─────
-const talentTip = ref<{ visible: boolean; x: number; y: number; desc: string }>({
-  visible: false, x: 0, y: 0, desc: '',
-});
-
-function showTalentTip(ev: MouseEvent, t: { 名称: string; 描述: string }): void {
-  if (!t.描述) return;
-  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const tipWidth = 220;
-  let x = rect.left + rect.width / 2 - tipWidth / 2;
-  if (x < 8) x = 8;
-  if (x + tipWidth > window.innerWidth - 8) x = window.innerWidth - 8 - tipWidth;
-  talentTip.value = { visible: true, x, y: rect.bottom + 6, desc: t.描述 };
-}
-
-function hideTalentTip(): void {
-  talentTip.value = { visible: false, x: 0, y: 0, desc: '' };
-}
-
-function toggleTalentTip(ev: MouseEvent, t: { 名称: string; 描述: string }): void {
-  if (talentTip.value.visible && talentTip.value.desc === t.描述) {
-    hideTalentTip();
-  } else {
-    showTalentTip(ev, t);
-  }
+// ── Effect tooltip text (desc + optional duration, single line) ──
+function effectTipText(effect: NormalizedEffect): string {
+  const parts: string[] = [];
+  if (effect.desc) parts.push(effect.desc);
+  if (effect.duration) parts.push(`${effect.duration} ${t('layout.right.minutesUnit')}`);
+  return parts.join(' · ');
 }
 
 // ── Attributes ───────────────────────────────────────────────────
@@ -474,16 +404,7 @@ watch([isCollapsed, isMobile], ([collapsed, mobile]) => {
   );
 }, { immediate: true });
 
-function onDocumentClick(): void {
-  if (effectTip.value.visible) hideEffectTip();
-}
-
-onMounted(() => {
-  document.addEventListener('click', onDocumentClick);
-});
-
 onUnmounted(() => {
-  document.removeEventListener('click', onDocumentClick);
   document.documentElement.style.removeProperty('--sidebar-right-reserve');
 });
 </script>
@@ -864,34 +785,11 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
-.effect-detail--fixed {
-  position: fixed;
-  z-index: 9999;
-  min-width: 200px;
-  max-width: 280px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: none;
-  box-shadow: var(--glass-shadow);
-  text-align: left;
-  white-space: normal;
-  pointer-events: none;
-}
-.effect-detail__desc {
-  margin: 0;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  color: var(--color-text-bone);
-  font-weight: 400;
-}
-.effect-detail__dur {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 0.64rem;
-  color: var(--color-text-muted);
+/* Tooltip / fallback wrapper around each effect tag — keep tags inline in the
+   flex row and let the tag fill the wrapper so its pill styling is unchanged. */
+.effect-tag-wrap {
+  display: inline-flex;
+  max-width: 100%;
 }
 
 /* ─── Attributes ─── */
@@ -966,6 +864,10 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+}
+.talent-tag-wrap {
+  display: inline-flex;
+  max-width: 100%;
 }
 .talent-tag {
   display: inline-flex;
