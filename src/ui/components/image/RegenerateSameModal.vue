@@ -187,7 +187,9 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
                 :disabled="busy"
                 :label="$t('image.regenerate.useRefRedraw')"
               />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('image.regenerate.useRefRedraw') }}</span>
+              <!-- aria-hidden: AgaToggle's :label already names the switch for AT; this span is a
+                   mouse-convenience click target (clicking the text toggles, like the old <label>). -->
+              <span class="aga-toggle-row__label aga-toggle-row__label--clickable" aria-hidden="true" @click="!busy && (useReference = !useReference)">{{ $t('image.regenerate.useRefRedraw') }}</span>
             </div>
             <div v-if="useReference" class="regen-ref-controls">
               <div class="regen-label">{{ $t('image.regenerate.redrawStrength') }}</div>
@@ -326,6 +328,7 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 
 .aga-toggle-row { display: flex; align-items: center; gap: var(--space-sm); }
 .aga-toggle-row__label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.aga-toggle-row__label--clickable { cursor: pointer; }
 
 .regen-meta { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .regen-meta-chip {

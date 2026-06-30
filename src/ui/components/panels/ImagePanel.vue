@@ -3468,8 +3468,8 @@ function clearNpcImages() {
 
             <div v-if="galleryImages.length > 0" class="gallery-grid">
               <div v-for="img in galleryImages" :key="img.id" class="gallery-card">
-                <Tooltip :text="$t('image.gallery.clickViewLarge')" class="tt-block">
-                <div class="gallery-card-image" @click="openViewer(img.id)" style="cursor:pointer">
+                <!-- native title= (not the glass Tooltip): the bubble would be clipped by .gallery-card overflow:hidden -->
+                <div class="gallery-card-image" :title="$t('image.gallery.clickViewLarge')" @click="openViewer(img.id)" style="cursor:pointer">
                   <ImageDisplay :asset-id="img.id" :fallback-letter="galleryNpc?.charAt(0) ?? '?'" size="lg" />
                   <!-- Overlay badges: status + usage (stacked, top-left) -->
                   <div class="gallery-overlay-badges">
@@ -3486,7 +3486,6 @@ function clearNpcImages() {
                     <span v-if="img.providerMeta?.reference" class="gallery-usage-badge gallery-usage-badge--ref">{{ $t('image.gallery.usageBadge.reference') }}</span>
                   </div>
                 </div>
-                </Tooltip>
                 <div class="gallery-card-meta">
                   <div class="gallery-meta-top">
                     <span class="gallery-meta-comp">{{ img.composition || $t('image.gallery.metaComp.character') }}</span>
@@ -3634,12 +3633,10 @@ function clearNpcImages() {
             <!-- Current wallpaper -->
             <div class="scene-section">
               <h3 class="section-label">{{ $t('image.scene.currentWallpaper') }}</h3>
-              <Tooltip v-if="currentSceneWallpaperId" :text="$t('image.gallery.clickViewLarge')" class="tt-block">
-              <div class="wallpaper-card" @click="openViewer(currentSceneWallpaperId)">
+              <div v-if="currentSceneWallpaperId" class="wallpaper-card" :title="$t('image.gallery.clickViewLarge')" @click="openViewer(currentSceneWallpaperId)">
                 <ImageDisplay :asset-id="currentSceneWallpaperId" fallback-letter="S" size="lg" />
                 <span class="wallpaper-badge">{{ $t('image.scene.currentlyUsed') }}</span>
               </div>
-              </Tooltip>
               <div v-else class="wallpaper-placeholder">
                 <p>{{ $t('image.scene.noWallpaper') }}</p>
                 <p class="form-hint">{{ $t('image.scene.noWallpaperHint') }}</p>
@@ -3875,8 +3872,7 @@ function clearNpcImages() {
                   :key="String(record.id ?? record.createdAt)"
                   class="scene-history-card"
                 >
-                  <Tooltip :text="$t('image.gallery.clickViewLarge')" class="tt-block">
-                  <div class="scene-history-card-image" @click="openViewer(String(record.id ?? ''))" style="cursor:pointer">
+                  <div class="scene-history-card-image" :title="$t('image.gallery.clickViewLarge')" @click="openViewer(String(record.id ?? ''))" style="cursor:pointer">
                     <ImageDisplay :asset-id="String(record.id ?? '')" fallback-letter="S" size="lg" />
                     <div class="gallery-overlay-badges">
                       <span :class="['gallery-status-badge', `gallery-status-badge--${record.status ?? 'complete'}`]">
@@ -3885,7 +3881,6 @@ function clearNpcImages() {
                       <span v-if="isCurrentSceneWallpaper(String(record.id ?? ''))" class="gallery-usage-badge">{{ $t('image.scene.currentWallpaperBadge') }}</span>
                     </div>
                   </div>
-                  </Tooltip>
                   <div class="scene-history-card-body">
                     <div class="scene-history-card-top">
                       <span class="scene-history-card-time">{{ new Date(Number(record.createdAt) || 0).toLocaleString() }}</span>
@@ -4071,10 +4066,10 @@ function clearNpcImages() {
         <div v-if="filteredHistory.length > 0" class="history-list-v2">
           <div v-for="entry in filteredHistory" :key="entry.key" class="history-card-v2">
             <!-- Left: image (1/3) -->
-            <Tooltip :text="$t('image.gallery.clickViewLarge')" class="tt-block tt-history-image">
             <div
               class="history-card-image-v2"
               :class="entry.type === 'scene' ? 'history-card-image-v2--landscape' : ''"
+              :title="$t('image.gallery.clickViewLarge')"
               @click="openViewer(entry.assetId)"
               style="cursor:pointer"
             >
@@ -4090,7 +4085,6 @@ function clearNpcImages() {
                 <span class="history-type-badge-v2">{{ entry.type === 'scene' ? $t('image.history.typeScene') : $t('image.history.typeCharacter') }}</span>
               </div>
             </div>
-            </Tooltip>
 
             <!-- Right: metadata (2/3) -->
             <div class="history-card-body-v2">
@@ -6357,10 +6351,8 @@ function clearNpcImages() {
 }
 /* Tooltip wrappers around block-level clickable image cards must not collapse
    to inline-flex; keep them transparent to the card grid/flex layout. */
-.tt-block { display: block; width: 100%; }
-.tt-history-image { width: 33.33%; flex-shrink: 0; align-items: stretch; }
 .history-card-image-v2 {
-  width: 100%; flex-shrink: 0; position: relative; overflow: hidden;
+  width: 33.33%; flex-shrink: 0; position: relative; overflow: hidden;
   aspect-ratio: 3/4; border-right: 1px solid var(--color-border);
 }
 .history-card-image-v2--landscape { aspect-ratio: 16/9; min-height: 240px; }
@@ -6636,7 +6628,7 @@ function clearNpcImages() {
   margin-top: var(--space-md); padding: 16px;
   border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 30%, transparent);
   border-radius: var(--radius-lg);
-  background: color-mix(in oklch, var(--color-fuchsia-base) 04%, transparent);
+  background: color-mix(in oklch, var(--color-fuchsia-base) 4%, transparent);
 }
 .secret-header-row { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 15%, transparent); padding-bottom: 10px; margin-bottom: 12px; }
 .secret-title { font-size: 0.95rem; font-weight: 700; color: var(--color-fuchsia); margin: 0; }
@@ -6650,9 +6642,9 @@ function clearNpcImages() {
 .secret-all-btn:hover { background: color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent); }
 .secret-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .secret-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
-.secret-status { padding: 8px 10px; border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 25%, transparent); background: color-mix(in oklch, var(--color-fuchsia-base) 08%, transparent); border-radius: var(--radius-md); font-size: 0.78rem; color: var(--color-fuchsia-bright); margin-bottom: 12px; }
+.secret-status { padding: 8px 10px; border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 25%, transparent); background: color-mix(in oklch, var(--color-fuchsia-base) 8%, transparent); border-radius: var(--radius-md); font-size: 0.78rem; color: var(--color-fuchsia-bright); margin-bottom: 12px; }
 .secret-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.secret-card { border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent); background: rgba(0,0,0,0.3); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 6px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: var(--lumi-inset-highlight), inset 0 0 12px color-mix(in oklch, var(--color-fuchsia-base) 04%, transparent); }
+.secret-card { border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent); background: rgba(0,0,0,0.3); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 6px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: var(--lumi-inset-highlight), inset 0 0 12px color-mix(in oklch, var(--color-fuchsia-base) 4%, transparent); }
 .secret-card-header { display: flex; align-items: center; justify-content: space-between; }
 .secret-card-label { font-size: 0.82rem; font-weight: 600; color: var(--color-fuchsia-bright); }
 .secret-card-btn {
@@ -6689,7 +6681,7 @@ function clearNpcImages() {
 
 /* Fuchsia-themed grid buttons */
 .grid-btn--fuchsia { border-color: color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent); }
-.grid-btn--fuchsia:hover { border-color: color-mix(in oklch, var(--color-fuchsia-base) 50%, transparent); background: color-mix(in oklch, var(--color-fuchsia-base) 06%, transparent); }
+.grid-btn--fuchsia:hover { border-color: color-mix(in oklch, var(--color-fuchsia-base) 50%, transparent); background: color-mix(in oklch, var(--color-fuchsia-base) 6%, transparent); }
 .grid-btn--fuchsia-active {
   border-color: var(--color-fuchsia) !important; background: color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent) !important;
   color: var(--color-fuchsia-bright) !important; box-shadow: 0 0 10px color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent);
