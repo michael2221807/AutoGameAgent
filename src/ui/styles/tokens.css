@@ -105,7 +105,6 @@
      ───────────────────────────────────────────────────────────── */
   --color-nsfw:             #e879a0;
   --color-nsfw-bright:      #f472b6;
-  --color-nsfw-muted:       color-mix(in oklch, var(--color-nsfw) 15%, transparent);
 
   /* ─────────────────────────────────────────────────────────────
      BACKWARD-COMPAT ALIASES — every legacy `var(--color-primary)` etc.

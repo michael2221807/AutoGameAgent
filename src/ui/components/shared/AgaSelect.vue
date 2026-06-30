@@ -27,6 +27,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void;
+  /** Fired whenever the control is dismissed (selection / Escape / click-outside).
+      Lets inline-edit hosts commit + collapse on click-away (native <select> @blur parity). */
+  (e: 'close'): void;
 }>();
 
 const { t } = useI18n();
@@ -48,7 +51,9 @@ function toggle() {
   }
 }
 
-function close() { isOpen.value = false; }
+// silent=true skips the close emit (Escape: let the host run its own cancel handler
+// instead of committing — selection/click-outside still emit so click-away commits).
+function close(silent = false) { isOpen.value = false; if (!silent) emit('close'); }
 
 function select(opt: SelectOption) {
   if (opt.disabled) return;
@@ -66,7 +71,7 @@ function onKeydown(e: KeyboardEvent) {
     return;
   }
 
-  if (e.key === 'Escape') { e.preventDefault(); close(); triggerRef.value?.focus(); return; }
+  if (e.key === 'Escape') { e.preventDefault(); close(true); triggerRef.value?.focus(); return; }
   if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx.value = Math.min(highlightIdx.value + 1, props.options.length - 1); return; }
   if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx.value = Math.max(highlightIdx.value - 1, 0); return; }
   if (e.key === 'Enter' || e.key === ' ') {

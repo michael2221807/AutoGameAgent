@@ -1283,7 +1283,7 @@ const genderSelectOptions = computed<SelectOption[]>(() => [
                 :label="$t('relationship.editForm.nsfw.virginCheckbox')"
                 @update:model-value="(v) => editForm.私密信息['是否为处女/处男'] = v"
               />
-              <span class="aga-toggle-row__label">{{ $t('relationship.editForm.nsfw.virginCheckbox') }}</span>
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('relationship.editForm.nsfw.virginCheckbox') }}</span>
             </div>
             <span class="form-hint">{{ $t('relationship.editForm.nsfw.virginHint') }}</span>
           </div>
@@ -1436,11 +1436,11 @@ const genderSelectOptions = computed<SelectOption[]>(() => [
           <div class="form-group form-group--row">
             <div class="aga-toggle-row">
               <AgaToggle v-model="editForm.关注" :label="$t('relationship.editForm.flags.watch')" />
-              <span class="aga-toggle-row__label">{{ $t('relationship.editForm.flags.watch') }}</span>
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('relationship.editForm.flags.watch') }}</span>
             </div>
             <div class="aga-toggle-row">
               <AgaToggle v-model="editForm.心跳锁定" :label="$t('relationship.editForm.flags.heartbeatLock')" />
-              <span class="aga-toggle-row__label">{{ $t('relationship.editForm.flags.heartbeatLock') }}</span>
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('relationship.editForm.flags.heartbeatLock') }}</span>
             </div>
           </div>
         </div>

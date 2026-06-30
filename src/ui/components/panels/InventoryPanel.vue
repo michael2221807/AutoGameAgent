@@ -390,7 +390,7 @@ function saveCurrency(): void {
           v-model="filterType"
           class="filter-select-aga"
           :options="filterSelectOptions"
-          :ariaLabel="t('inventory.filter.all')"
+          :ariaLabel="t('inventory.edit.label.type')"
         />
       </div>
 
@@ -954,6 +954,7 @@ function saveCurrency(): void {
   .panel-header-left { flex-wrap: wrap; }
   .form-row { flex-direction: column; }
   /* Story 2: mobile touch targets */
+  .panel-header-left :deep(.aga-btn) { min-height: 44px; }
   .btn-primary { min-height: 44px; }
   .btn-secondary { min-height: 44px; }
   .btn-danger { min-height: 44px; }

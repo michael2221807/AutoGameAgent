@@ -1606,6 +1606,7 @@ const avatarInitial = computed<string>(() => {
                     :model-value="genderDraft"
                     :options="genderSelectOptions"
                     @update:model-value="v => { genderDraft = v; commitGender(); }"
+                    @close="commitGender"
                   />
                 </span>
               </template>
@@ -1637,6 +1638,7 @@ const avatarInitial = computed<string>(() => {
                     :model-value="locationDraft"
                     :options="locationSelectOptions"
                     @update:model-value="v => { locationDraft = v; commitLocation(); }"
+                    @close="commitLocation"
                   />
                 </span>
               </template>

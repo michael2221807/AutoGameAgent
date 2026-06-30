@@ -340,9 +340,12 @@ const availableNpcs = computed(() =>
 );
 
 // AgaSelect option lists (preserve exact label logic from the original <option> markup)
-const parentOptions = computed<SelectOption[]>(() =>
-  availableParents.value.map(p => ({ label: p, value: p })),
-);
+const parentOptions = computed<SelectOption[]>(() => [
+  // explicit selectable "no parent" entry (a placeholder isn't selectable, so an
+  // existing child could never be demoted back to a root location without it)
+  { label: t('map.edit.noParent'), value: '' },
+  ...availableParents.value.map(p => ({ label: p, value: p })),
+]);
 const connectionOptions = computed<SelectOption[]>(() =>
   availableConnections.value.map(opt => ({ label: opt, value: opt })),
 );
@@ -1149,7 +1152,7 @@ onActivated(() => {
         </div>
         <div class="loc-form-group">
           <label class="loc-form-label">{{ $t('map.edit.label.parent') }}</label>
-          <AgaSelect :modelValue="locationForm.上级 ?? ''" :options="parentOptions" :placeholder="$t('map.edit.noParent')" @update:modelValue="v => locationForm.上级 = v" />
+          <AgaSelect :modelValue="locationForm.上级 ?? ''" :options="parentOptions" @update:modelValue="v => locationForm.上级 = v" />
         </div>
 
         <div class="loc-form-group">
