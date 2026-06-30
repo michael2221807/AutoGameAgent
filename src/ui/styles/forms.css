@@ -1,0 +1,175 @@
+/**
+ * AGA Global Form-Control Foundation — Sanctuary aesthetic
+ *
+ * Part of the UI Consistency epic (2026-06-29). Audit:
+ *   docs/status/ui-consistency-audit-2026-06-29.md
+ *   docs/plans/ui-consistency-epic-plan.md  (Phase 0 / F1)
+ *
+ * WHY THIS FILE EXISTS
+ * The app had 54 native checkbox/radio/range/file controls + 35 native
+ * <select>s rendered with raw browser defaults (per project_native_form_styling
+ * memory, browser defaults are never acceptable). Instead of editing dozens of
+ * SFCs, this single global layer themes every native control with design tokens.
+ *
+ * NON-DESTRUCTIVE BY DESIGN
+ * Every rule is wrapped in :where(...) so it has ZERO specificity — it applies
+ * ONLY where a component does not already style that control. Any existing
+ * scoped component style (a class selector) always wins. This guarantees the
+ * foundation can never override intentional per-panel styling; it only fills
+ * the gaps left by bare / partially-styled controls.
+ *
+ * Pseudo-elements (::-webkit-slider-thumb etc.) cannot live inside :where(),
+ * so range thumbs/tracks use attribute-only selectors ([type='range']) which
+ * keep specificity at (0,1,1) — equal to a component's own
+ * `.cls::-webkit-slider-thumb`, so a panel that styles its own thumb still wins
+ * by source order while bare/accent-only ranges pick up the unified sage thumb.
+ *
+ * Imported once in main.ts AFTER tokens.css (so var(--token) is resolved).
+ */
+
+/* ─────────────────────────────────────────────────────────────
+   ACCENT COLOR — themes native checkbox / radio / range / progress
+   in one line for every browser that honors accent-color.
+   ───────────────────────────────────────────────────────────── */
+:where(input[type='checkbox'], input[type='radio'], input[type='range'], progress) {
+  accent-color: var(--color-sage-400);
+}
+:where(input[type='checkbox'], input[type='radio']) {
+  cursor: pointer;
+}
+:where(input[type='checkbox']:focus-visible, input[type='radio']:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 22%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TEXT-LIKE INPUTS + TEXTAREA — baseline keyboard focus ring.
+   Box styling is left to components; this only supplies a token
+   focus ring where a component declares none.
+   ───────────────────────────────────────────────────────────── */
+:where(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):focus-visible,
+  textarea:focus-visible
+) {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 14%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   NATIVE <select> — token surface + focus ring + dark option list.
+   Native arrow is kept (colored via `color`) so no select ever loses
+   or doubles its dropdown affordance. Fully-glass dropdowns come from
+   migrating chrome-surface selects to AgaSelect (epic phases).
+   ───────────────────────────────────────────────────────────── */
+:where(select) {
+  color: var(--color-text);
+  background-color: var(--color-surface-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+:where(select:hover) {
+  border-color: color-mix(in oklch, var(--color-sage-400) 35%, var(--color-border));
+}
+:where(select:focus-visible) {
+  outline: none;
+  border-color: var(--color-sage-400);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 18%, transparent);
+}
+:where(select) option {
+  background: var(--color-surface-elevated);
+  color: var(--color-text);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RANGE SLIDER — unified sage track + glowing thumb (webkit + moz).
+   ───────────────────────────────────────────────────────────── */
+:where(input[type='range']) {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--color-border) 85%, transparent);
+  cursor: pointer;
+}
+/* WebKit / Blink — pseudo-elements can't go inside :where(), so these use the
+   bare `input` element selector (specificity 0,0,2) which sits BELOW any
+   component's own `.class::-webkit-slider-thumb` (0,1,1). That guarantees a panel
+   with a custom thumb always wins, independent of CSS bundle order; only
+   bare/accent-only ranges pick up this unified sage thumb. */
+input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: var(--radius-full);
+  background: var(--color-sage-400);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+input:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+:where(input[type='range']:focus-visible) {
+  outline: none;
+}
+input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+}
+/* Firefox */
+input::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--color-border) 85%, transparent);
+}
+input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-sage-400);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+  cursor: pointer;
+}
+input:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FILE INPUT — token-styled selector button for any visible file
+   input (most are display:none + a styled trigger; this covers the
+   exceptions like the card-cover picker).
+   ───────────────────────────────────────────────────────────── */
+:where(input[type='file']) {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+:where(input[type='file'])::file-selector-button {
+  margin-right: var(--space-sm);
+  padding: var(--space-2xs) var(--space-sm);
+  background: var(--color-sage-muted);
+  color: var(--color-sage-100);
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 35%, transparent);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+:where(input[type='file'])::file-selector-button:hover {
+  background: color-mix(in oklch, var(--color-sage-400) 22%, transparent);
+}

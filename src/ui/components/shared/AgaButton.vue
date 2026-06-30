@@ -8,7 +8,7 @@
  * Uses AGA design tokens from tokens.css.
  */
 defineProps<{
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'danger' | 'warning' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   loading?: boolean;
@@ -127,6 +127,20 @@ defineProps<{
   box-shadow:
     0 0 14px color-mix(in oklch, var(--color-danger) 22%, transparent),
     inset 0 0 10px color-mix(in oklch, var(--color-danger) 10%, transparent);
+}
+
+/* Warning — amber caution beacon (e.g. reset-to-default). Not destructive-red. */
+.aga-btn--warning {
+  background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+  border-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+  color: color-mix(in oklch, var(--color-warning) 95%, var(--color-text));
+}
+.aga-btn--warning:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-warning) 22%, transparent);
+  border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
+  box-shadow:
+    0 0 14px color-mix(in oklch, var(--color-warning) 22%, transparent),
+    inset 0 0 10px color-mix(in oklch, var(--color-warning) 10%, transparent);
 }
 
 /* Ghost — transparent, warms to sage on hover */

@@ -15,6 +15,9 @@ import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import Modal from '@/ui/components/common/Modal.vue';
 import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
 import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { API_PROVIDER_PRESETS } from '@/engine/ai/types';
 import { inferImageBackendFromUrl, AI_SETTINGS_STORAGE_KEY } from '@/engine/ai/ai-service';
@@ -289,6 +292,12 @@ function getCategoryMeta(cat: APICategory): { label: string; desc: string } {
 
 const CATEGORY_OPTIONS: APICategory[] = ['llm', 'embedding', 'rerank', 'image'];
 
+/** Provider picker options for the edit modal (AgaSelect). */
+const PROVIDER_VALUES: APIProviderType[] = ['openai', 'claude', 'gemini', 'deepseek', 'custom'];
+const providerOptions = computed<SelectOption[]>(() =>
+  PROVIDER_VALUES.map((p) => ({ label: t(`api.form.provider.${p}`), value: p })),
+);
+
 type ImageBackendHint = 'civitai' | 'novelai' | 'openai' | 'sd_webui' | 'comfyui' | 'custom';
 
 /** Static image backend data (URL, model placeholders). Labels and hints come from t() at call site. */
@@ -310,6 +319,12 @@ function getImageBackendPreset(key: ImageBackendHint): { label: string; url: str
   };
 }
 const imageBackend = ref<ImageBackendHint>('civitai');
+
+/** Image backend picker options for the edit modal (AgaSelect). */
+const IMAGE_BACKEND_VALUES: ImageBackendHint[] = ['civitai', 'novelai', 'openai', 'sd_webui', 'comfyui', 'custom'];
+const imageBackendOptions = computed<SelectOption[]>(() =>
+  IMAGE_BACKEND_VALUES.map((k) => ({ label: t(`api.imageBackend.${k}`), value: k })),
+);
 
 function onImageBackendChange(): void {
   const preset = getImageBackendPreset(imageBackend.value);
@@ -748,6 +763,27 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   const required = requiredCategoryFor(type);
   return (api.apiCategory ?? 'llm') !== required;
 }
+
+/**
+ * Build the per-usageType assignment dropdown options as SelectOption[] for AgaSelect.
+ * PRESERVES the exact label logic from the prior native <select>:
+ *  - empty placeholder when no assignable API matches
+ *  - ' (disabled)' suffix for disabled APIs
+ *  - ' ⚠ mismatch' suffix when the API's category does not match the slot
+ */
+function getAssignableAPIOptions(type: UsageType): SelectOption[] {
+  const apis = getAssignableAPIs(type);
+  if (apis.length === 0) {
+    return [{ label: t('api.assign.noMatch'), value: '' }];
+  }
+  return apis.map((api) => ({
+    value: api.id,
+    label:
+      api.name +
+      (!api.enabled ? ' ' + t('api.assign.disabled') : '') +
+      (isApiCategoryMismatch(api, type) ? ' ⚠ ' + t('api.assign.mismatch') : ''),
+  }));
+}
 </script>
 
 <template>
@@ -756,8 +792,8 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
     <header class="panel-header">
       <h2 class="panel-title">{{ $t('api.title') }}</h2>
       <div class="header-actions">
-        <button class="btn-secondary" @click="showAssignModal = true">{{ $t('api.assignBtn') }}</button>
-        <button class="btn-primary" @click="openAddModal">{{ $t('api.addApi') }}</button>
+        <AgaButton variant="secondary" size="sm" @click="showAssignModal = true">{{ $t('api.assignBtn') }}</AgaButton>
+        <AgaButton variant="primary" size="sm" @click="openAddModal">{{ $t('api.addApi') }}</AgaButton>
       </div>
     </header>
 
@@ -771,31 +807,29 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         <div class="api-header">
           <div class="api-title-area">
             <!-- Status dot (B.1.1) -->
-            <div
-              :class="['status-dot', `status-dot--${testStatuses[api.id] ?? 'idle'}`]"
-              :title="testStatuses[api.id] === 'ok' ? `${testLatencies[api.id]}ms` : (testStatuses[api.id] ?? $t('api.test.untested'))"
-            />
+            <Tooltip :text="testStatuses[api.id] === 'ok' ? `${testLatencies[api.id]}ms` : (testStatuses[api.id] ?? $t('api.test.untested'))">
+              <span :class="['status-dot', `status-dot--${testStatuses[api.id] ?? 'idle'}`]" />
+            </Tooltip>
             <span class="api-name">{{ api.name }}</span>
             <!-- §11.3: API 类别 badge -->
-            <span
-              :class="['api-category-badge', `api-category-badge--${api.apiCategory ?? 'llm'}`]"
-              :title="getCategoryMeta(api.apiCategory ?? 'llm').desc"
-            >
-              {{ getCategoryMeta(api.apiCategory ?? 'llm').label }}
-            </span>
+            <Tooltip :text="getCategoryMeta(api.apiCategory ?? 'llm').desc">
+              <span :class="['api-category-badge', `api-category-badge--${api.apiCategory ?? 'llm'}`]">
+                {{ getCategoryMeta(api.apiCategory ?? 'llm').label }}
+              </span>
+            </Tooltip>
             <span v-if="(api.apiCategory ?? 'llm') === 'llm'" class="api-provider">{{ providerName(api.provider) }}</span>
             <span v-if="testStatuses[api.id] === 'ok'" class="latency-badge">
               {{ testLatencies[api.id] }}ms
             </span>
           </div>
           <div class="api-actions">
-            <button
-              :class="['toggle-btn', { 'toggle-btn--on': api.enabled }]"
-              :title="api.enabled ? $t('api.card.disable') : $t('api.card.enable')"
-              @click="apiStore.toggleAPI(api.id)"
-            >
-              {{ api.enabled ? 'ON' : 'OFF' }}
-            </button>
+            <Tooltip :text="api.enabled ? $t('api.card.disable') : $t('api.card.enable')" interactive>
+              <AgaToggle
+                :modelValue="api.enabled"
+                :label="api.enabled ? $t('api.card.disable') : $t('api.card.enable')"
+                @update:modelValue="() => apiStore.toggleAPI(api.id)"
+              />
+            </Tooltip>
           </div>
         </div>
 
@@ -855,14 +889,11 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             <span class="setting-label">{{ $t('api.aiSettings.streaming.label') }}</span>
             <span class="setting-desc">{{ $t('api.aiSettings.streaming.desc') }}</span>
           </div>
-          <button
-            role="switch"
-            :aria-checked="streamingEnabled"
-            :class="['toggle-switch', { 'toggle-switch--on': streamingEnabled }]"
-            @click="streamingEnabled = !streamingEnabled; saveAISettings()"
-          >
-            {{ streamingEnabled ? 'ON' : 'OFF' }}
-          </button>
+          <AgaToggle
+            :modelValue="streamingEnabled"
+            :label="$t('api.aiSettings.streaming.label')"
+            @update:modelValue="v => { streamingEnabled = v; saveAISettings(); }"
+          />
         </div>
 
         <!-- Split generation toggle -->
@@ -871,14 +902,11 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
             <span class="setting-label">{{ $t('api.aiSettings.splitGen.label') }}</span>
             <span class="setting-desc">{{ $t('api.aiSettings.splitGen.desc') }}</span>
           </div>
-          <button
-            role="switch"
-            :aria-checked="splitGenEnabled"
-            :class="['toggle-switch', { 'toggle-switch--on': splitGenEnabled }]"
-            @click="splitGenEnabled = !splitGenEnabled; saveAISettings()"
-          >
-            {{ splitGenEnabled ? 'ON' : 'OFF' }}
-          </button>
+          <AgaToggle
+            :modelValue="splitGenEnabled"
+            :label="$t('api.aiSettings.splitGen.label')"
+            @update:modelValue="v => { splitGenEnabled = v; saveAISettings(); }"
+          />
         </div>
 
         <!-- Max retries -->
@@ -945,26 +973,21 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         <!-- Provider only for LLM category -->
         <div v-if="form.apiCategory === 'llm'" class="form-group">
           <label class="form-label">{{ $t('api.form.provider') }}</label>
-          <select v-model="form.provider" class="form-input" @change="onProviderChange">
-            <option value="openai">{{ $t('api.form.provider.openai') }}</option>
-            <option value="claude">{{ $t('api.form.provider.claude') }}</option>
-            <option value="gemini">{{ $t('api.form.provider.gemini') }}</option>
-            <option value="deepseek">{{ $t('api.form.provider.deepseek') }}</option>
-            <option value="custom">{{ $t('api.form.provider.custom') }}</option>
-          </select>
+          <AgaSelect
+            :modelValue="form.provider"
+            :options="providerOptions"
+            @update:modelValue="v => { form.provider = v as APIProviderType; onProviderChange(); }"
+          />
         </div>
 
         <!-- Image backend selector -->
         <div v-if="form.apiCategory === 'image'" class="form-group">
           <label class="form-label">{{ $t('api.form.imageBackend') }}</label>
-          <select v-model="imageBackend" class="form-input" @change="onImageBackendChange">
-            <option value="civitai">{{ $t('api.imageBackend.civitai') }}</option>
-            <option value="novelai">{{ $t('api.imageBackend.novelai') }}</option>
-            <option value="openai">{{ $t('api.imageBackend.openai') }}</option>
-            <option value="sd_webui">{{ $t('api.imageBackend.sd_webui') }}</option>
-            <option value="comfyui">{{ $t('api.imageBackend.comfyui') }}</option>
-            <option value="custom">{{ $t('api.imageBackend.custom') }}</option>
-          </select>
+          <AgaSelect
+            :modelValue="imageBackend"
+            :options="imageBackendOptions"
+            @update:modelValue="v => { imageBackend = v as ImageBackendHint; onImageBackendChange(); }"
+          />
         </div>
 
         <div class="form-group">
@@ -1044,14 +1067,10 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 
         <!-- Disable prefill toggle (LLM only) -->
         <div v-if="form.apiCategory === 'llm'" class="form-group">
-          <label class="form-label">
-            <input
-              v-model="form.disablePrefill"
-              type="checkbox"
-              class="form-checkbox"
-            />
-            {{ $t('api.form.disablePrefill') }}
-          </label>
+          <div class="aga-toggle-row">
+            <AgaToggle v-model="form.disablePrefill" :label="$t('api.form.disablePrefill')" />
+            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('api.form.disablePrefill') }}</span>
+          </div>
           <span class="form-hint">
             {{ $t('api.form.disablePrefillHint') }}
           </span>
@@ -1061,14 +1080,10 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
         <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-advanced">
           <summary>{{ $t('api.form.advancedOptions') }}</summary>
           <div class="form-group">
-            <label class="form-label">
-              <input
-                v-model="form.useCustomRouting"
-                type="checkbox"
-                class="form-checkbox"
-              />
-              {{ $t('api.form.useCustomRouting') }}
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle v-model="form.useCustomRouting" :label="$t('api.form.useCustomRouting')" />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('api.form.useCustomRouting') }}</span>
+            </div>
             <span class="form-hint">
               {{ $t('api.form.customRoutingHint') }}
             </span>
@@ -1090,15 +1105,14 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
           {{ formValidationError }}
         </span>
         <div style="flex: 1" />
-        <button class="btn-secondary" @click="showEditModal = false">{{ $t('api.modal.cancel') }}</button>
-        <button
-          class="btn-primary"
+        <AgaButton variant="secondary" @click="showEditModal = false">{{ $t('api.modal.cancel') }}</AgaButton>
+        <AgaButton
+          variant="primary"
           :disabled="!!formValidationError"
-          :title="formValidationError ?? $t('api.modal.save')"
           @click="saveAPI"
         >
           {{ $t('api.modal.save') }}
-        </button>
+        </AgaButton>
       </template>
     </Modal>
 
@@ -1130,15 +1144,15 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
           </div>
         </div>
 
-        <label class="assign-show-all">
-          <input type="checkbox" v-model="showAllInAssign" />
+        <div class="assign-show-all">
+          <AgaToggle v-model="showAllInAssign" :label="$t('api.assign.showAll')" />
           <span>{{ $t('api.assign.showAll') }}</span>
           <span class="assign-show-all-hint">
             {{ showAllInAssign
               ? $t('api.assign.showAllHintOn')
               : $t('api.assign.showAllHintOff') }}
           </span>
-        </label>
+        </div>
 
         <div v-for="cat in CATEGORY_ORDER" :key="cat" class="assign-group">
           <div class="assign-group-label">{{ getAssignCategoryMeta(cat).label }}</div>
@@ -1148,27 +1162,22 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
               v-for="type in typesForCategory(cat)"
               :key="type"
               :class="['assign-row', { 'assign-row--stale': staleAssignmentTypes.has(type) }]"
-              :title="staleAssignmentTypes.has(type) ? $t('api.preset.staleHint') : undefined"
             >
-              <span
-                class="assign-label"
-                :title="getUsageTypeMeta(type).tip"
-              >
+              <Tooltip v-if="staleAssignmentTypes.has(type)" :text="$t('api.preset.staleHint')">
+                <span class="assign-stale-dot" aria-hidden="true" />
+              </Tooltip>
+              <span class="assign-label">
                 {{ getUsageTypeMeta(type).label }}
-                <span class="assign-tip-icon">?</span>
+                <Tooltip :text="getUsageTypeMeta(type).tip" position="right">
+                  <span class="assign-tip-icon">?</span>
+                </Tooltip>
               </span>
-              <select
+              <AgaSelect
                 class="assign-select"
-                :value="getAssignedApiId(type)"
-                @change="assignAPI(type, ($event.target as HTMLSelectElement).value)"
-              >
-                <option v-if="getAssignableAPIs(type).length === 0" value="">
-                  {{ $t('api.assign.noMatch') }}
-                </option>
-                <option v-for="api in getAssignableAPIs(type)" :key="api.id" :value="api.id">
-                  {{ api.name }}{{ !api.enabled ? ' ' + $t('api.assign.disabled') : '' }}{{ isApiCategoryMismatch(api, type) ? ' ⚠ ' + $t('api.assign.mismatch') : '' }}
-                </option>
-              </select>
+                :modelValue="getAssignedApiId(type)"
+                :options="getAssignableAPIOptions(type)"
+                @update:modelValue="v => assignAPI(type, v)"
+              />
             </div>
           </div>
         </div>
@@ -1237,8 +1246,8 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 
 .api-card {
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--glass-bg);
+  border: none;
   border-radius: 10px;
   transition: opacity 0.15s ease;
   box-shadow: var(--lumi-inset-highlight);
@@ -1300,7 +1309,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   font-size: 0.68rem;
   font-weight: 600;
   padding: 2px 8px;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
   background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
   border-radius: 8px;
   text-transform: uppercase;
@@ -1318,7 +1327,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   text-shadow: 0 0 4px currentColor;
 }
 .api-category-badge--llm {
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
   background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
 }
 .api-category-badge--embedding {
@@ -1334,23 +1343,6 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
-}
-
-.toggle-btn {
-  padding: 2px 12px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-secondary, #8888a0);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.toggle-btn--on {
-  color: var(--color-success, #22c55e);
-  border-color: color-mix(in oklch, var(--color-success) 30%, transparent);
-  background: color-mix(in oklch, var(--color-success) 8%, transparent);
 }
 
 .api-details {
@@ -1408,7 +1400,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 }
 .btn-sm:hover:not(:disabled) {
   color: var(--color-text, #e0e0e6);
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-primary);
 }
 .btn-sm:disabled {
   opacity: 0.5;
@@ -1471,25 +1463,6 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   color: var(--color-text-secondary, #8888a0);
 }
 
-.toggle-switch {
-  flex-shrink: 0;
-  padding: 3px 14px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-secondary, #8888a0);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  min-width: 52px;
-}
-.toggle-switch--on {
-  color: var(--color-success, #22c55e);
-  border-color: color-mix(in oklch, var(--color-success) 30%, transparent);
-  background: color-mix(in oklch, var(--color-success) 8%, transparent);
-}
-
 .retry-input {
   width: 60px;
   padding: 4px 8px;
@@ -1502,7 +1475,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   outline: none;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
-.retry-input:focus { border-color: var(--color-primary, #6366f1); }
+.retry-input:focus { border-color: var(--color-primary); }
 
 /* ── Edit form ── */
 .edit-form {
@@ -1542,11 +1515,11 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   outline: none;
   font-family: inherit;
 }
-.form-input:focus { border-color: var(--color-primary, #6366f1); }
+.form-input:focus { border-color: var(--color-primary); }
 
 .form-range {
   width: 100%;
-  accent-color: var(--color-primary, #6366f1);
+  accent-color: var(--color-primary);
 }
 
 /* ── Model input (B.1.2) ── */
@@ -1564,7 +1537,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   padding: 8px 12px;
   font-size: 0.78rem;
   font-weight: 600;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
   background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent);
   border-radius: 6px;
@@ -1599,14 +1572,14 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   border-radius: 3px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.7rem;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
 }
 
 /* §11.3: 三选一类别 segment */
 .category-segment {
   display: flex;
   gap: 0;
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1615,7 +1588,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   padding: 10px 14px;
   background: transparent;
   border: none;
-  border-right: 1px solid var(--color-border, #2a2a3a);
+  border-right: 1px solid var(--color-border);
   color: var(--color-text-secondary, #8888a0);
   font-size: 0.85rem;
   font-weight: 600;
@@ -1629,7 +1602,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 }
 .category-segment__btn--active {
   background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
   box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .category-segment__btn--active:hover {
@@ -1654,9 +1627,15 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   margin-bottom: 8px;
   color: var(--color-text, #e0e0e6);
 }
-.form-checkbox {
-  margin-right: 6px;
-  vertical-align: middle;
+/* Inline toggle row (replaces former checkbox-in-label controls) */
+.aga-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 /* ── Preset toolbar ── */
@@ -1698,9 +1677,22 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 }
 
 /* ── Stale assignment row (missing API warning) ── */
-.assign-row--stale .assign-select {
-  border-color: var(--color-amber-400, #f59e0b) !important;
+.assign-row--stale :deep(.assign-select) {
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-amber-400) 20%, transparent);
+  border-radius: 5px;
+  animation: stale-pulse 2s ease-in-out infinite;
+}
+.assign-row--stale :deep(.aga-select__trigger) {
+  border-color: var(--color-amber-400);
+}
+.assign-stale-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--color-amber-400);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-amber-400) 50%, transparent);
   animation: stale-pulse 2s ease-in-out infinite;
 }
 @keyframes stale-pulse {
@@ -1721,15 +1713,11 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: var(--color-bg-secondary, #2a2a3e);
-  border: 1px solid var(--color-border, #44445a);
-  border-radius: 4px;
+  background: var(--glass-bg);
+  border: none;
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
-  cursor: pointer;
   user-select: none;
-}
-.assign-show-all input[type="checkbox"] {
-  cursor: pointer;
 }
 .assign-show-all-hint {
   font-size: 0.72rem;
@@ -1767,7 +1755,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   border-radius: 3px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.7rem;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
 }
 
 .assign-list {
@@ -1785,24 +1773,14 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
 }
 
 .assign-label {
+  flex: 1;
   font-size: 0.82rem;
   color: var(--color-text, #e0e0e6);
   transition: opacity 0.15s ease;
 }
 
 .assign-select {
-  padding: 4px 8px;
-  font-size: 0.78rem;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 5px;
   min-width: 150px;
-  transition: opacity 0.15s ease;
-}
-.assign-select:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
 }
 
 .assign-tip-icon {
@@ -1822,7 +1800,8 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   vertical-align: middle;
   cursor: help;
 }
-.assign-label:hover .assign-tip-icon {
+.assign-label:hover .assign-tip-icon,
+.assign-tip-icon:hover {
   opacity: 1;
 }
 
@@ -1832,7 +1811,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1);
+  background: var(--color-primary);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -1861,7 +1840,7 @@ function isApiCategoryMismatch(api: APIConfig, type: UsageType): boolean {
   border-radius: 6px;
   cursor: pointer;
 }
-.btn-secondary:hover { color: var(--color-text, #e0e0e6); border-color: var(--color-primary, #6366f1); }
+.btn-secondary:hover { color: var(--color-text, #e0e0e6); border-color: var(--color-primary); }
 
 /* ── Empty ── */
 .empty-state {

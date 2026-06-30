@@ -313,5 +313,11 @@
   "settings.engram.advanced.debug.label": "调试模式",
   "settings.engram.advanced.debug.desc": "开启后侧边栏显示 Engram 调试面板",
   "settings.engram.advanced.knowledgeEdge.label": "事实边",
-  "settings.engram.advanced.knowledgeEdge.desc": "开启后 AI 每回合提取实体间事实，构建可搜索的知识图谱边"
+  "settings.engram.advanced.knowledgeEdge.desc": "开启后 AI 每回合提取实体间事实，构建可搜索的知识图谱边",
+  "settings.ui.fontSize.decrease": "减小字号",
+  "settings.ui.fontSize.increase": "增大字号",
+  "settings.scale.uiScale.decrease": "缩小界面",
+  "settings.scale.uiScale.increase": "放大界面",
+  "settings.textReplace.editRule": "编辑规则",
+  "settings.textReplace.deleteRule": "删除规则"
 }

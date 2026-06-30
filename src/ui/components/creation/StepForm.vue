@@ -8,6 +8,7 @@
  */
 import { computed, reactive, watch } from 'vue';
 import type { CreationStep, FormFieldConfig } from '@/engine/types';
+import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 
 const props = defineProps<{
   step: CreationStep;
@@ -99,10 +100,15 @@ function onTextInput(field: FormFieldConfig, event: Event): void {
   onFieldChange();
 }
 
-/** 处理 select 字段变更 */
-function onSelectChange(field: FormFieldConfig, event: Event): void {
-  formData[field.key] = (event.target as HTMLSelectElement).value;
+/** 处理 select 字段变更（AgaSelect 直接发出 value 字符串） */
+function onSelectChange(field: FormFieldConfig, value: string): void {
+  formData[field.key] = value;
   onFieldChange();
+}
+
+/** 将字段的 options（string[]）映射为 AgaSelect 的 SelectOption[] */
+function selectOptions(field: FormFieldConfig): SelectOption[] {
+  return (field.options ?? []).map((opt) => ({ label: String(opt), value: String(opt) }));
 }
 
 /** 安全地将 unknown 转为字符串用于 :value 绑定 */
@@ -158,19 +164,16 @@ defineExpose({ hasValidationErrors });
         />
 
         <!-- Select -->
-        <select
+        <AgaSelect
           v-else-if="field.type === 'select'"
           :id="`field-${field.key}`"
-          :value="asString(formData[field.key])"
-          class="form-input form-select"
-          :required="field.required"
-          @change="onSelectChange(field, $event)"
-        >
-          <option value="" disabled>{{ $t('creation.form.selectPlaceholder') }}</option>
-          <option v-for="opt in (field.options ?? [])" :key="opt" :value="opt">
-            {{ opt }}
-          </option>
-        </select>
+          :data-testid="`creation-field-${field.key}`"
+          :model-value="asString(formData[field.key])"
+          :options="selectOptions(field)"
+          :placeholder="$t('creation.form.selectPlaceholder')"
+          class="form-field-select"
+          @update:model-value="(v) => onSelectChange(field, v)"
+        />
 
         <!-- Textarea -->
         <textarea
@@ -196,8 +199,8 @@ defineExpose({ hasValidationErrors });
    - Form inputs: bg surface-input; focus sage 3px ring + sage micro-wash
      (matches SearchInput / MainGamePanel input language)
    - Textarea: serif font for narrative-style input (matches MainGamePanel)
-   - Native `<select>` gains a sanctuary-tinted SVG chevron (per
-     project_native_form_styling memory — browser defaults never OK)
+   - Select field migrated to AgaSelect (design-system glass dropdown +
+     keyboard nav); native `<select>` chevron styling retired
    - has-error: danger border + 3px rust ring (echoes focus treatment)
    - validation-hint: sans + tokenized rust color */
 
@@ -269,16 +272,11 @@ defineExpose({ hasValidationErrors });
               inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 
-/* Native select — custom chevron so it never shows the browser default.
-   The stroke color `%23a0968c` is a warm umber that reads well on surface-input. */
-.form-select {
-  appearance: none;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a0968c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 36px;
+/* Select field now uses AgaSelect (token-consistent glass list + keyboard nav).
+   Stretch the inline-block primitive to the field column width. */
+.form-field-select {
+  display: block;
+  width: 100%;
 }
 
 .form-textarea {

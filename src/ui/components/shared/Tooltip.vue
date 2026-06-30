@@ -7,7 +7,20 @@
  * no full glass recipe). The 800ms reveal delay is CSS-only (no JS timers) so it
  * stays smooth on low-end devices.
  *
- * Usage:  <Tooltip :text="$t('save.export.nsfw.hint')"><InfoIcon /></Tooltip>
+ * Two modes:
+ *  - default (non-interactive): wraps a static element (icon, badge, label). The
+ *    wrapper is itself focusable (tabindex=0) + `cursor: help` so keyboard users
+ *    can surface the hint.
+ *  - interactive: wraps a focusable control (button / a / input). The wrapper does
+ *    NOT add its own tabindex (avoids a nested-focusable a11y anti-pattern) and
+ *    inherits the trigger's cursor; the hint reveals on :focus-within so focusing
+ *    the inner control still shows it. Use this when wrapping any clickable element.
+ *
+ * Usage:
+ *   <Tooltip :text="$t('save.export.nsfw.hint')"><InfoIcon /></Tooltip>
+ *   <Tooltip :text="$t('layout.topbar.ariaSettings')" interactive>
+ *     <button @click="open">⚙</button>
+ *   </Tooltip>
  */
 import { computed, useId } from 'vue';
 
@@ -19,8 +32,10 @@ const props = withDefaults(
     position?: 'top' | 'bottom' | 'left' | 'right';
     /** Reveal delay in ms (default 800 — appears only on a deliberate hover). */
     delay?: number;
+    /** Set when the slot is a focusable control (button/a/input). */
+    interactive?: boolean;
   }>(),
-  { position: 'top', delay: 800 },
+  { position: 'top', delay: 800, interactive: false },
 );
 
 // Vue 3.5 useId() → collision-free, SSR/HMR-safe id for aria-describedby (no globalThis mutation).
@@ -32,8 +47,8 @@ const styleVars = computed(() => ({ '--tt-delay': `${props.delay}ms` }));
 <template>
   <span
     class="tt-wrap"
-    :class="`tt-wrap--${position}`"
-    tabindex="0"
+    :class="[`tt-wrap--${position}`, { 'tt-wrap--interactive': interactive }]"
+    :tabindex="interactive ? undefined : 0"
     :aria-describedby="tipId"
     :style="styleVars"
   >
@@ -49,6 +64,11 @@ const styleVars = computed(() => ({ '--tt-delay': `${props.delay}ms` }));
   align-items: center;
   cursor: help;
   outline: none;
+}
+
+/* Interactive trigger: let the inner control own focus + cursor. */
+.tt-wrap--interactive {
+  cursor: inherit;
 }
 
 .tt-bubble {
@@ -73,7 +93,8 @@ const styleVars = computed(() => ({ '--tt-delay': `${props.delay}ms` }));
 }
 
 .tt-wrap:hover .tt-bubble,
-.tt-wrap:focus-visible .tt-bubble {
+.tt-wrap:focus-visible .tt-bubble,
+.tt-wrap--interactive:focus-within .tt-bubble {
   opacity: 1;
   visibility: visible;
   transition:
@@ -89,7 +110,8 @@ const styleVars = computed(() => ({ '--tt-delay': `${props.delay}ms` }));
 @media (prefers-reduced-motion: reduce) {
   .tt-bubble,
   .tt-wrap:hover .tt-bubble,
-  .tt-wrap:focus-visible .tt-bubble {
+  .tt-wrap:focus-visible .tt-bubble,
+  .tt-wrap--interactive:focus-within .tt-bubble {
     transition: none;
   }
 }

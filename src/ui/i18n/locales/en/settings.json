@@ -313,5 +313,11 @@
   "settings.engram.advanced.debug.label": "Debug Mode",
   "settings.engram.advanced.debug.desc": "When enabled, shows Engram debug panel in the sidebar",
   "settings.engram.advanced.knowledgeEdge.label": "Fact Edges",
-  "settings.engram.advanced.knowledgeEdge.desc": "When enabled, AI extracts inter-entity facts each turn to build searchable knowledge graph edges"
+  "settings.engram.advanced.knowledgeEdge.desc": "When enabled, AI extracts inter-entity facts each turn to build searchable knowledge graph edges",
+  "settings.ui.fontSize.decrease": "Decrease font size",
+  "settings.ui.fontSize.increase": "Increase font size",
+  "settings.scale.uiScale.decrease": "Decrease UI scale",
+  "settings.scale.uiScale.increase": "Increase UI scale",
+  "settings.textReplace.editRule": "Edit rule",
+  "settings.textReplace.deleteRule": "Delete rule"
 }

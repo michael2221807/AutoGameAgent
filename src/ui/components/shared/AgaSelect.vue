@@ -19,6 +19,10 @@ const props = defineProps<{
   options: SelectOption[];
   placeholder?: string;
   disabled?: boolean;
+  /** Forwarded to the inner combobox button so a <label for="…"> can target it. */
+  id?: string;
+  /** Accessible name for the combobox button (when there is no visible <label>). */
+  ariaLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -87,11 +91,13 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
   <div class="aga-select" :class="{ 'aga-select--disabled': disabled, 'aga-select--open': isOpen }">
     <button
       ref="triggerRef"
+      :id="id"
       class="aga-select__trigger"
       :disabled="disabled"
       role="combobox"
       aria-haspopup="listbox"
       :aria-expanded="isOpen"
+      :aria-label="ariaLabel"
       @click="toggle"
       @keydown="onKeydown"
     >

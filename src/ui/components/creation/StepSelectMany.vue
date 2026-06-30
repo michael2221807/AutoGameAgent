@@ -13,6 +13,7 @@ import type { CreationStep } from '@/engine/types';
 import PresetDetailPanel from './PresetDetailPanel.vue';
 import CustomPresetModal from './CustomPresetModal.vue';
 import AIPresetGenModal from './AIPresetGenModal.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 
@@ -232,19 +233,23 @@ const hoveredPreset = ref<PresetEntry | null>(null);
           <div class="preset-card-header">
             <span class="preset-name">{{ getDisplayName(preset) }}</span>
             <div v-if="preset.source === 'user'" class="user-badge-row">
-              <span class="user-badge" :title="$t('creation.selectMany.userCustomTooltip')">{{ $t('creation.selectMany.customizeStep', { label: '' }) }}</span>
-              <button
-                type="button"
-                class="user-action user-action--edit"
-                :title="$t('common.actions.edit')"
-                @click="handleEdit(preset, $event)"
-              >✏</button>
-              <button
-                type="button"
-                class="user-action user-action--del"
-                :title="$t('common.actions.delete')"
-                @click="handleRemove(preset, $event)"
-              >🗑</button>
+              <Tooltip :text="$t('creation.selectMany.userCustomTooltip')">
+                <span class="user-badge">{{ $t('creation.selectMany.customizeStep', { label: '' }) }}</span>
+              </Tooltip>
+              <Tooltip :text="$t('common.actions.edit')" interactive>
+                <button
+                  type="button"
+                  class="user-action user-action--edit"
+                  @click="handleEdit(preset, $event)"
+                >✏</button>
+              </Tooltip>
+              <Tooltip :text="$t('common.actions.delete')" interactive>
+                <button
+                  type="button"
+                  class="user-action user-action--del"
+                  @click="handleRemove(preset, $event)"
+                >🗑</button>
+              </Tooltip>
             </div>
           </div>
           <span v-if="preset.description" class="preset-desc">{{ preset.description }}</span>

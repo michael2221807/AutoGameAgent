@@ -15,6 +15,10 @@
 import { ref, computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 import { eventBus } from '@/engine/core/event-bus';
@@ -45,6 +49,22 @@ function updatePromptSetting<K extends keyof PromptSettings>(key: K, value: Prom
   setValue('系统.设置.prompt', { ...current, [key]: value });
 }
 
+// ─── Action options select options ──────────────────────────
+const actionModeOptions = computed(() => [
+  { value: 'action', label: t('prompt.settings.actionModeAction') },
+  { value: 'story', label: t('prompt.settings.actionModeStory') },
+]);
+const actionPaceOptions = computed(() => [
+  { value: 'fast', label: t('prompt.settings.actionPaceFast') },
+  { value: 'slow', label: t('prompt.settings.actionPaceSlow') },
+]);
+
+// ─── Edit-modal injection mode select options ───────────────
+const injectionModeOptions = computed(() => [
+  { value: 'always', label: t('prompt.modal.injectionAlways') },
+  { value: 'match_any', label: t('prompt.modal.injectionKeyword') },
+]);
+
 // ─── Heroine Plan state ─────────────────────────────────────
 const heroinePlan = computed<HeroinePlan>(() => {
   const raw = get<HeroinePlan>('元数据.女主规划');
@@ -55,6 +75,20 @@ const heroineEditName = ref('');
 const heroineEditType = ref('主线女主');
 const heroineEditRelation = ref('');
 const heroineEditStage = ref('');
+
+// ─── Heroine type select options ────────────────────────────
+const heroineTypeOptions = computed(() => [
+  { value: '主线女主', label: t('prompt.heroine.typeMainHeroine') },
+  { value: '支线女主', label: t('prompt.heroine.typeSubHeroine') },
+  { value: '隐藏女主', label: t('prompt.heroine.typeHiddenHeroine') },
+  { value: '主线男主', label: t('prompt.heroine.typeMainHero') },
+  { value: '支线角色', label: t('prompt.heroine.typeSupportRole') },
+]);
+
+// ─── Heroine event target select options ────────────────────
+const heroineEventTargetOptions = computed(() =>
+  heroinePlan.value.heroineEntries.map((h) => ({ value: h.name, label: h.name })),
+);
 
 function addHeroineEntry() {
   if (!heroineEditName.value.trim()) return;
@@ -461,6 +495,13 @@ function collapseAll(): void {
 const searchQuery = ref('');
 const filterMode = ref<'all' | 'enabled' | 'disabled' | 'modified'>('all');
 
+const filterModeOptions = computed(() => [
+  { value: 'all', label: t('prompt.filter.all') },
+  { value: 'enabled', label: t('prompt.filter.enabled') },
+  { value: 'disabled', label: t('prompt.filter.disabled') },
+  { value: 'modified', label: t('prompt.filter.modified') },
+]);
+
 const filteredPrompts = computed<PromptEntry[]>(() => {
   let list = promptEntries.value;
   if (filterMode.value === 'enabled') list = list.filter((p) => p.enabled);
@@ -692,20 +733,28 @@ function previewContent(content: string, maxLen = 100): string {
         <div class="settings-group">
           <h3 class="settings-group-title">{{ $t('prompt.settings.roleBoundaryTitle') }}</h3>
           <div class="settings-row">
-            <label class="settings-label">
-              <input type="checkbox" :checked="promptSettings.enableNoControl" @change="updatePromptSetting('enableNoControl', ($event.target as HTMLInputElement).checked)" />
-              {{ $t('prompt.settings.enableNoControl') }}
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle
+                :modelValue="promptSettings.enableNoControl"
+                :label="$t('prompt.settings.enableNoControl')"
+                @update:modelValue="v => updatePromptSetting('enableNoControl', v)"
+              />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('prompt.settings.enableNoControl') }}</span>
+            </div>
           </div>
         </div>
 
         <div class="settings-group">
           <h3 class="settings-group-title">{{ $t('prompt.settings.worldBookTitle') }}</h3>
           <div class="settings-row">
-            <label class="settings-label">
-              <input type="checkbox" :checked="promptSettings.enableWorldBook !== false" @change="updatePromptSetting('enableWorldBook', ($event.target as HTMLInputElement).checked)" />
-              {{ $t('prompt.settings.enableWorldBook') }}
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle
+                :modelValue="promptSettings.enableWorldBook !== false"
+                :label="$t('prompt.settings.enableWorldBook')"
+                @update:modelValue="v => updatePromptSetting('enableWorldBook', v)"
+              />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('prompt.settings.enableWorldBook') }}</span>
+            </div>
           </div>
           <p class="settings-desc">{{ $t('prompt.settings.enableWorldBookDesc') }}</p>
         </div>
@@ -713,20 +762,28 @@ function previewContent(content: string, maxLen = 100): string {
         <div class="settings-group">
           <h3 class="settings-group-title">{{ $t('prompt.settings.actionOptionsTitle') }}</h3>
           <div class="settings-row">
-            <label class="settings-label">
-              <input type="checkbox" :checked="promptSettings.enableActionOptions" @change="updatePromptSetting('enableActionOptions', ($event.target as HTMLInputElement).checked)" />
-              {{ $t('prompt.settings.enableActionOptions') }}
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle
+                :modelValue="promptSettings.enableActionOptions"
+                :label="$t('prompt.settings.enableActionOptions')"
+                @update:modelValue="v => updatePromptSetting('enableActionOptions', v)"
+              />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('prompt.settings.enableActionOptions') }}</span>
+            </div>
           </div>
           <div v-if="promptSettings.enableActionOptions" class="settings-row">
-            <select class="settings-select" :value="promptSettings.actionOptionsMode" @change="updatePromptSetting('actionOptionsMode', ($event.target as HTMLSelectElement).value as 'action' | 'story')">
-              <option value="action">{{ $t('prompt.settings.actionModeAction') }}</option>
-              <option value="story">{{ $t('prompt.settings.actionModeStory') }}</option>
-            </select>
-            <select class="settings-select" :value="promptSettings.actionPace" @change="updatePromptSetting('actionPace', ($event.target as HTMLSelectElement).value as 'fast' | 'slow')">
-              <option value="fast">{{ $t('prompt.settings.actionPaceFast') }}</option>
-              <option value="slow">{{ $t('prompt.settings.actionPaceSlow') }}</option>
-            </select>
+            <AgaSelect
+              class="settings-select-control"
+              :modelValue="promptSettings.actionOptionsMode"
+              :options="actionModeOptions"
+              @update:modelValue="v => updatePromptSetting('actionOptionsMode', v as 'action' | 'story')"
+            />
+            <AgaSelect
+              class="settings-select-control"
+              :modelValue="promptSettings.actionPace"
+              :options="actionPaceOptions"
+              @update:modelValue="v => updatePromptSetting('actionPace', v as 'fast' | 'slow')"
+            />
           </div>
         </div>
 
@@ -754,7 +811,7 @@ function previewContent(content: string, maxLen = 100): string {
               <span class="heroine-card-name">{{ entry.name }}</span>
               <span class="heroine-card-type">{{ entry.type }}</span>
               <span class="heroine-card-stage">{{ entry.currentStage }}</span>
-              <button class="btn btn--ghost btn--sm" style="margin-left:auto;color:var(--color-danger,#ef4444)" @click="removeHeroineEntry(entry.name)">{{ $t('prompt.heroine.delete') }}</button>
+              <AgaButton variant="danger" size="sm" class="heroine-delete-btn" @click="removeHeroineEntry(entry.name)">{{ $t('prompt.heroine.delete') }}</AgaButton>
             </div>
             <div class="heroine-card-meta">
               {{ $t('prompt.heroine.relation') }}: {{ entry.currentRelationStatus }}
@@ -765,16 +822,10 @@ function previewContent(content: string, maxLen = 100): string {
 
           <div class="heroine-add-form">
             <input v-model="heroineEditName" class="settings-input" :placeholder="$t('prompt.heroine.namePlaceholder')" style="flex:1" />
-            <select v-model="heroineEditType" class="settings-select" style="width:120px">
-              <option value="主线女主">{{ $t('prompt.heroine.typeMainHeroine') }}</option>
-              <option value="支线女主">{{ $t('prompt.heroine.typeSubHeroine') }}</option>
-              <option value="隐藏女主">{{ $t('prompt.heroine.typeHiddenHeroine') }}</option>
-              <option value="主线男主">{{ $t('prompt.heroine.typeMainHero') }}</option>
-              <option value="支线角色">{{ $t('prompt.heroine.typeSupportRole') }}</option>
-            </select>
+            <AgaSelect v-model="heroineEditType" class="heroine-type-select" :options="heroineTypeOptions" />
             <input v-model="heroineEditRelation" class="settings-input" :placeholder="$t('prompt.heroine.relationPlaceholder')" style="width:100px" />
             <input v-model="heroineEditStage" class="settings-input" :placeholder="$t('prompt.heroine.stagePlaceholder')" style="width:100px" />
-            <button class="btn btn--primary btn--sm" @click="addHeroineEntry">{{ $t('prompt.heroine.add') }}</button>
+            <AgaButton variant="primary" size="sm" @click="addHeroineEntry">{{ $t('prompt.heroine.add') }}</AgaButton>
           </div>
         </div>
 
@@ -786,7 +837,7 @@ function previewContent(content: string, maxLen = 100): string {
             <div class="heroine-card-header">
               <span class="heroine-card-name">[{{ evt.heroineName }}] {{ evt.eventName }}</span>
               <span :class="['heroine-status', `heroine-status--${evt.status === '待触发' ? 'pending' : evt.status === '已完成' ? 'done' : 'active'}`]">{{ evt.status }}</span>
-              <button class="btn btn--ghost btn--sm" style="margin-left:auto;color:var(--color-danger,#ef4444)" @click="removeHeroineEvent(idx)">{{ $t('prompt.heroine.delete') }}</button>
+              <AgaButton variant="danger" size="sm" class="heroine-delete-btn" @click="removeHeroineEvent(idx)">{{ $t('prompt.heroine.delete') }}</AgaButton>
             </div>
             <div v-if="evt.eventDescription" class="heroine-card-meta">{{ evt.eventDescription }}</div>
           </div>
@@ -794,13 +845,15 @@ function previewContent(content: string, maxLen = 100): string {
           <div v-if="heroinePlan.interactionEvents.length === 0" class="heroine-empty">{{ $t('prompt.heroine.noEvents') }}</div>
 
           <div class="heroine-add-form">
-            <select v-model="heroineEventTarget" class="settings-select" style="width:120px">
-              <option value="" disabled>{{ $t('prompt.heroine.selectCharacter') }}</option>
-              <option v-for="h in heroinePlan.heroineEntries" :key="h.name" :value="h.name">{{ h.name }}</option>
-            </select>
+            <AgaSelect
+              v-model="heroineEventTarget"
+              class="heroine-type-select"
+              :options="heroineEventTargetOptions"
+              :placeholder="$t('prompt.heroine.selectCharacter')"
+            />
             <input v-model="heroineEventName" class="settings-input" :placeholder="$t('prompt.heroine.eventNamePlaceholder')" style="flex:1" />
             <input v-model="heroineEventDesc" class="settings-input" :placeholder="$t('prompt.heroine.eventDescPlaceholder')" style="flex:2" />
-            <button class="btn btn--primary btn--sm" @click="addHeroineEvent">{{ $t('prompt.heroine.add') }}</button>
+            <AgaButton variant="primary" size="sm" @click="addHeroineEvent">{{ $t('prompt.heroine.add') }}</AgaButton>
           </div>
         </div>
 
@@ -824,10 +877,10 @@ function previewContent(content: string, maxLen = 100): string {
       <template v-if="activeTab === 'prompts'">
       <div class="prompts-header-actions">
         <div class="header-actions">
-          <button class="btn btn--ghost btn--sm" @click="expandAll" :title="$t('prompt.actions.expand')">{{ $t('prompt.actions.expand') }}</button>
-          <button class="btn btn--ghost btn--sm" @click="collapseAll" :title="$t('prompt.actions.collapse')">{{ $t('prompt.actions.collapse') }}</button>
-          <button class="btn btn--ghost btn--sm" @click="importPrompts" :title="$t('prompt.actions.import')">{{ $t('prompt.actions.import') }}</button>
-          <button class="btn btn--primary btn--sm" @click="exportAll" :title="$t('prompt.actions.export')">{{ $t('prompt.actions.export') }}</button>
+          <AgaButton variant="ghost" size="sm" @click="expandAll">{{ $t('prompt.actions.expand') }}</AgaButton>
+          <AgaButton variant="ghost" size="sm" @click="collapseAll">{{ $t('prompt.actions.collapse') }}</AgaButton>
+          <AgaButton variant="ghost" size="sm" @click="importPrompts">{{ $t('prompt.actions.import') }}</AgaButton>
+          <AgaButton variant="primary" size="sm" @click="exportAll">{{ $t('prompt.actions.export') }}</AgaButton>
         </div>
       </div>
 
@@ -840,12 +893,14 @@ function previewContent(content: string, maxLen = 100): string {
           :placeholder="$t('prompt.search.placeholder')"
           :aria-label="$t('prompt.search.ariaLabel')"
         />
-        <select v-model="filterMode" class="filter-select" :aria-label="$t('prompt.filter.ariaLabel')">
-          <option value="all">{{ $t('prompt.filter.all') }}</option>
-          <option value="enabled">{{ $t('prompt.filter.enabled') }}</option>
-          <option value="disabled">{{ $t('prompt.filter.disabled') }}</option>
-          <option value="modified">{{ $t('prompt.filter.modified') }}</option>
-        </select>
+        <AgaSelect
+          :modelValue="filterMode"
+          class="filter-select-control"
+          :options="filterModeOptions"
+          :placeholder="$t('prompt.filter.ariaLabel')"
+          :aria-label="$t('prompt.filter.ariaLabel')"
+          @update:modelValue="v => filterMode = v as 'all' | 'enabled' | 'disabled' | 'modified'"
+        />
       </div>
 
       <!-- ─── Category groups ─── -->
@@ -884,39 +939,46 @@ function previewContent(content: string, maxLen = 100): string {
               >
                 <div class="prompt-header">
                   <div class="prompt-title-area" @click="openPrompt(entry)">
-                    <span class="prompt-id" :title="entry.id">{{ getDisplayName(entry.id) }}</span>
+                    <Tooltip :text="entry.id">
+                      <span class="prompt-id">{{ getDisplayName(entry.id) }}</span>
+                    </Tooltip>
                     <span v-if="entry.modified" class="modified-badge">{{ $t('prompt.entry.modifiedBadge') }}</span>
                   </div>
                   <div class="prompt-controls">
                     <!-- Weight input -->
-                    <div class="weight-control" :title="$t('prompt.entry.weightTitle')">
-                      <span class="weight-label" :style="{ color: weightColor(entry.weight) }">W</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10"
-                        :value="entry.weight"
-                        class="weight-input"
-                        :style="{ color: weightColor(entry.weight) }"
-                        @change="setWeight(entry, Number(($event.target as HTMLInputElement).value))"
-                        @click.stop
-                        :aria-label="$t('prompt.entry.weightAriaLabel')"
-                      />
-                    </div>
+                    <Tooltip :text="$t('prompt.entry.weightTitle')" interactive>
+                      <div class="weight-control">
+                        <span class="weight-label" :style="{ color: weightColor(entry.weight) }">W</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          :value="entry.weight"
+                          class="weight-input"
+                          :style="{ color: weightColor(entry.weight) }"
+                          @change="setWeight(entry, Number(($event.target as HTMLInputElement).value))"
+                          @click.stop
+                          :aria-label="$t('prompt.entry.weightAriaLabel')"
+                        />
+                      </div>
+                    </Tooltip>
                     <!-- Export single -->
-                    <button class="icon-btn" :title="$t('prompt.entry.exportTitle')" @click="exportSingle(entry, $event)">
-                      <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12">
-                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                      </svg>
-                    </button>
+                    <Tooltip :text="$t('prompt.entry.exportTitle')" interactive>
+                      <button class="icon-btn" :aria-label="$t('prompt.entry.exportTitle')" @click="exportSingle(entry, $event)">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12">
+                          <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                      </button>
+                    </Tooltip>
                     <!-- Enable toggle -->
-                    <button
-                      :class="['enable-toggle', { 'enable-toggle--on': entry.enabled }]"
-                      @click.stop="toggleEnabled(entry)"
-                      :title="entry.enabled ? $t('prompt.entry.enableTitle') : $t('prompt.entry.disableTitle')"
-                    >
-                      {{ entry.enabled ? 'ON' : 'OFF' }}
-                    </button>
+                    <Tooltip :text="entry.enabled ? $t('prompt.entry.enableTitle') : $t('prompt.entry.disableTitle')" interactive>
+                      <AgaToggle
+                        :modelValue="entry.enabled"
+                        :label="entry.enabled ? $t('prompt.entry.enableTitle') : $t('prompt.entry.disableTitle')"
+                        @update:modelValue="() => toggleEnabled(entry)"
+                        @click.stop
+                      />
+                    </Tooltip>
                   </div>
                 </div>
                 <p class="prompt-preview" @click="openPrompt(entry)">
@@ -944,15 +1006,20 @@ function previewContent(content: string, maxLen = 100): string {
       <div class="meta-fields">
         <div class="meta-row">
           <label class="meta-label">{{ $t('prompt.modal.type') }}</label>
-          <select v-model="editType" class="meta-select">
-            <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
+          <AgaSelect
+            :modelValue="editType"
+            class="meta-select-control"
+            :options="typeOptions"
+            @update:modelValue="v => editType = v as PromptEntry['type']"
+          />
 
           <label class="meta-label">{{ $t('prompt.modal.injectionMode') }}</label>
-          <select v-model="editInjectionMode" class="meta-select">
-            <option value="always">{{ $t('prompt.modal.injectionAlways') }}</option>
-            <option value="match_any">{{ $t('prompt.modal.injectionKeyword') }}</option>
-          </select>
+          <AgaSelect
+            :modelValue="editInjectionMode"
+            class="meta-select-control"
+            :options="injectionModeOptions"
+            @update:modelValue="v => editInjectionMode = v as 'always' | 'match_any'"
+          />
         </div>
 
         <div class="meta-row">
@@ -982,16 +1049,16 @@ function previewContent(content: string, maxLen = 100): string {
         />
       </div>
       <template #footer>
-        <button
+        <AgaButton
           v-if="editingPrompt?.modified"
-          class="btn-warning"
+          variant="warning"
           @click="resetPrompt"
         >
           {{ $t('prompt.modal.resetDefault') }}
-        </button>
+        </AgaButton>
         <div style="flex: 1" />
-        <button class="btn-secondary" @click="showModal = false">{{ $t('prompt.modal.cancel') }}</button>
-        <button class="btn-primary" @click="savePrompt">{{ $t('prompt.modal.save') }}</button>
+        <AgaButton variant="secondary" @click="showModal = false">{{ $t('prompt.modal.cancel') }}</AgaButton>
+        <AgaButton variant="primary" @click="savePrompt">{{ $t('prompt.modal.save') }}</AgaButton>
       </template>
     </Modal>
   </div>
@@ -1011,66 +1078,77 @@ function previewContent(content: string, maxLen = 100): string {
 /* ── Tabs ── */
 .panel-tabs { display: flex; gap: 4px; margin-left: auto; }
 .tab-btn {
-  padding: 4px 12px; border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px; background: transparent; color: var(--color-text-secondary, #8888a0);
+  padding: 4px 12px; border: 1px solid var(--color-border);
+  border-radius: 6px; background: transparent; color: var(--color-text-secondary);
   font-size: 13px; cursor: pointer; transition: all 0.15s;
 }
-.tab-btn:hover { background: var(--color-primary-muted, rgba(99,102,241,.1)); }
-.tab-btn--active { background: var(--color-primary, #6366f1); color: var(--color-text-bone); border-color: var(--color-primary, #6366f1); box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
+.tab-btn:hover { background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
+.tab-btn--active { background: color-mix(in oklch, var(--color-sage-400) 22%, transparent); color: var(--color-sage-100); border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent); box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
 
 .prompts-header-actions { display: flex; justify-content: flex-end; }
 
 /* ── Settings Tab ── */
 .settings-tab { display: flex; flex-direction: column; gap: 16px; padding-top: 8px; }
 .settings-group {
-  padding: 12px 16px; background: var(--color-surface, #1a1a24);
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px;
+  padding: 12px 16px; background: var(--color-surface);
+  border: 1px solid var(--color-border); border-radius: 8px;
   display: flex; flex-direction: column; gap: 6px;
 }
-.settings-group-title { font-size: 14px; font-weight: 600; color: var(--color-text, #e0e0e6); margin: 0; }
-.settings-desc { font-size: 12px; color: var(--color-text-muted, #55556a); margin: 0; }
-.settings-select, .settings-input {
-  padding: 5px 10px; background: var(--color-bg, #111118);
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 6px;
-  color: var(--color-text, #e0e0e6); font-size: 13px; max-width: 300px;
+.settings-group-title { font-size: 14px; font-weight: 600; color: var(--color-text); margin: 0; }
+.settings-desc { font-size: 12px; color: var(--color-text-muted); margin: 0; }
+.settings-input {
+  padding: 5px 10px; background: var(--color-bg);
+  border: 1px solid var(--color-border); border-radius: 6px;
+  color: var(--color-text); font-size: 13px; max-width: 300px;
 }
-.settings-select:focus, .settings-input:focus { outline: none; border-color: var(--color-primary, #6366f1); }
+.settings-input:focus { outline: none; border-color: var(--color-sage-400); }
 .settings-textarea {
-  padding: 8px 10px; background: var(--color-bg, #111118);
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 6px;
-  color: var(--color-text, #e0e0e6); font-size: 13px; resize: vertical;
+  padding: 8px 10px; background: var(--color-bg);
+  border: 1px solid var(--color-border); border-radius: 6px;
+  color: var(--color-text); font-size: 13px; resize: vertical;
   font-family: inherit;
 }
-.settings-textarea:focus { outline: none; border-color: var(--color-primary, #6366f1); }
+.settings-textarea:focus { outline: none; border-color: var(--color-sage-400); }
 .settings-row { display: flex; gap: 8px; align-items: center; }
-.settings-label { font-size: 13px; color: var(--color-text-secondary, #8888a0); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.settings-label { font-size: 13px; color: var(--color-text-secondary); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* AgaToggle inline row (feature/setting boolean) */
+.aga-toggle-row { display: flex; align-items: center; gap: var(--space-sm); }
+.aga-toggle-row__label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+
+/* AgaSelect sizing on chrome surfaces */
+.settings-select-control { max-width: 300px; min-width: 160px; }
+.heroine-type-select { width: 130px; }
+.filter-select-control { min-width: 140px; }
+.meta-select-control { min-width: 140px; }
 
 /* Style radio group */
 .style-radio-group { display: flex; flex-direction: column; gap: 4px; }
 .style-radio-item {
   display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px;
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 6px;
+  border: 1px solid var(--color-border); border-radius: 6px;
   cursor: pointer; transition: all 0.15s;
 }
-.style-radio-item:hover { border-color: var(--color-primary, #6366f1); }
-.style-radio-item--active { border-color: var(--color-primary, #6366f1); background: color-mix(in oklch, var(--color-sage-400) 6%, transparent); }
-.style-radio-item input[type="radio"] { margin-top: 3px; accent-color: var(--color-primary, #6366f1); }
+.style-radio-item:hover { border-color: var(--color-sage-400); }
+.style-radio-item--active { border-color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 6%, transparent); }
+.style-radio-item input[type="radio"] { margin-top: 3px; accent-color: var(--color-sage-400); }
 .style-radio-info { display: flex; flex-direction: column; }
-.style-radio-label { font-size: 13px; font-weight: 500; color: var(--color-text, #e0e0e6); }
-.style-radio-desc { font-size: 11px; color: var(--color-text-muted, #55556a); }
+.style-radio-label { font-size: 13px; font-weight: 500; color: var(--color-text); }
+.style-radio-desc { font-size: 11px; color: var(--color-text-muted); }
 
 /* Heroine plan tab */
 .heroine-tab { display: flex; flex-direction: column; gap: 16px; padding-top: 8px; }
 .heroine-card {
-  padding: 8px 12px; background: var(--color-bg, #111118);
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 6px;
+  padding: 8px 12px; background: var(--color-bg);
+  border: 1px solid var(--color-border); border-radius: 6px;
   margin-bottom: 4px;
 }
 .heroine-card-header { display: flex; align-items: center; gap: 8px; }
-.heroine-card-name { font-size: 13px; font-weight: 600; color: var(--color-text, #e0e0e6); }
-.heroine-card-type { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--color-primary-muted, rgba(99,102,241,.1)); color: var(--color-primary, #6366f1); }
-.heroine-card-stage { font-size: 11px; color: var(--color-text-muted, #55556a); }
-.heroine-card-meta { font-size: 12px; color: var(--color-text-secondary, #8888a0); margin-top: 4px; }
+.heroine-card-name { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.heroine-card-type { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: color-mix(in oklch, var(--color-sage-400) 14%, transparent); color: var(--color-sage-300); }
+.heroine-card-stage { font-size: 11px; color: var(--color-text-muted); }
+.heroine-card-meta { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; }
+.heroine-delete-btn { margin-left: auto; }
 .heroine-status { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
 .heroine-status--pending { background: color-mix(in oklch, var(--color-amber-400) 10%, transparent); color: var(--color-amber-400); }
 .heroine-status--active { background: color-mix(in oklch, var(--color-sage-300) 10%, transparent); color: var(--color-sage-300); }
@@ -1106,7 +1184,7 @@ function previewContent(content: string, maxLen = 100): string {
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1);
+  background: color-mix(in oklch, var(--color-sage-400) 50%, transparent);
   border-radius: 10px;
 }
 
@@ -1114,27 +1192,6 @@ function previewContent(content: string, maxLen = 100): string {
   display: flex;
   gap: 6px;
 }
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 500;
-  transition: all 0.15s ease;
-}
-.btn--sm { padding: 5px 10px; }
-.btn--primary { color: var(--color-text-bone); background: var(--color-primary, #6366f1); }
-.btn--primary:hover { background: var(--color-primary-hover, #4f46e5); }
-.btn--ghost {
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-}
-.btn--ghost:hover { color: var(--color-text, #e0e0e6); }
 
 /* ── Toolbar ── */
 .toolbar {
@@ -1148,23 +1205,13 @@ function previewContent(content: string, maxLen = 100): string {
   height: 36px;
   padding: 0 12px;
   font-size: 0.85rem;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-border, #2a2a3a);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   outline: none;
 }
-.search-field:focus { border-color: var(--color-primary, #6366f1); }
-
-.filter-select {
-  height: 36px;
-  padding: 0 10px;
-  font-size: 0.82rem;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 8px;
-}
+.search-field:focus { border-color: var(--color-sage-400); }
 
 /* ── Category groups ── */
 .groups-list {
@@ -1307,7 +1354,7 @@ function previewContent(content: string, maxLen = 100): string {
 }
 .weight-input::-webkit-inner-spin-button,
 .weight-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.weight-input:focus { border-color: var(--color-primary, #6366f1); text-shadow: 0 0 4px currentColor; }
+.weight-input:focus { border-color: var(--color-sage-400); text-shadow: 0 0 4px currentColor; }
 
 .icon-btn {
   width: 24px;
@@ -1324,24 +1371,6 @@ function previewContent(content: string, maxLen = 100): string {
   transition: all 0.15s ease;
 }
 .icon-btn:hover { color: var(--color-text, #e0e0e6); background: rgba(255,255,255,0.06); }
-
-.enable-toggle {
-  padding: 2px 10px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-secondary, #8888a0);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.enable-toggle--on {
-  color: var(--color-success, #22c55e);
-  border-color: color-mix(in oklch, var(--color-success) 25%, transparent);
-  text-shadow: 0 0 4px color-mix(in oklch, var(--color-success) 35%, transparent);
-  background: color-mix(in oklch, var(--color-success) 8%, transparent);
-}
 
 .prompt-preview {
   margin: 5px 0 0;
@@ -1374,14 +1403,6 @@ function previewContent(content: string, maxLen = 100): string {
   color: var(--color-text-secondary, #8888a0);
   flex-shrink: 0;
 }
-.meta-select {
-  padding: 4px 8px;
-  font-size: 0.75rem;
-  background: rgba(255,255,255,0.06);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-}
 .meta-input {
   flex: 1;
   padding: 4px 8px;
@@ -1405,7 +1426,7 @@ function previewContent(content: string, maxLen = 100): string {
   color: var(--color-text-secondary);
   cursor: pointer;
 }
-.scope-check input { accent-color: var(--color-primary); }
+.scope-check input { accent-color: var(--color-sage-400); }
 
 /* ── Edit area ── */
 .edit-area {
@@ -1428,44 +1449,7 @@ function previewContent(content: string, maxLen = 100): string {
   line-height: 1.6;
   box-sizing: border-box;
 }
-.prompt-editor:focus { border-color: var(--color-primary, #6366f1); }
-
-/* ── Buttons ── */
-.btn-primary {
-  padding: 6px 16px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.btn-primary:hover { background: var(--color-primary-hover, #4f46e5); }
-
-.btn-secondary {
-  padding: 6px 14px;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.btn-secondary:hover { color: var(--color-text, #e0e0e6); border-color: var(--color-primary, #6366f1); }
-
-.btn-warning {
-  padding: 6px 14px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-warning, #f59e0b);
-  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-amber-400) 20%, transparent);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.btn-warning:hover { background: var(--color-warning, #f59e0b); color: #000; }
+.prompt-editor:focus { border-color: var(--color-sage-400); }
 
 /* ── Empty ── */
 .empty-state {

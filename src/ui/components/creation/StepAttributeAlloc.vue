@@ -143,13 +143,13 @@ function emitCurrent(): void {
 
     <!-- 辅助操作按钮组 -->
     <div class="helper-actions">
-      <button class="helper-btn" @click="resetAttributes" :title="$t('creation.attributes.reset')">
+      <button class="helper-btn" @click="resetAttributes">
         {{ $t('creation.attributes.reset') }}
       </button>
-      <button class="helper-btn" data-testid="creation-attr-balance" @click="balanceAttributes" :title="$t('creation.attributes.balance')">
+      <button class="helper-btn" data-testid="creation-attr-balance" @click="balanceAttributes">
         {{ $t('creation.attributes.balance') }}
       </button>
-      <button class="helper-btn" @click="randomizeAttributes" :title="$t('creation.attributes.randomize')">
+      <button class="helper-btn" @click="randomizeAttributes">
         {{ $t('creation.attributes.randomize') }}
       </button>
     </div>

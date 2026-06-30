@@ -27,6 +27,7 @@ import App from './App.vue';
 import { router } from './ui/router';
 import { i18n, loadLocaleMessages } from './ui/i18n';
 import './ui/styles/tokens.css';
+import './ui/styles/forms.css';
 import './ui/styles/mobile.css';
 
 // Apply persisted font-size × ui-scale before any component renders so the

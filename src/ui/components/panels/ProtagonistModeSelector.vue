@@ -83,7 +83,6 @@ function toggleField(path: string): void {
         <label v-for="opt in EDITABLE_OPTIONS" :key="opt.path" class="pms-check">
           <input
             type="checkbox"
-            class="pms-check__box"
             :checked="selected.has(opt.path)"
             @change="toggleField(opt.path)"
           />
@@ -161,12 +160,6 @@ function toggleField(path: string): void {
   gap: 7px;
   font-size: 0.86rem;
   color: var(--color-text);
-  cursor: pointer;
-}
-.pms-check__box {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-sage-400);
   cursor: pointer;
 }
 </style>

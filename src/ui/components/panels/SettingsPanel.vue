@@ -17,6 +17,8 @@ import type { ProfileManager } from '@/engine/persistence/profile-manager';
 import type { SaveManager } from '@/engine/persistence/save-manager';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { useLocale } from '@/ui/composables/useLocale';
 import { useI18n } from 'vue-i18n';
 
@@ -1149,7 +1151,7 @@ onBeforeUnmount(() => {
         class="settings-search"
         :placeholder="$t('settings.search.placeholder')"
       />
-      <button v-if="hasChanges" class="btn-secondary" @click="resetAll">{{ $t('settings.resetAll') }}</button>
+      <AgaButton v-if="hasChanges" variant="secondary" size="sm" @click="resetAll">{{ $t('settings.resetAll') }}</AgaButton>
     </header>
 
     <div class="settings-layout">
@@ -1413,11 +1415,15 @@ onBeforeUnmount(() => {
           <span class="setting-desc">{{ $t('settings.ui.fontSize.desc') }}</span>
         </div>
         <div class="font-size-control">
-          <button class="adj-btn" @click="settings.fontSize = Math.max(10, settings.fontSize - 1)">−</button>
+          <Tooltip :text="$t('settings.ui.fontSize.decrease')" interactive>
+            <button class="adj-btn" :aria-label="$t('settings.ui.fontSize.decrease')" @click="settings.fontSize = Math.max(10, settings.fontSize - 1)">−</button>
+          </Tooltip>
           <span class="font-size-value">{{ settings.fontSize }}px</span>
-          <button class="adj-btn" @click="settings.fontSize = Math.min(24, settings.fontSize + 1)">+</button>
-          <button class="btn-sm" @click="applyFontSize">{{ $t('settings.ui.fontSize.apply') }}</button>
-          <button class="btn-sm btn-sm--muted" @click="settings.fontSize = 14; applyFontSize()">{{ $t('settings.ui.fontSize.reset') }}</button>
+          <Tooltip :text="$t('settings.ui.fontSize.increase')" interactive>
+            <button class="adj-btn" :aria-label="$t('settings.ui.fontSize.increase')" @click="settings.fontSize = Math.min(24, settings.fontSize + 1)">+</button>
+          </Tooltip>
+          <AgaButton variant="primary" size="sm" @click="applyFontSize">{{ $t('settings.ui.fontSize.apply') }}</AgaButton>
+          <AgaButton variant="ghost" size="sm" @click="settings.fontSize = 14; applyFontSize()">{{ $t('settings.ui.fontSize.reset') }}</AgaButton>
         </div>
       </div>
 
@@ -1432,7 +1438,6 @@ onBeforeUnmount(() => {
             :key="preset.id"
             class="accent-swatch"
             :class="{ 'accent-swatch--active': settings.themeAccent === preset.id }"
-            :title="$t(preset.labelKey)"
             :aria-label="$t(preset.labelKey)"
             :aria-pressed="settings.themeAccent === preset.id"
             :style="{
@@ -1735,14 +1740,14 @@ onBeforeUnmount(() => {
 
       <Transition name="fade-row">
         <div v-if="debugSettings.debugMode" class="debug-sub">
-          <label class="check-opt">
-            <input type="checkbox" v-model="debugSettings.consoleDebug" />
-            <span>{{ $t('settings.advanced.consoleDebug.label') }}</span>
-          </label>
-          <label class="check-opt">
-            <input type="checkbox" v-model="debugSettings.aiLogging" />
-            <span>{{ $t('settings.advanced.aiLogging.label') }}</span>
-          </label>
+          <div class="aga-toggle-row">
+            <AgaToggle v-model="debugSettings.consoleDebug" :label="$t('settings.advanced.consoleDebug.label')" />
+            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('settings.advanced.consoleDebug.label') }}</span>
+          </div>
+          <div class="aga-toggle-row">
+            <AgaToggle v-model="debugSettings.aiLogging" :label="$t('settings.advanced.aiLogging.label')" />
+            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('settings.advanced.aiLogging.label') }}</span>
+          </div>
         </div>
       </Transition>
 
@@ -1752,7 +1757,7 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.advanced.textReplace.label') }}</span>
           <span class="setting-desc">{{ $t('settings.advanced.textReplace.desc', { count: textReplaceRules.length }) }}</span>
         </div>
-        <button class="btn-sm" @click="showReplaceModal = true">{{ $t('settings.advanced.textReplace.editRules') }}</button>
+        <AgaButton variant="primary" size="sm" @click="showReplaceModal = true">{{ $t('settings.advanced.textReplace.editRules') }}</AgaButton>
       </div>
 
       <!-- Import / Export settings -->
@@ -1762,8 +1767,8 @@ onBeforeUnmount(() => {
           <span class="setting-desc">{{ $t('settings.advanced.importExport.desc') }}</span>
         </div>
         <div style="display:flex; gap:6px;">
-          <button class="btn-sm" @click="exportSettings">{{ $t('settings.advanced.importExport.export') }}</button>
-          <button class="btn-sm" @click="openImportSettings">{{ $t('settings.advanced.importExport.import') }}</button>
+          <AgaButton variant="primary" size="sm" @click="exportSettings">{{ $t('settings.advanced.importExport.export') }}</AgaButton>
+          <AgaButton variant="primary" size="sm" @click="openImportSettings">{{ $t('settings.advanced.importExport.import') }}</AgaButton>
         </div>
       </div>
 
@@ -1773,7 +1778,7 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.advanced.clearCache.label') }}</span>
           <span class="setting-desc">{{ $t('settings.advanced.clearCache.desc') }}</span>
         </div>
-        <button class="btn-sm btn-sm--danger" @click="showClearCacheConfirm = true">{{ $t('settings.advanced.clearCache.btn') }}</button>
+        <AgaButton variant="danger" size="sm" @click="showClearCacheConfirm = true">{{ $t('settings.advanced.clearCache.btn') }}</AgaButton>
       </div>
     </section>
 
@@ -1788,7 +1793,9 @@ onBeforeUnmount(() => {
           <span class="setting-desc">{{ $t('settings.scale.uiScale.desc') }}</span>
         </div>
         <div class="scale-control">
-          <button class="adj-btn" @click="uiScale = Math.max(80, uiScale - 5)">−</button>
+          <Tooltip :text="$t('settings.scale.uiScale.decrease')" interactive>
+            <button class="adj-btn" :aria-label="$t('settings.scale.uiScale.decrease')" @click="uiScale = Math.max(80, uiScale - 5)">−</button>
+          </Tooltip>
           <input
             type="range"
             min="80"
@@ -1798,8 +1805,10 @@ onBeforeUnmount(() => {
             class="scale-slider"
             :aria-label="$t('settings.scale.uiScale.ariaLabel')"
           />
-          <button class="adj-btn" @click="uiScale = Math.min(120, uiScale + 5)">+</button>
-          <button class="btn-sm" @click="uiScale = 100">{{ $t('settings.scale.uiScale.reset') }}</button>
+          <Tooltip :text="$t('settings.scale.uiScale.increase')" interactive>
+            <button class="adj-btn" :aria-label="$t('settings.scale.uiScale.increase')" @click="uiScale = Math.min(120, uiScale + 5)">+</button>
+          </Tooltip>
+          <AgaButton variant="primary" size="sm" @click="uiScale = 100">{{ $t('settings.scale.uiScale.reset') }}</AgaButton>
         </div>
       </div>
 
@@ -1832,9 +1841,9 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.data.exportAllSaves.label') }}</span>
           <span class="setting-desc">{{ $t('settings.data.exportAllSaves.desc') }}</span>
         </div>
-        <button class="btn-sm" :disabled="isExportingAllSaves" @click="exportAllSaves">
+        <AgaButton variant="primary" size="sm" :disabled="isExportingAllSaves" :loading="isExportingAllSaves" @click="exportAllSaves">
           {{ isExportingAllSaves ? $t('settings.data.exportAllSaves.btnBusy') : $t('settings.data.exportAllSaves.btn') }}
-        </button>
+        </AgaButton>
       </div>
 
       <!-- Import saves -->
@@ -1843,7 +1852,7 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.data.importSaves.label') }}</span>
           <span class="setting-desc">{{ $t('settings.data.importSaves.desc') }}</span>
         </div>
-        <button class="btn-sm" @click="openImportSaves">{{ $t('settings.data.importSaves.btn') }}</button>
+        <AgaButton variant="primary" size="sm" @click="openImportSaves">{{ $t('settings.data.importSaves.btn') }}</AgaButton>
       </div>
 
       <!-- Clear all data -->
@@ -1852,9 +1861,9 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.data.clearAll.label') }}</span>
           <span class="setting-desc" style="color: var(--color-danger, #ef4444);">{{ $t('settings.data.clearAll.desc') }}</span>
         </div>
-        <button class="btn-sm btn-sm--danger" @click="showClearAllConfirm = true; clearAllStep = 1">
+        <AgaButton variant="danger" size="sm" @click="showClearAllConfirm = true; clearAllStep = 1">
           {{ $t('settings.data.clearAll.btn') }}
-        </button>
+        </AgaButton>
       </div>
     </section>
 
@@ -2005,7 +2014,7 @@ onBeforeUnmount(() => {
           <span class="setting-label">{{ $t('settings.memory.resetDefaults.label') }}</span>
           <span class="setting-desc">{{ $t('settings.memory.resetDefaults.desc') }}</span>
         </div>
-        <button class="btn-sm" @click="memorySettings = { ...defaultMemorySettings }">{{ $t('settings.memory.resetDefaults.label') }}</button>
+        <AgaButton variant="primary" size="sm" @click="memorySettings = { ...defaultMemorySettings }">{{ $t('settings.memory.resetDefaults.label') }}</AgaButton>
       </div>
     </section>
 
@@ -2035,15 +2044,17 @@ onBeforeUnmount(() => {
   <Modal v-model="showReplaceModal" :title="$t('settings.textReplace.modalTitle')" width="600px">
     <div class="rules-header">
       <span class="rules-count">{{ $t('settings.textReplace.count', { count: textReplaceRules.length }) }}</span>
-      <button class="btn-sm" @click="openNewRule">{{ $t('settings.textReplace.addRule') }}</button>
+      <AgaButton variant="primary" size="sm" @click="openNewRule">{{ $t('settings.textReplace.addRule') }}</AgaButton>
     </div>
     <div v-if="textReplaceRules.length" class="rules-list">
       <div v-for="rule in textReplaceRules" :key="rule.id" class="rule-row">
-        <button
-          :class="['rule-toggle', { 'rule-toggle--on': rule.enabled }]"
-          @click="toggleRule(rule.id)"
-          :title="rule.enabled ? $t('settings.textReplace.enabled') : $t('settings.textReplace.disabled')"
-        >{{ rule.enabled ? '●' : '○' }}</button>
+        <Tooltip :text="rule.enabled ? $t('settings.textReplace.enabled') : $t('settings.textReplace.disabled')" interactive>
+          <button
+            :class="['rule-toggle', { 'rule-toggle--on': rule.enabled }]"
+            :aria-label="rule.enabled ? $t('settings.textReplace.enabled') : $t('settings.textReplace.disabled')"
+            @click="toggleRule(rule.id)"
+          >{{ rule.enabled ? '●' : '○' }}</button>
+        </Tooltip>
         <div class="rule-info">
           <code class="rule-pattern">{{ rule.pattern }}</code>
           <span class="rule-arrow">→</span>
@@ -2054,8 +2065,12 @@ onBeforeUnmount(() => {
           <span v-if="rule.ignoreCase" class="rule-flag">i</span>
           <span v-if="rule.global" class="rule-flag">g</span>
         </div>
-        <button class="btn-icon-sm" @click="openEditRule(rule)" title="编辑">✏️</button>
-        <button class="btn-icon-sm btn-icon-sm--danger" @click="deleteRule(rule.id)" title="删除">🗑️</button>
+        <Tooltip :text="$t('settings.textReplace.editRule')" interactive>
+          <button class="btn-icon-sm" :aria-label="$t('settings.textReplace.editRule')" @click="openEditRule(rule)">✏️</button>
+        </Tooltip>
+        <Tooltip :text="$t('settings.textReplace.deleteRule')" interactive>
+          <button class="btn-icon-sm btn-icon-sm--danger" :aria-label="$t('settings.textReplace.deleteRule')" @click="deleteRule(rule.id)">🗑️</button>
+        </Tooltip>
       </div>
     </div>
     <p v-else class="rules-empty">{{ $t('settings.textReplace.empty') }}</p>
@@ -2084,8 +2099,8 @@ onBeforeUnmount(() => {
     </div>
     <p v-if="ruleFormError" class="form-error">{{ ruleFormError }}</p>
     <template #footer>
-      <button class="btn-modal btn-modal--secondary" @click="showRuleEditor = false">{{ $t('settings.textReplace.cancelBtn') }}</button>
-      <button class="btn-modal btn-modal--primary" @click="submitRuleForm">{{ editingRule ? $t('settings.textReplace.saveBtn') : $t('settings.textReplace.addBtn') }}</button>
+      <AgaButton variant="secondary" size="md" @click="showRuleEditor = false">{{ $t('settings.textReplace.cancelBtn') }}</AgaButton>
+      <AgaButton variant="primary" size="md" @click="submitRuleForm">{{ editingRule ? $t('settings.textReplace.saveBtn') : $t('settings.textReplace.addBtn') }}</AgaButton>
     </template>
   </Modal>
 
@@ -2093,8 +2108,8 @@ onBeforeUnmount(() => {
   <Modal v-model="showClearCacheConfirm" :title="$t('settings.advanced.clearCache.confirmTitle')" width="360px">
     <p class="confirm-text">{{ $t('settings.advanced.clearCache.confirmText') }}</p>
     <template #footer>
-      <button class="btn-modal btn-modal--secondary" @click="showClearCacheConfirm = false">{{ $t('settings.advanced.clearCache.confirmCancel') }}</button>
-      <button class="btn-modal btn-modal--danger" @click="clearCache">{{ $t('settings.advanced.clearCache.confirmOk') }}</button>
+      <AgaButton variant="secondary" size="md" @click="showClearCacheConfirm = false">{{ $t('settings.advanced.clearCache.confirmCancel') }}</AgaButton>
+      <AgaButton variant="danger" size="md" @click="clearCache">{{ $t('settings.advanced.clearCache.confirmOk') }}</AgaButton>
     </template>
   </Modal>
 
@@ -2114,13 +2129,13 @@ onBeforeUnmount(() => {
       <p class="confirm-text">{{ $t('settings.data.clearAll.step2Hint') }}</p>
     </template>
     <template #footer>
-      <button class="btn-modal btn-modal--secondary" @click="showClearAllConfirm = false">{{ $t('settings.data.clearAll.step1Cancel') }}</button>
-      <button v-if="clearAllStep === 1" class="btn-modal btn-modal--danger" @click="clearAllStep = 2">
+      <AgaButton variant="secondary" size="md" @click="showClearAllConfirm = false">{{ $t('settings.data.clearAll.step1Cancel') }}</AgaButton>
+      <AgaButton v-if="clearAllStep === 1" variant="danger" size="md" @click="clearAllStep = 2">
         {{ $t('settings.data.clearAll.step1Continue') }}
-      </button>
-      <button v-else class="btn-modal btn-modal--danger" @click="clearAllData">
+      </AgaButton>
+      <AgaButton v-else variant="danger" size="md" @click="clearAllData">
         {{ $t('settings.data.clearAll.step2Confirm') }}
-      </button>
+      </AgaButton>
     </template>
   </Modal>
 </template>
@@ -2252,7 +2267,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   padding: 16px;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   position: relative;
 }
@@ -2308,16 +2323,6 @@ onBeforeUnmount(() => {
 .setting-desc {
   font-size: 0.72rem;
   color: var(--color-text-secondary, #8888a0);
-}
-
-.setting-select {
-  padding: 6px 10px;
-  font-size: 0.82rem;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
-  max-width: 200px;
 }
 
 /* ── Font size control ── */
@@ -2449,26 +2454,6 @@ onBeforeUnmount(() => {
   color: var(--color-text-secondary, #8888a0);
 }
 
-/* ── Buttons ── */
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--color-primary, #91c49b);
-  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn-sm:hover { background: var(--color-primary, #91c49b); color: var(--color-text-bone); }
-.btn-sm--muted {
-  color: var(--color-text-muted);
-  background: transparent;
-  border-color: var(--color-border);
-}
-.btn-sm--muted:hover { background: color-mix(in oklch, var(--color-text-muted) 12%, transparent); color: var(--color-text-secondary); }
-
 .num-input {
   width: 72px;
   padding: 5px 8px;
@@ -2486,35 +2471,6 @@ onBeforeUnmount(() => {
   border-color: var(--color-primary, #91c49b);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
-
-/* 2026-04-14：短期记忆注入模式下拉 */
-.select-input {
-  min-width: 180px;
-  padding: 5px 8px;
-  font-size: 0.82rem;
-  color: var(--color-text, #e8e8f0);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 5px;
-  transition: border-color 0.15s ease;
-  cursor: pointer;
-}
-.select-input:focus {
-  outline: none;
-  border-color: var(--color-primary, #91c49b);
-}
-
-.btn-secondary {
-  padding: 6px 14px;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.btn-secondary:hover { color: var(--color-text, #e0e0e6); border-color: var(--color-primary, #91c49b); }
 
 /* ── About ── */
 .about-info {
@@ -2615,6 +2571,16 @@ onBeforeUnmount(() => {
   margin: -4px 0 4px;
 }
 
+.aga-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 .range-pair {
   display: flex;
   align-items: center;
@@ -2625,14 +2591,6 @@ onBeforeUnmount(() => {
   font-size: 0.88rem;
   color: var(--color-text-secondary, #8888a0);
 }
-
-/* Btn-sm danger variant */
-.btn-sm--danger {
-  color: var(--color-danger, #ef4444) !important;
-  background: color-mix(in oklch, var(--color-danger) 8%, transparent) !important;
-  border-color: color-mix(in oklch, var(--color-danger) 25%, transparent) !important;
-}
-.btn-sm--danger:hover { background: var(--color-danger, #ef4444) !important; color: var(--color-text-bone) !important; box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-danger) 15%, transparent); }
 
 /* ── Text replace modal ── */
 .rules-header {
@@ -2706,7 +2664,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .rule-mode--text  { background: color-mix(in oklch, var(--color-success) 12%, transparent); color: var(--color-success); }
-.rule-mode--regex { background: rgba(251,146,60,0.12); color: #fb923c; }
+.rule-mode--regex { background: color-mix(in oklch, var(--color-warning) 12%, transparent); color: var(--color-warning); }
 .rule-flags { display: flex; gap: 3px; flex-shrink: 0; }
 .rule-flag {
   font-size: 0.6rem;
@@ -2754,23 +2712,6 @@ onBeforeUnmount(() => {
 .form-checks { display: flex; gap: 16px; margin-bottom: 8px; }
 .form-error { font-size: 0.78rem; color: var(--color-danger, #ef4444); margin: 0 0 6px; }
 .confirm-text { font-size: 0.88rem; color: var(--color-text, #e0e0e6); line-height: 1.5; margin: 0; }
-
-/* ── Modal buttons ── */
-.btn-modal {
-  padding: 7px 16px;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.btn-modal--primary  { background: var(--color-primary, #91c49b); color: var(--color-text-bone); }
-.btn-modal--primary:hover { opacity: 0.88; }
-.btn-modal--secondary { background: rgba(255,255,255,0.07); color: var(--color-text, #e0e0e6); }
-.btn-modal--secondary:hover { background: rgba(255,255,255,0.12); }
-.btn-modal--danger   { background: var(--color-danger, #ef4444); color: var(--color-text-bone); }
-.btn-modal--danger:hover { opacity: 0.88; }
 
 /* ── Transitions ── */
 .fade-row-enter-active { transition: all 0.15s ease; }

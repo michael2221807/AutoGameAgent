@@ -14,6 +14,7 @@ import type { GamePack } from '@/engine/types/game-pack';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
 import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 
 const { t } = useI18n();
 
@@ -308,16 +309,11 @@ onMounted(() => {
           <span class="toggle-label">{{ $t('creation.confirm.options.streaming') }}</span>
           <span class="toggle-desc">{{ $t('creation.confirm.options.streamingDesc') }}</span>
         </div>
-        <button
-          class="toggle-switch"
-          :class="{ active: streamingEnabled }"
-          role="switch"
-          :aria-checked="streamingEnabled"
-          :aria-label="$t('creation.confirm.options.streamingToggle')"
-          @click="toggleStreaming"
-        >
-          <span class="toggle-thumb" />
-        </button>
+        <AgaToggle
+          :model-value="streamingEnabled"
+          :label="$t('creation.confirm.options.streamingToggle')"
+          @update:model-value="() => toggleStreaming()"
+        />
       </div>
 
       <div v-if="!enhancedOpening" class="toggle-row">
@@ -325,16 +321,11 @@ onMounted(() => {
           <span class="toggle-label">{{ $t('creation.confirm.options.stepGen') }}</span>
           <span class="toggle-desc">{{ $t('creation.confirm.options.stepGenDesc') }}</span>
         </div>
-        <button
-          class="toggle-switch"
-          :class="{ active: generationMode === 'step' }"
-          role="switch"
-          :aria-checked="generationMode === 'step'"
-          :aria-label="$t('creation.confirm.options.stepGenToggle')"
-          @click="toggleGenerationMode"
-        >
-          <span class="toggle-thumb" />
-        </button>
+        <AgaToggle
+          :model-value="generationMode === 'step'"
+          :label="$t('creation.confirm.options.stepGenToggle')"
+          @update:model-value="() => toggleGenerationMode()"
+        />
       </div>
 
       <div class="toggle-row">
@@ -342,17 +333,12 @@ onMounted(() => {
           <span class="toggle-label">{{ $t('creation.confirm.options.enhancedOpening') }}</span>
           <span class="toggle-desc">{{ $t('creation.confirm.options.enhancedOpeningDesc') }}</span>
         </div>
-        <button
-          class="toggle-switch"
+        <AgaToggle
           data-testid="creation-enhanced-toggle"
-          :class="{ active: enhancedOpening }"
-          role="switch"
-          :aria-checked="enhancedOpening"
-          :aria-label="$t('creation.confirm.options.enhancedOpeningToggle')"
-          @click="toggleEnhancedOpening"
-        >
-          <span class="toggle-thumb" />
-        </button>
+          :model-value="enhancedOpening"
+          :label="$t('creation.confirm.options.enhancedOpeningToggle')"
+          @update:model-value="() => toggleEnhancedOpening()"
+        />
       </div>
 
       <!-- Advanced settings (collapsible, only when enhanced opening is on) -->
@@ -402,16 +388,11 @@ onMounted(() => {
               <span class="toggle-label small">{{ $t('creation.confirm.options.bypassRateLimit') }}</span>
               <span class="toggle-desc">{{ $t('creation.confirm.options.bypassRateLimitWarning') }}</span>
             </div>
-            <button
-              class="toggle-switch"
-              :class="{ active: bypassRateLimit }"
-              role="switch"
-              :aria-checked="bypassRateLimit"
-              :aria-label="$t('creation.confirm.options.bypassRateLimit')"
-              @click="bypassRateLimit = !bypassRateLimit; emitCurrentOptions()"
-            >
-              <span class="toggle-thumb" />
-            </button>
+            <AgaToggle
+              :model-value="bypassRateLimit"
+              :label="$t('creation.confirm.options.bypassRateLimit')"
+              @update:model-value="v => { bypassRateLimit = v; emitCurrentOptions(); }"
+            />
           </div>
         </div>
       </div>
@@ -597,39 +578,6 @@ onMounted(() => {
   font-style: italic;
   line-height: 1.6;
   letter-spacing: 0.01em;
-}
-
-.toggle-switch {
-  position: relative;
-  width: 40px;
-  height: 22px;
-  background: var(--color-border);
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background-color var(--duration-normal) var(--ease-out),
-              box-shadow var(--duration-normal) var(--ease-out);
-}
-
-.toggle-switch.active {
-  background: color-mix(in oklch, var(--color-sage-400) 70%, var(--color-border));
-  box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 35%, transparent);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  background: var(--color-text-bone);
-  border-radius: 50%;
-  transition: transform var(--duration-normal) var(--ease-out);
-}
-
-.toggle-switch.active .toggle-thumb {
-  transform: translateX(18px);
 }
 
 /* ── Advanced settings ── */
