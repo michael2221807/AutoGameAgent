@@ -16,6 +16,9 @@ import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useActionQueueStore } from '@/engine/stores/engine-action-queue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import { useInventoryEditor } from '@/ui/composables/editors';
 import { useRouter } from 'vue-router';
 import Modal from '@/ui/components/common/Modal.vue';
@@ -210,6 +213,13 @@ function itemTypeIcon(type: string | undefined): string {
 const ITEM_TYPES = ['武器', '防具', '消耗品', '材料', '任务', '饰品', '其他'] as const;
 const QUALITY_OPTIONS = ['普通', '优良', '稀有', '史诗', '传说', '神话'] as const;
 
+// AgaSelect option arrays — reproduce the exact original <option> label logic.
+const TYPE_OPTION_KEY: Record<string, string> = { 武器: 'weapon', 防具: 'armor', 消耗品: 'consumable', 材料: 'material', 任务: 'quest', 饰品: 'accessory', 其他: 'other' };
+const QUALITY_OPTION_KEY: Record<string, string> = { 普通: 'common', 优良: 'fine', 稀有: 'rare', 史诗: 'epic', 传说: 'legendary', 神话: 'mythic' };
+const typeSelectOptions = computed(() => ITEM_TYPES.map((tp) => ({ value: tp, label: t(`inventory.edit.typeOption.${TYPE_OPTION_KEY[tp] ?? 'other'}`) })));
+const qualitySelectOptions = computed(() => QUALITY_OPTIONS.map((q) => ({ value: q, label: t(`inventory.edit.qualityOption.${QUALITY_OPTION_KEY[q] ?? 'common'}`) })));
+const filterSelectOptions = computed(() => [{ value: 'all', label: t('inventory.filter.all') }, ...itemTypes.value.map((tp) => ({ value: tp, label: tp }))]);
+
 interface ItemEditForm {
   名称: string;
   类型: string;
@@ -348,9 +358,9 @@ function saveCurrency(): void {
       <header class="panel-header">
         <div class="panel-header-left">
           <h2 class="panel-title">{{ t('inventory.title') }}</h2>
-          <button class="btn-create" @click="openCreateItem">+ {{ t('inventory.action.create') }}</button>
-          <button class="btn-currency-edit" @click="openCurrencyEdit">{{ t('inventory.action.editCurrency') }}</button>
-          <button class="btn-currency-edit" @click="openAdvancedEditor">⚙ {{ t('character.edit.advancedEdit') }}</button>
+          <AgaButton variant="primary" size="sm" @click="openCreateItem">+ {{ t('inventory.action.create') }}</AgaButton>
+          <AgaButton variant="secondary" size="sm" @click="openCurrencyEdit">{{ t('inventory.action.editCurrency') }}</AgaButton>
+          <AgaButton variant="secondary" size="sm" @click="openAdvancedEditor">⚙ {{ t('character.edit.advancedEdit') }}</AgaButton>
         </div>
         <div class="currency-bar">
           <template v-if="currencyEntries.length > 0">
@@ -376,10 +386,12 @@ function saveCurrency(): void {
           class="search-field"
           :placeholder="t('inventory.search.placeholder')"
         />
-        <select v-model="filterType" class="filter-select">
-          <option value="all">{{ t('inventory.filter.all') }}</option>
-          <option v-for="typeOpt in itemTypes" :key="typeOpt" :value="typeOpt">{{ typeOpt }}</option>
-        </select>
+        <AgaSelect
+          v-model="filterType"
+          class="filter-select-aga"
+          :options="filterSelectOptions"
+          :ariaLabel="t('inventory.filter.all')"
+        />
       </div>
 
       <!-- ─── Item count ─── -->
@@ -457,15 +469,11 @@ function saveCurrency(): void {
         <div class="form-row">
           <div class="form-group form-group--half">
             <label class="form-label">{{ t('inventory.edit.label.type') }}</label>
-            <select v-model="itemForm.类型" class="form-input">
-              <option v-for="tp in ITEM_TYPES" :key="tp" :value="tp">{{ t(`inventory.edit.typeOption.${({'武器':'weapon','防具':'armor','消耗品':'consumable','材料':'material','任务':'quest','饰品':'accessory','其他':'other'})[tp] ?? 'other'}`) }}</option>
-            </select>
+            <AgaSelect v-model="itemForm.类型" class="form-select-aga" :options="typeSelectOptions" :ariaLabel="t('inventory.edit.label.type')" />
           </div>
           <div class="form-group form-group--half">
             <label class="form-label">{{ t('inventory.edit.label.quality') }}</label>
-            <select v-model="itemForm.品质" class="form-input">
-              <option v-for="q in QUALITY_OPTIONS" :key="q" :value="q">{{ t(`inventory.edit.qualityOption.${({'普通':'common','优良':'fine','稀有':'rare','史诗':'epic','传说':'legendary','神话':'mythic'})[q] ?? 'common'}`) }}</option>
-            </select>
+            <AgaSelect v-model="itemForm.品质" class="form-select-aga" :options="qualitySelectOptions" :ariaLabel="t('inventory.edit.label.quality')" />
           </div>
         </div>
         <div class="form-group">
@@ -477,14 +485,14 @@ function saveCurrency(): void {
           <textarea v-model="itemForm.描述" class="form-textarea" rows="2" :placeholder="t('inventory.edit.placeholder.desc')" />
         </div>
         <div class="form-group form-group--row">
-          <label class="form-check-label">
-            <input type="checkbox" v-model="itemForm.可装备" />
-            <span>{{ t('inventory.edit.label.equippable') }}</span>
-          </label>
-          <label v-if="itemForm.可装备" class="form-check-label">
-            <input type="checkbox" v-model="itemForm.已装备" />
-            <span>{{ t('inventory.edit.label.equipped') }}</span>
-          </label>
+          <div class="aga-toggle-row">
+            <AgaToggle v-model="itemForm.可装备" :label="t('inventory.edit.label.equippable')" />
+            <span class="aga-toggle-row__label" aria-hidden="true">{{ t('inventory.edit.label.equippable') }}</span>
+          </div>
+          <div v-if="itemForm.可装备" class="aga-toggle-row">
+            <AgaToggle v-model="itemForm.已装备" :label="t('inventory.edit.label.equipped')" />
+            <span class="aga-toggle-row__label" aria-hidden="true">{{ t('inventory.edit.label.equipped') }}</span>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -602,32 +610,26 @@ function saveCurrency(): void {
   height: 36px;
   padding: 0 12px;
   font-size: 0.85rem;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-border, #2a2a3a);
+  color: var(--color-text);
+  background: var(--color-surface-input);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   outline: none;
-  transition: border-color 0.2s ease;
+  transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
-.search-field:focus {
-  border-color: var(--color-primary, #6366f1);
+.search-field:focus-visible {
+  border-color: var(--color-sage-400);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 14%, transparent);
 }
 .search-field::placeholder {
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   opacity: 0.6;
 }
 
-.filter-select {
-  height: 36px;
-  padding: 0 10px;
-  font-size: 0.82rem;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 8px;
-  outline: none;
-  cursor: pointer;
-}
+.filter-select-aga { min-width: 130px; }
+.form-select-aga { width: 100%; }
+.aga-toggle-row { display: flex; align-items: center; gap: var(--space-sm); }
+.aga-toggle-row__label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
 
 /* ── Item summary ── */
 .item-summary {
@@ -834,30 +836,6 @@ function saveCurrency(): void {
   gap: 10px;
   flex-wrap: wrap;
 }
-.btn-create {
-  padding: 4px 12px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-sage-400);
-  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-sage-400) 25%, transparent);
-  border-radius: var(--radius-md, 6px);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn-create:hover { background: color-mix(in oklch, var(--color-sage-400) 18%, transparent); }
-.btn-currency-edit {
-  padding: 4px 10px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--color-amber-400);
-  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-amber-400) 20%, transparent);
-  border-radius: var(--radius-md, 6px);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn-currency-edit:hover { background: color-mix(in oklch, var(--color-amber-400) 16%, transparent); }
 .btn-advanced-inv { padding: 4px 10px; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); border-radius: 5px; cursor: pointer; opacity: 0.5; transition: all 0.15s; }
 .btn-advanced-inv:hover { opacity: 1; color: var(--color-sage-400); border-color: var(--color-sage-600); }
 
@@ -976,8 +954,6 @@ function saveCurrency(): void {
   .panel-header-left { flex-wrap: wrap; }
   .form-row { flex-direction: column; }
   /* Story 2: mobile touch targets */
-  .btn-create { min-height: 44px; }
-  .btn-currency-edit { min-height: 44px; }
   .btn-primary { min-height: 44px; }
   .btn-secondary { min-height: 44px; }
   .btn-danger { min-height: 44px; }
