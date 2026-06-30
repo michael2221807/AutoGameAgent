@@ -52,7 +52,9 @@ test.describe('Save persistence — full-backup roundtrip (offline)', () => {
       // The confirm modal detects a FULL (destructive) backup → the acknowledge gate appears.
       await expect(savePage.backupAcknowledge).toBeVisible({ timeout: 15_000 });
       await expect(savePage.backupConfirmButton).toBeDisabled();   // gated until acknowledged
-      await savePage.backupAcknowledge.check();
+      // backup-acknowledge is now an AgaToggle (button[role=switch]), not a native
+      // checkbox — use click() (Playwright .check() only works on input checkbox/radio).
+      await savePage.backupAcknowledge.click();
       await expect(savePage.backupConfirmButton).toBeEnabled();
 
       // Confirm → importAll succeeds → the app reloads (executeImport only schedules

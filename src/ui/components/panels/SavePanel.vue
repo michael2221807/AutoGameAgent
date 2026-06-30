@@ -222,7 +222,7 @@ function saveTypeBadge(type: SaveSlotMeta['saveType']): { label: string; cls: st
   switch (type) {
     case 'pre-round': return { label: t('save.badge.preRound'), cls: 'badge--info' };
     case 'timepoint': return { label: t('save.badge.timepoint'), cls: 'badge--warning' };
-    case 'exit':      return { label: t('save.badge.exit'), cls: 'badge--purple' };
+    case 'exit':      return { label: t('save.badge.exit'), cls: 'badge--exit' };
     default:          return null; // manual — no badge
   }
 }
@@ -1612,7 +1612,9 @@ const showSettings = ref(false);
 .badge--active   { color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
 .badge--info     { color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-300) 12%, transparent); }
 .badge--warning  { color: var(--color-amber-400); background: color-mix(in oklch, var(--color-amber-400) 12%, transparent); }
-.badge--purple   { color: var(--color-amber-300); background: color-mix(in oklch, var(--color-amber-400) 12%, transparent); }
+/* exit-state save: neutral umber (a muted "terminal/past" tone, distinct from the
+   amber warning badge — the sanctuary palette has no violet). */
+.badge--exit     { color: var(--color-text-umber); background: color-mix(in oklch, var(--color-text-umber) 14%, transparent); }
 
 .slot-time {
   font-size: 0.72rem;
