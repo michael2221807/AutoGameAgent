@@ -26,6 +26,7 @@ import type { AIService } from '@/engine/ai/ai-service';
 import type { PromptAssembler } from '@/engine/prompt/prompt-assembler';
 import type { EngramEdge } from '@/engine/memory/engram/knowledge-edge';
 import type { EngramEntity } from '@/engine/memory/engram/entity-builder';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const props = defineProps<{
   edges: EngramEdge[];
@@ -275,21 +276,25 @@ function cancelClassify(): void {
 
           <!-- pagination -->
           <div v-if="group.totalPages > 1" class="ecp-page">
-            <button
-              type="button"
-              class="ecp-page__btn"
-              :disabled="group.page <= 1"
-              :aria-label="t('save.toCard.classify.prevPage')"
-              @click="setPage(group.key, group.page - 1)"
-            >‹</button>
+            <Tooltip :text="t('save.toCard.classify.prevPage')" interactive>
+              <button
+                type="button"
+                class="ecp-page__btn"
+                :disabled="group.page <= 1"
+                :aria-label="t('save.toCard.classify.prevPage')"
+                @click="setPage(group.key, group.page - 1)"
+              >‹</button>
+            </Tooltip>
             <span class="ecp-page__label">{{ group.page }} / {{ group.totalPages }}</span>
-            <button
-              type="button"
-              class="ecp-page__btn"
-              :disabled="group.page >= group.totalPages"
-              :aria-label="t('save.toCard.classify.nextPage')"
-              @click="setPage(group.key, group.page + 1)"
-            >›</button>
+            <Tooltip :text="t('save.toCard.classify.nextPage')" interactive>
+              <button
+                type="button"
+                class="ecp-page__btn"
+                :disabled="group.page >= group.totalPages"
+                :aria-label="t('save.toCard.classify.nextPage')"
+                @click="setPage(group.key, group.page + 1)"
+              >›</button>
+            </Tooltip>
           </div>
         </div>
       </div>

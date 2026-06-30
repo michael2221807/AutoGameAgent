@@ -19,6 +19,9 @@ import { useLocale } from '@/ui/composables/useLocale';
 import Modal from '@/ui/components/common/Modal.vue';
 import CardExportFlow from '@/ui/components/panels/CardExportFlow.vue';
 import SaveToCardFlow from '@/ui/components/panels/SaveToCardFlow.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import type { SaveSlotMeta } from '@/engine/types/persistence';
 import type { GameStateTree } from '@/engine/types';
@@ -890,10 +893,12 @@ const showSettings = ref(false);
       <header class="panel-header">
         <h2 class="panel-title">{{ $t('save.title') }}</h2>
         <div class="header-actions">
-          <button class="btn btn--ghost btn--sm" data-testid="save-settings-toggle" @click="showSettings = !showSettings" :class="{ 'btn--ghost-active': showSettings }" :title="$t('save.settingsTitle')">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
-          </button>
-          <button class="btn btn--primary btn--sm" type="button" @click="openNewSlotModal">{{ $t('save.newSlot') }}</button>
+          <Tooltip :text="$t('save.settingsTitle')" interactive>
+            <button class="btn btn--ghost btn--sm" data-testid="save-settings-toggle" @click="showSettings = !showSettings" :class="{ 'btn--ghost-active': showSettings }">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
+            </button>
+          </Tooltip>
+          <AgaButton variant="primary" size="sm" type="button" @click="openNewSlotModal">{{ $t('save.newSlot') }}</AgaButton>
         </div>
       </header>
 
@@ -916,18 +921,20 @@ const showSettings = ref(false);
               <label class="gh-label">{{ $t('save.github.tokenLabel') }}</label>
               <div class="gh-token-row">
                 <input :type="ghShowToken ? 'text' : 'password'" class="gh-input gh-input--mono" v-model="ghToken" :placeholder="$t('save.github.tokenPlaceholder')" spellcheck="false" autocomplete="off" />
-                <button class="gh-eye" @click="ghShowToken = !ghShowToken" :title="ghShowToken ? $t('save.github.hideToken') : $t('save.github.showToken')">
-                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z" /><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4" /></svg>
-                </button>
+                <Tooltip :text="ghShowToken ? $t('save.github.hideToken') : $t('save.github.showToken')" interactive>
+                  <button class="gh-eye" @click="ghShowToken = !ghShowToken">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z" /><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4" /></svg>
+                  </button>
+                </Tooltip>
               </div>
             </div>
             <div class="gh-field">
               <label class="gh-label">{{ $t('save.github.repoLabel') }}</label>
               <input class="gh-input" v-model="ghRepoName" :placeholder="$t('save.github.repoPlaceholder')" spellcheck="false" />
             </div>
-            <button class="gh-connect-btn" @click="ghSaveToken" :disabled="ghStatus.stage === 'checking' || !ghToken.trim()">
+            <AgaButton class="gh-connect-btn" variant="primary" size="sm" @click="ghSaveToken" :disabled="ghStatus.stage === 'checking' || !ghToken.trim()">
               {{ ghStatus.stage === 'checking' ? $t('save.github.connecting') : $t('save.github.connectBtn') }}
-            </button>
+            </AgaButton>
           </div>
         </template>
 
@@ -940,21 +947,25 @@ const showSettings = ref(false);
               </span>
               <span v-else-if="ghCloudInfo" class="gh-cloud-info gh-cloud-empty">{{ $t('save.github.cloudEmpty') }}</span>
             </div>
-            <button class="gh-copy-btn" @click="ghCopyToken" :title="$t('save.github.copyToken')">
-              <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
-            </button>
+            <Tooltip :text="$t('save.github.copyToken')" interactive>
+              <AgaButton class="gh-icon-btn" variant="ghost" size="sm" @click="ghCopyToken">
+                <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
+              </AgaButton>
+            </Tooltip>
             <div class="gh-actions">
-              <button class="gh-action-btn gh-action-btn--up" :disabled="ghBusy()" @click="ghUpload">
+              <AgaButton variant="primary" size="sm" :disabled="ghBusy()" @click="ghUpload">
                 <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
                 {{ ghStatus.stage === 'uploading' ? $t('save.github.uploading') : $t('save.github.uploadBtn') }}
-              </button>
-              <button class="gh-action-btn gh-action-btn--down" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghShowDownloadConfirm = true">
+              </AgaButton>
+              <AgaButton variant="secondary" size="sm" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghShowDownloadConfirm = true">
                 <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
                 {{ ghStatus.stage === 'downloading' ? $t('save.github.downloading') : $t('save.github.downloadBtn') }}
-              </button>
-              <button class="gh-action-btn gh-action-btn--disconnect" @click="ghUsername = ''; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" :title="$t('save.github.disconnect')">
-                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06"/></svg>
-              </button>
+              </AgaButton>
+              <Tooltip :text="$t('save.github.disconnect')" interactive>
+                <AgaButton class="gh-icon-btn" variant="danger" size="sm" @click="ghUsername = ''; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06"/></svg>
+                </AgaButton>
+              </Tooltip>
             </div>
           </div>
         </template>
@@ -979,10 +990,10 @@ const showSettings = ref(false);
         <section v-if="showSettings" class="settings-section">
           <p class="settings-title">{{ $t('save.settingsTitle') }}</p>
           <div class="settings-row">
-            <label class="toggle-label">
-              <input type="checkbox" v-model="autoSaveSettings.timepointEnabled" class="toggle-cb" />
-              <span>{{ $t('save.autoSave.timepoint.label') }}</span>
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle v-model="autoSaveSettings.timepointEnabled" :label="$t('save.autoSave.timepoint.label')" />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('save.autoSave.timepoint.label') }}</span>
+            </div>
             <Transition name="fade-in">
               <div v-if="autoSaveSettings.timepointEnabled" class="inline-row">
                 <span class="cfg-label">{{ $t('save.autoSave.timepoint.every') }}</span>
@@ -1003,10 +1014,10 @@ const showSettings = ref(false);
             <p class="settings-title">{{ $t('save.backup.sectionTitle') }}</p>
             <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.hint') }}</p>
             <p class="settings-hint backup-hint--full-width" style="color: var(--color-amber-400);">{{ $t('save.backup.fullBackup.secretWarning') }}</p>
-            <label class="backup-include-ref">
-              <input type="checkbox" v-model="includeReferenceAssets" class="toggle-cb" />
-              <span>{{ $t('save.backup.includeRef') }}</span>
-            </label>
+            <div class="aga-toggle-row backup-include-ref">
+              <AgaToggle v-model="includeReferenceAssets" :label="$t('save.backup.includeRef')" />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('save.backup.includeRef') }}</span>
+            </div>
             <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.includeRefHint') }}</p>
             <div class="backup-btns">
               <button class="btn btn--secondary btn--sm" data-testid="backup-export" :disabled="isExportingBackup" @click="exportFullBackup">
@@ -1025,24 +1036,24 @@ const showSettings = ref(false);
           <div v-if="lanAvailable" class="gh-section">
             <div class="gh-header">
               <p class="settings-title">{{ $t('save.lan.sectionTitle') }}</p>
-              <label class="lan-toggle-label">
-                <input type="checkbox" :checked="lanEnabled" @change="lanToggle" class="lan-toggle-cb" />
-                <span class="lan-toggle-text">{{ lanEnabled ? $t('save.lan.enabled') : $t('save.lan.disabled') }}</span>
-              </label>
+              <div class="aga-toggle-row lan-toggle-label">
+                <AgaToggle :modelValue="lanEnabled" @update:modelValue="() => lanToggle()" :label="lanEnabled ? $t('save.lan.enabled') : $t('save.lan.disabled')" />
+                <span class="lan-toggle-text" aria-hidden="true">{{ lanEnabled ? $t('save.lan.enabled') : $t('save.lan.disabled') }}</span>
+              </div>
             </div>
             <template v-if="lanEnabled">
               <p class="settings-hint">
                 {{ $t('save.lan.hint') }}
               </p>
               <div class="gh-actions" style="margin-top: 8px">
-                <button class="gh-action-btn gh-action-btn--up" :disabled="lanBusy" @click="lanUpload">
+                <AgaButton variant="primary" size="sm" :disabled="lanBusy" @click="lanUpload">
                   <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
                   {{ lanBusy ? $t('save.lan.busy') : $t('save.lan.uploadBtn') }}
-                </button>
-                <button class="gh-action-btn gh-action-btn--down" :disabled="lanBusy" @click="lanDownload">
+                </AgaButton>
+                <AgaButton variant="secondary" size="sm" :disabled="lanBusy" @click="lanDownload">
                   <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
                   {{ lanBusy ? $t('save.lan.busy') : $t('save.lan.downloadBtn') }}
-                </button>
+                </AgaButton>
               </div>
               <p v-if="lanStatus" class="gh-status-msg">{{ lanStatus }}</p>
             </template>
@@ -1111,7 +1122,6 @@ const showSettings = ref(false);
               type="button"
               :disabled="!slot.lastSavedAt"
               @click="exportSingleSave(slot)"
-              :title="$t('save.slot.export')"
             >{{ $t('save.slot.export') }}</button>
             <button
               class="action-btn action-btn--tocard"
@@ -1120,17 +1130,17 @@ const showSettings = ref(false);
               :disabled="!slot.lastSavedAt"
               @click="openToCard(slot.slotId)"
             >{{ $t('save.slot.toCard') }}</button>
-            <button
-              v-if="vectorStore && embedder"
-              class="action-btn action-btn--rebuild"
-              type="button"
-              :disabled="!slot.lastSavedAt || rebuildingSlotId === slot.slotId"
-              @click="rebuildVectors(slot.slotId)"
-              :title="$t('save.slot.vectors')"
-            >
-              <span v-if="rebuildingSlotId === slot.slotId" class="spinner spinner--sm" />
-              <span v-else>{{ $t('save.slot.vectors') }}</span>
-            </button>
+            <Tooltip v-if="vectorStore && embedder" :text="$t('save.slot.vectors')" interactive>
+              <button
+                class="action-btn action-btn--rebuild"
+                type="button"
+                :disabled="!slot.lastSavedAt || rebuildingSlotId === slot.slotId"
+                @click="rebuildVectors(slot.slotId)"
+              >
+                <span v-if="rebuildingSlotId === slot.slotId" class="spinner spinner--sm" />
+                <span v-else>{{ $t('save.slot.vectors') }}</span>
+              </button>
+            </Tooltip>
             <button
               v-if="slot.slotId !== 'auto'"
               class="action-btn action-btn--delete"
@@ -1235,10 +1245,10 @@ const showSettings = ref(false);
             <li>{{ $t('save.import.warningFullList3') }}</li>
             <li>{{ $t('save.import.warningFullList4') }}</li>
           </ul>
-          <label class="import-acknowledge">
-            <input type="checkbox" v-model="fullImportAcknowledged" data-testid="backup-acknowledge" />
-            <span>{{ $t('save.import.acknowledge') }}</span>
-          </label>
+          <div class="aga-toggle-row import-acknowledge">
+            <AgaToggle v-model="fullImportAcknowledged" data-testid="backup-acknowledge" :label="$t('save.import.acknowledge')" />
+            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('save.import.acknowledge') }}</span>
+          </div>
         </div>
         <div v-else class="import-warning import-warning--info">
           <strong>{{ $t('save.import.warningProfile') }}</strong>
@@ -1267,12 +1277,12 @@ const showSettings = ref(false);
 
     <!-- GitHub download confirm -->
     <Modal v-model="ghShowDownloadConfirm" :title="$t('save.github.downloadConfirmTitle')" width="400px">
-      <p class="confirm-text" style="color: var(--color-danger, #ef4444)">
+      <p class="confirm-text confirm-text--danger">
         {{ $t('save.github.downloadConfirmText') }}
       </p>
       <template #footer>
-        <button class="btn-modal btn-modal--secondary" @click="ghShowDownloadConfirm = false">{{ $t('save.github.downloadConfirmCancel') }}</button>
-        <button class="btn-modal btn-modal--danger" @click="ghDownload">{{ $t('save.github.downloadConfirmOk') }}</button>
+        <AgaButton variant="secondary" @click="ghShowDownloadConfirm = false">{{ $t('save.github.downloadConfirmCancel') }}</AgaButton>
+        <AgaButton variant="danger" @click="ghDownload">{{ $t('save.github.downloadConfirmOk') }}</AgaButton>
       </template>
     </Modal>
 
@@ -1315,7 +1325,7 @@ const showSettings = ref(false);
 /* ── Settings section ── */
 .settings-section {
   background: rgba(255,255,255,0.025);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   padding: 14px;
   display: flex;
@@ -1340,20 +1350,16 @@ const showSettings = ref(false);
   flex-wrap: wrap;
 }
 
-.toggle-label {
+/* AgaToggle row: switch + descriptive label (label span is aria-hidden) */
+.aga-toggle-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  color: var(--color-text, #e0e0e6);
-  cursor: pointer;
-  user-select: none;
+  gap: var(--space-sm);
 }
-
-.toggle-cb {
-  accent-color: var(--color-primary, #6366f1);
-  width: 14px;
-  height: 14px;
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  user-select: none;
 }
 
 .inline-row {
@@ -1407,15 +1413,8 @@ const showSettings = ref(false);
   width: 100%;
 }
 
-/* ── Include-ref checkbox ── */
+/* ── Include-ref toggle row ── */
 .backup-include-ref {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--color-text, #e0e0e6);
-  cursor: pointer;
-  user-select: none;
   width: 100%;
 }
 .backup-hint--full-width {
@@ -1497,22 +1496,14 @@ const showSettings = ref(false);
   transition: background 0.15s;
 }
 .gh-eye:hover { background: rgba(255,255,255,0.1); }
+/* Layout-only: AgaButton provides the primary visual treatment; this just
+   places the button in the GitHub config grid. */
 .gh-connect-btn {
   grid-column: 2;
   grid-row: 2 / 4;
   align-self: stretch;
-  padding: 0 16px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
-  color: var(--color-text-primary, #e0e0e8);
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
-.gh-connect-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
-.gh-connect-btn:disabled { opacity: 0.4; cursor: default; }
 .gh-badge {
   font-size: 0.7rem;
   color: var(--color-success, #22c55e);
@@ -1537,50 +1528,10 @@ const showSettings = ref(false);
   display: flex;
   gap: 4px;
 }
-.gh-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border-radius: 5px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.05);
-  color: var(--color-text-primary, #e0e0e8);
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  white-space: nowrap;
-}
-.gh-action-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); }
-.gh-action-btn:disabled { opacity: 0.35; cursor: default; }
-.gh-action-btn--up:hover:not(:disabled) { border-color: rgba(96,165,250,0.4); color: #93bbfc; box-shadow: 0 0 10px rgba(96,165,250,0.15); }
-.gh-action-btn--down:hover:not(:disabled) { border-color: rgba(34,197,94,0.4); color: #6ee7a0; box-shadow: 0 0 10px rgba(34,197,94,0.15); }
-.gh-action-btn--disconnect {
-  padding: 5px 6px;
-  color: var(--color-text-secondary, #8888a0);
-}
-.gh-action-btn--disconnect:hover:not(:disabled) { border-color: rgba(239,68,68,0.4); color: #f87171; }
-.gh-copy-btn {
-  display: flex;
-  align-items: center;
-  padding: 5px 6px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 5px;
-  color: var(--color-text-secondary, #8888a0);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.gh-copy-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); color: var(--color-text-primary, #e0e0e8); }
+/* icon-only AgaButton: tighten padding so the X / copy glyph reads as a compact chip */
+.gh-icon-btn { padding: var(--space-2xs) var(--space-xs); }
 .lan-toggle-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
   font-size: 0.72rem;
-}
-.lan-toggle-cb {
-  accent-color: var(--color-success, #22c55e);
 }
 .lan-toggle-text {
   color: var(--color-text-secondary, #8888a0);
@@ -1623,7 +1574,7 @@ const showSettings = ref(false);
 }
 .slot-card:hover { border-color: color-mix(in oklch, var(--color-sage-400) 30%, transparent); background: linear-gradient(135deg, color-mix(in oklch, var(--color-sage-400) 3%, transparent), transparent 60%); }
 .slot-card--active {
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-sage-400);
   background: linear-gradient(135deg,
     color-mix(in oklch, var(--color-sage-400) 6%, transparent),
     color-mix(in oklch, var(--color-sage-400) 3%, transparent));
@@ -1658,10 +1609,10 @@ const showSettings = ref(false);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-.badge--active   { color: var(--color-primary, #6366f1); background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
+.badge--active   { color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
 .badge--info     { color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-300) 12%, transparent); }
 .badge--warning  { color: var(--color-amber-400); background: color-mix(in oklch, var(--color-amber-400) 12%, transparent); }
-.badge--purple   { color: #a78bfa; background: rgba(167,139,250,0.12); }
+.badge--purple   { color: var(--color-amber-300); background: color-mix(in oklch, var(--color-amber-400) 12%, transparent); }
 
 .slot-time {
   font-size: 0.72rem;
@@ -1679,7 +1630,7 @@ const showSettings = ref(false);
   font-size: 0.75rem;
   color: var(--color-text-secondary, #8888a0);
 }
-.slot-detail--status { color: var(--color-primary, #6366f1); font-weight: 500; }
+.slot-detail--status { color: var(--color-sage-300); font-weight: 500; }
 .slot-detail--size { font-family: 'JetBrains Mono','Fira Code',monospace; margin-left: auto; }
 
 .slot-actions {
@@ -1705,10 +1656,10 @@ const showSettings = ref(false);
 }
 .action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .action-btn--save:hover:not(:disabled)    { color: var(--color-success,#22c55e); border-color: var(--color-success,#22c55e); background: color-mix(in oklch, var(--color-success) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-success) 15%, transparent); }
-.action-btn--load:hover:not(:disabled)    { color: var(--color-primary,#6366f1); border-color: var(--color-primary,#6366f1); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
+.action-btn--load:hover:not(:disabled)    { color: var(--color-sage-300); border-color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-400) 15%, transparent); }
 .action-btn--export:hover:not(:disabled)  { color: var(--color-sage-300); border-color: var(--color-sage-300); background: color-mix(in oklch, var(--color-sage-300) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-sage-300) 15%, transparent); }
 .action-btn--tocard:hover:not(:disabled)  { color: var(--color-amber-400); border-color: var(--color-amber-400); background: color-mix(in oklch, var(--color-amber-400) 8%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--color-amber-400) 15%, transparent); }
-.action-btn--rebuild:hover:not(:disabled) { color: #a78bfa; border-color: #a78bfa; background: rgba(167,139,250,0.08); }
+.action-btn--rebuild:hover:not(:disabled) { color: var(--color-amber-300); border-color: var(--color-amber-300); background: color-mix(in oklch, var(--color-amber-400) 8%, transparent); }
 .action-btn--delete:hover:not(:disabled)  { color: var(--color-danger,#ef4444); border-color: var(--color-danger,#ef4444); background: color-mix(in oklch, var(--color-danger) 8%, transparent); }
 
 /* ── Buttons ── */
@@ -1726,14 +1677,14 @@ const showSettings = ref(false);
   transition: opacity 0.15s, background 0.15s;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn--primary   { background: var(--color-primary,#6366f1); color: var(--color-text-bone); }
+.btn--primary   { background: var(--color-sage-muted); color: var(--color-sage-100); border: 1px solid color-mix(in oklch, var(--color-sage-400) 35%, transparent); }
 .btn--primary:not(:disabled):hover { opacity: 0.88; }
-.btn--secondary { background: rgba(255,255,255,0.06); color: var(--color-text,#e0e0e6); border: 1px solid var(--color-border,#2a2a3a); }
+.btn--secondary { background: rgba(255,255,255,0.06); color: var(--color-text); border: 1px solid var(--color-border); }
 .btn--secondary:not(:disabled):hover { background: rgba(255,255,255,0.1); }
-.btn--danger    { background: var(--color-danger,#ef4444); color: var(--color-text-bone); }
+.btn--danger    { background: color-mix(in oklch, var(--color-danger) 12%, transparent); color: color-mix(in oklch, var(--color-danger) 95%, var(--color-text)); border: 1px solid color-mix(in oklch, var(--color-danger) 40%, transparent); }
 .btn--danger:not(:disabled):hover { opacity: 0.88; }
-.btn--ghost     { background: transparent; color: var(--color-text-secondary,#8888a0); border: 1px solid var(--color-border,#2a2a3a); border-radius: 7px; padding: 5px; }
-.btn--ghost:hover, .btn--ghost-active { color: var(--color-primary,#6366f1); border-color: var(--color-primary,#6366f1); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); }
+.btn--ghost     { background: transparent; color: var(--color-text-secondary); border: 1px solid var(--color-border); border-radius: 7px; padding: 5px; }
+.btn--ghost:hover, .btn--ghost-active { color: var(--color-sage-300); border-color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 8%, transparent); }
 .btn--sm { padding: 4px 10px; font-size: 0.76rem; border-radius: 6px; }
 
 /* ── Spinner ── */
@@ -1757,31 +1708,7 @@ const showSettings = ref(false);
   line-height: 1.6;
   margin: 0 0 8px;
 }
-.btn-modal {
-  padding: 7px 18px;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  border: 1px solid var(--color-border, #333);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.btn-modal--secondary {
-  background: transparent;
-  color: var(--color-text-secondary, #8a8580);
-  border-color: var(--color-border, #333);
-}
-.btn-modal--secondary:hover {
-  background: rgba(255,255,255,0.05);
-}
-.btn-modal--danger {
-  background: color-mix(in oklch, var(--color-danger, #ef4444) 15%, transparent);
-  color: var(--color-danger, #ef4444);
-  border-color: color-mix(in oklch, var(--color-danger, #ef4444) 30%, transparent);
-}
-.btn-modal--danger:hover {
-  background: color-mix(in oklch, var(--color-danger, #ef4444) 25%, transparent);
-}
+.confirm-text--danger { color: var(--color-danger); }
 .confirm-warning {
   font-size: 0.78rem;
   color: var(--color-amber-400);
@@ -1879,7 +1806,7 @@ const showSettings = ref(false);
 }
 .import-badge--profile {
   background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
-  color: #818cf8;
+  color: var(--color-sage-300);
   border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent);
 }
 
@@ -1954,7 +1881,7 @@ const showSettings = ref(false);
   color: var(--color-text, #e0e0e6);
 }
 .import-warning--info strong {
-  color: #818cf8;
+  color: var(--color-sage-300);
 }
 .import-warning__list {
   margin: 0;
@@ -1972,20 +1899,8 @@ const showSettings = ref(false);
 }
 
 .import-acknowledge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding-top: 6px;
   border-top: 1px dashed color-mix(in oklch, var(--color-danger) 25%, transparent);
-  font-size: 0.82rem;
-  color: var(--color-text, #e0e0e6);
-  cursor: pointer;
-  user-select: none;
-}
-.import-acknowledge input[type="checkbox"] {
-  accent-color: var(--color-danger, #ef4444);
-  width: 14px;
-  height: 14px;
 }
 
 /* ─── Mobile: sidebar reserve is 0px — provide minimum padding ─── */

@@ -6,6 +6,7 @@
  */
 import { useI18n } from 'vue-i18n';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import type { ExportFlags } from '@/engine/export/game-card-bundle.types';
 
 const props = defineProps<{ modelValue: ExportFlags }>();
@@ -61,21 +62,33 @@ function toggle(field: keyof ExportFlags): void {
     <p class="ckl-group-title">{{ t('save.export.images.sectionTitle') }}</p>
     <div class="ckl-list">
       <p class="ckl-static">{{ t('save.export.images.selectedOnly') }}</p>
-      <label class="ckl-row">
-        <input type="checkbox" class="ckl-box" :checked="modelValue.includedGenerationHistory" @change="toggle('includedGenerationHistory')" />
-        <span class="ckl-label">{{ t('save.export.images.includeHistory') }}</span>
-      </label>
-      <label class="ckl-row">
-        <input type="checkbox" class="ckl-box" :checked="modelValue.includedReferenceGallery" @change="toggle('includedReferenceGallery')" />
-        <span class="ckl-label">{{ t('save.export.images.includeGallery') }}</span>
-      </label>
+      <div class="aga-toggle-row">
+        <AgaToggle
+          :model-value="modelValue.includedGenerationHistory"
+          :label="t('save.export.images.includeHistory')"
+          @update:model-value="() => toggle('includedGenerationHistory')"
+        />
+        <span class="aga-toggle-row__label" aria-hidden="true">{{ t('save.export.images.includeHistory') }}</span>
+      </div>
+      <div class="aga-toggle-row">
+        <AgaToggle
+          :model-value="modelValue.includedReferenceGallery"
+          :label="t('save.export.images.includeGallery')"
+          @update:model-value="() => toggle('includedReferenceGallery')"
+        />
+        <span class="aga-toggle-row__label" aria-hidden="true">{{ t('save.export.images.includeGallery') }}</span>
+      </div>
     </div>
 
     <!-- Content rating -->
-    <label class="ckl-row ckl-row--nsfw">
-      <input type="checkbox" class="ckl-box" :checked="modelValue.containsNsfw" @change="toggle('containsNsfw')" />
-      <span class="ckl-label">{{ t('save.export.images.nsfw') }}</span>
-    </label>
+    <div class="aga-toggle-row aga-toggle-row--nsfw">
+      <AgaToggle
+        :model-value="modelValue.containsNsfw"
+        :label="t('save.export.images.nsfw')"
+        @update:model-value="() => toggle('containsNsfw')"
+      />
+      <span class="aga-toggle-row__label aga-toggle-row__label--nsfw" aria-hidden="true">{{ t('save.export.images.nsfw') }}</span>
+    </div>
   </div>
 </template>
 
@@ -121,8 +134,20 @@ function toggle(field: keyof ExportFlags): void {
 @media (hover: hover) {
   .ckl-row:hover { background: color-mix(in oklch, var(--color-text) 4%, transparent); }
 }
-.ckl-row--nsfw {
+.aga-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 5px 4px;
+}
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.aga-toggle-row--nsfw {
   margin-top: 12px;
+}
+.aga-toggle-row__label--nsfw {
   color: var(--color-amber-400);
 }
 .ckl-box {

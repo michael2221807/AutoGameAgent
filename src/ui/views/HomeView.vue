@@ -33,6 +33,7 @@ import Modal from '@/ui/components/common/Modal.vue';
 import APIPanel from '@/ui/components/panels/APIPanel.vue';
 import SettingsPanel from '@/ui/components/panels/SettingsPanel.vue';
 import CardImportFlow from '@/ui/components/panels/CardImportFlow.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
 import { eventBus } from '@/engine/core/event-bus';
 import { useLocale } from '@/ui/composables/useLocale';
@@ -527,12 +528,16 @@ onMounted(async () => {
                   spellcheck="false"
                   autocomplete="off"
                 />
-                <button class="sync-eye" @click="ghShowToken = !ghShowToken" tabindex="-1" :title="$t('home.github.toggleVisibility')">
-                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z"/><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4"/></svg>
-                </button>
-                <button class="sync-eye" @click="ghCopyToken()" tabindex="-1" :title="$t('home.github.copyToken')" :disabled="!ghToken.trim()">
-                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
-                </button>
+                <Tooltip :text="$t('home.github.toggleVisibility')" interactive>
+                  <button class="sync-eye" @click="ghShowToken = !ghShowToken" tabindex="-1">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path v-if="ghShowToken" d="M.143 2.31a.75.75 0 0 1 1.047-.167l14 10a.75.75 0 1 1-.88 1.214l-2.248-1.606A7.4 7.4 0 0 1 8 13C3.353 13 .2 9.2.014 8.436a.8.8 0 0 1 0-.872A10.2 10.2 0 0 1 3.28 4.63L.31 3.357A.75.75 0 0 1 .143 2.31M5.09 5.92A3 3 0 0 0 8.91 10.08z"/><path v-else d="M8 2c4.647 0 7.8 3.8 7.986 4.564a.8.8 0 0 1 0 .872C15.8 8.2 12.647 12 8 12S.2 8.2.014 7.436a.8.8 0 0 1 0-.872C.2 5.8 3.353 2 8 2m0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4"/></svg>
+                  </button>
+                </Tooltip>
+                <Tooltip :text="$t('home.github.copyToken')" interactive>
+                  <button class="sync-eye" @click="ghCopyToken()" tabindex="-1" :disabled="!ghToken.trim()">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
+                  </button>
+                </Tooltip>
               </div>
             </div>
             <div class="sync-field">
@@ -562,27 +567,31 @@ onMounted(async () => {
                 <div class="sync-repo-row">
                   <template v-if="!ghEditingRepo">
                     <span class="sync-reponame">{{ ghRepoName }}</span>
-                    <button class="sync-repo-edit" @click="ghEditingRepo = true" :title="$t('home.github.switchRepo')">
-                      <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758z"/></svg>
-                    </button>
+                    <Tooltip :text="$t('home.github.switchRepo')" interactive>
+                      <button class="sync-repo-edit" @click="ghEditingRepo = true">
+                        <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758z"/></svg>
+                      </button>
+                    </Tooltip>
                   </template>
                   <template v-else>
                     <input class="sync-repo-input" v-model="ghRepoName" spellcheck="false" @keydown.enter="ghSwitchRepo" />
-                    <button class="sync-repo-confirm" @click="ghSwitchRepo" :disabled="ghBusy()">
-                      <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0"/></svg>
-                    </button>
+                    <Tooltip :text="$t('home.github.confirmRepo')" interactive>
+                      <button class="sync-repo-confirm" @click="ghSwitchRepo" :disabled="ghBusy()">
+                        <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0"/></svg>
+                      </button>
+                    </Tooltip>
                   </template>
                 </div>
               </div>
             </div>
-            <button class="sync-disconnect" @click="ghConnected = false; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null" :title="$t('home.github.disconnect')">
+            <button class="sync-disconnect" @click="ghConnected = false; ghToken = ''; githubSync?.setToken(''); ghCloudInfo = null">
               {{ $t('home.github.disconnectButton') }}
             </button>
           </div>
 
           <div class="sync-token-copy-row">
             <span class="sync-token-preview">Token: {{ ghToken.slice(0, 10) }}···{{ ghToken.slice(-4) }}</span>
-            <button class="sync-token-copy-btn" @click="ghCopyToken()" :title="$t('home.github.copyToken')">
+            <button class="sync-token-copy-btn" @click="ghCopyToken()">
               <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>
               {{ $t('home.github.copyTokenButton') }}
             </button>

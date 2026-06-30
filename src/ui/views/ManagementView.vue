@@ -48,6 +48,8 @@ import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import { useActionQueueStore } from '@/engine/stores/engine-action-queue';
 import { useLocale } from '@/ui/composables/useLocale';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const router = useRouter();
 const { t } = useI18n();
@@ -544,26 +546,29 @@ function triggerImportRawStateTree(): void {
   <div class="management-view">
     <!-- Header -->
     <header class="mgmt-header">
-      <button class="btn-back" @click="goHome" :aria-label="$t('management.buttons.home')">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
+      <Tooltip :text="$t('management.buttons.home')" interactive>
+        <button class="btn-back" @click="goHome" :aria-label="$t('management.buttons.home')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+      </Tooltip>
       <h1 class="mgmt-title">{{ $t('management.title') }}</h1>
       <div class="header-actions">
-        <label style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:var(--color-text-secondary);">
-          <input type="checkbox" v-model="mgmtIncludeRefAssets" style="accent-color:var(--color-sage-400)" />
-          {{ $t('management.options.includeRefAssets') }}
-        </label>
-        <button
-          class="btn btn-small btn-outline"
-          type="button"
-          :title="$t('management.buttons.exportFullTitle')"
-          @click="exportFullBackup"
-          :disabled="isLoading || !backupService"
-        >
-          {{ $t('management.buttons.exportFull') }}
-        </button>
+        <div class="aga-toggle-row">
+          <AgaToggle v-model="mgmtIncludeRefAssets" :label="$t('management.options.includeRefAssets')" />
+          <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('management.options.includeRefAssets') }}</span>
+        </div>
+        <Tooltip :text="$t('management.buttons.exportFullTitle')" interactive>
+          <button
+            class="btn btn-small btn-outline"
+            type="button"
+            @click="exportFullBackup"
+            :disabled="isLoading || !backupService"
+          >
+            {{ $t('management.buttons.exportFull') }}
+          </button>
+        </Tooltip>
         <button
           class="btn btn-small btn-outline"
           type="button"
@@ -575,15 +580,16 @@ function triggerImportRawStateTree(): void {
         <button class="btn btn-small btn-outline" @click="triggerImport" :disabled="isLoading">
           {{ $t('management.buttons.importSave') }}
         </button>
-        <button
-          class="btn btn-small btn-outline"
-          type="button"
-          :title="$t('management.buttons.importDemoTreeTitle')"
-          @click="triggerImportRawStateTree"
-          :disabled="isLoading"
-        >
-          {{ $t('management.buttons.importDemoTree') }}
-        </button>
+        <Tooltip :text="$t('management.buttons.importDemoTreeTitle')" interactive>
+          <button
+            class="btn btn-small btn-outline"
+            type="button"
+            @click="triggerImportRawStateTree"
+            :disabled="isLoading"
+          >
+            {{ $t('management.buttons.importDemoTree') }}
+          </button>
+        </Tooltip>
         <button class="btn btn-small btn-primary" @click="goToCreation" :disabled="isLoading">
           {{ $t('management.buttons.newCharacter') }}
         </button>
@@ -803,6 +809,16 @@ function triggerImportRawStateTree(): void {
   display: flex;
   gap: 0.375rem;
   flex-wrap: wrap;
+}
+
+.aga-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 /* ── Buttons ─────────────────────────────────────────────────

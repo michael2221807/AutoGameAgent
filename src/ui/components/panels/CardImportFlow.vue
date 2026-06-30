@@ -587,7 +587,7 @@ const errorText = computed(() => (errorCode.value ? t(`save.import.card.error.${
           <fieldset v-if="optInRows.length" class="cif-group">
             <legend class="cif-group__legend">{{ t('save.import.card.global.optInLegend') }}</legend>
             <label v-for="r in optInRows" :key="r.flag" class="cif-check">
-              <input type="checkbox" class="cif-checkbox" :checked="optIns.has(r.flag)" @change="toggleOptIn(r.flag, ($event.target as HTMLInputElement).checked)" />
+              <input type="checkbox" :checked="optIns.has(r.flag)" @change="toggleOptIn(r.flag, ($event.target as HTMLInputElement).checked)" />
               <span>{{ r.label }}</span>
               <Tooltip :text="r.hint"><span class="cif-help" aria-hidden="true">?</span></Tooltip>
             </label>
@@ -790,7 +790,10 @@ const errorText = computed(() => (errorCode.value ? t(`save.import.card.error.${
 .cif-group__auto { margin: 0; font-size: 0.85rem; color: var(--color-sage-400); }
 .cif-group__info { margin: 0; font-size: 0.82rem; color: var(--color-text-secondary); line-height: 1.5; }
 .cif-check { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--color-text); cursor: pointer; }
-.cif-checkbox { width: 18px; height: 18px; accent-color: var(--color-sage-400); cursor: pointer; }
+/* Opt-in checkbox is a list/whitelist multi-select → native control themed by the
+   global forms.css foundation (sage accent + focus ring); no bespoke box CSS per
+   native-form-styling rule. Keep a modest size for the row rhythm. */
+.cif-check input[type='checkbox'] { width: 18px; height: 18px; }
 .cif-help {
   display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px;
   font-size: 0.7rem; color: var(--color-text-secondary); cursor: help;

@@ -44,5 +44,6 @@
   "home.cloudStatus.unknownTime": "Unknown time",
   "home.cloudStatus.noArchive": "No cloud save",
   "home.cloudStatus.uploadToSync": "Upload to sync across devices",
-  "home.cloudStatus.checking": "Checking cloud…"
+  "home.cloudStatus.checking": "Checking cloud…",
+  "home.github.confirmRepo": "Confirm repo name"
 }

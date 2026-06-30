@@ -44,5 +44,6 @@
   "home.cloudStatus.unknownTime": "未知时间",
   "home.cloudStatus.noArchive": "云端暂无存档",
   "home.cloudStatus.uploadToSync": "上传后即可在其他设备下载",
-  "home.cloudStatus.checking": "正在检查云端…"
+  "home.cloudStatus.checking": "正在检查云端…",
+  "home.github.confirmRepo": "确认仓库名"
 }
