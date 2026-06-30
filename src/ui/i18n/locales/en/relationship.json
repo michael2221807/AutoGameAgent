@@ -231,5 +231,6 @@
   "relationship.delete.locationRefs": "The following locations will remove this NPC:",
   "relationship.delete.engramEntity": "The entity in Relationship Graph Editor will become orphaned",
   "relationship.toast.engramRenameFailed": "NPC renamed, but Engram entity rename failed — please update manually in Relationship Graph",
-  "relationship.toast.engramDeleteFailed": "NPC deleted, but Engram entity cleanup failed — please clean up manually in Relationship Graph"
+  "relationship.toast.engramDeleteFailed": "NPC deleted, but Engram entity cleanup failed — please clean up manually in Relationship Graph",
+  "relationship.roster.add": "Add character"
 }

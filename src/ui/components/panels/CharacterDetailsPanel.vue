@@ -23,6 +23,7 @@ import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
 import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
 import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { readStatFields } from '@/engine/pack/stat-section-reader';
@@ -707,6 +708,20 @@ const talentNameDraft = ref('');
 const talentDescDraft = ref('');
 const locationCancelled = ref(false);
 const descriptionCancelled = ref(false);
+
+const genderSelectOptions = computed<SelectOption[]>(() => [
+  { label: t('character.edit.genderOption.male'), value: '男' },
+  { label: t('character.edit.genderOption.female'), value: '女' },
+  { label: t('character.edit.genderOption.other'), value: '其他' },
+]);
+const locationSelectOptions = computed<SelectOption[]>(() => {
+  const opts = locationOptions.value.map((loc) => ({ label: loc, value: loc }));
+  // Include the free-typed current draft value if it is not already a known location.
+  if (locationDraft.value && !locationOptions.value.includes(locationDraft.value)) {
+    opts.push({ label: locationDraft.value, value: locationDraft.value });
+  }
+  return opts;
+});
 
 function startEditGender(): void { genderDraft.value = gender.value ?? ''; editingGender.value = true; }
 function commitGender(): void {
@@ -1491,16 +1506,18 @@ const avatarInitial = computed<string>(() => {
     <template v-if="isLoaded">
       <!-- ─── Hero Header ─── -->
       <div class="hero-header">
-        <button class="hero-avatar" :title="t('character.hero.viewGallery')" @click="activeTab = 'playerImage'">
-          <ImageDisplay
-            v-if="playerAvatarId"
-            :asset-id="playerAvatarId"
-            :fallback-letter="avatarInitial"
-            size="fill"
-            class="hero-avatar-img"
-          />
-          <span v-else>{{ avatarInitial }}</span>
-        </button>
+        <Tooltip :text="t('character.hero.viewGallery')" interactive>
+          <button class="hero-avatar" @click="activeTab = 'playerImage'">
+            <ImageDisplay
+              v-if="playerAvatarId"
+              :asset-id="playerAvatarId"
+              :fallback-letter="avatarInitial"
+              size="fill"
+              class="hero-avatar-img"
+            />
+            <span v-else>{{ avatarInitial }}</span>
+          </button>
+        </Tooltip>
         <div class="hero-info">
           <div class="hero-name-row">
             <h2 class="hero-name">{{ name ?? $t('character.hero.unnamed') }}</h2>
@@ -1520,11 +1537,13 @@ const avatarInitial = computed<string>(() => {
             <span v-if="talentTier" class="trait-chip trait-chip--tier">{{ talentTier }}</span>
           </div>
         </div>
-        <button class="btn-edit-all" :title="t('character.hero.editBasicInfo')" @click="openSchemaEdit(P.characterBaseInfo, t('character.hero.editBasicInfo'))">
-          <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-          </svg>
-        </button>
+        <Tooltip :text="t('character.hero.editBasicInfo')" interactive>
+          <button class="btn-edit-all" @click="openSchemaEdit(P.characterBaseInfo, t('character.hero.editBasicInfo'))">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
 
       <!-- ─── Tab bar ─── -->
@@ -1582,11 +1601,13 @@ const avatarInitial = computed<string>(() => {
             <div class="info-row" @click="!editingGender && startEditGender()">
               <span class="info-label">{{ $t('character.basic.fieldGender') }}</span>
               <template v-if="editingGender">
-                <select v-model="genderDraft" class="inline-input" @change="commitGender" @blur="commitGender" @keydown.escape="editingGender = false">
-                  <option value="男">{{ $t('character.edit.genderOption.male') }}</option>
-                  <option value="女">{{ $t('character.edit.genderOption.female') }}</option>
-                  <option value="其他">{{ $t('character.edit.genderOption.other') }}</option>
-                </select>
+                <span @keydown.escape="editingGender = false">
+                  <AgaSelect
+                    :model-value="genderDraft"
+                    :options="genderSelectOptions"
+                    @update:model-value="v => { genderDraft = v; commitGender(); }"
+                  />
+                </span>
               </template>
               <span v-else class="info-value info-value--editable">{{ gender ?? '—' }} <span class="edit-icon">✏</span></span>
             </div>
@@ -1611,10 +1632,13 @@ const avatarInitial = computed<string>(() => {
             <div class="info-row" @click="startEditLocation">
               <span class="info-label">{{ $t('character.basic.fieldLocation') }}</span>
               <template v-if="editingLocation">
-                <select v-model="locationDraft" class="inline-input" @change="commitLocation" @keydown.escape="cancelLocation">
-                  <option v-for="loc in locationOptions" :key="loc" :value="loc">{{ loc }}</option>
-                  <option v-if="locationDraft && !locationOptions.includes(locationDraft)" :value="locationDraft">{{ locationDraft }}</option>
-                </select>
+                <span @keydown.escape="cancelLocation">
+                  <AgaSelect
+                    :model-value="locationDraft"
+                    :options="locationSelectOptions"
+                    @update:model-value="v => { locationDraft = v; commitLocation(); }"
+                  />
+                </span>
               </template>
               <span v-else class="info-value info-value--editable">{{ location ?? '—' }} <span class="edit-icon">✏</span></span>
             </div>
@@ -1739,11 +1763,13 @@ const avatarInitial = computed<string>(() => {
         <section class="info-card" :aria-label="$t('character.attributes.sectionAcquired')">
           <h3 class="card-title">
             {{ $t('character.attributes.sectionAcquired') }} <span class="card-subtitle">{{ $t('character.attributes.acquiredSubtitle') }}</span>
-            <button class="btn-icon" :title="$t('character.attributes.editAttributes')" @click="openSchemaEdit(P.characterAttributes, t('character.attributes.editAttributes'))">
-              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-              </svg>
-            </button>
+            <Tooltip :text="$t('character.attributes.editAttributes')" interactive>
+              <button class="btn-icon" @click="openSchemaEdit(P.characterAttributes, t('character.attributes.editAttributes'))">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </Tooltip>
           </h3>
           <div v-if="attributeList.length" class="attribute-list">
             <div v-for="attr in attributeList" :key="attr.key" class="attribute-item attribute-item--stepper">
@@ -1767,9 +1793,11 @@ const avatarInitial = computed<string>(() => {
         <section class="info-card" :aria-label="$t('character.edit.vitals')">
           <h3 class="card-title">
             {{ $t('character.edit.vitals') }}
-            <button class="btn-icon" :title="$t('character.edit.advancedEdit')" @click="openVitalsEdit">
-              <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
-            </button>
+            <Tooltip :text="$t('character.edit.advancedEdit')" interactive>
+              <button class="btn-icon" @click="openVitalsEdit">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+              </button>
+            </Tooltip>
           </h3>
           <div class="vitals-grid">
             <div class="vital-item">
@@ -2045,7 +2073,7 @@ const avatarInitial = computed<string>(() => {
                 </div>
                 <label class="pi-label" style="margin-top:4px;">{{ $t('character.image.reference.denoise') }}</label>
                 <div style="display:flex;align-items:center;gap:8px;">
-                  <input type="range" min="0.1" max="1" step="0.05" v-model.number="playerRefDenoise" style="flex:1" />
+                  <input type="range" min="0.1" max="1" step="0.05" v-model.number="playerRefDenoise" class="bp-edit-range" style="flex:1" />
                   <span style="font-size:0.8rem;min-width:32px;text-align:right">{{ playerRefDenoise.toFixed(2) }}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--color-text-muted);">
@@ -2211,7 +2239,9 @@ const avatarInitial = computed<string>(() => {
           <teleport to="body">
             <div v-if="playerSecretViewerOpen" class="secret-viewer-overlay" @click="playerSecretViewerOpen = false">
               <img :src="playerSecretViewerSrc" class="secret-viewer-img" @click.stop />
-              <button class="secret-viewer-close" @click="playerSecretViewerOpen = false">&times;</button>
+              <Tooltip :text="$t('common.actions.close')" interactive>
+                <button class="secret-viewer-close" :aria-label="$t('common.actions.close')" @click="playerSecretViewerOpen = false">&times;</button>
+              </Tooltip>
             </div>
           </teleport>
 
@@ -2376,7 +2406,9 @@ const avatarInitial = computed<string>(() => {
           <div v-for="(bp, bi) in bodyEditForm.身体部位" :key="bp._id" class="bp-edit-card">
             <div class="bp-edit-head">
               <input v-model="bp.部位名称" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.partName')" />
-              <button type="button" class="bp-edit-remove" :aria-label="$t('common.actions.delete')" @click="removeDraftBodyPart(bi)">×</button>
+              <Tooltip :text="$t('common.actions.delete')" interactive>
+                <button type="button" class="bp-edit-remove" :aria-label="$t('common.actions.delete')" @click="removeDraftBodyPart(bi)">×</button>
+              </Tooltip>
             </div>
             <textarea v-model="bp.特征描述" class="form-textarea-s2" rows="2" :placeholder="$t('character.body.edit.featureDescription')" />
             <input v-model="bp.特殊印记" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.specialMark')" />
@@ -2411,7 +2443,9 @@ const avatarInitial = computed<string>(() => {
           <div v-for="(rec, ri) in bodyEditForm.子宫.内射记录" :key="rec._id" class="record-edit-row">
             <input v-model="rec.日期" type="text" class="form-input-s2 record-edit-date" :placeholder="$t('character.body.edit.recordDate')" />
             <input v-model="rec.描述" type="text" class="form-input-s2" :placeholder="$t('character.body.edit.recordDesc')" />
-            <button type="button" class="bp-edit-remove" :aria-label="$t('common.actions.delete')" @click="removeInseminationRecord(ri)">×</button>
+            <Tooltip :text="$t('common.actions.delete')" interactive>
+              <button type="button" class="bp-edit-remove" :aria-label="$t('common.actions.delete')" @click="removeInseminationRecord(ri)">×</button>
+            </Tooltip>
           </div>
           <button type="button" class="bp-edit-add" @click="addInseminationRecord">+ {{ $t('character.body.edit.addRecord') }}</button>
         </div>
@@ -2421,7 +2455,7 @@ const avatarInitial = computed<string>(() => {
           <span class="body-edit-section-title">{{ $t('character.body.sensitivePoints') }}</span>
           <div v-if="bodyEditForm.敏感点.length" class="tag-edit-row">
             <span v-for="(s, si) in bodyEditForm.敏感点" :key="si" class="tag-edit-chip">
-              {{ s }}<button type="button" class="tag-edit-x" :aria-label="$t('common.actions.delete')" @click="removeSensitivePoint(si)">×</button>
+              {{ s }}<Tooltip :text="$t('common.actions.delete')" interactive><button type="button" class="tag-edit-x" :aria-label="$t('common.actions.delete')" @click="removeSensitivePoint(si)">×</button></Tooltip>
             </span>
           </div>
           <div class="tag-edit-add">
@@ -2435,7 +2469,7 @@ const avatarInitial = computed<string>(() => {
           <span class="body-edit-section-title">{{ $t('character.body.tattoos') }}</span>
           <div v-if="bodyEditForm.纹身与印记.length" class="tag-edit-row">
             <span v-for="(t, ti) in bodyEditForm.纹身与印记" :key="ti" class="tag-edit-chip">
-              {{ t }}<button type="button" class="tag-edit-x" :aria-label="$t('common.actions.delete')" @click="removeTattoo(ti)">×</button>
+              {{ t }}<Tooltip :text="$t('common.actions.delete')" interactive><button type="button" class="tag-edit-x" :aria-label="$t('common.actions.delete')" @click="removeTattoo(ti)">×</button></Tooltip>
             </span>
           </div>
           <div class="tag-edit-add">
@@ -2553,9 +2587,22 @@ const avatarInitial = computed<string>(() => {
   background: radial-gradient(ellipse 80% 60% at 20% 50%,
     color-mix(in oklch, var(--color-sage-400) 8%, transparent),
     color-mix(in oklch, var(--color-sage-400) 4%, transparent));
-  border: 1px solid color-mix(in oklch, var(--color-sage-400) 18%, transparent);
   border-radius: 12px;
   position: relative;
+}
+.hero-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .hero-avatar {
@@ -2739,7 +2786,7 @@ const avatarInitial = computed<string>(() => {
 .info-card {
   padding: 14px;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
 }
 
@@ -2810,9 +2857,9 @@ const avatarInitial = computed<string>(() => {
   height: 26px;
   padding: 0 8px;
   font-size: 0.84rem;
-  color: var(--color-text, #e0e0e6);
-  background: var(--color-bg, #0f0f14);
-  border: 1px solid var(--color-primary, #6366f1);
+  color: var(--color-text);
+  background: var(--color-surface-input);
+  border: 1px solid var(--color-sage-600);
   border-radius: 6px;
   outline: none;
   max-width: 160px;
@@ -3093,7 +3140,7 @@ const avatarInitial = computed<string>(() => {
 .relation-card {
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
@@ -3253,8 +3300,8 @@ const avatarInitial = computed<string>(() => {
 }
 .player-stat-card {
   display: flex; flex-direction: column; align-items: center;
-  padding: 6px 12px; background: var(--color-surface, #1a1a24);
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 6px;
+  padding: 6px 12px; background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle); border-radius: 6px;
   min-width: 80px;
 }
 .player-stat-val { font-size: 13px; font-weight: 600; color: var(--color-text, #e0e0e6); }
@@ -3293,7 +3340,7 @@ const avatarInitial = computed<string>(() => {
 .pi-empty { color: var(--color-text-muted, #55556a); font-size: 13px; text-align: center; padding: 24px; }
 .player-archive { }
 .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-md, 12px); }
-.player-img-card { background: var(--color-surface, #1a1a24); border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px; overflow: hidden; box-shadow: var(--lumi-inset-highlight); }
+.player-img-card { background: var(--color-surface); border: 1px solid var(--color-border-subtle); border-radius: 8px; overflow: hidden; box-shadow: var(--lumi-inset-highlight); }
 .player-img-preview { position: relative; }
 .player-img-preview :deep(.img-display) { width: 100%; height: auto; aspect-ratio: 3/4; border-radius: 0; }
 .player-img-badges {
@@ -3332,9 +3379,9 @@ const avatarInitial = computed<string>(() => {
 .anchor-section {
   margin-top: var(--space-lg, 16px);
   padding: var(--space-md, 12px);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
-  background: var(--color-surface-elevated, #22222e);
+  background: var(--color-surface-elevated);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -3669,20 +3716,20 @@ const avatarInitial = computed<string>(() => {
   padding: 4px 12px;
   font-size: 0.78rem;
   border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
-  color: var(--color-text-secondary, #aaa);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--glass-bg);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .secret-opt-btn:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.18);
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  border-color: color-mix(in oklch, var(--color-sage-400) 30%, transparent);
 }
 .secret-opt-btn--active {
-  background: rgba(163,190,140,0.18);
-  border-color: var(--color-sage-300, #a3be8c);
-  color: var(--color-sage-300, #a3be8c);
+  background: color-mix(in oklch, var(--color-sage-400) 18%, transparent);
+  border-color: var(--color-sage-300);
+  color: var(--color-sage-300);
 }
 
 .secret-status {

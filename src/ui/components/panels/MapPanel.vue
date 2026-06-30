@@ -26,6 +26,9 @@ const { t } = useI18n();
 cytoscape.use(fcose);
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 import { useLocationEditor } from '@/ui/composables/editors';
 import { useRouter } from 'vue-router';
@@ -334,6 +337,17 @@ const availableConnections = computed(() =>
 );
 const availableNpcs = computed(() =>
   npcNames.value.filter(n => !locationForm.value.NPC!.includes(n)),
+);
+
+// AgaSelect option lists (preserve exact label logic from the original <option> markup)
+const parentOptions = computed<SelectOption[]>(() =>
+  availableParents.value.map(p => ({ label: p, value: p })),
+);
+const connectionOptions = computed<SelectOption[]>(() =>
+  availableConnections.value.map(opt => ({ label: opt, value: opt })),
+);
+const npcOptions = computed<SelectOption[]>(() =>
+  availableNpcs.value.map(opt => ({ label: opt, value: opt })),
 );
 
 function openContextMenu(name: string, renderedX: number, renderedY: number): void {
@@ -983,10 +997,12 @@ onActivated(() => {
       <header class="panel-header">
         <h2 class="panel-title">{{ $t('map.title') }}</h2>
         <div class="header-actions">
-          <button class="btn-secondary" :title="$t('map.fitView')" @click="fitView">{{ $t('map.fitView') }}</button>
-          <button class="btn-secondary" :title="$t('map.refresh')" @click="refreshGraph">{{ $t('map.refresh') }}</button>
+          <button class="btn-secondary" @click="fitView">{{ $t('map.fitView') }}</button>
+          <button class="btn-secondary" @click="refreshGraph">{{ $t('map.refresh') }}</button>
           <button class="btn-create-loc" @click="openCreateLocation">+ {{ $t('map.action.create') }}</button>
-          <button class="btn-help" :aria-label="$t('map.helpBtn')" :title="$t('map.helpBtn')" @click="showHelp = true">?</button>
+          <Tooltip :text="$t('map.helpBtn')" interactive>
+            <button class="btn-help" :aria-label="$t('map.helpBtn')" @click="showHelp = true">?</button>
+          </Tooltip>
         </div>
       </header>
 
@@ -1061,7 +1077,9 @@ onActivated(() => {
         <div v-if="selectedEntry" class="location-detail" role="region" :aria-label="$t('map.detail.ariaLabel')">
           <div class="detail-header">
             <h3 class="detail-name">{{ selectedEntry.名称 }}</h3>
-            <button class="btn-icon" :aria-label="$t('map.detail.close')" :title="$t('map.detail.close')" @click="clearSelection">✕</button>
+            <Tooltip :text="$t('map.detail.close')" interactive>
+              <button class="btn-icon" :aria-label="$t('map.detail.close')" @click="clearSelection">✕</button>
+            </Tooltip>
           </div>
 
           <div class="exploration-badge">
@@ -1131,10 +1149,7 @@ onActivated(() => {
         </div>
         <div class="loc-form-group">
           <label class="loc-form-label">{{ $t('map.edit.label.parent') }}</label>
-          <select v-model="locationForm.上级" class="loc-form-input">
-            <option value="">{{ $t('map.edit.noParent') }}</option>
-            <option v-for="p in availableParents" :key="p" :value="p">{{ p }}</option>
-          </select>
+          <AgaSelect :modelValue="locationForm.上级 ?? ''" :options="parentOptions" :placeholder="$t('map.edit.noParent')" @update:modelValue="v => locationForm.上级 = v" />
         </div>
 
         <div class="loc-form-group">
@@ -1143,10 +1158,12 @@ onActivated(() => {
             <span v-for="(c, ci) in locationForm.连接" :key="ci" class="tag-chip">{{ c }} <button class="tag-x" @click="removeConnection(ci)">&times;</button></span>
           </div>
           <div class="tag-add-row">
-            <select v-model="addConnectionSelect" class="loc-form-input" @change="addConnection">
-              <option value="">{{ $t('map.edit.addConnection') }}</option>
-              <option v-for="opt in availableConnections" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
+            <AgaSelect
+              :modelValue="addConnectionSelect"
+              :options="connectionOptions"
+              :placeholder="$t('map.edit.addConnection')"
+              @update:modelValue="v => { addConnectionSelect = v; addConnection(); }"
+            />
           </div>
           <span class="loc-form-hint">ⓘ {{ $t('map.edit.connectionHint') }}</span>
         </div>
@@ -1157,10 +1174,12 @@ onActivated(() => {
             <span v-for="(n, ni) in locationForm.NPC" :key="ni" class="tag-chip">{{ n }} <button class="tag-x" @click="removeNpc(ni)">&times;</button></span>
           </div>
           <div class="tag-add-row">
-            <select v-model="addNpcSelect" class="loc-form-input" @change="addNpc">
-              <option value="">{{ $t('map.edit.addNpc') }}</option>
-              <option v-for="opt in availableNpcs" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
+            <AgaSelect
+              :modelValue="addNpcSelect"
+              :options="npcOptions"
+              :placeholder="$t('map.edit.addNpc')"
+              @update:modelValue="v => { addNpcSelect = v; addNpc(); }"
+            />
           </div>
         </div>
       </div>
@@ -1366,7 +1385,6 @@ onActivated(() => {
 .loc-form-group { display: flex; flex-direction: column; gap: 4px; }
 .loc-form-label { font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); }
 .loc-form-input { height: 34px; padding: 0 10px; font-size: 0.84rem; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 6px; outline: none; appearance: none; -webkit-appearance: none; }
-select.loc-form-input { padding-right: 28px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%238888a0'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
 .loc-form-textarea { padding: 8px 10px; font-size: 0.84rem; color: var(--color-text); background: var(--color-surface-input, rgba(255,255,255,0.04)); border: 1px solid var(--color-border); border-radius: 6px; outline: none; resize: vertical; }
 .loc-form-hint { font-size: 0.72rem; color: var(--color-sage-400); font-style: italic; padding: 4px 8px; background: color-mix(in oklch, var(--color-sage-400) 6%, transparent); border-radius: 4px; }
 .tag-list-edit { display: flex; flex-wrap: wrap; gap: 4px; min-height: 28px; }

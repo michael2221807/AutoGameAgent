@@ -98,6 +98,16 @@
   --color-info:             oklch(0.74 0.07  var(--hue-1));
 
   /* ─────────────────────────────────────────────────────────────
+     NSFW / INTIMATE ACCENT — warm rose beacon for the private-archive
+     surfaces (香闺秘档). Was hardcoded #e879a0 / #f472b6 / rgba(232,121,160)
+     scattered across RelationshipPanel; promoted to a token family so the
+     pink lives in one place and stays consistent with the warm palette.
+     ───────────────────────────────────────────────────────────── */
+  --color-nsfw:             #e879a0;
+  --color-nsfw-bright:      #f472b6;
+  --color-nsfw-muted:       color-mix(in oklch, var(--color-nsfw) 15%, transparent);
+
+  /* ─────────────────────────────────────────────────────────────
      BACKWARD-COMPAT ALIASES — every legacy `var(--color-primary)` etc.
      still resolves; value now resolves to sage instead of indigo.
      ───────────────────────────────────────────────────────────── */

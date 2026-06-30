@@ -19,6 +19,10 @@ import { useGameState } from '@/ui/composables/useGameState';
 import { useMobile } from '@/ui/composables/useMobile';
 import Modal from '@/ui/components/common/Modal.vue';
 import NpcChatModal from '@/ui/components/shared/NpcChatModal.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import type { SelectOption } from '@/ui/components/shared/AgaSelect.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { formatMemoryEntry } from '@/engine/social/npc-memory-format';
@@ -744,6 +748,23 @@ function displayBodyPartName(name: string | undefined): string {
   };
   return map[name] ?? name;
 }
+
+/** NPC type options for the edit-modal AgaSelect (placeholder = uncategorized). */
+const typeSelectOptions = computed<SelectOption[]>(() => [
+  { label: t('relationship.editForm.typeOption.key'), value: '重点' },
+  { label: t('relationship.editForm.typeOption.companion'), value: '同伴' },
+  { label: t('relationship.editForm.typeOption.merchant'), value: '商人' },
+  { label: t('relationship.editForm.typeOption.neutral'), value: '中立' },
+  { label: t('relationship.editForm.typeOption.hostile'), value: '敌对' },
+  { label: t('relationship.editForm.typeOption.normal'), value: '普通' },
+]);
+
+/** NPC gender options for the edit-modal AgaSelect (placeholder = unset). */
+const genderSelectOptions = computed<SelectOption[]>(() => [
+  { label: t('relationship.editForm.genderOption.male'), value: '男' },
+  { label: t('relationship.editForm.genderOption.female'), value: '女' },
+  { label: t('relationship.editForm.genderOption.other'), value: '其他' },
+]);
 </script>
 
 <template>
@@ -757,7 +778,9 @@ function displayBodyPartName(name: string | undefined): string {
               {{ $t('relationship.roster.title') }}
               <span v-if="relationships?.length" class="badge">{{ relationships.length }}</span>
             </div>
-            <button class="btn-add" @click="openAddNew">+</button>
+            <Tooltip :text="$t('relationship.roster.add')" interactive>
+              <button class="btn-add" :aria-label="$t('relationship.roster.add')" @click="openAddNew">+</button>
+            </Tooltip>
           </div>
           <input
             v-model="searchQuery"
@@ -824,14 +847,16 @@ function displayBodyPartName(name: string | undefined): string {
           <template v-if="selectedNpc">
             <!-- Hero header -->
             <div class="rd-hero">
-              <button class="rd-hero-avatar-btn" :title="$t('relationship.detail.avatarTitle')" @click="openImageWorkbench(selectedNpc.名称, $event)">
-                <ImageDisplay
-                  :asset-id="selectedNpc['图片档案']?.['已选头像图片ID']"
-                  :fallback-letter="selectedNpc.名称?.charAt(0) ?? '?'"
-                  size="fill"
-                  class="rd-hero-avatar-img"
-                />
-              </button>
+              <Tooltip :text="$t('relationship.detail.avatarTitle')" interactive>
+                <button class="rd-hero-avatar-btn" :aria-label="$t('relationship.detail.avatarTitle')" @click="openImageWorkbench(selectedNpc.名称, $event)">
+                  <ImageDisplay
+                    :asset-id="selectedNpc['图片档案']?.['已选头像图片ID']"
+                    :fallback-letter="selectedNpc.名称?.charAt(0) ?? '?'"
+                    size="fill"
+                    class="rd-hero-avatar-img"
+                  />
+                </button>
+              </Tooltip>
               <div class="rd-hero-info">
                 <h2 class="rd-hero-name">{{ selectedNpc.名称 }}</h2>
                 <div class="rd-hero-chips">
@@ -908,11 +933,12 @@ function displayBodyPartName(name: string | undefined): string {
 
                 <!-- Portrait gallery (bottom of main column) -->
                 <div v-if="selectedNpc['图片档案']?.['已选立绘图片ID']" class="portrait-gallery">
-                  <div class="portrait-frame" @click="openPortraitViewer(selectedNpc['图片档案']['已选立绘图片ID'])">
-                    <ImageDisplay :asset-id="selectedNpc['图片档案']['已选立绘图片ID']" :fallback-letter="selectedNpc.名称?.charAt(0) ?? '?'" size="lg" class="portrait-image" />
-                    <div class="portrait-vignette" />
-                    <div class="portrait-hint">{{ $t('relationship.detail.clickFullImage') }}</div>
-                  </div>
+                  <Tooltip :text="$t('relationship.detail.clickFullImage')" interactive>
+                    <div class="portrait-frame" role="button" :aria-label="$t('relationship.detail.clickFullImage')" @click="openPortraitViewer(selectedNpc['图片档案']['已选立绘图片ID'])">
+                      <ImageDisplay :asset-id="selectedNpc['图片档案']['已选立绘图片ID']" :fallback-letter="selectedNpc.名称?.charAt(0) ?? '?'" size="lg" class="portrait-image" />
+                      <div class="portrait-vignette" />
+                    </div>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -1022,27 +1048,24 @@ function displayBodyPartName(name: string | undefined): string {
             </div>
             <div class="form-group form-group--half">
               <label class="form-label">{{ $t('relationship.editForm.label.type') }}</label>
-              <select v-model="editForm.类型" class="form-input">
-                <option value="">{{ $t('relationship.editForm.typeOption.uncategorized') }}</option>
-                <option value="重点">{{ $t('relationship.editForm.typeOption.key') }}</option>
-                <option value="同伴">{{ $t('relationship.editForm.typeOption.companion') }}</option>
-                <option value="商人">{{ $t('relationship.editForm.typeOption.merchant') }}</option>
-                <option value="中立">{{ $t('relationship.editForm.typeOption.neutral') }}</option>
-                <option value="敌对">{{ $t('relationship.editForm.typeOption.hostile') }}</option>
-                <option value="普通">{{ $t('relationship.editForm.typeOption.normal') }}</option>
-              </select>
+              <AgaSelect
+                v-model="editForm.类型"
+                :options="typeSelectOptions"
+                :placeholder="$t('relationship.editForm.typeOption.uncategorized')"
+                :aria-label="$t('relationship.editForm.label.type')"
+              />
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group form-group--half">
               <label class="form-label">{{ $t('relationship.editForm.label.gender') }}</label>
-              <select v-model="editForm.性别" class="form-input">
-                <option value="">{{ $t('relationship.editForm.genderOption.unset') }}</option>
-                <option value="男">{{ $t('relationship.editForm.genderOption.male') }}</option>
-                <option value="女">{{ $t('relationship.editForm.genderOption.female') }}</option>
-                <option value="其他">{{ $t('relationship.editForm.genderOption.other') }}</option>
-              </select>
+              <AgaSelect
+                v-model="editForm.性别"
+                :options="genderSelectOptions"
+                :placeholder="$t('relationship.editForm.genderOption.unset')"
+                :aria-label="$t('relationship.editForm.label.gender')"
+              />
             </div>
             <div class="form-group form-group--half">
               <label class="form-label">{{ $t('relationship.editForm.label.age') }}</label>
@@ -1217,7 +1240,7 @@ function displayBodyPartName(name: string | undefined): string {
 
         <!-- 私密信息（NSFW 开启时显示） -->
         <div v-if="nsfwEnabled" class="form-section">
-          <h4 class="form-section-title" style="color: #e879a0;">{{ $t('relationship.editForm.sectionNsfw') }}</h4>
+          <h4 class="form-section-title form-section-title--nsfw">{{ $t('relationship.editForm.sectionNsfw') }}</h4>
 
           <div class="form-row">
             <div class="form-group form-group--half">
@@ -1254,14 +1277,14 @@ function displayBodyPartName(name: string | undefined): string {
 
           <!-- 处女状态 + 初夜（非处女时显示） -->
           <div class="form-group">
-            <label class="form-check-label">
-              <input
-                type="checkbox"
-                :checked="editForm.私密信息['是否为处女/处男'] === true"
-                @change="(e) => editForm.私密信息['是否为处女/处男'] = (e.target as HTMLInputElement).checked"
+            <div class="aga-toggle-row">
+              <AgaToggle
+                :model-value="editForm.私密信息['是否为处女/处男'] === true"
+                :label="$t('relationship.editForm.nsfw.virginCheckbox')"
+                @update:model-value="(v) => editForm.私密信息['是否为处女/处男'] = v"
               />
-              <span>{{ $t('relationship.editForm.nsfw.virginCheckbox') }}</span>
-            </label>
+              <span class="aga-toggle-row__label">{{ $t('relationship.editForm.nsfw.virginCheckbox') }}</span>
+            </div>
             <span class="form-hint">{{ $t('relationship.editForm.nsfw.virginHint') }}</span>
           </div>
 
@@ -1411,14 +1434,14 @@ function displayBodyPartName(name: string | undefined): string {
           <h4 class="form-section-title">{{ $t('relationship.editForm.sectionFlags') }}</h4>
 
           <div class="form-group form-group--row">
-            <label class="form-check-label">
-              <input type="checkbox" v-model="editForm.关注" />
-              <span>{{ $t('relationship.editForm.flags.watch') }}</span>
-            </label>
-            <label class="form-check-label">
-              <input type="checkbox" v-model="editForm.心跳锁定" />
-              <span>{{ $t('relationship.editForm.flags.heartbeatLock') }}</span>
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle v-model="editForm.关注" :label="$t('relationship.editForm.flags.watch')" />
+              <span class="aga-toggle-row__label">{{ $t('relationship.editForm.flags.watch') }}</span>
+            </div>
+            <div class="aga-toggle-row">
+              <AgaToggle v-model="editForm.心跳锁定" :label="$t('relationship.editForm.flags.heartbeatLock')" />
+              <span class="aga-toggle-row__label">{{ $t('relationship.editForm.flags.heartbeatLock') }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -2004,7 +2027,7 @@ function displayBodyPartName(name: string | undefined): string {
   margin: 0 0 10px;
 }
 .rd-section-title--nsfw {
-  color: #e879a0;
+  color: var(--color-nsfw);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2015,9 +2038,9 @@ function displayBodyPartName(name: string | undefined): string {
   letter-spacing: 0.1em;
   padding: 2px 8px;
   border-radius: 4px;
-  background: color-mix(in oklch, #e879a0 12%, transparent);
-  color: #e879a0;
-  border: 1px solid color-mix(in oklch, #e879a0 25%, transparent);
+  background: color-mix(in oklch, var(--color-nsfw) 12%, transparent);
+  color: var(--color-nsfw);
+  border: 1px solid color-mix(in oklch, var(--color-nsfw) 25%, transparent);
 }
 .rd-quote {
   padding: 14px 18px;
@@ -2293,8 +2316,10 @@ function displayBodyPartName(name: string | undefined): string {
 .nsfw-card {
   padding: 12px 14px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(232, 121, 160, 0.04), rgba(232, 121, 160, 0.02) 60%);
-  border: 1px solid rgba(232, 121, 160, 0.08);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--color-nsfw) 4%, transparent),
+    color-mix(in oklch, var(--color-nsfw) 2%, transparent) 60%);
+  border: 1px solid color-mix(in oklch, var(--color-nsfw) 8%, transparent);
 }
 
 .nsfw-row {
@@ -2329,20 +2354,20 @@ function displayBodyPartName(name: string | undefined): string {
   flex: 1;
   height: 5px;
   border-radius: 3px;
-  background: rgba(232, 121, 160, 0.1);
+  background: color-mix(in oklch, var(--color-nsfw) 10%, transparent);
   overflow: hidden;
 }
 .desire-fill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #e879a0, #f472b6);
+  background: linear-gradient(90deg, var(--color-nsfw), var(--color-nsfw-bright));
   transition: width 0.4s ease;
-  box-shadow: 0 0 6px rgba(232, 121, 160, 0.35);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-nsfw) 35%, transparent);
 }
 .desire-num {
   font-size: 0.78rem;
   font-weight: 600;
-  color: #e879a0;
+  color: var(--color-nsfw);
   min-width: 20px;
 }
 
@@ -2361,9 +2386,9 @@ function displayBodyPartName(name: string | undefined): string {
   border-radius: var(--radius-full);
 }
 .detail-tag--nsfw {
-  background: rgba(232, 121, 160, 0.07);
-  color: #e879a0;
-  border-color: rgba(232, 121, 160, 0.12);
+  background: color-mix(in oklch, var(--color-nsfw) 7%, transparent);
+  color: var(--color-nsfw);
+  border-color: color-mix(in oklch, var(--color-nsfw) 12%, transparent);
 }
 .detail-tag--trait {
   background: color-mix(in oklch, var(--color-sage-600) 10%, transparent);
@@ -2382,13 +2407,13 @@ function displayBodyPartName(name: string | undefined): string {
 .bp-card {
   padding: 10px 12px;
   border-radius: var(--radius-md);
-  background: rgba(232, 121, 160, 0.025);
-  border: 1px solid rgba(232, 121, 160, 0.08);
+  background: color-mix(in oklch, var(--color-nsfw) 2.5%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-nsfw) 8%, transparent);
   transition: border-color var(--duration-fast);
 }
 .bp-card:hover {
-  border-color: rgba(232, 121, 160, 0.2);
-  box-shadow: inset 0 0 10px rgba(232, 121, 160, 0.06);
+  border-color: color-mix(in oklch, var(--color-nsfw) 20%, transparent);
+  box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-nsfw) 6%, transparent);
 }
 .bp-head {
   font-size: 0.8rem;
@@ -2400,22 +2425,22 @@ function displayBodyPartName(name: string | undefined): string {
 }
 .bp-mark {
   font-size: 0.65rem;
-  color: #e879a0;
+  color: var(--color-nsfw);
   opacity: 0.8;
 }
 .bp-view-toggle {
   margin-left: auto;
   font-size: 0.6rem;
-  color: #e879a0;
+  color: var(--color-nsfw);
   background: transparent;
-  border: 1px solid rgba(232, 121, 160, 0.3);
+  border: 1px solid color-mix(in oklch, var(--color-nsfw) 30%, transparent);
   border-radius: var(--radius-sm);
   padding: 1px 6px;
   cursor: pointer;
   transition: all var(--duration-fast);
 }
 .bp-view-toggle:hover {
-  background: rgba(232, 121, 160, 0.1);
+  background: color-mix(in oklch, var(--color-nsfw) 10%, transparent);
 }
 .bp-image :deep(.img-display) {
   width: 100%;
@@ -2452,7 +2477,7 @@ function displayBodyPartName(name: string | undefined): string {
 .bp-fill {
   height: 100%;
   border-radius: 2px;
-  background: #e879a0;
+  background: var(--color-nsfw);
   transition: width 0.3s;
 }
 .bp-fill--dev {
@@ -2473,19 +2498,12 @@ function displayBodyPartName(name: string | undefined): string {
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  background: var(--color-surface, #1a1a24);
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.4),
-    0 16px 48px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--color-surface);
+  box-shadow: var(--glass-shadow);
   transition: box-shadow var(--duration-normal) var(--ease-out);
 }
 .portrait-frame:hover {
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.4),
-    0 16px 48px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    var(--lumi-inset-highlight);
+  box-shadow: var(--glass-shadow), var(--lumi-inset-highlight);
 }
 .portrait-image :deep(.img-display) {
   width: 100%;
@@ -2506,24 +2524,9 @@ function displayBodyPartName(name: string | undefined): string {
   background: radial-gradient(
     ellipse at 50% 30%,
     transparent 50%,
-    rgba(0, 0, 0, 0.2) 100%
+    color-mix(in oklch, var(--color-bg) 60%, transparent) 100%
   );
-  box-shadow: inset 0 -48px 40px -24px var(--color-bg, #0f0f14);
-}
-.portrait-hint {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 0.06em;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--duration-normal, 240ms) var(--ease-out);
-}
-.portrait-frame:hover .portrait-hint {
-  opacity: 1;
+  box-shadow: inset 0 -48px 40px -24px var(--color-bg);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2578,6 +2581,20 @@ function displayBodyPartName(name: string | undefined): string {
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.form-section-title--nsfw {
+  color: var(--color-nsfw);
+}
+
+/* ── AgaToggle inline rows (label + pill switch) ── */
+.aga-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .form-row {
@@ -2642,9 +2659,26 @@ function displayBodyPartName(name: string | undefined): string {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #e879a0;
+  background: var(--color-nsfw);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(232, 121, 160, 0.4);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-nsfw) 40%, transparent);
+}
+.form-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-nsfw);
+  cursor: pointer;
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-nsfw) 40%, transparent);
+}
+.form-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in oklch, var(--color-text-bone) 8%, transparent);
+}
+.form-range:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
 }
 
 .form-hint {
@@ -2655,28 +2689,19 @@ function displayBodyPartName(name: string | undefined): string {
   line-height: 1.4;
 }
 
-.form-check-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  color: var(--color-text-bone);
-  cursor: pointer;
-}
-
 /* ── NSFW form nested blocks ── */
 .nested-block {
   margin-top: 14px;
   padding: 12px 12px 10px;
-  background: rgba(232, 121, 160, 0.04);
-  border: 1px solid rgba(232, 121, 160, 0.18);
+  background: color-mix(in oklch, var(--color-nsfw) 4%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-nsfw) 18%, transparent);
   border-radius: var(--radius-md);
 }
 .nested-title {
   margin: 0 0 8px;
   font-size: 0.78rem;
   font-weight: 600;
-  color: #e879a0;
+  color: var(--color-nsfw);
   letter-spacing: 0.04em;
 }
 
@@ -2703,14 +2728,14 @@ function displayBodyPartName(name: string | undefined): string {
   color: var(--color-text-bone);
 }
 .bp-edit-name--fixed {
-  color: #e879a0;
+  color: var(--color-nsfw);
 }
 .bp-edit-badge {
   font-size: 0.64rem;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  background: rgba(232, 121, 160, 0.12);
-  color: #e879a0;
+  background: color-mix(in oklch, var(--color-nsfw) 12%, transparent);
+  color: var(--color-nsfw);
   letter-spacing: 0.05em;
 }
 .bp-name-input {
@@ -3007,6 +3032,4 @@ function displayBodyPartName(name: string | undefined): string {
   color: var(--color-warning);
   font-weight: 500;
 }
-.btn-advanced-rel { padding: 4px 10px; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); border-radius: 5px; cursor: pointer; opacity: 0.5; transition: all 0.15s; }
-.btn-advanced-rel:hover { opacity: 1; color: var(--color-sage-400); border-color: var(--color-sage-600); }
 </style>

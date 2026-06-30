@@ -231,5 +231,6 @@
   "relationship.delete.locationRefs": "以下地点将移除此 NPC 驻留",
   "relationship.delete.engramEntity": "关系网编辑器中的实体将变为孤立",
   "relationship.toast.engramRenameFailed": "NPC 已改名，但 Engram 实体重命名失败——请在关系网编辑器中手动修改",
-  "relationship.toast.engramDeleteFailed": "NPC 已删除，但 Engram 实体清理失败——请在关系网编辑器中手动清理"
+  "relationship.toast.engramDeleteFailed": "NPC 已删除，但 Engram 实体清理失败——请在关系网编辑器中手动清理",
+  "relationship.roster.add": "添加角色"
 }
