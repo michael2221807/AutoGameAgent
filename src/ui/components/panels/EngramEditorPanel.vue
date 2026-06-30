@@ -26,6 +26,10 @@ import type { CoverageStats } from '@/engine/memory/engram/engram-editor';
 import { eventBus } from '@/engine/core/event-bus';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import EngramGraphView from '@/ui/components/engram/EngramGraphView.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 
@@ -103,11 +107,13 @@ const pendingCount = computed(() => {
 });
 
 // ─── Entity type badge helpers ───
+// Badge fills reference design tokens (sage/amber/umber family) so they stay
+// on-palette; resolved at render time via CSS var() in the inline :style.
 const ENTITY_TYPE_COLORS: Record<string, string> = {
-  npc: '#6b7a8d',
-  location: '#d4956b',
-  item: '#9b7ac7',
-  player: '#4a9a7a',
+  npc: 'var(--color-text-umber)',
+  location: 'var(--color-amber-400)',
+  item: 'var(--color-sage-300)',
+  player: 'var(--color-sage-500)',
 };
 
 function entityTypeLabel(type: string): string {
@@ -116,7 +122,7 @@ function entityTypeLabel(type: string): string {
 }
 
 function entityTypeBgColor(type: string): string {
-  return ENTITY_TYPE_COLORS[type] ?? '#6b7a8d';
+  return ENTITY_TYPE_COLORS[type] ?? 'var(--color-text-umber)';
 }
 
 // ─── Pagination — Entities ───
@@ -310,6 +316,33 @@ async function confirmDeleteEdge(): Promise<void> {
   loadData();
 }
 
+// ─── Edge entity dropdown options (AgaSelect) ───
+const entitySelectOptions = computed<{ label: string; value: string }[]>(() =>
+  entities.value.map((e) => ({ label: e.name, value: e.name })),
+);
+
+// ─── Entity type radio options (custom token-styled segmented control) ───
+const entityTypeOptions = computed<{ label: string; value: EngramEntity['type'] }[]>(() => [
+  { label: 'NPC', value: 'npc' },
+  { label: t('engram.entity.typeLocation'), value: 'location' },
+  { label: t('engram.entity.typeItem'), value: 'item' },
+]);
+
+// WAI-ARIA radiogroup keyboard nav for the entity-type segmented control:
+// arrow keys move both selection and focus (roving tabindex in the template).
+function onEntityTypeKeydown(e: KeyboardEvent): void {
+  const opts = entityTypeOptions.value;
+  const cur = opts.findIndex((o) => o.value === entityFormType.value);
+  let next = cur;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (cur + 1) % opts.length;
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (cur - 1 + opts.length) % opts.length;
+  else return;
+  e.preventDefault();
+  entityFormType.value = opts[next].value;
+  const btns = (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('.segmented__item');
+  btns[next]?.focus();
+}
+
 // ─── Edge source label helper ───
 function edgeSourceLabel(source?: string): string {
   if (!source) return t('engram.editor.edge.sourceLabel.ai');
@@ -425,9 +458,11 @@ const edgeSectionOpen = ref(true);
       <!-- Header -->
       <div class="panel-header">
         <h2 class="panel-title">{{ t('engram.editor.title') }}</h2>
-        <button class="collapse-btn" @click="collapsed = !collapsed">
-          {{ collapsed ? '+' : '−' }}
-        </button>
+        <Tooltip :text="collapsed ? t('common.actions.expand') : t('common.actions.collapse')" interactive>
+          <AgaButton variant="ghost" size="sm" class="collapse-btn" @click="collapsed = !collapsed">
+            {{ collapsed ? '+' : '−' }}
+          </AgaButton>
+        </Tooltip>
       </div>
 
       <div v-show="!collapsed" class="panel-body">
@@ -451,24 +486,32 @@ const edgeSectionOpen = ref(true);
           </div>
 
           <!-- NPC coverage bar -->
-          <div v-if="coverage.totalNpcs > 0" class="coverage-row"
-               :title="`${coverage.npcsWithEntity} proper entities / ${coverage.totalNpcs} non-普通 NPCs in 社交.関系 (excluding _pendingEnrichment stubs)`">
-            <span class="coverage-label">{{ t('engram.batchSolidify.stats.npc') }}</span>
-            <div class="coverage-bar-track">
-              <div class="coverage-bar-fill" :style="{ width: coverage.coveragePercent + '%' }" />
+          <Tooltip
+            v-if="coverage.totalNpcs > 0"
+            :text="t('engram.batchSolidify.npcCoverageTooltip', { with: coverage.npcsWithEntity, total: coverage.totalNpcs })"
+          >
+            <div class="coverage-row">
+              <span class="coverage-label">{{ t('engram.batchSolidify.stats.npc') }}</span>
+              <div class="coverage-bar-track">
+                <div class="coverage-bar-fill" :style="{ width: coverage.coveragePercent + '%' }" />
+              </div>
+              <span class="coverage-ratio">{{ coverage.npcsWithEntity }}/{{ coverage.totalNpcs }} ({{ coverage.coveragePercent }}%)</span>
             </div>
-            <span class="coverage-ratio">{{ coverage.npcsWithEntity }}/{{ coverage.totalNpcs }} ({{ coverage.coveragePercent }}%)</span>
-          </div>
+          </Tooltip>
 
           <!-- Location coverage bar -->
-          <div v-if="coverage.totalLocations > 0" class="coverage-row"
-               :title="`${coverage.locationsWithEntity} proper location entities / ${coverage.totalLocations} locations in 世界.地点信息 (excluding _pendingEnrichment stubs)`">
-            <span class="coverage-label">{{ t('engram.batchSolidify.stats.location') }}</span>
-            <div class="coverage-bar-track">
-              <div class="coverage-bar-fill" :style="{ width: coverage.locationCoveragePercent + '%' }" />
+          <Tooltip
+            v-if="coverage.totalLocations > 0"
+            :text="t('engram.batchSolidify.locationCoverageTooltip', { with: coverage.locationsWithEntity, total: coverage.totalLocations })"
+          >
+            <div class="coverage-row">
+              <span class="coverage-label">{{ t('engram.batchSolidify.stats.location') }}</span>
+              <div class="coverage-bar-track">
+                <div class="coverage-bar-fill" :style="{ width: coverage.locationCoveragePercent + '%' }" />
+              </div>
+              <span class="coverage-ratio">{{ coverage.locationsWithEntity }}/{{ coverage.totalLocations }} ({{ coverage.locationCoveragePercent }}%)</span>
             </div>
-            <span class="coverage-ratio">{{ coverage.locationsWithEntity }}/{{ coverage.totalLocations }} ({{ coverage.locationCoveragePercent }}%)</span>
-          </div>
+          </Tooltip>
 
           <!-- Coverage formula annotation -->
           <div class="coverage-formula">
@@ -488,33 +531,40 @@ const edgeSectionOpen = ref(true);
           <!-- Operations row: solidify + vectorize side by side -->
           <div class="ops-row">
             <!-- Batch solidify (AI edge generation) -->
-            <button
+            <Tooltip
               v-if="batchSolidify.available"
-              class="btn-op btn-op--solidify"
-              :disabled="batchSolidify.isRunning.value"
-              :title="t('engram.batchSolidify.buttonTooltip')"
-              @click="runBatchSolidify"
+              :text="t('engram.batchSolidify.buttonTooltip')"
+              interactive
             >
-              <span v-if="batchSolidify.isRunning.value" class="spinner-sm" />
-              <span v-else class="op-icon">&#9889;</span>
-              {{ batchSolidify.isRunning.value ? batchSolidify.getProgressMessage() : t('engram.batchSolidify.buttonLabel') }}
-            </button>
-            <button
+              <AgaButton
+                variant="secondary"
+                size="sm"
+                :disabled="batchSolidify.isRunning.value"
+                @click="runBatchSolidify"
+              >
+                <span v-if="batchSolidify.isRunning.value" class="spinner-sm" />
+                <span v-else class="op-icon">&#9889;</span>
+                {{ batchSolidify.isRunning.value ? batchSolidify.getProgressMessage() : t('engram.batchSolidify.buttonLabel') }}
+              </AgaButton>
+            </Tooltip>
+            <AgaButton
               v-if="batchSolidify.available && batchSolidify.lastError.value"
-              class="btn-op btn-op--retry"
+              variant="warning"
+              size="sm"
               :disabled="batchSolidify.isRunning.value"
               @click="runBatchSolidify"
-            >{{ t('engram.batchSolidify.retry') }}</button>
+            >{{ t('engram.batchSolidify.retry') }}</AgaButton>
 
             <!-- Vectorize (embedding computation, no AI) -->
-            <button
-              class="btn-op btn-op--vectorize"
+            <AgaButton
+              variant="ghost"
+              size="sm"
               :disabled="vectorizing || pendingCount === 0"
               @click="vectorizeAll"
             >
               <span v-if="vectorizing" class="spinner-sm" />
               {{ vectorizing ? t('engram.editor.vectorize.running') : t('engram.editor.vectorize.button') }}
-            </button>
+            </AgaButton>
             <span v-if="pendingCount > 0" class="pending-hint">{{ pendingCount }} {{ t('engram.editor.stats.pending') }}</span>
           </div>
 
@@ -571,19 +621,18 @@ const edgeSectionOpen = ref(true);
             </div>
             <div class="form-field">
               <label class="form-label">{{ t('engram.editor.entity.type') }}</label>
-              <div class="radio-group">
-                <label class="radio-item">
-                  <input v-model="entityFormType" type="radio" value="npc" />
-                  <span>NPC</span>
-                </label>
-                <label class="radio-item">
-                  <input v-model="entityFormType" type="radio" value="location" />
-                  <span>{{ t('engram.entity.typeLocation') }}</span>
-                </label>
-                <label class="radio-item">
-                  <input v-model="entityFormType" type="radio" value="item" />
-                  <span>{{ t('engram.entity.typeItem') }}</span>
-                </label>
+              <div class="segmented" role="radiogroup" :aria-label="t('engram.editor.entity.type')" @keydown="onEntityTypeKeydown">
+                <button
+                  v-for="opt in entityTypeOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="segmented__item"
+                  :class="{ 'segmented__item--active': entityFormType === opt.value }"
+                  role="radio"
+                  :aria-checked="entityFormType === opt.value"
+                  :tabindex="entityFormType === opt.value ? 0 : -1"
+                  @click="entityFormType = opt.value"
+                >{{ opt.label }}</button>
               </div>
             </div>
             <div class="form-field">
@@ -591,12 +640,13 @@ const edgeSectionOpen = ref(true);
               <textarea v-model="entityFormSummary" class="form-textarea" rows="3" />
             </div>
             <div class="inline-form__actions">
-              <button class="btn-secondary" @click="cancelEntityForm">{{ t('engram.editor.entity.cancel') }}</button>
-              <button
-                class="btn-primary"
+              <AgaButton variant="secondary" size="sm" @click="cancelEntityForm">{{ t('engram.editor.entity.cancel') }}</AgaButton>
+              <AgaButton
+                variant="primary"
+                size="sm"
                 :disabled="!entityFormName.trim()"
                 @click="saveEntity"
-              >{{ t('engram.editor.entity.save') }}</button>
+              >{{ t('engram.editor.entity.save') }}</AgaButton>
             </div>
           </div>
 
@@ -632,12 +682,13 @@ const edgeSectionOpen = ref(true);
                       />
                     </template>
                     <div class="delete-confirm__actions">
-                      <button class="btn-secondary btn-sm" @click="cancelDeleteEntity">{{ t('engram.editor.entity.cancel') }}</button>
-                      <button
-                        class="btn-danger btn-sm"
+                      <AgaButton variant="secondary" size="sm" @click="cancelDeleteEntity">{{ t('engram.editor.entity.cancel') }}</AgaButton>
+                      <AgaButton
+                        variant="danger"
+                        size="sm"
                         :disabled="deleteEntityCascadeCount >= 5 && deleteEntityConfirmText !== deletingEntityName"
                         @click="confirmDeleteEntity"
-                      >{{ t('engram.editor.entity.delete') }}</button>
+                      >{{ t('engram.editor.entity.delete') }}</AgaButton>
                     </div>
                   </div>
 
@@ -653,8 +704,12 @@ const edgeSectionOpen = ref(true);
                         {{ t('engram.editor.entity.coreEdges', { count: entityCoreEdgeCount(entity.name) }) }}
                       </span>
                       <div class="entity-card__actions">
-                        <button class="btn-icon" @click.stop="openEditEntity(entity)" :title="t('engram.editor.entity.edit')">&#9998;</button>
-                        <button class="btn-icon btn-icon--danger" @click.stop="openDeleteEntity(entity)" :title="t('engram.editor.entity.delete')">&times;</button>
+                        <Tooltip :text="t('engram.editor.entity.edit')" interactive>
+                          <button class="btn-icon" @click.stop="openEditEntity(entity)">&#9998;</button>
+                        </Tooltip>
+                        <Tooltip :text="t('engram.editor.entity.delete')" interactive>
+                          <button class="btn-icon btn-icon--danger" @click.stop="openDeleteEntity(entity)">&times;</button>
+                        </Tooltip>
                       </div>
                     </div>
                     <p v-if="entity.summary" class="entity-card__summary">{{ entity.summary }}</p>
@@ -667,17 +722,21 @@ const edgeSectionOpen = ref(true);
 
           <!-- Entity pagination -->
           <div v-if="entityPageCount > 1" class="pagination">
-            <button
-              class="btn-page"
-              :disabled="entityPage <= 0"
-              @click="entityPage--"
-            >&laquo;</button>
+            <Tooltip :text="t('common.actions.previous')" interactive>
+              <button
+                class="btn-page"
+                :disabled="entityPage <= 0"
+                @click="entityPage--"
+              >&laquo;</button>
+            </Tooltip>
             <span class="page-info">{{ entityPage + 1 }} / {{ entityPageCount }}</span>
-            <button
-              class="btn-page"
-              :disabled="entityPage >= entityPageCount - 1"
-              @click="entityPage++"
-            >&raquo;</button>
+            <Tooltip :text="t('common.actions.next')" interactive>
+              <button
+                class="btn-page"
+                :disabled="entityPage >= entityPageCount - 1"
+                @click="entityPage++"
+              >&raquo;</button>
+            </Tooltip>
           </div>
           </div>
           </Transition>
@@ -718,34 +777,41 @@ const edgeSectionOpen = ref(true);
             <div class="form-row-half">
               <div class="form-field">
                 <label class="form-label">{{ t('engram.editor.edge.source') }}</label>
-                <select v-model="edgeFormSource" class="form-select">
-                  <option value="" disabled>--</option>
-                  <option v-for="e in entities" :key="'src-' + e.name" :value="e.name">{{ e.name }}</option>
-                </select>
+                <AgaSelect
+                  v-model="edgeFormSource"
+                  class="form-select-aga"
+                  :options="entitySelectOptions"
+                  :placeholder="t('engram.editor.edge.source')"
+                  :ariaLabel="t('engram.editor.edge.source')"
+                />
               </div>
               <div class="form-field">
                 <label class="form-label">{{ t('engram.editor.edge.target') }}</label>
-                <select v-model="edgeFormTarget" class="form-select">
-                  <option value="" disabled>--</option>
-                  <option v-for="e in entities" :key="'tgt-' + e.name" :value="e.name">{{ e.name }}</option>
-                </select>
+                <AgaSelect
+                  v-model="edgeFormTarget"
+                  class="form-select-aga"
+                  :options="entitySelectOptions"
+                  :placeholder="t('engram.editor.edge.target')"
+                  :ariaLabel="t('engram.editor.edge.target')"
+                />
               </div>
             </div>
             <div class="form-field">
               <label class="form-label">{{ t('engram.editor.edge.fact') }}</label>
               <textarea v-model="edgeFormFact" class="form-textarea" rows="3" />
             </div>
-            <label class="checkbox-label">
-              <input v-model="edgeFormCore" type="checkbox" />
-              <span>{{ t('engram.editor.edge.core') }}</span>
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle v-model="edgeFormCore" :label="t('engram.editor.edge.core')" />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ t('engram.editor.edge.core') }}</span>
+            </div>
             <div class="inline-form__actions">
-              <button class="btn-secondary" @click="cancelEdgeForm">{{ t('engram.editor.edge.cancel') }}</button>
-              <button
-                class="btn-primary"
+              <AgaButton variant="secondary" size="sm" @click="cancelEdgeForm">{{ t('engram.editor.edge.cancel') }}</AgaButton>
+              <AgaButton
+                variant="primary"
+                size="sm"
                 :disabled="!edgeFormSource || !edgeFormTarget || edgeFormFact.length < 10"
                 @click="saveEdge"
-              >{{ t('engram.editor.edge.save') }}</button>
+              >{{ t('engram.editor.edge.save') }}</AgaButton>
             </div>
           </div>
 
@@ -765,8 +831,8 @@ const edgeSectionOpen = ref(true);
                   <div v-if="deletingEdgeId === edge.id" class="delete-confirm">
                     <p class="delete-confirm__msg">{{ t('engram.editor.confirm.deleteEdge') }}</p>
                     <div class="delete-confirm__actions">
-                      <button class="btn-secondary btn-sm" @click="cancelDeleteEdge">{{ t('engram.editor.edge.cancel') }}</button>
-                      <button class="btn-danger btn-sm" @click="confirmDeleteEdge">{{ t('engram.editor.edge.delete') }}</button>
+                      <AgaButton variant="secondary" size="sm" @click="cancelDeleteEdge">{{ t('engram.editor.edge.cancel') }}</AgaButton>
+                      <AgaButton variant="danger" size="sm" @click="confirmDeleteEdge">{{ t('engram.editor.edge.delete') }}</AgaButton>
                     </div>
                   </div>
 
@@ -780,8 +846,12 @@ const edgeSectionOpen = ref(true);
                         <span class="edge-card__entity">{{ edge.targetEntity }}</span>
                       </span>
                       <div class="edge-card__actions">
-                        <button class="btn-icon" @click.stop="openEditEdge(edge)" :title="t('engram.editor.edge.edit')">&#9998;</button>
-                        <button class="btn-icon btn-icon--danger" @click.stop="openDeleteEdge(edge.id)" :title="t('engram.editor.edge.delete')">&times;</button>
+                        <Tooltip :text="t('engram.editor.edge.edit')" interactive>
+                          <button class="btn-icon" @click.stop="openEditEdge(edge)">&#9998;</button>
+                        </Tooltip>
+                        <Tooltip :text="t('engram.editor.edge.delete')" interactive>
+                          <button class="btn-icon btn-icon--danger" @click.stop="openDeleteEdge(edge.id)">&times;</button>
+                        </Tooltip>
                       </div>
                     </div>
                     <p class="edge-card__fact">{{ edge.fact }}</p>
@@ -801,17 +871,21 @@ const edgeSectionOpen = ref(true);
 
           <!-- Edge pagination -->
           <div v-if="edgePageCount > 1" class="pagination">
-            <button
-              class="btn-page"
-              :disabled="edgePage <= 0"
-              @click="edgePage--"
-            >&laquo;</button>
+            <Tooltip :text="t('common.actions.previous')" interactive>
+              <button
+                class="btn-page"
+                :disabled="edgePage <= 0"
+                @click="edgePage--"
+              >&laquo;</button>
+            </Tooltip>
             <span class="page-info">{{ edgePage + 1 }} / {{ edgePageCount }}</span>
-            <button
-              class="btn-page"
-              :disabled="edgePage >= edgePageCount - 1"
-              @click="edgePage++"
-            >&raquo;</button>
+            <Tooltip :text="t('common.actions.next')" interactive>
+              <button
+                class="btn-page"
+                :disabled="edgePage >= edgePageCount - 1"
+                @click="edgePage++"
+              >&raquo;</button>
+            </Tooltip>
           </div>
           </div>
           </Transition>
@@ -882,24 +956,12 @@ const edgeSectionOpen = ref(true);
   color: var(--color-text-bone);
 }
 
+/* AgaButton ghost override: keep the compact square +/− toggle dimensions */
 .collapse-btn {
   width: 28px;
   height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 0;
   font-size: 1.1rem;
-  color: var(--color-text-secondary);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  transition: all var(--duration-fast, 0.15s) ease;
-}
-
-.collapse-btn:hover {
-  color: var(--color-text-bone);
-  border-color: var(--color-sage-400);
 }
 
 /* ── Graph area ── */
@@ -972,7 +1034,7 @@ const edgeSectionOpen = ref(true);
 }
 
 .stat-value--core {
-  color: #fbbf24;
+  color: var(--color-amber-400);
 }
 
 .stat-value--pending {
@@ -1007,11 +1069,24 @@ const edgeSectionOpen = ref(true);
   color: var(--color-text-secondary);
 }
 
+/* Coverage rows are wrapped in <Tooltip> — make the wrapper span full width
+   so the bar track still flexes to fill the section. */
+.coverage-section > :deep(.tt-wrap) {
+  display: flex;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
 .coverage-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   margin-bottom: 6px;
+}
+
+:deep(.tt-wrap) > .coverage-row {
+  margin-bottom: 0;
 }
 
 .coverage-label {
@@ -1080,46 +1155,6 @@ const edgeSectionOpen = ref(true);
   flex-wrap: wrap;
 }
 
-.btn-op {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm, 6px);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-  min-height: 30px;
-}
-
-.btn-op:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: var(--color-sage-400, #8a9e6c);
-}
-
-.btn-op:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-op--solidify {
-  border-color: var(--color-sage-600, #5a7a6a);
-  color: var(--color-sage-400, #8a9e6c);
-}
-
-.btn-op--retry {
-  border-color: var(--color-amber-400, #c9a040);
-  color: var(--color-amber-400, #c9a040);
-}
-
-.btn-op--vectorize {
-  color: var(--color-text-muted);
-}
-
 .op-icon {
   font-size: 0.85rem;
 }
@@ -1177,11 +1212,28 @@ const edgeSectionOpen = ref(true);
 }
 
 /* ── Collapsible sections (debug-section pattern) ── */
+/* §8: glass-grade container — no hard 1px border; edge-gradient ::before instead. */
 .debug-section {
-  border: 1px solid var(--color-border, #2a2a3a);
+  position: relative;
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 12px;
+}
+
+.debug-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-edge-gradient);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .section-header {
@@ -1193,7 +1245,7 @@ const edgeSectionOpen = ref(true);
   background: rgba(255,255,255,0.02);
   border: none;
   cursor: pointer;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   transition: background 0.15s ease;
 }
 .section-header:hover { background: rgba(255,255,255,0.04); }
@@ -1204,12 +1256,12 @@ const edgeSectionOpen = ref(true);
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 20px; height: 18px; padding: 0 5px;
   font-size: 0.62rem; font-weight: 700; color: var(--color-text-bone);
-  background: var(--color-primary, #6366f1); border-radius: 9px;
+  background: var(--color-sage-400); border-radius: 9px;
 }
 
 .section-header__spacer { flex: 1; }
 
-.chevron { transition: transform 0.2s; color: var(--color-text-secondary, #8888a0); }
+.chevron { transition: transform 0.2s; color: var(--color-text-secondary); }
 .chevron--open { transform: rotate(0deg); }
 .chevron:not(.chevron--open) { transform: rotate(-90deg); }
 
@@ -1279,23 +1331,28 @@ const edgeSectionOpen = ref(true);
 }
 
 .form-input,
-.form-select {
+.form-textarea {
   width: 100%;
-  height: 34px;
-  padding: 0 10px;
   font-size: 0.82rem;
   color: var(--color-text-bone);
   background: var(--color-surface-input);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm, 4px);
   outline: none;
-  transition: border-color var(--duration-fast, 0.15s) ease;
   box-sizing: border-box;
+  transition: border-color var(--duration-fast, 0.15s) ease,
+              box-shadow var(--duration-fast, 0.15s) ease;
+}
+
+.form-input {
+  height: 34px;
+  padding: 0 10px;
 }
 
 .form-input:focus,
-.form-select:focus {
-  border-color: var(--color-sage-400);
+.form-textarea:focus {
+  border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
 .form-input--readonly {
@@ -1304,22 +1361,15 @@ const edgeSectionOpen = ref(true);
 }
 
 .form-textarea {
-  width: 100%;
   padding: 8px 10px;
-  font-size: 0.82rem;
-  color: var(--color-text-bone);
-  background: var(--color-surface-input);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 4px);
-  outline: none;
   resize: vertical;
-  box-sizing: border-box;
   font-family: inherit;
-  transition: border-color var(--duration-fast, 0.15s) ease;
 }
 
-.form-textarea:focus {
-  border-color: var(--color-sage-400);
+/* AgaSelect fills the form column width */
+.form-select-aga {
+  display: block;
+  width: 100%;
 }
 
 .form-row-half {
@@ -1331,36 +1381,55 @@ const edgeSectionOpen = ref(true);
   flex: 1;
 }
 
-.radio-group {
-  display: flex;
-  gap: 16px;
-}
-
-.radio-item {
-  display: flex;
-  align-items: center;
+/* ── Token-styled segmented radio control (entity type) ── */
+.segmented {
+  display: inline-flex;
   gap: 4px;
+  padding: 3px;
+  background: var(--color-surface-input);
+  border-radius: var(--radius-md, 8px);
+}
+
+.segmented__item {
+  padding: 4px 14px;
   font-size: 0.82rem;
-  color: var(--color-text-bone);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
   cursor: pointer;
+  transition: color var(--duration-fast, 0.15s) ease,
+              background var(--duration-fast, 0.15s) ease,
+              border-color var(--duration-fast, 0.15s) ease;
 }
 
-.radio-item input[type="radio"] {
-  accent-color: var(--color-sage-400);
+.segmented__item:hover:not(.segmented__item--active) {
+  color: var(--color-text-bone);
+  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
 }
 
-.checkbox-label {
+.segmented__item--active {
+  color: var(--color-sage-100);
+  background: var(--color-sage-muted);
+  border-color: color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+}
+
+.segmented__item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 22%, transparent);
+}
+
+/* ── AgaToggle row (edge 'core' flag) ── */
+.aga-toggle-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  color: var(--color-text-bone);
-  cursor: pointer;
+  gap: var(--space-sm);
   margin-top: 8px;
 }
 
-.checkbox-label input[type="checkbox"] {
-  accent-color: #fbbf24;
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 /* ── Item list ── */
@@ -1415,7 +1484,7 @@ const edgeSectionOpen = ref(true);
 
 .core-count {
   font-size: 0.72rem;
-  color: #fbbf24;
+  color: var(--color-amber-400);
   margin-left: auto;
 }
 
@@ -1475,8 +1544,8 @@ const edgeSectionOpen = ref(true);
   padding: 1px 6px;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #1a1a1a;
-  background: #fbbf24;
+  color: var(--color-bg);
+  background: var(--color-amber-400);
   border-radius: var(--radius-full, 9999px);
   letter-spacing: 0.05em;
 }
@@ -1694,71 +1763,6 @@ const edgeSectionOpen = ref(true);
   text-align: center;
   font-size: 0.82rem;
   color: var(--color-text-muted);
-}
-
-/* ── Shared button styles ── */
-.btn-primary {
-  padding: 6px 16px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-bone);
-  background: var(--color-sage-400);
-  border: none;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  transition: all var(--duration-fast, 0.15s) ease;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-sage-500);
-}
-
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  padding: 6px 16px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  transition: all var(--duration-fast, 0.15s) ease;
-}
-
-.btn-secondary:hover {
-  color: var(--color-text-bone);
-  border-color: var(--color-text-secondary);
-}
-
-.btn-danger {
-  padding: 6px 16px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #fff;
-  background: var(--color-danger, #ef4444);
-  border: none;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  transition: all var(--duration-fast, 0.15s) ease;
-}
-
-.btn-danger:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.btn-danger:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 0.75rem;
 }
 
 /* ── TransitionGroup list animation ── */

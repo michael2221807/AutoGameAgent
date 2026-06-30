@@ -22,6 +22,9 @@ import type { EngramEntity } from '@/engine/memory/engram/entity-builder';
 import type { EngramRelation } from '@/engine/memory/engram/engram-types';
 import type { EngramEdge } from '@/engine/memory/engram/knowledge-edge';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { isLoaded, get, setValue } = useGameState();
 const debugStore = useEngramDebugStore();
@@ -188,7 +191,7 @@ function formatScore(s: number): string {
 }
 
 const ENTITY_TYPE_COLOR: Record<string, string> = {
-  player:   'var(--color-primary, #6366f1)',
+  player:   'var(--color-sage-400)',
   npc:      'var(--color-success, #22c55e)',
   location: 'var(--color-warning, #f59e0b)',
   item:     'var(--color-sage-300)',
@@ -219,6 +222,13 @@ const gfEdgeInvalidated = ref(false);
 const gfRoundMin = ref(0);
 const gfRoundMax = ref(0);
 const gfLayout = ref<'cose' | 'concentric' | 'breadthfirst' | 'circle'>('cose');
+
+const graphLayoutOptions = computed(() => [
+  { label: t('engram.graph.layout.cose'), value: 'cose' },
+  { label: t('engram.graph.layout.concentric'), value: 'concentric' },
+  { label: t('engram.graph.layout.breadthfirst'), value: 'breadthfirst' },
+  { label: t('engram.graph.layout.circle'), value: 'circle' },
+]);
 
 const maxRound = computed(() => {
   let m = 0;
@@ -444,9 +454,9 @@ onUnmounted(() => destroyGraph());
     <header class="panel-header">
       <h2 class="panel-title">{{ $t('engram.title') }}</h2>
       <div class="header-actions">
-        <button class="btn-sm" :disabled="events.length === 0" @click="exportJson">{{ $t('engram.exportJson') }}</button>
-        <button class="btn-sm" :disabled="v2Edges.length === 0" @click="rebuildEdges">{{ $t('engram.rebuildEdges') }}</button>
-        <button class="btn-sm btn-sm--danger" :disabled="events.length === 0" @click="openClearModal">{{ $t('engram.clearData') }}</button>
+        <AgaButton variant="secondary" size="sm" :disabled="events.length === 0" @click="exportJson">{{ $t('engram.exportJson') }}</AgaButton>
+        <AgaButton variant="secondary" size="sm" :disabled="v2Edges.length === 0" @click="rebuildEdges">{{ $t('engram.rebuildEdges') }}</AgaButton>
+        <AgaButton variant="danger" size="sm" :disabled="events.length === 0" @click="openClearModal">{{ $t('engram.clearData') }}</AgaButton>
       </div>
     </header>
 
@@ -472,7 +482,7 @@ onUnmounted(() => destroyGraph());
           <span class="stat-label">{{ $t('engram.stats.relations') }}</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value" style="color: var(--color-success, #22c55e);">{{ v2Edges.length }}</span>
+          <span class="stat-value" style="color: var(--color-success);">{{ v2Edges.length }}</span>
           <span class="stat-label">{{ $t('engram.stats.factEdges') }}</span>
         </div>
       </div>
@@ -559,10 +569,11 @@ onUnmounted(() => destroyGraph());
                     <span class="sao-sep">→</span>{{ ev.action }}
                     <template v-if="ev.object"><span class="sao-sep">→</span><strong>{{ ev.object }}</strong></template>
                   </span>
-                  <span
-                    :class="['embed-badge', ev.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
-                    :title="ev.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')"
-                  >{{ ev.is_embedded ? '✓' : '○' }}</span>
+                  <Tooltip :text="ev.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')">
+                    <span
+                      :class="['embed-badge', ev.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
+                    >{{ ev.is_embedded ? '✓' : '○' }}</span>
+                  </Tooltip>
                 </div>
                 <p class="event-text">{{ ev.text }}</p>
                 <div class="item-meta">
@@ -573,9 +584,9 @@ onUnmounted(() => destroyGraph());
 
               <!-- 分页控件 -->
               <div v-if="totalEventPages > 1" class="pagination">
-                <button class="btn-sm" :disabled="eventPage === 0" @click="eventPage--">←</button>
+                <AgaButton variant="secondary" size="sm" :disabled="eventPage === 0" @click="eventPage--">←</AgaButton>
                 <span class="page-info">{{ eventPage + 1 }} / {{ totalEventPages }}</span>
-                <button class="btn-sm" :disabled="eventPage >= totalEventPages - 1" @click="eventPage++">→</button>
+                <AgaButton variant="secondary" size="sm" :disabled="eventPage >= totalEventPages - 1" @click="eventPage++">→</AgaButton>
               </div>
             </template>
           </div>
@@ -599,11 +610,12 @@ onUnmounted(() => destroyGraph());
               <div class="entity-header">
                 <span class="entity-name">{{ ent.name }}</span>
                 <span class="entity-type" :style="{ color: entityColor(ent.type) }">{{ ent.type }}</span>
-                <span v-if="ent._pendingEnrichment" class="enrich-badge" :title="$t('engram.entity.pendingEnrich')">{{ $t('engram.entity.pendingEnrich') }}</span>
-                <span
-                  :class="['embed-badge', ent.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
-                  :title="ent.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')"
-                >{{ ent.is_embedded ? '✓' : '○' }}</span>
+                <span v-if="ent._pendingEnrichment" class="enrich-badge">{{ $t('engram.entity.pendingEnrich') }}</span>
+                <Tooltip :text="ent.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')">
+                  <span
+                    :class="['embed-badge', ent.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
+                  >{{ ent.is_embedded ? '✓' : '○' }}</span>
+                </Tooltip>
               </div>
               <div v-if="ent.summary" class="entity-desc">{{ ent.summary }}</div>
               <div class="item-meta">
@@ -635,10 +647,11 @@ onUnmounted(() => destroyGraph());
                   <span class="rel-from">{{ edge.sourceEntity }}</span>
                   <span class="rel-arrow">→</span>
                   <span class="rel-to">{{ edge.targetEntity }}</span>
-                  <span
-                    :class="['embed-badge', edge.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
-                    :title="edge.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')"
-                  >{{ edge.is_embedded ? '✓' : '○' }}</span>
+                  <Tooltip :text="edge.is_embedded ? $t('engram.embed.vectorized') : $t('engram.embed.notVectorized')">
+                    <span
+                      :class="['embed-badge', edge.is_embedded ? 'embed-badge--ok' : 'embed-badge--pending']"
+                    >{{ edge.is_embedded ? '✓' : '○' }}</span>
+                  </Tooltip>
                   <span v-if="(edge.invalidAtRound ?? edge.invalidatedAtRound) != null" class="rel-invalidated">{{ $t('engram.edge.invalidated') }}</span>
                 </div>
                 <div class="rel-fact" :title="edge.fact">{{ edge.fact }}</div>
@@ -670,9 +683,13 @@ onUnmounted(() => destroyGraph());
             <div class="gf-bar">
               <div class="gf-group gf-group--round-range">
                 <span class="gf-label">{{ $t('engram.graph.roundLabel') }}</span>
-                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMin" :title="$t('engram.graph.roundStart')" />
+                <Tooltip :text="$t('engram.graph.roundStart')" interactive>
+                  <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMin" />
+                </Tooltip>
                 <span class="gf-val">{{ gfRoundMin }} – {{ gfRoundMax }}</span>
-                <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMax" :title="$t('engram.graph.roundEnd')" />
+                <Tooltip :text="$t('engram.graph.roundEnd')" interactive>
+                  <input type="range" class="gf-range" min="0" :max="maxRound" v-model.number="gfRoundMax" />
+                </Tooltip>
               </div>
               <span class="gf-sep" />
               <div class="gf-group">
@@ -695,13 +712,13 @@ onUnmounted(() => destroyGraph());
                   <input type="checkbox" v-model="gfShowLabels" style="display:none;" />
                   {{ gfShowLabels ? $t('engram.graph.labelToggleOn') : $t('engram.graph.labelToggleOff') }}
                 </label>
-                <select class="gf-select" v-model="gfLayout" @change="runGraphLayout()">
-                  <option value="cose">{{ $t('engram.graph.layout.cose') }}</option>
-                  <option value="concentric">{{ $t('engram.graph.layout.concentric') }}</option>
-                  <option value="breadthfirst">{{ $t('engram.graph.layout.breadthfirst') }}</option>
-                  <option value="circle">{{ $t('engram.graph.layout.circle') }}</option>
-                </select>
-                <button class="btn-sm" @click="runGraphLayout()">{{ $t('engram.graph.relayout') }}</button>
+                <AgaSelect
+                  class="gf-layout-select"
+                  :model-value="gfLayout"
+                  :options="graphLayoutOptions"
+                  @update:model-value="(v) => { gfLayout = v as typeof gfLayout; runGraphLayout(); }"
+                />
+                <AgaButton variant="secondary" size="sm" @click="runGraphLayout()">{{ $t('engram.graph.relayout') }}</AgaButton>
               </div>
             </div>
 
@@ -837,10 +854,10 @@ onUnmounted(() => destroyGraph());
         {{ $t('engram.clear.step2', { events: events.length, entities: entities.length, relations: relations.length }) }}
       </div>
       <template #footer>
-        <button class="btn-sm" @click="showClearModal = false; clearStep = 1">{{ $t('engram.clear.cancel') }}</button>
-        <button class="btn-sm btn-sm--danger" @click="confirmClear">
+        <AgaButton variant="secondary" size="sm" @click="showClearModal = false; clearStep = 1">{{ $t('engram.clear.cancel') }}</AgaButton>
+        <AgaButton variant="danger" size="sm" @click="confirmClear">
           {{ clearStep === 1 ? $t('engram.clear.continue') : $t('engram.clear.confirm') }}
-        </button>
+        </AgaButton>
       </template>
     </Modal>
   </div>
@@ -871,23 +888,6 @@ onUnmounted(() => destroyGraph());
   display: flex;
   gap: 6px;
 }
-
-/* ── Buttons ── */
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--color-text-secondary, #8888a0);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn-sm:hover { color: var(--color-text,#e0e0e6); border-color: var(--color-primary,#6366f1); }
-.btn-sm:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
-.btn-sm--danger { color: var(--color-danger); border-color: color-mix(in oklch, var(--color-danger) 30%, transparent); }
-.btn-sm--danger:hover { background: color-mix(in oklch, var(--color-danger) 10%, transparent); border-color: var(--color-danger); }
 
 /* ── Debug off notice ── */
 .debug-off {
@@ -925,7 +925,7 @@ onUnmounted(() => destroyGraph());
   gap: 3px;
   padding: 10px 6px;
   background: rgba(255,255,255,0.02);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
   box-shadow: var(--lumi-inset-highlight);
 }
@@ -933,7 +933,7 @@ onUnmounted(() => destroyGraph());
   font-size: 1.1rem;
   font-weight: 700;
   font-family: 'JetBrains Mono','Fira Code',monospace;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
 }
 .stat-limit {
   font-size: 0.68rem;
@@ -946,7 +946,7 @@ onUnmounted(() => destroyGraph());
 
 /* ── Sections ── */
 .debug-section {
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -968,7 +968,7 @@ onUnmounted(() => destroyGraph());
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 20px; height: 18px; padding: 0 5px;
   font-size: 0.62rem; font-weight: 700; color: var(--color-text-bone);
-  background: var(--color-primary,#6366f1); border-radius: 9px;
+  background: var(--color-sage-400); border-radius: 9px;
 }
 .section-ts {
   font-size: 0.68rem;
@@ -1081,7 +1081,7 @@ onUnmounted(() => destroyGraph());
   font-size: 0.62rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;
   flex-shrink: 0;
 }
-.score-source--vector { color: var(--color-primary,#6366f1); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
+.score-source--vector { color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
 .score-source--edge   { color: var(--color-sage-400); background: color-mix(in oklch, var(--color-sage-400) 10%, transparent); }
 .score-source--graph  { color: var(--color-success,#22c55e); background: color-mix(in oklch, var(--color-success) 10%, transparent); }
 .score-pct { font-size: 0.68rem; font-family: monospace; color: var(--color-text,#e0e0e6); flex-shrink: 0; width: 36px; }
@@ -1108,7 +1108,7 @@ onUnmounted(() => destroyGraph());
 
 .embed-status {
   background: rgba(255, 255, 255, 0.025);
-  border: 1px solid var(--color-border, #2a2a3a);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;
@@ -1208,15 +1208,15 @@ onUnmounted(() => destroyGraph());
 .gf-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 8px 10px; border-radius: 6px;
-  background: rgba(255,255,255,0.02); border: 1px solid var(--color-border, #2a2a3a);
+  background: rgba(255,255,255,0.02); border: 1px solid var(--color-border-subtle);
   margin-bottom: 8px;
 }
 .gf-group { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text-secondary,#8888a0); }
 .gf-label { font-weight: 600; margin-right: 2px; }
-.gf-sep { width: 1px; height: 18px; background: var(--color-border, #2a2a3a); flex-shrink: 0; }
+.gf-sep { width: 1px; height: 18px; background: var(--color-border-subtle); flex-shrink: 0; }
 .gf-toggle {
   padding: 2px 7px; border-radius: 4px; font-size: 11px; cursor: pointer;
-  border: 1px solid var(--color-border, #2a2a3a); background: transparent; color: var(--color-text-secondary,#8888a0);
+  border: 1px solid var(--color-border-subtle); background: transparent; color: var(--color-text-secondary,#8888a0);
   transition: all 0.15s; user-select: none;
 }
 .gf-toggle:hover { border-color: var(--color-sage-400); }
@@ -1225,19 +1225,11 @@ onUnmounted(() => destroyGraph());
 .gf-group--round-range .gf-range { width: 64px; }
 .gf-val { font-family: 'JetBrains Mono',monospace; font-size: 11px; min-width: 24px; color: var(--color-text); }
 .gf-group--round-range .gf-val { min-width: 48px; text-align: center; }
-.gf-select {
-  background: var(--color-surface, #232220); color: var(--color-text); border: 1px solid var(--color-border);
-  border-radius: 4px; padding: 3px 6px; font-size: 11px; cursor: pointer;
-  -webkit-appearance: none; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a8580'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 5px center; padding-right: 18px;
-}
-.gf-select:focus { border-color: var(--color-sage-400, #8a9e6c); outline: none; }
-.gf-select option { background: var(--color-surface, #232220); color: var(--color-text, #d4cfc5); }
+.gf-layout-select { min-width: 96px; }
 
 /* ── Graph card + container ── */
 .graph-card {
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px;
+  border: 1px solid var(--color-border-subtle); border-radius: 8px;
   padding: 0; background: rgba(0,0,0,0.15); overflow: hidden;
 }
 .cy-container { width: 100%; height: 480px; }
@@ -1245,10 +1237,10 @@ onUnmounted(() => destroyGraph());
 /* ── Graph tooltip ── */
 .graph-tooltip {
   position: fixed; max-width: 340px; padding: 10px 14px;
-  background: var(--glass-bg); border: none;
+  background: rgba(25, 24, 22, 0.92); border: none;
   border-radius: 8px; font-size: 12px; line-height: 1.5; color: var(--color-text);
-  z-index: 100; pointer-events: none;
-  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  z-index: var(--z-tooltip); pointer-events: none;
+  backdrop-filter: blur(6px) saturate(1.2); -webkit-backdrop-filter: blur(6px) saturate(1.2);
   box-shadow: var(--glass-shadow), inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 4%, transparent);
 }
 :deep(.gtt-type) { font-size: 10px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -1286,7 +1278,7 @@ onUnmounted(() => destroyGraph());
 }
 .arch-card__title {
   margin: 0 0 6px; font-size: 0.75rem; font-weight: 700;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-sage-400);
 }
 .arch-flow {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
@@ -1297,13 +1289,13 @@ onUnmounted(() => destroyGraph());
   background: rgba(255,255,255,0.06); color: var(--color-text);
   text-shadow: 0 0 3px currentColor;
 }
-.arch-step--vec { background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); color: var(--color-primary); border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent); }
+.arch-step--vec { background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); color: var(--color-sage-400); border: 1px solid color-mix(in oklch, var(--color-sage-400) 30%, transparent); }
 .arch-step--triple { background: color-mix(in oklch, var(--color-success) 12%, transparent); color: var(--color-success); border: 1px solid color-mix(in oklch, var(--color-success) 30%, transparent); }
 .arch-arrow { color: var(--color-text-secondary); font-size: 0.68rem; }
 .arch-items { display: flex; flex-direction: column; gap: 3px; }
 .arch-item { font-size: 0.72rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 6px; }
 .arch-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.arch-dot--vec { background: var(--color-primary, #6366f1); }
+.arch-dot--vec { background: var(--color-sage-400); }
 .arch-dot--kw { background: var(--color-warning, #f59e0b); }
 
 @media (max-width: 767px) {

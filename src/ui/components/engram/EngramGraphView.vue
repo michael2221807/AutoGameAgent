@@ -14,6 +14,9 @@ import type { Core as CyCore, ElementDefinition } from 'cytoscape';
 import type { EngramEntity } from '@/engine/memory/engram/entity-builder';
 import type { EngramEdge } from '@/engine/memory/engram/knowledge-edge';
 import { NODE_COLORS, NODE_SHAPES, NODE_SIZES } from '@/engine/memory/engram/engram-graph-builder';
+import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 
 const { t } = useI18n();
 
@@ -40,6 +43,13 @@ type LayoutName = 'cose' | 'concentric' | 'breadthfirst' | 'circle';
 const layout = ref<LayoutName>('cose');
 const showLabels = ref(true);
 const graphExpanded = ref(true);
+
+const layoutOptions = computed<SelectOption[]>(() => [
+  { label: t('engram.graph.layout.cose'), value: 'cose' },
+  { label: t('engram.graph.layout.concentric'), value: 'concentric' },
+  { label: t('engram.graph.layout.breadthfirst'), value: 'breadthfirst' },
+  { label: t('engram.graph.layout.circle'), value: 'circle' },
+]);
 
 // ─── Tooltip state (matches EngramDebugPanel pattern) ───
 
@@ -336,7 +346,8 @@ function destroyGraph(): void {
   }
 }
 
-function onLayoutChange(): void {
+function onLayoutChange(value: string): void {
+  layout.value = value as LayoutName;
   runLayout();
 }
 
@@ -457,19 +468,23 @@ onBeforeUnmount(() => destroyGraph());
           <template v-if="graphExpanded">
             <span class="gf-sep" />
             <div class="gf-group">
-              <label class="gf-toggle" :class="{ 'gf-toggle--on': showLabels }" @click.prevent="onToggleLabels">
-                {{ showLabels ? t('engram.graph.labelToggleOn') : t('engram.graph.labelToggleOff') }}
-              </label>
+              <AgaToggle
+                :modelValue="showLabels"
+                :label="showLabels ? t('engram.graph.labelToggleOn') : t('engram.graph.labelToggleOff')"
+                @update:modelValue="() => onToggleLabels()"
+              />
+              <span class="gf-group__label" aria-hidden="true">{{ showLabels ? t('engram.graph.labelToggleOn') : t('engram.graph.labelToggleOff') }}</span>
             </div>
             <span class="gf-sep" />
             <div class="gf-group">
-              <select class="gf-select" v-model="layout" @change="onLayoutChange">
-                <option value="cose">{{ t('engram.graph.layout.cose') }}</option>
-                <option value="concentric">{{ t('engram.graph.layout.concentric') }}</option>
-                <option value="breadthfirst">{{ t('engram.graph.layout.breadthfirst') }}</option>
-                <option value="circle">{{ t('engram.graph.layout.circle') }}</option>
-              </select>
-              <button class="gf-btn" @click="runLayout">{{ t('engram.graph.relayout') }}</button>
+              <AgaSelect
+                class="gf-select-aga"
+                :modelValue="layout"
+                :options="layoutOptions"
+                :ariaLabel="t('engram.section.graph')"
+                @update:modelValue="(v) => onLayoutChange(v)"
+              />
+              <AgaButton size="sm" variant="ghost" @click="runLayout">{{ t('engram.graph.relayout') }}</AgaButton>
             </div>
           </template>
         </div>
@@ -519,7 +534,7 @@ onBeforeUnmount(() => destroyGraph());
 
 /* ── Card container — single unit, no visible seam ── */
 .graph-card {
-  border: 1px solid var(--color-border, #2a2a3a); border-radius: 8px;
+  border: 1px solid var(--color-border-subtle, transparent); border-radius: 8px;
   background: rgba(0,0,0,0.15); overflow: hidden;
 }
 
@@ -530,34 +545,10 @@ onBeforeUnmount(() => destroyGraph());
   background: rgba(255,255,255,0.02);
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
-.gf-group { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text-secondary,#8888a0); }
+.gf-group { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-text-secondary,#8888a0); }
+.gf-group__label { font-size: var(--font-size-sm, 11px); color: var(--color-text-secondary, #8888a0); user-select: none; }
 .gf-sep { width: 1px; height: 18px; background: var(--color-border, #2a2a3a); flex-shrink: 0; }
-.gf-toggle {
-  padding: 2px 7px; border-radius: 4px; font-size: 11px; cursor: pointer;
-  border: 1px solid var(--color-border, #2a2a3a); background: transparent;
-  color: var(--color-text-secondary,#8888a0); transition: all 0.15s; user-select: none;
-}
-.gf-toggle:hover { border-color: var(--color-sage-400); }
-.gf-toggle--on {
-  border-color: var(--color-sage-400); background: rgba(138,158,108,0.15);
-  color: var(--color-text, #e0e0e6);
-  box-shadow: inset 0 0 8px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-}
-.gf-select {
-  background: var(--color-surface, #232220); color: var(--color-text); border: 1px solid var(--color-border);
-  border-radius: 4px; padding: 3px 6px; font-size: 11px; cursor: pointer;
-  -webkit-appearance: none; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a8580'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 5px center; padding-right: 18px;
-}
-.gf-select:focus { border-color: var(--color-sage-400, #8a9e6c); outline: none; }
-.gf-select option { background: var(--color-surface, #232220); color: var(--color-text, #d4cfc5); }
-.gf-btn {
-  padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;
-  border: 1px solid var(--color-border, #2a2a3a); background: transparent;
-  color: var(--color-text-secondary,#8888a0); transition: all 0.15s;
-}
-.gf-btn:hover { border-color: var(--color-sage-400); color: var(--color-text, #e0e0e6); }
+.gf-select-aga { min-width: 120px; }
 
 /* ── Collapse toggle ── */
 .gf-collapse-btn {
@@ -642,20 +633,23 @@ onBeforeUnmount(() => destroyGraph());
 }
 
 /* ── Graph tooltip (matches EngramDebugPanel .graph-tooltip + .gtt-* pattern) ── */
+/* Canvas exception: cytoscape nodes/edges are canvas-rendered and cannot host
+   Tooltip.vue, so this stays JS-driven but is aligned to the unified glass-chip
+   tokens (bg / blur / z-index / color / radius). */
 .graph-tooltip {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--z-tooltip, 1000);
   pointer-events: none;
   max-width: 360px;
   padding: 8px 12px;
-  border-radius: 6px;
-  background: rgba(20, 20, 18, 0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(25, 24, 22, 0.92);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  box-shadow: var(--glass-shadow, 0 4px 16px rgba(0, 0, 0, 0.4));
   font-size: 11px;
   line-height: 1.5;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text, #d4cfc5);
 }
 .graph-tooltip :deep(.gtt-type) {
   font-size: 9px;

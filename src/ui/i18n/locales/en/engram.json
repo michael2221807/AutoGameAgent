@@ -209,5 +209,7 @@
   "engram.batchSolidify.stats.sourceUser": "User",
   "engram.batchSolidify.stats.sourceBatchSync": "Batch",
   "engram.batchSolidify.stats.sourceLegacy": "Auto",
-  "engram.batchSolidify.stats.sourceCardImport": "Card Import"
+  "engram.batchSolidify.stats.sourceCardImport": "Card Import",
+  "engram.batchSolidify.npcCoverageTooltip": "{with} of {total} non-generic NPCs in 社交.関系 have proper entities (excluding _pendingEnrichment stubs).",
+  "engram.batchSolidify.locationCoverageTooltip": "{with} of {total} locations in 世界.地点信息 have proper entities (excluding _pendingEnrichment stubs)."
 }

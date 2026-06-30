@@ -898,7 +898,7 @@ function previewContent(content: string, maxLen = 100): string {
           class="filter-select-control"
           :options="filterModeOptions"
           :placeholder="$t('prompt.filter.ariaLabel')"
-          :aria-label="$t('prompt.filter.ariaLabel')"
+          :ariaLabel="$t('prompt.filter.ariaLabel')"
           @update:modelValue="v => filterMode = v as 'all' | 'enabled' | 'disabled' | 'modified'"
         />
       </div>

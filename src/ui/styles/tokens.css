@@ -130,6 +130,20 @@
   --color-vital-spirit:     oklch(0.72 0.06 150);   /* sage */
 
   /* ─────────────────────────────────────────────────────────────
+     DATA-VIZ CATEGORICAL PALETTE — warm-desaturated, never neon.
+     Used by score-bar / tag swatches that must visually distinguish
+     multiple non-semantic categories (memory signal kinds, source
+     types). Each is a muted, warm-tinted hue so the chart stays in
+     the sanctuary palette rather than borrowing Tailwind primaries.
+     ───────────────────────────────────────────────────────────── */
+  --color-viz-blue:    oklch(0.68 0.09 245);  /* vector similarity / event */
+  --color-viz-green:   oklch(0.72 0.09 150);  /* keyword hit */
+  --color-viz-orange:  var(--color-amber-400);/* time decay (amber beacon) */
+  --color-viz-purple:  oklch(0.70 0.09 305);  /* character hit / entity */
+  --color-viz-red:     oklch(0.64 0.11 30);   /* graph weight (warm rust) */
+  --color-viz-gray:    oklch(0.62 0.01 90);   /* neutral / unscored */
+
+  /* ─────────────────────────────────────────────────────────────
      SPACING (4px base) — unchanged from legacy
      ───────────────────────────────────────────────────────────── */
   --space-2xs:  2px;

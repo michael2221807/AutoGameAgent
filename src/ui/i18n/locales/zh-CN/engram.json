@@ -209,5 +209,7 @@
   "engram.batchSolidify.stats.sourceUser": "用户",
   "engram.batchSolidify.stats.sourceBatchSync": "批量",
   "engram.batchSolidify.stats.sourceLegacy": "主回合",
-  "engram.batchSolidify.stats.sourceCardImport": "卡导入"
+  "engram.batchSolidify.stats.sourceCardImport": "卡导入",
+  "engram.batchSolidify.npcCoverageTooltip": "已建 {with}/{total} 个非普通 NPC 的正式实体（不含 _pendingEnrichment 占位），来自 社交.関系。",
+  "engram.batchSolidify.locationCoverageTooltip": "已建 {with}/{total} 个地点的正式实体（不含 _pendingEnrichment 占位），来自 世界.地点信息。"
 }

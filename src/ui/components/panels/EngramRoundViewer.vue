@@ -11,6 +11,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import type {
   EngramWriteSnapshot,
   EngramReadSnapshot,
@@ -68,12 +69,12 @@ const filteredCandidates = computed(() =>
 );
 
 const componentColorMap: Record<ScoredComponent['color'], string> = {
-  blue: '#5b8def',
-  green: '#5bba6f',
-  orange: 'var(--color-amber-400)',
-  purple: '#a87bdf',
-  red: '#df6b6b',
-  gray: '#8a8a8a',
+  blue: 'var(--color-viz-blue)',
+  green: 'var(--color-viz-green)',
+  orange: 'var(--color-viz-orange)',
+  purple: 'var(--color-viz-purple)',
+  red: 'var(--color-viz-red)',
+  gray: 'var(--color-viz-gray)',
 };
 
 function barFillWidth(c: ScoredCandidateTrace): string {
@@ -193,15 +194,15 @@ function fmtScore(n: number): string {
         <template v-if="props.write.reviewResult.invalidatedEdges?.length">
           <div v-for="ie in props.write.reviewResult.invalidatedEdges" :key="ie.edgeId" class="erv__review-detail erv__review-detail--invalidated">
             <span class="erv__review-badge erv__review-badge--invalidated">{{ $t('mainGame.engram.badgeInvalidated') }}</span>
-            <span class="erv__review-fact" :title="ie.fact">{{ ie.fact }}</span>
-            <span v-if="ie.reason" class="erv__review-reason" :title="ie.reason">{{ ie.reason }}</span>
+            <Tooltip class="erv__review-fact" :text="ie.fact"><span class="erv__review-clip">{{ ie.fact }}</span></Tooltip>
+            <Tooltip v-if="ie.reason" class="erv__review-reason" :text="ie.reason"><span class="erv__review-clip">{{ ie.reason }}</span></Tooltip>
           </div>
         </template>
         <template v-if="props.write.reviewResult.keptEdges?.length">
           <div v-for="ke in props.write.reviewResult.keptEdges" :key="ke.edgeId" class="erv__review-detail erv__review-detail--kept">
             <span class="erv__review-badge erv__review-badge--kept">{{ $t('mainGame.engram.badgeKept') }}</span>
-            <span class="erv__review-fact" :title="ke.fact">{{ ke.fact }}</span>
-            <span v-if="ke.reason" class="erv__review-reason" :title="ke.reason">{{ ke.reason }}</span>
+            <Tooltip class="erv__review-fact" :text="ke.fact"><span class="erv__review-clip">{{ ke.fact }}</span></Tooltip>
+            <Tooltip v-if="ke.reason" class="erv__review-reason" :text="ke.reason"><span class="erv__review-clip">{{ ke.reason }}</span></Tooltip>
           </div>
         </template>
       </section>
@@ -214,15 +215,15 @@ function fmtScore(n: number): string {
           <div class="erv__pipeline-bar">
             <span class="erv__pipeline-query">{{ $t('mainGame.engram.pipelineQuery') }}: "{{ props.read.query.length > 60 ? props.read.query.slice(0, 60) + '…' : props.read.query }}"</span>
             <div class="erv__pipeline-stats">
-              <span :title="$t('mainGame.engram.pipelineVectorEvent')">{{ $t('mainGame.engram.pipelineVectorEvent') }}{{ props.read.pipeline.vectorEventCount }}</span>
-              <span :title="$t('mainGame.engram.pipelineVectorEntity')">{{ $t('mainGame.engram.pipelineVectorEntity') }}{{ props.read.pipeline.vectorEntityCount }}</span>
-              <span :title="$t('mainGame.engram.pipelineGraph')">{{ $t('mainGame.engram.pipelineGraph') }}{{ props.read.pipeline.graphCount }}</span>
+              <span>{{ $t('mainGame.engram.pipelineVectorEvent') }}{{ props.read.pipeline.vectorEventCount }}</span>
+              <span>{{ $t('mainGame.engram.pipelineVectorEntity') }}{{ props.read.pipeline.vectorEntityCount }}</span>
+              <span>{{ $t('mainGame.engram.pipelineGraph') }}{{ props.read.pipeline.graphCount }}</span>
               <span class="erv__pipeline-arrow">→</span>
-              <span :title="$t('mainGame.engram.pipelineMerge')">{{ $t('mainGame.engram.pipelineMerge') }}{{ props.read.pipeline.afterMerge }}</span>
+              <span>{{ $t('mainGame.engram.pipelineMerge') }}{{ props.read.pipeline.afterMerge }}</span>
               <span v-if="props.read.config.rerankEnabled" class="erv__pipeline-arrow">→</span>
-              <span v-if="props.read.config.rerankEnabled" :title="$t('mainGame.engram.pipelineRerank')">{{ $t('mainGame.engram.pipelineRerank') }}{{ props.read.pipeline.afterRerank }}</span>
+              <span v-if="props.read.config.rerankEnabled">{{ $t('mainGame.engram.pipelineRerank') }}{{ props.read.pipeline.afterRerank }}</span>
               <span class="erv__pipeline-arrow">→</span>
-              <span class="erv__pipeline-injected" :title="$t('mainGame.engram.pipelineInjected')">{{ $t('mainGame.engram.pipelineInjected') }}{{ props.read.pipeline.injectedCount }}</span>
+              <span class="erv__pipeline-injected">{{ $t('mainGame.engram.pipelineInjected') }}{{ props.read.pipeline.injectedCount }}</span>
               <span class="erv__muted">{{ props.read.totalDurationMs.toFixed(0) }}ms</span>
             </div>
           </div>
@@ -250,13 +251,18 @@ function fmtScore(n: number): string {
           <div class="erv__bar-container">
             <div class="erv__bar-track">
               <div class="erv__bar-fill" :style="{ width: barFillWidth(c) }">
-                <div
+                <Tooltip
                   v-for="(comp, ci) in c.components"
                   :key="ci"
-                  class="erv__bar-segment"
-                  :style="{ flex: `${comp.contribution} 0 0%`, backgroundColor: componentColorMap[comp.color] }"
-                  :title="`${comp.label}: ${fmtScore(comp.rawValue)} × ${fmtScore(comp.weight)} = ${fmtScore(comp.contribution)}`"
-                />
+                  class="erv__bar-segment-tip"
+                  :style="{ flex: `${comp.contribution} 0 0%` }"
+                  :text="`${comp.label}: ${fmtScore(comp.rawValue)} × ${fmtScore(comp.weight)} = ${fmtScore(comp.contribution)}`"
+                >
+                  <div
+                    class="erv__bar-segment"
+                    :style="{ backgroundColor: componentColorMap[comp.color] }"
+                  />
+                </Tooltip>
               </div>
             </div>
             <span class="erv__bar-score">{{ fmtScore(c.finalScore) }}</span>
@@ -610,7 +616,16 @@ function fmtScore(n: number): string {
 
 .erv__bar-fill--filtered { opacity: 0.5; }
 
+.erv__bar-segment-tip {
+  display: block;
+  min-width: 1px;
+  height: 100%;
+  /* the bubble follows the tip wrapper; keep cursor inherited from the row */
+  cursor: inherit;
+}
+
 .erv__bar-segment {
+  width: 100%;
   height: 100%;
   min-width: 1px;
   transition: width 0.3s ease;
@@ -655,8 +670,8 @@ function fmtScore(n: number): string {
 }
 
 .erv__tag--edge { background: color-mix(in oklch, var(--color-sage-400) 15%, transparent); color: var(--color-sage-400); }
-.erv__tag--entity { background: color-mix(in oklch, #a87bdf 15%, transparent); color: #a87bdf; }
-.erv__tag--event { background: color-mix(in oklch, #5b8def 15%, transparent); color: #5b8def; }
+.erv__tag--entity { background: color-mix(in oklch, var(--color-viz-purple) 15%, transparent); color: var(--color-viz-purple); }
+.erv__tag--event { background: color-mix(in oklch, var(--color-viz-blue) 15%, transparent); color: var(--color-viz-blue); }
 .erv__tag--filtered { background: color-mix(in oklch, var(--color-text-umber) 10%, transparent); color: var(--color-text-umber); }
 
 /* ── Detail card ── */
@@ -766,9 +781,9 @@ function fmtScore(n: number): string {
 }
 
 /* ── Review result ── */
-.erv__heading--review { color: var(--color-danger, #ef4444); }
+.erv__heading--review { color: var(--color-danger); }
 .erv__review-stats { display: flex; gap: 12px; font-size: var(--font-size-sm); color: var(--color-text-umber); }
-.erv__review-invalidated { color: var(--color-danger, #ef4444); font-weight: 600; }
+.erv__review-invalidated { color: var(--color-danger); font-weight: 600; }
 
 .erv__review-detail {
   display: flex;
@@ -786,32 +801,33 @@ function fmtScore(n: number): string {
   font-weight: 600;
 }
 .erv__review-badge--invalidated {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--color-danger, #ef4444);
+  background: var(--color-danger-muted);
+  color: var(--color-danger);
 }
 .erv__review-badge--kept {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: var(--color-success-muted);
+  color: var(--color-success);
 }
 .erv__review-fact {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .erv__review-reason {
   flex-shrink: 0;
   max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   opacity: 0.7;
   font-style: italic;
 }
+.erv__review-clip {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── NPC Relevance Section ── */
-.erv__heading--npc { color: #a87bdf; }
+.erv__heading--npc { color: var(--color-viz-purple); }
 
 .erv__npc-summary {
   display: flex;
@@ -824,7 +840,7 @@ function fmtScore(n: number): string {
 }
 
 .erv__npc-saved {
-  color: #22c55e;
+  color: var(--color-success);
   font-weight: 600;
 }
 
@@ -838,7 +854,7 @@ function fmtScore(n: number): string {
   padding: 4px 0;
   color: var(--color-text-umber);
 }
-.erv__npc-tier-header--t1 { color: #5bba6f; }
+.erv__npc-tier-header--t1 { color: var(--color-success); }
 .erv__npc-tier-header--t2 { color: var(--color-amber-400); }
 .erv__npc-tier-header--t3 { color: var(--color-text-umber); opacity: 0.7; }
 .erv__npc-tier-header--clickable { cursor: pointer; }
@@ -852,9 +868,9 @@ function fmtScore(n: number): string {
 }
 
 .erv__npc-dot { font-size: 10px; flex-shrink: 0; width: 14px; text-align: center; }
-.erv__npc-dot--t1 { color: #5bba6f; }
+.erv__npc-dot--t1 { color: var(--color-success); }
 .erv__npc-dot--t2 { color: var(--color-amber-400); }
-.erv__npc-dot--t2a { color: #5b8def; }
+.erv__npc-dot--t2a { color: var(--color-viz-blue); }
 
 .erv__npc-name {
   font-weight: 500;
