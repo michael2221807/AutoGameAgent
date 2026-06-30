@@ -28,6 +28,7 @@ import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import AgaTabBar, { type TabItem } from '@/ui/components/shared/AgaTabBar.vue';
 import AgaProgressBar from '@/ui/components/shared/AgaProgressBar.vue';
 import AgaConfirmModal from '@/ui/components/shared/AgaConfirmModal.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { useGameState } from '@/ui/composables/useGameState';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
@@ -3467,7 +3468,8 @@ function clearNpcImages() {
 
             <div v-if="galleryImages.length > 0" class="gallery-grid">
               <div v-for="img in galleryImages" :key="img.id" class="gallery-card">
-                <div class="gallery-card-image" @click="openViewer(img.id)" style="cursor:pointer" :title="$t('image.gallery.clickViewLarge')">
+                <Tooltip :text="$t('image.gallery.clickViewLarge')" class="tt-block">
+                <div class="gallery-card-image" @click="openViewer(img.id)" style="cursor:pointer">
                   <ImageDisplay :asset-id="img.id" :fallback-letter="galleryNpc?.charAt(0) ?? '?'" size="lg" />
                   <!-- Overlay badges: status + usage (stacked, top-left) -->
                   <div class="gallery-overlay-badges">
@@ -3484,6 +3486,7 @@ function clearNpcImages() {
                     <span v-if="img.providerMeta?.reference" class="gallery-usage-badge gallery-usage-badge--ref">{{ $t('image.gallery.usageBadge.reference') }}</span>
                   </div>
                 </div>
+                </Tooltip>
                 <div class="gallery-card-meta">
                   <div class="gallery-meta-top">
                     <span class="gallery-meta-comp">{{ img.composition || $t('image.gallery.metaComp.character') }}</span>
@@ -3631,10 +3634,12 @@ function clearNpcImages() {
             <!-- Current wallpaper -->
             <div class="scene-section">
               <h3 class="section-label">{{ $t('image.scene.currentWallpaper') }}</h3>
-              <div v-if="currentSceneWallpaperId" class="wallpaper-card" @click="openViewer(currentSceneWallpaperId)" :title="$t('image.gallery.clickViewLarge')">
+              <Tooltip v-if="currentSceneWallpaperId" :text="$t('image.gallery.clickViewLarge')" class="tt-block">
+              <div class="wallpaper-card" @click="openViewer(currentSceneWallpaperId)">
                 <ImageDisplay :asset-id="currentSceneWallpaperId" fallback-letter="S" size="lg" />
                 <span class="wallpaper-badge">{{ $t('image.scene.currentlyUsed') }}</span>
               </div>
+              </Tooltip>
               <div v-else class="wallpaper-placeholder">
                 <p>{{ $t('image.scene.noWallpaper') }}</p>
                 <p class="form-hint">{{ $t('image.scene.noWallpaperHint') }}</p>
@@ -3870,7 +3875,8 @@ function clearNpcImages() {
                   :key="String(record.id ?? record.createdAt)"
                   class="scene-history-card"
                 >
-                  <div class="scene-history-card-image" @click="openViewer(String(record.id ?? ''))" style="cursor:pointer" :title="$t('image.gallery.clickViewLarge')">
+                  <Tooltip :text="$t('image.gallery.clickViewLarge')" class="tt-block">
+                  <div class="scene-history-card-image" @click="openViewer(String(record.id ?? ''))" style="cursor:pointer">
                     <ImageDisplay :asset-id="String(record.id ?? '')" fallback-letter="S" size="lg" />
                     <div class="gallery-overlay-badges">
                       <span :class="['gallery-status-badge', `gallery-status-badge--${record.status ?? 'complete'}`]">
@@ -3879,6 +3885,7 @@ function clearNpcImages() {
                       <span v-if="isCurrentSceneWallpaper(String(record.id ?? ''))" class="gallery-usage-badge">{{ $t('image.scene.currentWallpaperBadge') }}</span>
                     </div>
                   </div>
+                  </Tooltip>
                   <div class="scene-history-card-body">
                     <div class="scene-history-card-top">
                       <span class="scene-history-card-time">{{ new Date(Number(record.createdAt) || 0).toLocaleString() }}</span>
@@ -4064,12 +4071,12 @@ function clearNpcImages() {
         <div v-if="filteredHistory.length > 0" class="history-list-v2">
           <div v-for="entry in filteredHistory" :key="entry.key" class="history-card-v2">
             <!-- Left: image (1/3) -->
+            <Tooltip :text="$t('image.gallery.clickViewLarge')" class="tt-block tt-history-image">
             <div
               class="history-card-image-v2"
               :class="entry.type === 'scene' ? 'history-card-image-v2--landscape' : ''"
               @click="openViewer(entry.assetId)"
               style="cursor:pointer"
-              :title="$t('image.gallery.clickViewLarge')"
             >
               <ImageDisplay
                 :asset-id="entry.assetId"
@@ -4083,6 +4090,7 @@ function clearNpcImages() {
                 <span class="history-type-badge-v2">{{ entry.type === 'scene' ? $t('image.history.typeScene') : $t('image.history.typeCharacter') }}</span>
               </div>
             </div>
+            </Tooltip>
 
             <!-- Right: metadata (2/3) -->
             <div class="history-card-body-v2">
@@ -4539,7 +4547,7 @@ function clearNpcImages() {
                   <div v-if="selectedPresetParamPreview.notApplicable.length > 0" class="replicate-group">
                     <span class="replicate-group-label replicate-group-label--na">{{ $t('image.presets.notApplicable') }}</span>
                     <div class="replicate-chips">
-                      <span v-for="na in selectedPresetParamPreview.notApplicable" :key="na.key" class="replicate-chip replicate-chip--na" :title="na.reason">
+                      <span v-for="na in selectedPresetParamPreview.notApplicable" :key="na.key" class="replicate-chip replicate-chip--na">
                         {{ na.key }}: {{ na.value }} ({{ na.reason }})
                       </span>
                     </div>
@@ -5184,9 +5192,9 @@ function clearNpcImages() {
               <span class="form-label">{{ $t('image.settings.buzzEstimate') }}</span>
               <span class="form-hint">{{ $t('image.settings.buzzEstimateHint') }}</span>
             </div>
-            <button class="btn-secondary btn-sm" :disabled="civitaiWhatifLoading" @click="runCivitaiWhatif">
+            <AgaButton variant="secondary" size="sm" :disabled="civitaiWhatifLoading" @click="runCivitaiWhatif">
               {{ civitaiWhatifLoading ? $t('image.settings.buzzQuerying') : $t('image.settings.buzzQuery') }}
-            </button>
+            </AgaButton>
           </div>
           <p v-if="civitaiWhatifResult" class="form-hint" style="margin-top: 4px;">{{ civitaiWhatifResult }}</p>
         </div>
@@ -5429,12 +5437,17 @@ function clearNpcImages() {
                   : $t('image.confirm.subtitleConfirm') }}
               </div>
             </div>
-            <button
+            <Tooltip
               v-if="manualFlowStage !== 'submitting'"
-              class="confirm-close"
-              :aria-label="$t('image.confirm.close')"
-              @click="cancelConfirm"
-            >×</button>
+              :text="$t('image.confirm.close')"
+              interactive
+            >
+              <button
+                class="confirm-close"
+                :aria-label="$t('image.confirm.close')"
+                @click="cancelConfirm"
+              >×</button>
+            </Tooltip>
           </header>
 
           <div class="confirm-body">
@@ -5542,14 +5555,14 @@ function clearNpcImages() {
           <footer class="confirm-footer">
             <!-- confirm 状态：操作按钮 -->
             <template v-if="manualFlowStage !== 'submitting'">
-              <button class="btn-secondary" @click="cancelConfirm">{{ $t('image.confirm.goBack') }}</button>
-              <button class="btn-primary" :disabled="isGenerating" @click="submitGenerate">{{ $t('image.confirm.confirmGenerate') }}</button>
+              <AgaButton variant="secondary" @click="cancelConfirm">{{ $t('image.confirm.goBack') }}</AgaButton>
+              <AgaButton variant="primary" :disabled="isGenerating" @click="submitGenerate">{{ $t('image.confirm.confirmGenerate') }}</AgaButton>
             </template>
             <!-- submitting 状态：取消按钮 -->
             <template v-else>
-              <button class="btn-secondary" @click="cancelSubmitting">
+              <AgaButton variant="secondary" @click="cancelSubmitting">
                 {{ backgroundMode ? $t('image.confirm.closeHint') : $t('image.confirm.cancelWait') }}
-              </button>
+              </AgaButton>
             </template>
           </footer>
         </div>
@@ -5910,8 +5923,6 @@ function clearNpcImages() {
   border-top: 1px solid var(--color-border);
 }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.btn-primary, .btn-secondary { padding: 6px 16px; font-size: 0.82rem; font-weight: 600; border-radius: var(--radius-md); cursor: pointer; transition: all 0.15s; border: 1px solid var(--color-border); background: var(--color-surface-elevated); color: var(--color-text); }
-.btn-secondary:hover { border-color: color-mix(in oklch, var(--color-sage-400) 40%, transparent); color: var(--color-sage-100); }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 .grid-btn__label { font-size: 0.82rem; font-weight: 600; color: inherit; }
@@ -6344,8 +6355,12 @@ function clearNpcImages() {
   border-color: var(--color-primary);
   box-shadow: 0 4px 20px rgba(var(--color-primary-rgb, 212, 175, 55), 0.15);
 }
+/* Tooltip wrappers around block-level clickable image cards must not collapse
+   to inline-flex; keep them transparent to the card grid/flex layout. */
+.tt-block { display: block; width: 100%; }
+.tt-history-image { width: 33.33%; flex-shrink: 0; align-items: stretch; }
 .history-card-image-v2 {
-  width: 33.33%; flex-shrink: 0; position: relative; overflow: hidden;
+  width: 100%; flex-shrink: 0; position: relative; overflow: hidden;
   aspect-ratio: 3/4; border-right: 1px solid var(--color-border);
 }
 .history-card-image-v2--landscape { aspect-ratio: 16/9; min-height: 240px; }
@@ -6619,33 +6634,33 @@ function clearNpcImages() {
 /* ── Secret part section (fuchsia theme) ── */
 .secret-section {
   margin-top: var(--space-md); padding: 16px;
-  border: 1px solid rgba(192, 38, 211, 0.3);
+  border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 30%, transparent);
   border-radius: var(--radius-lg);
-  background: rgba(192, 38, 211, 0.04);
+  background: color-mix(in oklch, var(--color-fuchsia-base) 04%, transparent);
 }
-.secret-header-row { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid rgba(192,38,211,0.15); padding-bottom: 10px; margin-bottom: 12px; }
-.secret-title { font-size: 0.95rem; font-weight: 700; color: #c084fc; margin: 0; }
+.secret-header-row { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 15%, transparent); padding-bottom: 10px; margin-bottom: 12px; }
+.secret-title { font-size: 0.95rem; font-weight: 700; color: var(--color-fuchsia); margin: 0; }
 .secret-desc { font-size: 0.68rem; color: var(--color-text-secondary); margin: 3px 0 0; }
 .secret-all-btn {
   padding: 5px 12px; font-size: 0.72rem; font-weight: 500;
-  border: 1px solid rgba(192,38,211,0.4); border-radius: var(--radius-md);
-  background: rgba(192,38,211,0.1); color: #d8b4fe; cursor: pointer;
+  border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 40%, transparent); border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-fuchsia-base) 10%, transparent); color: var(--color-fuchsia-bright); cursor: pointer;
   transition: all 0.2s;
 }
-.secret-all-btn:hover { background: rgba(192,38,211,0.2); }
+.secret-all-btn:hover { background: color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent); }
 .secret-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .secret-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
-.secret-status { padding: 8px 10px; border: 1px solid rgba(192,38,211,0.25); background: rgba(192,38,211,0.08); border-radius: var(--radius-md); font-size: 0.78rem; color: #d8b4fe; margin-bottom: 12px; }
+.secret-status { padding: 8px 10px; border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 25%, transparent); background: color-mix(in oklch, var(--color-fuchsia-base) 08%, transparent); border-radius: var(--radius-md); font-size: 0.78rem; color: var(--color-fuchsia-bright); margin-bottom: 12px; }
 .secret-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.secret-card { border: 1px solid rgba(192,38,211,0.2); background: rgba(0,0,0,0.3); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 6px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: var(--lumi-inset-highlight), inset 0 0 12px rgba(192,38,211,0.04); }
+.secret-card { border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent); background: rgba(0,0,0,0.3); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 6px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: var(--lumi-inset-highlight), inset 0 0 12px color-mix(in oklch, var(--color-fuchsia-base) 04%, transparent); }
 .secret-card-header { display: flex; align-items: center; justify-content: space-between; }
-.secret-card-label { font-size: 0.82rem; font-weight: 600; color: #d8b4fe; }
+.secret-card-label { font-size: 0.82rem; font-weight: 600; color: var(--color-fuchsia-bright); }
 .secret-card-btn {
   font-size: 0.62rem; padding: 3px 8px;
-  border: 1px solid rgba(192,38,211,0.35); border-radius: var(--radius-sm);
-  background: rgba(0,0,0,0.5); color: #c084fc; cursor: pointer;
+  border: 1px solid color-mix(in oklch, var(--color-fuchsia-base) 35%, transparent); border-radius: var(--radius-sm);
+  background: rgba(0,0,0,0.5); color: var(--color-fuchsia); cursor: pointer;
 }
-.secret-card-btn:hover { background: rgba(192,38,211,0.15); }
+.secret-card-btn:hover { background: color-mix(in oklch, var(--color-fuchsia-base) 15%, transparent); }
 .secret-card-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .secret-card-image {
   aspect-ratio: 1;
@@ -6666,22 +6681,22 @@ function clearNpcImages() {
 }
 .secret-card-placeholder {
   width: 100%; height: 100%;
-  border: 1px dashed rgba(192,38,211,0.2);
+  border: 1px dashed color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent);
   background: rgba(0,0,0,0.15);
   display: flex; align-items: center; justify-content: center;
   font-size: 0.72rem; color: var(--color-text-secondary);
 }
 
 /* Fuchsia-themed grid buttons */
-.grid-btn--fuchsia { border-color: rgba(192,38,211,0.2); }
-.grid-btn--fuchsia:hover { border-color: rgba(192,38,211,0.5); background: rgba(192,38,211,0.06); }
+.grid-btn--fuchsia { border-color: color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent); }
+.grid-btn--fuchsia:hover { border-color: color-mix(in oklch, var(--color-fuchsia-base) 50%, transparent); background: color-mix(in oklch, var(--color-fuchsia-base) 06%, transparent); }
 .grid-btn--fuchsia-active {
-  border-color: #c084fc !important; background: rgba(192,38,211,0.2) !important;
-  color: #d8b4fe !important; box-shadow: 0 0 10px rgba(192,38,211,0.2);
+  border-color: var(--color-fuchsia) !important; background: color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent) !important;
+  color: var(--color-fuchsia-bright) !important; box-shadow: 0 0 10px color-mix(in oklch, var(--color-fuchsia-base) 20%, transparent);
 }
-.form-textarea--fuchsia { border-color: color-mix(in oklch, #e879a0 20%, transparent); }
-.form-textarea--fuchsia:focus { border-color: #e879a0; }
-.secret-header { font-size: var(--font-size-sm); color: #e879a0; margin-bottom: var(--space-2xs); }
+.form-textarea--fuchsia { border-color: color-mix(in oklch, var(--color-nsfw) 20%, transparent); }
+.form-textarea--fuchsia:focus { border-color: var(--color-nsfw); }
+.secret-header { font-size: var(--font-size-sm); color: var(--color-nsfw); margin-bottom: var(--space-2xs); }
 .secret-desc { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--space-sm); }
 .secret-parts { display: flex; gap: var(--space-sm); }
 
@@ -6760,18 +6775,18 @@ function clearNpcImages() {
   margin-top: 8px;
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px dashed var(--color-border, #2a2a3a);
+  border: 1px dashed var(--color-border);
   border-radius: 6px;
 }
 .form-advanced > summary {
   cursor: pointer;
   font-size: 0.78rem;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   user-select: none;
 }
 .form-advanced[open] > summary {
   margin-bottom: 8px;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
 }
 .backend-status-bar {
   display: flex;
@@ -6782,7 +6797,7 @@ function clearNpcImages() {
   background: rgba(255, 255, 255, 0.02);
   border-radius: 6px;
   font-size: 0.8rem;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
 }
 .status-dot {
   width: 8px;
@@ -6790,18 +6805,18 @@ function clearNpcImages() {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.status-dot--ok { background: #4ade80; box-shadow: 0 0 6px #4ade8066, 0 0 12px #4ade8033; }
-.status-dot--off { background: #666; }
-.backend-status-label { font-weight: 600; color: var(--color-text, #e0e0e6); }
-.backend-status-model { color: var(--color-text-secondary, #8888a0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; }
-.backend-status-warn { color: var(--color-amber, #fbbf24); font-size: 0.75rem; }
+.status-dot--ok {
+  background: var(--color-success);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--color-success) 40%, transparent),
+              0 0 12px color-mix(in oklch, var(--color-success) 20%, transparent);
+}
+.status-dot--off { background: var(--color-text-muted); }
+.backend-status-label { font-weight: 600; color: var(--color-text); }
+.backend-status-model { color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; }
+.backend-status-warn { color: var(--color-warning); font-size: 0.75rem; }
 
 .form-textarea--error {
-  border-color: var(--color-error, #f87171) !important;
-}
-.btn-sm {
-  padding: 4px 12px;
-  font-size: 0.8rem;
+  border-color: var(--color-danger) !important;
 }
 
 /* ─── Mobile: stack sidebars, fullwidth forms ─── */

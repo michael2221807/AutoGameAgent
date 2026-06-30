@@ -107,6 +107,18 @@
   --color-nsfw-bright:      #f472b6;
 
   /* ─────────────────────────────────────────────────────────────
+     SECRET-ARCHIVE FUCHSIA — lavender/magenta accent for the 秘部档案
+     (secret-part) section in ImagePanel. Was hardcoded #c084fc /
+     #d8b4fe / rgba(192,38,211,…) scattered inline; promoted to a token
+     family so the fuchsia lives in one place. `-base` is the deep
+     magenta used for translucent washes via color-mix (matches the
+     project convention used by the nsfw rose tokens).
+     ───────────────────────────────────────────────────────────── */
+  --color-fuchsia:          #c084fc;
+  --color-fuchsia-bright:   #d8b4fe;
+  --color-fuchsia-base:     #c026d3;
+
+  /* ─────────────────────────────────────────────────────────────
      BACKWARD-COMPAT ALIASES — every legacy `var(--color-primary)` etc.
      still resolves; value now resolves to sage instead of indigo.
      ───────────────────────────────────────────────────────────── */

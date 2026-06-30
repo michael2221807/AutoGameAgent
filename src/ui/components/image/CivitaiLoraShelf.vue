@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import {
   validateLoraAir,
   collectActiveLorasForScope,
@@ -362,8 +363,12 @@ function formatAirShort(air: string): string {
             <span v-if="lora.enabled && isAirInvalid(lora.air)" class="lora-item__error-badge">{{ $t('image.lora.airInvalid') }}</span>
             <span v-if="strengthWarning(lora.strength)" class="lora-item__warn-badge">{{ strengthWarning(lora.strength) }}</span>
           </div>
-          <button class="lora-item__expand" :aria-label="selectedId === lora.id ? $t('image.lora.collapse') : $t('image.lora.expand')" @click="selectLora(lora.id)">{{ selectedId === lora.id ? '▴' : '▾' }}</button>
-          <button class="lora-item__delete" :aria-label="$t('image.lora.deleteAriaLabel')" @click="deleteLora(lora.id)">×</button>
+          <Tooltip :text="selectedId === lora.id ? $t('image.lora.collapse') : $t('image.lora.expand')" interactive>
+            <button class="lora-item__expand" :aria-label="selectedId === lora.id ? $t('image.lora.collapse') : $t('image.lora.expand')" @click="selectLora(lora.id)">{{ selectedId === lora.id ? '▴' : '▾' }}</button>
+          </Tooltip>
+          <Tooltip :text="$t('image.lora.deleteAriaLabel')" interactive>
+            <button class="lora-item__delete" :aria-label="$t('image.lora.deleteAriaLabel')" @click="deleteLora(lora.id)">×</button>
+          </Tooltip>
         </div>
 
         <!-- Expanded editor -->
@@ -450,9 +455,13 @@ function formatAirShort(air: string): string {
                   class="lora-editor__trigger-chip"
                   :class="{ 'lora-editor__trigger-chip--off': !tt.enabled }"
                 >
-                  <button :aria-label="tt.enabled ? $t('image.lora.disableTrigger') : $t('image.lora.enableTrigger')" @click="toggleTrigger(lora.id, tt.id)">{{ tt.enabled ? '●' : '○' }}</button>
+                  <Tooltip :text="tt.enabled ? $t('image.lora.disableTrigger') : $t('image.lora.enableTrigger')" interactive>
+                    <button :aria-label="tt.enabled ? $t('image.lora.disableTrigger') : $t('image.lora.enableTrigger')" @click="toggleTrigger(lora.id, tt.id)">{{ tt.enabled ? '●' : '○' }}</button>
+                  </Tooltip>
                   {{ tt.text }}
-                  <button class="lora-editor__trigger-del" :aria-label="$t('image.lora.deleteTrigger')" @click="deleteTrigger(lora.id, tt.id)">×</button>
+                  <Tooltip :text="$t('image.lora.deleteTrigger')" interactive>
+                    <button class="lora-editor__trigger-del" :aria-label="$t('image.lora.deleteTrigger')" @click="deleteTrigger(lora.id, tt.id)">×</button>
+                  </Tooltip>
                 </span>
               </div>
               <div v-else class="form-hint">{{ $t('image.lora.noTriggers') }}</div>

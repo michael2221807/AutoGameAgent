@@ -18,6 +18,7 @@ import type { ImageBackendType, CivitaiLoraSnapshot, ImageReferenceInput } from 
 const { t } = useI18n();
 import { PROVIDER_CAPABILITIES } from '@/engine/image/provider-capabilities';
 import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 
 const props = defineProps<{
   /** Short subject label: NPC name, '场景', '主角', etc. */
@@ -180,10 +181,14 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
           </div>
 
           <div v-if="canUseReference" class="regen-ref-block">
-            <label class="regen-ref-toggle">
-              <input type="checkbox" v-model="useReference" :disabled="busy" />
-              <span>{{ $t('image.regenerate.useRefRedraw') }}</span>
-            </label>
+            <div class="aga-toggle-row">
+              <AgaToggle
+                v-model="useReference"
+                :disabled="busy"
+                :label="$t('image.regenerate.useRefRedraw')"
+              />
+              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('image.regenerate.useRefRedraw') }}</span>
+            </div>
             <div v-if="useReference" class="regen-ref-controls">
               <div class="regen-label">{{ $t('image.regenerate.redrawStrength') }}</div>
               <div class="regen-ref-slider">
@@ -195,7 +200,7 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
                 <span>{{ $t('image.regenerate.markKeep') }}</span>
                 <span>{{ $t('image.regenerate.markHeavy') }}</span>
               </div>
-              <p v-if="blobCheckFailed" class="regen-hint" style="color: var(--color-error, #f87171); margin-top: 4px;">
+              <p v-if="blobCheckFailed" class="regen-hint regen-hint--error">
                 {{ $t('image.regenerate.cacheMissing') }}
               </p>
               <p class="regen-hint">{{ $t('image.regenerate.refNote') }}</p>
@@ -317,6 +322,10 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 .regen-field-row { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .regen-label { font-size: var(--font-size-sm); color: var(--color-text-secondary); font-weight: 500; }
 .regen-hint { font-size: var(--font-size-xs); color: var(--color-text-muted); margin: 0; }
+.regen-hint--error { color: var(--color-danger); margin-top: var(--space-2xs); }
+
+.aga-toggle-row { display: flex; align-items: center; gap: var(--space-sm); }
+.aga-toggle-row__label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
 
 .regen-meta { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .regen-meta-chip {
@@ -353,8 +362,6 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 .regen-prompt-textarea--neg { color: var(--color-text-secondary); }
 
 .regen-ref-block { display: flex; flex-direction: column; gap: var(--space-xs); }
-.regen-ref-toggle { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text); cursor: pointer; }
-.regen-ref-toggle input[type="checkbox"] { accent-color: var(--color-sage-400); width: 16px; height: 16px; }
 .regen-ref-controls { display: flex; flex-direction: column; gap: var(--space-2xs); padding-left: var(--space-md); }
 .regen-ref-slider { display: flex; align-items: center; gap: var(--space-sm); }
 .regen-ref-slider input[type="range"] { flex: 1; accent-color: var(--color-sage-400); }
