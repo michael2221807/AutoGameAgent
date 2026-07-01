@@ -9,6 +9,7 @@
 import { ref, computed } from 'vue';
 import { isFestivalVisible, normalizeFestival } from './environment-helpers';
 import FestivalPopover from './FestivalPopover.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const props = defineProps<{
   festival: unknown;
@@ -33,18 +34,19 @@ function open(): void {
 
 <template>
   <template v-if="normalized">
-    <button
-      type="button"
-      class="festival-chip"
-      :title="$t('mainGame.env.festival.titleTemplate', { name: normalized.名称 })"
-      :aria-label="`${$t('mainGame.env.festival.label')} ${normalized.名称}`"
-      aria-haspopup="dialog"
-      :aria-expanded="popoverOpen"
-      @click="open"
-    >
-      <span class="festival-chip__label">{{ $t('mainGame.env.festival.label') }}</span>
-      <span class="festival-chip__value">{{ normalized.名称 }}</span>
-    </button>
+    <Tooltip :text="$t('mainGame.env.festival.titleTemplate', { name: normalized.名称 })" interactive>
+      <button
+        type="button"
+        class="festival-chip"
+        :aria-label="`${$t('mainGame.env.festival.label')} ${normalized.名称}`"
+        aria-haspopup="dialog"
+        :aria-expanded="popoverOpen"
+        @click="open"
+      >
+        <span class="festival-chip__label">{{ $t('mainGame.env.festival.label') }}</span>
+        <span class="festival-chip__value">{{ normalized.名称 }}</span>
+      </button>
+    </Tooltip>
 
     <FestivalPopover
       v-model="popoverOpen"

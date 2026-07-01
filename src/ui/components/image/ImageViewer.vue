@@ -6,6 +6,10 @@
  * Click overlay or press Escape to close.
  */
 import { onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
+
+const { t } = useI18n();
 
 defineProps<{
   src: string;
@@ -27,7 +31,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 <template>
   <Teleport to="body">
     <div class="image-viewer-overlay" @click.self="emit('close')">
-      <button class="image-viewer-close" @click="emit('close')" aria-label="关闭">&times;</button>
+      <Tooltip :text="t('common.actions.close')" class="image-viewer-close-tt" position="bottom" interactive>
+        <button class="image-viewer-close" @click="emit('close')" :aria-label="t('common.actions.close')">&times;</button>
+      </Tooltip>
       <img :src="src" :alt="alt ?? ''" class="image-viewer-img" />
     </div>
   </Teleport>
@@ -47,10 +53,14 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   cursor: zoom-out;
 }
 
-.image-viewer-close {
+/* the absolute positioning lives on the Tooltip wrapper so the hint bubble anchors to the ×. */
+.image-viewer-close-tt {
   position: absolute;
   top: var(--space-lg);
   right: var(--space-lg);
+  z-index: 201;
+}
+.image-viewer-close {
   background: none;
   border: none;
   color: var(--color-text-secondary);

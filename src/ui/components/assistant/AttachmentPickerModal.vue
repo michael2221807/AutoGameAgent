@@ -15,6 +15,8 @@ import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import StateTreeBrowser from './StateTreeBrowser.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import type { AttachmentSpec } from '@/engine/services/assistant/types';
 
@@ -99,10 +101,10 @@ const hasTarget = computed(() => targetPath.value !== null);
   >
     <div class="picker-body">
       <div class="picker-header">
-        <label class="filter-toggle">
-          <input v-model="showOnlyEditable" type="checkbox" />
-          <span>{{ t('assistant.picker.editableOnly') }}</span>
-        </label>
+        <div class="aga-toggle-row">
+          <AgaToggle v-model="showOnlyEditable" :label="t('assistant.picker.editableOnly')" />
+          <span class="aga-toggle-row__label" aria-hidden="true">{{ t('assistant.picker.editableOnly') }}</span>
+        </div>
         <p class="hint">
           {{ t('assistant.picker.hint') }}
         </p>
@@ -137,12 +139,13 @@ const hasTarget = computed(() => targetPath.value !== null);
             <button
               class="scope-btn"
               :class="{ active: targetPath === path }"
-              :title="targetPath === path ? t('assistant.picker.isTarget') : t('assistant.picker.setAsTarget')"
               @click="setAsTarget(path)"
             >
               {{ targetPath === path ? t('assistant.picker.isTarget') : t('assistant.picker.setAsTarget') }}
             </button>
-            <button class="remove-btn" @click="removeFromSelection(path)">×</button>
+            <Tooltip :text="t('assistant.attachment.remove')" interactive>
+              <button class="remove-btn" :aria-label="t('assistant.attachment.remove')" @click="removeFromSelection(path)">×</button>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -170,16 +173,6 @@ const hasTarget = computed(() => targetPath.value !== null);
   flex-direction: column;
   gap: 6px;
 }
-
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 0.86rem;
-}
-.filter-toggle input { cursor: pointer; }
 
 .hint {
   margin: 0;

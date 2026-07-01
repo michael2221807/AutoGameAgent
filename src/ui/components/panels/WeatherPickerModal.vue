@@ -9,6 +9,7 @@
  */
 import { ref, watch, nextTick } from 'vue';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import {
   buildSetWeatherAttachment,
   WEATHER_PRESETS,
@@ -105,8 +106,8 @@ function onCancel(): void {
     </div>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary" @click="onCancel">取消</button>
-      <button type="button" class="btn btn-primary" @click="onApply">应用</button>
+      <AgaButton variant="secondary" @click="onCancel">取消</AgaButton>
+      <AgaButton variant="primary" @click="onApply">应用</AgaButton>
     </template>
   </Modal>
 </template>
@@ -167,27 +168,8 @@ function onCancel(): void {
   box-shadow: 0 0 8px color-mix(in oklch, var(--color-amber-400) 15%, transparent);
 }
 .picker-error {
-  color: #ef4444;
+  color: var(--color-danger);
   font-size: 0.78rem;
   margin: 0;
-}
-.btn {
-  padding: 0.4rem 0.9rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  border: 1px solid var(--color-border);
-}
-.btn-secondary {
-  background: transparent;
-  color: var(--color-text-secondary);
-}
-.btn-primary {
-  background: var(--color-primary);
-  color: var(--color-sage-100);
-  border-color: var(--color-sage-400);
-}
-.btn:hover {
-  filter: brightness(1.08);
 }
 </style>

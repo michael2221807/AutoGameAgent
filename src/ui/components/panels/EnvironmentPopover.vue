@@ -79,7 +79,7 @@ defineEmits<{
 
 .env-popover__name {
   font-weight: 700;
-  color: var(--color-primary);
+  color: var(--color-sage-300);
   font-size: 0.95rem;
 }
 
@@ -92,7 +92,7 @@ defineEmits<{
 
 .env-popover__effect {
   font-size: 0.68rem;
-  color: rgba(74, 222, 128, 0.8);
+  color: var(--color-sage-300);
   margin-top: 0.25rem;
   font-style: italic;
   line-height: 1.5;

@@ -7,6 +7,7 @@
  */
 import { ref, watch, nextTick } from 'vue';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import {
   buildSetFestivalAttachment,
   type EnvTag,
@@ -113,17 +114,15 @@ function onCancel(): void {
       </label>
 
       <div class="preset-row">
-        <button type="button" class="btn btn-ghost" @click="resetToPingRi">
-          恢复为平日（无节日）
-        </button>
+        <AgaButton variant="ghost" size="sm" @click="resetToPingRi">恢复为平日（无节日）</AgaButton>
       </div>
 
       <p v-if="error" class="field-error">{{ error }}</p>
     </div>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary" @click="onCancel">取消</button>
-      <button type="button" class="btn btn-primary" @click="onApply">应用</button>
+      <AgaButton variant="secondary" @click="onCancel">取消</AgaButton>
+      <AgaButton variant="primary" @click="onApply">应用</AgaButton>
     </template>
   </Modal>
 </template>
@@ -163,30 +162,5 @@ function onCancel(): void {
   color: var(--color-danger);
   font-size: 0.78rem;
   margin: 0;
-}
-.btn {
-  padding: 0.4rem 0.9rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  border: 1px solid var(--color-border);
-}
-.btn-ghost {
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  padding: 0.25rem 0.6rem;
-}
-.btn-secondary {
-  background: transparent;
-  color: var(--color-text-secondary);
-}
-.btn-primary {
-  background: var(--color-primary);
-  color: var(--color-sage-100);
-  border-color: var(--color-sage-400);
-}
-.btn:hover {
-  filter: brightness(1.08);
 }
 </style>

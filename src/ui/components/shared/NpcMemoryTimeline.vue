@@ -96,15 +96,15 @@ const recentMemories = computed(() =>
   width: 10px;
   height: 10px;
   border-radius: var(--radius-full);
-  background: var(--color-primary-muted);
-  border: 2px solid var(--color-primary);
+  background: var(--color-sage-muted);
+  border: 2px solid var(--color-sage-400);
   margin-top: 4px;
   box-shadow: 0 0 3px currentColor;
 }
 
 .tl-dot--summary {
-  background: var(--color-warning-muted);
-  border-color: var(--color-warning);
+  background: var(--color-amber-muted);
+  border-color: var(--color-amber-400);
 }
 
 .tl-content { flex: 1; min-width: 0; }
