@@ -96,7 +96,7 @@
             v-for="(effect, i) in normalizedEffects"
             :key="i"
             :text="effectTipText(effect) || undefined"
-            position="bottom"
+            :position="effectTipText(effect) ? 'bottom' : undefined"
             class="effect-tag-wrap"
           >
             <div
@@ -166,7 +166,7 @@
             v-for="t in engineState.talents"
             :key="t.名称"
             :text="t.描述 || undefined"
-            position="bottom"
+            :position="t.描述 ? 'bottom' : undefined"
             class="talent-tag-wrap"
           >
             <span class="talent-tag">{{ t.名称 }}</span>

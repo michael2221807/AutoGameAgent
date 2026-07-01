@@ -1373,10 +1373,6 @@ function rejectAdvancement(): void {
 
 @media (max-width: 767px) {
   .plot-panel { padding-left: var(--space-md); padding-right: var(--space-md); transition: none; }
-  /* Story 2: mobile touch targets */
-  .btn-primary { min-height: 44px; }
-  .btn-secondary { min-height: 44px; }
-  .btn-danger { min-height: 44px; }
   .form-input { height: 44px; }
   .form-input--narrow { height: 44px; }
   .form-textarea { min-height: 44px; }

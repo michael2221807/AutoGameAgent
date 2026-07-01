@@ -164,4 +164,10 @@ defineProps<{
   animation: aga-spin 0.8s linear infinite;
 }
 @keyframes aga-spin { to { transform: rotate(360deg); } }
+
+/* Mobile touch-target floor (WCAG 2.5.5). One place for every AgaButton, so
+   panels no longer need per-file `.btn* { min-height: 44px }` mobile rules. */
+@media (max-width: 767px) {
+  .aga-btn { min-height: 44px; }
+}
 </style>

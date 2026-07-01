@@ -62,7 +62,7 @@ defineEmits<{
 
 .festival-popover__effect {
   font-size: 0.68rem;
-  color: var(--color-sage-300);
+  color: var(--color-success);
   margin-top: 0.25rem;
   font-style: italic;
   line-height: 1.5;

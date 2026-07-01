@@ -220,7 +220,7 @@ function onChildReset(childPath: string): void {
       v-else-if="fieldType === 'enum'"
       :model-value="typeof value === 'string' ? value : ''"
       :options="enumOptions"
-      :aria-label="label"
+      :ariaLabel="label"
       @update:model-value="(v) => emit('update', path, v)"
     />
 
