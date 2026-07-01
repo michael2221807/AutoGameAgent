@@ -120,7 +120,6 @@ function minifyJson(): void {
       <div class="toolbar-actions">
         <button
           class="toolbar-btn"
-          :title="t('jsonEditor.format')"
           :disabled="readonly"
           @click="formatJson"
         >
@@ -128,7 +127,6 @@ function minifyJson(): void {
         </button>
         <button
           class="toolbar-btn"
-          :title="t('jsonEditor.compress')"
           :disabled="readonly"
           @click="minifyJson"
         >
@@ -168,7 +166,7 @@ function minifyJson(): void {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--color-bg);
 }
@@ -206,11 +204,11 @@ function minifyJson(): void {
   padding: 0.2rem 0.55rem;
   background: none;
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
   font-size: 0.72rem;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .toolbar-btn:hover:not(:disabled) {

@@ -74,11 +74,15 @@ function onNpcEnter(name: string, event: MouseEvent): void {
   const npc = npcMap.value.get(name);
   if (!npc) return;
   if (hoverTimer) clearTimeout(hoverTimer);
+  // 800ms hover delay to match the unified Tooltip primitive's reveal timing.
+  // This is a RICH popover (avatar + affinity + multi-line description), so it
+  // cannot use the text-only <Tooltip> primitive verbatim, but its delay and
+  // z-index are reconciled with the design-system tooltip standard.
   hoverTimer = setTimeout(() => {
     hoveredNpc.value = npc;
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     popoverPos.value = { x: rect.left + rect.width / 2, y: rect.top };
-  }, 400);
+  }, 800);
 }
 
 function onNpcLeave(): void {
@@ -628,7 +632,7 @@ const parsedParts = computed<TextPart[]>(() => {
 .npc-popover {
   position: fixed;
   transform: translate(-50%, calc(-100% - 8px));
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   min-width: 200px;
   max-width: 280px;
   padding: 10px 14px;

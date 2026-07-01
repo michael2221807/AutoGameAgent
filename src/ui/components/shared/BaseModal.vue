@@ -12,6 +12,7 @@
  *   </BaseModal>
  */
 import { watch, onMounted, onBeforeUnmount } from 'vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const props = withDefaults(defineProps<{
   /** 控制对话框显示/隐藏（v-model） */
@@ -73,7 +74,9 @@ onBeforeUnmount(() => {
             <slot name="header">
               <h3 class="modal-title">{{ title }}</h3>
             </slot>
-            <button class="modal-close-btn" :aria-label="$t('modal.base.ariaClose')" @click="close">✕</button>
+            <Tooltip :text="$t('modal.base.ariaClose')" interactive>
+              <button class="modal-close-btn" :aria-label="$t('modal.base.ariaClose')" @click="close">✕</button>
+            </Tooltip>
           </header>
 
           <!-- 内容区 -->
@@ -181,7 +184,7 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   font-size: 0.85rem;

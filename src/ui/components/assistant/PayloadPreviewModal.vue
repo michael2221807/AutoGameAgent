@@ -20,6 +20,7 @@ import { ref, computed, watch, inject, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
 import JsonEditor from '@/ui/components/editing/JsonEditor.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 
 const { t } = useI18n();
 import type {
@@ -291,7 +292,7 @@ function statusLabel(status: ValidatedPatch['status']): string {
         <section class="col col-right">
           <h3 class="col-title">
             {{ t('assistant.payloadPreview.diffPreview') }}
-            <button v-if="selectedPatch" class="edit-btn" @click="startEditPatch">{{ t('assistant.payloadPreview.editBtn') }}</button>
+            <AgaButton v-if="selectedPatch" variant="ghost" size="sm" @click="startEditPatch">{{ t('assistant.payloadPreview.editBtn') }}</AgaButton>
           </h3>
           <div v-if="!selectedPatch" class="diff-empty">{{ t('assistant.payloadPreview.diffEmpty') }}</div>
           <template v-else>
@@ -312,8 +313,8 @@ function statusLabel(status: ValidatedPatch['status']): string {
               <JsonEditor v-model="editJsonText" />
               <div v-if="editJsonError" class="edit-error">{{ editJsonError }}</div>
               <div class="edit-actions">
-                <button class="btn btn--secondary" @click="cancelEditPatch">{{ t('assistant.payloadPreview.cancel') }}</button>
-                <button class="btn btn--primary" @click="saveEditedPatch">{{ t('assistant.payloadPreview.saveAndValidate') }}</button>
+                <AgaButton variant="secondary" @click="cancelEditPatch">{{ t('assistant.payloadPreview.cancel') }}</AgaButton>
+                <AgaButton variant="primary" @click="saveEditedPatch">{{ t('assistant.payloadPreview.saveAndValidate') }}</AgaButton>
               </div>
             </div>
           </template>
@@ -326,10 +327,10 @@ function statusLabel(status: ValidatedPatch['status']): string {
     </div>
 
     <template #footer>
-      <button class="btn btn--danger" @click="discard">{{ t('assistant.payloadPreview.discardBtn') }}</button>
-      <button class="btn btn--primary" :disabled="!canInject" @click="tryInject">
+      <AgaButton variant="danger" @click="discard">{{ t('assistant.payloadPreview.discardBtn') }}</AgaButton>
+      <AgaButton variant="primary" :disabled="!canInject" @click="tryInject">
         {{ canInject ? t('assistant.payloadPreview.injectAllBtn') : t('assistant.payloadPreview.cannotInject') }}
-      </button>
+      </AgaButton>
     </template>
 
     <!-- 二次确认子 modal -->
@@ -342,8 +343,8 @@ function statusLabel(status: ValidatedPatch['status']): string {
       <p>{{ t('assistant.payloadPreview.confirmBody', { count: workingPatches.length }) }}</p>
       <p class="confirm-hint">{{ t('assistant.payloadPreview.confirmHint') }}</p>
       <template #footer>
-        <button class="btn btn--secondary" @click="showInjectConfirm = false">{{ t('assistant.payloadPreview.cancel') }}</button>
-        <button class="btn btn--primary" @click="doInject">{{ t('assistant.payloadPreview.confirmBtn') }}</button>
+        <AgaButton variant="secondary" @click="showInjectConfirm = false">{{ t('assistant.payloadPreview.cancel') }}</AgaButton>
+        <AgaButton variant="primary" @click="doInject">{{ t('assistant.payloadPreview.confirmBtn') }}</AgaButton>
       </template>
     </Modal>
   </Modal>
@@ -369,7 +370,7 @@ function statusLabel(status: ValidatedPatch['status']): string {
 .col {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 6px;
   overflow: hidden;
   min-height: 0;
@@ -489,18 +490,8 @@ function statusLabel(status: ValidatedPatch['status']): string {
   max-height: 200px;
   overflow: auto;
 }
-.diff-pre.before { background: color-mix(in oklch, var(--color-danger) 6%, transparent); border: 1px solid color-mix(in oklch, var(--color-danger) 18%, transparent); }
-.diff-pre.after { background: color-mix(in oklch, var(--color-success) 6%, transparent); border: 1px solid color-mix(in oklch, var(--color-success) 18%, transparent); }
-
-.edit-btn {
-  padding: 3px 10px;
-  font-size: 0.74rem;
-  background: color-mix(in oklch, var(--color-sage-400) 15%, transparent);
-  color: var(--color-sage-400);
-  border: 1px solid var(--color-sage-400);
-  border-radius: 4px;
-  cursor: pointer;
-}
+.diff-pre.before { background: color-mix(in oklch, var(--color-danger) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-danger) 14%, transparent); }
+.diff-pre.after { background: color-mix(in oklch, var(--color-success) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-success) 14%, transparent); }
 
 .json-edit { display: flex; flex-direction: column; gap: 8px; }
 .edit-hint { font-size: 0.78rem; color: var(--color-text-secondary); }
@@ -529,17 +520,4 @@ function statusLabel(status: ValidatedPatch['status']): string {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
 }
-
-.btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.84rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn--primary { background: var(--color-sage-400); color: var(--color-text-bone); }
-.btn--secondary { background: color-mix(in oklch, var(--color-text-umber) 10%, transparent); color: var(--color-text); }
-.btn--danger { background: color-mix(in oklch, var(--color-danger) 12%, transparent); color: var(--color-danger); border: 1px solid color-mix(in oklch, var(--color-danger) 30%, transparent); }
 </style>

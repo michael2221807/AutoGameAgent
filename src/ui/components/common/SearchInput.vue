@@ -27,16 +27,23 @@
 
     <!-- Clear button — only visible when the input has content -->
     <Transition name="clear-fade">
-      <button
+      <Tooltip
         v-if="localValue"
-        class="search-input__clear"
-        :aria-label="$t('common.search.ariaClear')"
-        @click="handleClear"
+        class="search-input__clear-tip"
+        :text="$t('common.search.ariaClear')"
+        interactive
+        position="top"
       >
-        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-        </svg>
-      </button>
+        <button
+          class="search-input__clear"
+          :aria-label="$t('common.search.ariaClear')"
+          @click="handleClear"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </Tooltip>
     </Transition>
   </div>
 </template>
@@ -44,6 +51,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 
@@ -173,9 +181,12 @@ onUnmounted(() => {
 }
 
 /* ── Clear button (right) ── */
-.search-input__clear {
+/* The Tooltip wrapper owns the absolute right-anchor; the button inside fills it. */
+.search-input__clear-tip {
   position: absolute;
   right: 8px;
+}
+.search-input__clear {
   display: flex;
   align-items: center;
   justify-content: center;

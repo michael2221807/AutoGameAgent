@@ -12,6 +12,7 @@
 import { ref, computed, watch, toRaw } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '@/ui/components/shared/BaseModal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 
 const { t } = useI18n();
 import SchemaForm from './SchemaForm.vue';
@@ -157,38 +158,11 @@ function saveEntry(): void {
     />
 
     <template #footer>
-      <button class="btn btn-cancel" @click="closeDialog">{{ $t('common.actions.cancel') }}</button>
-      <button class="btn btn-save" @click="saveEntry">{{ $t('common.actions.save') }}</button>
+      <AgaButton variant="secondary" @click="closeDialog">{{ $t('common.actions.cancel') }}</AgaButton>
+      <AgaButton variant="primary" @click="saveEntry">{{ $t('common.actions.save') }}</AgaButton>
     </template>
   </BaseModal>
 </template>
 
 <style scoped>
-.btn {
-  padding: 0.55rem 1.25rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.88rem;
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.btn-cancel {
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-}
-
-.btn-cancel:hover {
-  background: var(--color-border);
-}
-
-.btn-save {
-  background: var(--color-sage-400);
-  color: var(--color-text-bone);
-}
-
-.btn-save:hover {
-  background: var(--color-sage-500);
-}
 </style>

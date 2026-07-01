@@ -15,6 +15,8 @@
 import { reactive, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '@/ui/components/shared/BaseModal.vue';
+import AgaSelect from '@/ui/components/shared/AgaSelect.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 
 const { t } = useI18n();
 
@@ -105,6 +107,16 @@ function closeDialog(): void {
   emit('update:modelValue', false);
 }
 
+/** NPC 类型下拉选项（值即状态树数据） */
+const npcTypeOptions = computed(() =>
+  NPC_TYPE_OPTIONS.map((t) => ({ label: t, value: t })),
+);
+
+/** 关系类型下拉选项（值即状态树数据） */
+const relationshipOptions = computed(() =>
+  RELATIONSHIP_OPTIONS.map((r) => ({ label: r, value: r })),
+);
+
 /** 保存 — 合并原有数据和表单修改 */
 function saveNpc(): void {
   if (!canSave.value) return;
@@ -148,10 +160,12 @@ function saveNpc(): void {
       <!-- 类型 -->
       <div class="form-group">
         <label for="npc-type" class="form-label">{{ $t('relationship.npcEdit.label.type') }}</label>
-        <select id="npc-type" v-model="form.type" class="form-input form-select">
-          <option value="">{{ $t('relationship.npcEdit.placeholder.selectType') }}</option>
-          <option v-for="t in NPC_TYPE_OPTIONS" :key="t" :value="t">{{ t }}</option>
-        </select>
+        <AgaSelect
+          id="npc-type"
+          v-model="form.type"
+          :options="npcTypeOptions"
+          :placeholder="$t('relationship.npcEdit.placeholder.selectType')"
+        />
       </div>
 
       <!-- 位置 -->
@@ -181,21 +195,23 @@ function saveNpc(): void {
       <!-- 关系类型 -->
       <div class="form-group">
         <label for="npc-rel" class="form-label">{{ $t('relationship.npcEdit.label.relationshipType') }}</label>
-        <select id="npc-rel" v-model="form.relationshipType" class="form-input form-select">
-          <option v-for="r in RELATIONSHIP_OPTIONS" :key="r" :value="r">{{ r }}</option>
-        </select>
+        <AgaSelect
+          id="npc-rel"
+          v-model="form.relationshipType"
+          :options="relationshipOptions"
+        />
       </div>
     </form>
 
     <template #footer>
-      <button class="btn btn-cancel" @click="closeDialog">{{ $t('common.actions.cancel') }}</button>
-      <button
-        class="btn btn-save"
+      <AgaButton variant="secondary" @click="closeDialog">{{ $t('common.actions.cancel') }}</AgaButton>
+      <AgaButton
+        variant="primary"
         :disabled="!canSave"
         @click="saveNpc"
       >
         {{ $t('common.actions.save') }}
-      </button>
+      </AgaButton>
     </template>
   </BaseModal>
 </template>
@@ -227,58 +243,20 @@ function saveNpc(): void {
   padding: 0.55rem 0.7rem;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--color-text);
   font-size: 0.88rem;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 
 .form-input:focus {
   border-color: var(--color-sage-400);
 }
 
-.form-select {
-  appearance: none;
-  cursor: pointer;
-}
-
 .form-textarea {
   resize: vertical;
   font-family: inherit;
   line-height: 1.5;
-}
-
-.btn {
-  padding: 0.55rem 1.25rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.88rem;
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.btn-cancel {
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-}
-
-.btn-cancel:hover {
-  background: var(--color-border);
-}
-
-.btn-save {
-  background: var(--color-sage-400);
-  color: var(--color-text-bone);
-}
-
-.btn-save:hover {
-  background: var(--color-sage-500);
-}
-
-.btn-save:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

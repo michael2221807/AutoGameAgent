@@ -124,19 +124,22 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
   justify-content: space-between;
   width: 100%;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text, #e0e0e6);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 0.84rem;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cs-trigger:hover {
+  border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
 }
 .cs-trigger:focus {
-  border-color: var(--color-primary, #6366f1);
+  border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 .custom-select.disabled .cs-trigger {
@@ -147,10 +150,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
 .cs-arrow {
   flex-shrink: 0;
   margin-left: 8px;
-  color: var(--color-text-secondary, #8888a0);
-  transition: transform 0.2s;
+  color: var(--color-text-muted);
+  transition: transform 0.2s, color 0.15s;
 }
-.custom-select.open .cs-arrow { transform: rotate(180deg); }
+.custom-select.open .cs-arrow {
+  transform: rotate(180deg);
+  color: var(--color-sage-300);
+}
 
 .cs-dropdown {
   position: absolute;
@@ -159,11 +165,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
   right: 0;
   max-height: 240px;
   overflow-y: auto;
-  background: var(--color-bg, #1a1a25);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: none;
   border-radius: 6px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  z-index: 100;
+  box-shadow: var(--glass-shadow);
+  z-index: var(--z-dropdown);
   padding: 4px;
 }
 .cs-option {
@@ -171,21 +179,27 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
   width: 100%;
   padding: 8px 12px;
   background: transparent;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   border: none;
   border-radius: 4px;
   font-size: 0.82rem;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.1s, color 0.1s;
 }
 .cs-option:hover, .cs-option.focused {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-sage-muted);
+  color: var(--color-sage-100);
 }
 .cs-option.selected {
-  background: color-mix(in oklch, var(--color-sage-400) 18%, transparent);
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-sage-300);
+  font-weight: 500;
+}
+.cs-option.selected::before {
+  content: '✓';
+  margin-right: 6px;
+  color: var(--color-sage-400);
 }
 
 .cs-drop-enter-active { transition: opacity 0.15s, transform 0.15s; }

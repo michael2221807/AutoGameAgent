@@ -10,6 +10,7 @@
 import { computed, toRaw } from 'vue';
 import { useI18n } from 'vue-i18n';
 import SchemaField from './SchemaField.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 
 const { t } = useI18n();
 
@@ -136,13 +137,14 @@ function resetAll(): void {
   <div class="schema-form">
     <div v-if="schemaDef.title || hasModifications" class="form-header">
       <h4 v-if="schemaDef.title" class="form-title">{{ schemaDef.title }}</h4>
-      <button
+      <AgaButton
         v-if="hasModifications"
-        class="reset-all-btn"
+        variant="danger"
+        size="sm"
         @click="resetAll"
       >
         {{ t('schemaForm.resetAll') }}
-      </button>
+      </AgaButton>
     </div>
 
     <p v-if="schemaDef.description" class="form-desc">{{ schemaDef.description }}</p>
@@ -180,23 +182,6 @@ function resetAll(): void {
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text);
-}
-
-.reset-all-btn {
-  padding: 0.3rem 0.65rem;
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.reset-all-btn:hover {
-  background: var(--color-danger);
-  border-color: var(--color-danger);
-  color: var(--color-text-bone);
 }
 
 .form-desc {

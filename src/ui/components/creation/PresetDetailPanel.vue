@@ -174,7 +174,7 @@ function formatVal(v: unknown): string {
   gap: 0.875rem;
   padding: 1.125rem;
   background: color-mix(in oklch, var(--color-surface) 80%, transparent);
-  border: 1px solid var(--color-border-subtle);
+  border: none;
   border-radius: var(--radius-lg);
   min-height: 220px;
   height: 100%;

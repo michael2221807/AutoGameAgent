@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 
 const { t } = useI18n();
 
@@ -94,9 +95,9 @@ const isRateLimitWaiting = computed(() =>
     </div>
     <div class="progress-percent">{{ overallProgress }}%</div>
 
-    <button class="cancel-btn" @click="emit('cancel')">
+    <AgaButton variant="ghost" @click="emit('cancel')">
       {{ t('progress.enhancedOpening.cancel') }}
-    </button>
+    </AgaButton>
   </div>
 </template>
 
@@ -113,7 +114,7 @@ const isRateLimitWaiting = computed(() =>
 
 .progress-title {
   font-size: 1.1rem;
-  color: var(--text-primary, #e0e0e0);
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -129,16 +130,16 @@ const isRateLimitWaiting = computed(() =>
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
-  color: var(--text-secondary, #888);
+  color: var(--color-text-secondary);
   transition: color 0.3s, opacity 0.3s;
 }
 
 .phase-item.done {
-  color: var(--color-success, #4caf50);
+  color: var(--color-success);
 }
 
 .phase-item.active {
-  color: var(--text-primary, #e0e0e0);
+  color: var(--color-text);
   font-weight: 500;
 }
 
@@ -147,7 +148,7 @@ const isRateLimitWaiting = computed(() =>
 }
 
 .phase-item.rate-limit-wait {
-  color: var(--color-warning, #e6a23c);
+  color: var(--color-warning);
   font-size: 0.82rem;
   font-style: italic;
   animation: pulse-wait 1.5s ease-in-out infinite;
@@ -174,7 +175,7 @@ const isRateLimitWaiting = computed(() =>
   backdrop-filter: var(--glass-blur, blur(24px) saturate(1.4));
   font-size: 0.85rem;
   line-height: 1.6;
-  color: var(--text-secondary, #aaa);
+  color: var(--color-text-secondary);
 }
 
 .stream-preview-text {
@@ -186,34 +187,19 @@ const isRateLimitWaiting = computed(() =>
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: var(--bg-tertiary, rgba(255, 255, 255, 0.08));
+  background: var(--color-surface-elevated);
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
   border-radius: 2px;
-  background: var(--color-accent, #d4a574);
+  background: var(--color-sage-400);
   transition: width 0.4s ease;
 }
 
 .progress-percent {
   font-size: 0.8rem;
-  color: var(--text-tertiary, #666);
-}
-
-.cancel-btn {
-  padding: 0.5rem 1.5rem;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary, #aaa);
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-
-.cancel-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary, #e0e0e0);
+  color: var(--color-text-muted);
 }
 </style>

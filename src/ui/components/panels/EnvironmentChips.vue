@@ -13,6 +13,7 @@
 import { ref, computed } from 'vue';
 import { formatTagSummary, sanitizeTagList, countOverflow } from './environment-helpers';
 import EnvironmentPopover from './EnvironmentPopover.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const props = defineProps<{
   tags: unknown;
@@ -33,18 +34,22 @@ function open(): void {
 
 <template>
   <template v-if="hasAny">
-    <button
-      type="button"
-      class="env-chips"
-      :title="overflow > 0 ? $t('mainGame.env.environment.overflowTooltip', { n: sanitized.length }) : $t('mainGame.env.environment.defaultTooltip')"
-      :aria-label="`${$t('mainGame.env.environment.label')}: ${summary}`"
-      aria-haspopup="dialog"
-      :aria-expanded="popoverOpen"
-      @click="open"
+    <Tooltip
+      :text="overflow > 0 ? $t('mainGame.env.environment.overflowTooltip', { n: sanitized.length }) : $t('mainGame.env.environment.defaultTooltip')"
+      interactive
     >
-      <span class="env-chips__label">{{ $t('mainGame.env.environment.label') }}</span>
-      <span class="env-chips__value">{{ summary }}</span>
-    </button>
+      <button
+        type="button"
+        class="env-chips"
+        :aria-label="`${$t('mainGame.env.environment.label')}: ${summary}`"
+        aria-haspopup="dialog"
+        :aria-expanded="popoverOpen"
+        @click="open"
+      >
+        <span class="env-chips__label">{{ $t('mainGame.env.environment.label') }}</span>
+        <span class="env-chips__value">{{ summary }}</span>
+      </button>
+    </Tooltip>
 
     <EnvironmentPopover
       v-model="popoverOpen"

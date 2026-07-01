@@ -55,6 +55,8 @@ import EnhancedOpeningProgress from '@/ui/components/creation/EnhancedOpeningPro
 import EnhancedOpeningFailDialog from '@/ui/components/creation/EnhancedOpeningFailDialog.vue';
 import type { PhaseErrorAction, PhaseErrorInfo, EnhancedOpeningSettings } from '@/engine/pipeline/sub-pipelines/enhanced-opening';
 import LoadingOverlay from '@/ui/components/common/LoadingOverlay.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 
 const router = useRouter();
@@ -491,11 +493,13 @@ function goHome(): void {
   <div class="creation-view">
     <!-- Top bar with back button and title -->
     <header class="creation-header">
-      <button class="btn-back" @click="goHome" :aria-label="$t('creation.header.backHome')">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
+      <Tooltip :text="$t('creation.header.backHome')" position="bottom" interactive>
+        <button class="btn-back" @click="goHome" :aria-label="$t('creation.header.backHome')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+      </Tooltip>
       <h1 class="creation-title">{{ $t('creation.header.title') }}</h1>
       <button class="btn-reset" @click="onReset" :disabled="isFirstStep && !Object.keys(selections).length">
         {{ $t('creation.header.reset') }}
@@ -556,45 +560,50 @@ function goHome(): void {
         role="alert"
       >
         <span class="error-text">{{ finalizeError ?? generationError?.message }}</span>
-        <button
-          class="error-dismiss"
-          @click="finalizeError = null"
-          :aria-label="$t('creation.error.dismiss')"
-        >
-          &times;
-        </button>
+        <Tooltip :text="$t('creation.error.dismiss')" position="left" interactive>
+          <button
+            class="error-dismiss"
+            @click="finalizeError = null"
+            :aria-label="$t('creation.error.dismiss')"
+          >
+            &times;
+          </button>
+        </Tooltip>
       </div>
     </Transition>
 
     <!-- Navigation buttons -->
     <footer class="creation-nav">
-      <button
-        class="btn btn-secondary"
+      <AgaButton
+        variant="secondary"
+        class="nav-btn"
         :disabled="isFirstStep || isFinalizing"
         @click="onPrev"
       >
         {{ $t('creation.nav.previous') }}
-      </button>
+      </AgaButton>
 
-      <button
+      <AgaButton
         v-if="!isLastStep"
-        class="btn btn-primary"
+        variant="primary"
+        class="nav-btn"
         data-testid="creation-next"
         :disabled="!canProceed || isFinalizing"
         @click="onNext"
       >
         {{ $t('creation.nav.next') }}
-      </button>
+      </AgaButton>
 
-      <button
+      <AgaButton
         v-else
-        class="btn btn-success"
+        variant="warning"
+        class="nav-btn nav-btn--start"
         data-testid="creation-start"
         :disabled="!canProceed || isFinalizing"
         @click="onFinalize"
       >
         {{ $t('creation.nav.startGame') }}
-      </button>
+      </AgaButton>
     </footer>
 
     <!-- Enhanced opening progress overlay -->
@@ -878,65 +887,20 @@ function goHome(): void {
   flex-shrink: 0;
 }
 
-.btn {
+/* Nav buttons reuse the AgaButton primitive (variants secondary/primary/warning);
+   .nav-btn only restores this footer's generous threshold-moment padding +
+   letter-spacing (wider than AgaButton's default md size). */
+.nav-btn {
   padding: 0.625rem 2rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-size: 0.82rem;
-  font-weight: 500;
   letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out);
-}
-.btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Primary "下一步" — sage beacon */
-.btn-primary {
-  background: var(--color-sage-muted);
-  color: var(--color-sage-100);
-  border-color: color-mix(in oklch, var(--color-sage-400) 35%, transparent);
-}
-.btn-primary:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--color-sage-400) 22%, transparent);
-  border-color: var(--color-sage-400);
-  box-shadow: 0 0 16px color-mix(in oklch, var(--color-sage-400) 28%, transparent);
-}
-
-/* Secondary "上一步" — neutral outline, warms to sage */
-.btn-secondary {
-  background: transparent;
-  border-color: var(--color-border);
-  color: var(--color-text);
-}
-.btn-secondary:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
-  color: var(--color-sage-100);
-  background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
 }
 
 /* "开始游戏" — amber warm beacon (rare confirmation, brief-compliant).
-   Amber is explicitly allowed for "narrative emphasis / confirmation"
-   per .impeccable.md; starting a new game is a one-shot threshold
-   moment that earns the amber glow. */
-.btn-success {
-  background: color-mix(in oklch, var(--color-amber-400) 14%, transparent);
-  color: var(--color-amber-300);
-  border-color: color-mix(in oklch, var(--color-amber-400) 42%, transparent);
-}
-.btn-success:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--color-amber-400) 24%, transparent);
-  border-color: var(--color-amber-400);
-  color: var(--color-amber-100);
-  box-shadow: 0 0 20px color-mix(in oklch, var(--color-amber-400) 32%, transparent),
-              inset 0 0 12px color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+   AgaButton variant=warning already supplies the amber fill + glow; this only
+   adds the threshold-moment text-shadow that makes starting a new game feel
+   like a one-shot warm event. Amber is explicitly allowed for "narrative
+   emphasis / confirmation" per .impeccable.md. */
+.nav-btn--start:hover:not(:disabled) {
   text-shadow: 0 0 6px color-mix(in oklch, var(--color-amber-400) 30%, transparent);
 }
 
@@ -973,7 +937,7 @@ function goHome(): void {
 /* ── Responsive ── */
 
 @media (max-width: 767px) {
-  .creation-nav .btn {
+  .creation-nav .nav-btn {
     min-height: 44px;
   }
 }
@@ -991,7 +955,7 @@ function goHome(): void {
   .creation-nav {
     padding: 0.625rem 0.875rem;
   }
-  .btn {
+  .nav-btn {
     padding: 0.5rem 1.25rem;
     font-size: 0.78rem;
   }

@@ -11,11 +11,16 @@
  * `set 世界.环境 = [the user's array]`, not push/delete.
  */
 import { ref, watch, computed, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import {
   buildReplaceEnvironmentAttachment,
   type EnvTag,
 } from './assistant-env-attachments';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   modelValue: boolean;
@@ -130,14 +135,14 @@ function onCancel(): void {
         <span class="count-label">
           当前 {{ tags.length }}/{{ MAX_TAGS }} 条
         </span>
-        <button
+        <AgaButton
           v-if="tags.length > 0"
-          type="button"
-          class="btn btn-ghost"
+          variant="ghost"
+          size="sm"
           @click="clearAll"
         >
           全部清空
-        </button>
+        </AgaButton>
       </div>
 
       <ul v-if="tags.length > 0" class="tag-list">
@@ -147,9 +152,16 @@ function onCancel(): void {
             <div v-if="tag.描述" class="tag-desc">{{ tag.描述 }}</div>
             <div v-if="tag.效果" class="tag-effect">{{ tag.效果 }}</div>
           </div>
-          <button type="button" class="tag-remove" @click="removeTag(i)" aria-label="删除">
-            ×
-          </button>
+          <Tooltip :text="t('common.actions.delete')" interactive>
+            <button
+              type="button"
+              class="tag-remove"
+              @click="removeTag(i)"
+              :aria-label="t('common.actions.delete')"
+            >
+              ×
+            </button>
+          </Tooltip>
         </li>
       </ul>
       <p v-else class="empty-state">（暂无环境标签 · 应用后将清空）</p>
@@ -176,26 +188,26 @@ function onCancel(): void {
           @keydown.enter="confirmAdd"
         />
         <div class="form-actions">
-          <button type="button" class="btn btn-ghost" @click="cancelAdd">取消</button>
-          <button type="button" class="btn btn-primary" @click="confirmAdd">添加</button>
+          <AgaButton variant="ghost" size="sm" @click="cancelAdd">取消</AgaButton>
+          <AgaButton variant="primary" size="sm" @click="confirmAdd">添加</AgaButton>
         </div>
       </div>
-      <button
+      <AgaButton
         v-else
-        type="button"
-        class="btn btn-secondary add-btn"
+        variant="secondary"
+        class="add-btn"
         :disabled="!canAdd"
         @click="beginAdd"
       >
         + 添加标签 {{ canAdd ? '' : `(已达 ${MAX_TAGS} 条上限)` }}
-      </button>
+      </AgaButton>
 
       <p v-if="error" class="editor-error">{{ error }}</p>
     </div>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary" @click="onCancel">取消</button>
-      <button type="button" class="btn btn-primary" @click="onApply">应用</button>
+      <AgaButton variant="secondary" @click="onCancel">取消</AgaButton>
+      <AgaButton variant="primary" @click="onApply">应用</AgaButton>
     </template>
   </Modal>
 </template>
@@ -247,7 +259,7 @@ function onCancel(): void {
 .tag-name {
   font-weight: 600;
   font-size: 0.88rem;
-  color: var(--color-primary);
+  color: var(--color-sage-300);
 }
 .tag-desc {
   font-size: 0.75rem;
@@ -255,7 +267,7 @@ function onCancel(): void {
 }
 .tag-effect {
   font-size: 0.7rem;
-  color: rgba(74, 222, 128, 0.85);
+  color: color-mix(in oklch, var(--color-success) 85%, transparent);
   font-style: italic;
 }
 .tag-remove {
@@ -279,33 +291,38 @@ function onCancel(): void {
 }
 .add-btn {
   width: 100%;
-  padding: 0.5rem;
   border-style: dashed;
-}
-.add-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .add-form {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   padding: 0.6rem;
-  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
-  border-radius: 4px;
+  background: color-mix(in oklch, var(--color-sage-400) 5%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-sage-400) 20%, transparent);
+  border-radius: var(--radius-md);
 }
 .form-input {
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--color-border);
-  border-radius: 3px;
-  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-input);
   color: var(--color-text);
   font-size: 0.82rem;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+.form-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.7;
+  font-style: italic;
 }
 .form-input:focus {
-  outline: 1px solid var(--color-primary);
-  outline-offset: 1px;
+  border-color: color-mix(in oklch, var(--color-sage-400) 45%, transparent);
+  background: color-mix(in oklch, var(--color-sage-400) 3%, var(--color-surface-input));
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 12%, transparent);
 }
 .form-actions {
   display: flex;
@@ -316,30 +333,5 @@ function onCancel(): void {
   color: var(--color-danger);
   font-size: 0.78rem;
   margin: 0;
-}
-.btn {
-  padding: 0.4rem 0.9rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  border: 1px solid var(--color-border);
-}
-.btn-ghost {
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  padding: 0.25rem 0.6rem;
-}
-.btn-secondary {
-  background: transparent;
-  color: var(--color-text);
-}
-.btn-primary {
-  background: var(--color-primary);
-  color: var(--color-sage-100);
-  border-color: var(--color-sage-400);
-}
-.btn:hover:not(:disabled) {
-  filter: brightness(1.08);
 }
 </style>

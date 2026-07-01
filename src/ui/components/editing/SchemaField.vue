@@ -14,6 +14,10 @@
  */
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
+import AgaSelect, { type SelectOption } from '@/ui/components/shared/AgaSelect.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 
@@ -75,6 +79,11 @@ const isModified = computed<boolean>(() =>
   JSON.stringify(props.value) !== JSON.stringify(props.defaultValue),
 );
 
+/** enum 下拉选项（AgaSelect） */
+const enumOptions = computed<SelectOption[]>(() =>
+  (schema.value.enum ?? []).map((opt) => ({ label: opt, value: opt })),
+);
+
 /** 当前数组值（array 类型专用） */
 const arrayValue = computed<unknown[]>(() =>
   Array.isArray(props.value) ? props.value : [],
@@ -120,10 +129,6 @@ function onBooleanToggle(): void {
   emit('update', props.path, !props.value);
 }
 
-function onEnumSelect(e: Event): void {
-  emit('update', props.path, (e.target as HTMLSelectElement).value);
-}
-
 function onResetClick(): void {
   emit('reset', props.path);
 }
@@ -165,16 +170,15 @@ function onChildReset(childPath: string): void {
     <div class="field-header">
       <label class="field-label">
         {{ label }}
-        <span v-if="isModified" class="modified-dot" :title="t('schemaField.modified')" />
+        <Tooltip v-if="isModified" :text="t('schemaField.modified')">
+          <span class="modified-dot" />
+        </Tooltip>
       </label>
-      <button
-        v-if="isModified"
-        class="reset-btn"
-        :title="t('schemaField.resetDefault')"
-        @click="onResetClick"
-      >
-        {{ t('schemaField.resetBtn') }}
-      </button>
+      <Tooltip v-if="isModified" :text="t('schemaField.resetDefault')" interactive>
+        <AgaButton variant="secondary" size="sm" @click="onResetClick">
+          {{ t('schemaField.resetBtn') }}
+        </AgaButton>
+      </Tooltip>
     </div>
 
     <p v-if="description" class="field-desc">{{ description }}</p>
@@ -200,33 +204,25 @@ function onChildReset(childPath: string): void {
     />
 
     <!-- Boolean toggle -->
-    <button
-      v-else-if="fieldType === 'boolean'"
-      class="toggle-btn"
-      :class="{ active: !!value }"
-      @click="onBooleanToggle"
-    >
-      <span class="toggle-track">
-        <span class="toggle-thumb" />
+    <div v-else-if="fieldType === 'boolean'" class="aga-toggle-row">
+      <AgaToggle
+        :model-value="!!value"
+        :label="value ? t('schemaField.toggleEnabled') : t('schemaField.toggleDisabled')"
+        @update:model-value="onBooleanToggle"
+      />
+      <span class="aga-toggle-row__label" aria-hidden="true">
+        {{ value ? t('schemaField.toggleEnabled') : t('schemaField.toggleDisabled') }}
       </span>
-      <span class="toggle-label">{{ value ? t('schemaField.toggleEnabled') : t('schemaField.toggleDisabled') }}</span>
-    </button>
+    </div>
 
     <!-- Enum (select) -->
-    <select
+    <AgaSelect
       v-else-if="fieldType === 'enum'"
-      class="field-input field-select"
-      :value="typeof value === 'string' ? value : ''"
-      @change="onEnumSelect"
-    >
-      <option
-        v-for="opt in (schema.enum ?? [])"
-        :key="opt"
-        :value="opt"
-      >
-        {{ opt }}
-      </option>
-    </select>
+      :model-value="typeof value === 'string' ? value : ''"
+      :options="enumOptions"
+      :aria-label="label"
+      @update:model-value="(v) => emit('update', path, v)"
+    />
 
     <!-- Array -->
     <div v-else-if="fieldType === 'array'" class="array-field">
@@ -241,7 +237,9 @@ function onChildReset(childPath: string): void {
           :value="typeof item === 'string' ? item : JSON.stringify(item)"
           @input="updateArrayItem(idx, ($event.target as HTMLInputElement).value)"
         />
-        <button class="array-remove-btn" :title="t('schemaField.removeItem')" @click="removeArrayItem(idx)">✕</button>
+        <Tooltip :text="t('schemaField.removeItem')" interactive>
+          <button class="array-remove-btn" @click="removeArrayItem(idx)">✕</button>
+        </Tooltip>
       </div>
       <button class="array-add-btn" @click="addArrayItem">{{ t('schemaField.addItem') }}</button>
     </div>
@@ -293,22 +291,6 @@ function onChildReset(childPath: string): void {
   flex-shrink: 0;
 }
 
-.reset-btn {
-  padding: 0.15rem 0.5rem;
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  color: var(--color-text-secondary);
-  font-size: 0.72rem;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.reset-btn:hover {
-  background: var(--color-border);
-  color: var(--color-text);
-}
-
 .field-desc {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
@@ -331,52 +313,15 @@ function onChildReset(childPath: string): void {
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
 }
 
-.field-select {
-  appearance: none;
-  cursor: pointer;
-}
-
-/* Boolean toggle */
-.toggle-btn {
+/* Boolean toggle row */
+.aga-toggle-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.25rem 0;
+  gap: var(--space-sm);
 }
 
-.toggle-track {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background: var(--color-border);
-  border-radius: 10px;
-  transition: background-color 0.2s;
-}
-
-.toggle-btn.active .toggle-track {
-  background: var(--color-sage-400);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: var(--color-text-bone);
-  border-radius: 50%;
-  transition: transform 0.2s;
-}
-
-.toggle-btn.active .toggle-thumb {
-  transform: translateX(16px);
-}
-
-.toggle-label {
-  font-size: 0.85rem;
+.aga-toggle-row__label {
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 

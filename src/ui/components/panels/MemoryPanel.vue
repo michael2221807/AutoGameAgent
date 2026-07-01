@@ -6,6 +6,8 @@ import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
 import { useLocale } from '@/ui/composables/useLocale';
 import { eventBus } from '@/engine/core/event-bus';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 
 const { t } = useI18n();
 const { locale } = useLocale();
@@ -284,9 +286,11 @@ function exportNarrative(): void {
       <header class="panel-header">
         <h2 class="panel-title">{{ $t('memory.title') }}</h2>
         <div class="header-actions">
-          <button class="btn-ghost" @click="exportNarrative" :title="$t('memory.export.buttonTitle')">
-            {{ $t('memory.export.button') }}
-          </button>
+          <Tooltip :text="$t('memory.export.buttonTitle')" interactive>
+            <AgaButton variant="ghost" size="sm" @click="exportNarrative">
+              {{ $t('memory.export.button') }}
+            </AgaButton>
+          </Tooltip>
         </div>
       </header>
 
@@ -510,24 +514,6 @@ function exportNarrative(): void {
 .header-actions {
   display: flex;
   gap: 8px;
-}
-
-.btn-ghost {
-  padding: 5px 12px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--duration-normal) var(--ease-out);
-  letter-spacing: 0.02em;
-}
-.btn-ghost:hover {
-  color: var(--color-text);
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--color-sage-600);
 }
 
 /* ── Tab Bar (pill-segmented) ── */
@@ -1174,11 +1160,6 @@ function exportNarrative(): void {
   /* ── Header ── */
   .panel-header { padding: 0; }
   .panel-title { font-size: 1rem; }
-  .btn-ghost {
-    padding: 8px 14px;
-    font-size: 0.75rem;
-    min-height: 36px;
-  }
 
   /* ── Tab bar — larger touch targets ── */
   .tab-bar {

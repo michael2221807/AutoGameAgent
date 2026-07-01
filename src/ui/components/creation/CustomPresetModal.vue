@@ -17,6 +17,7 @@
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/ui/components/common/Modal.vue';
+import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import type { CustomPresetSchema } from '@/engine/types';
 
 const { t } = useI18n();
@@ -195,11 +196,10 @@ function setVal(key: string, v: string): void {
     </div>
 
     <template #footer>
-      <button class="btn btn--secondary" :disabled="saving" @click="close">{{ $t('creation.customPreset.cancel') }}</button>
-      <button class="btn btn--primary" :disabled="submitDisabled" @click="submit">
-        <span v-if="saving" class="btn-spinner" />
+      <AgaButton variant="secondary" :disabled="saving" @click="close">{{ $t('creation.customPreset.cancel') }}</AgaButton>
+      <AgaButton variant="primary" :disabled="submitDisabled" :loading="saving" @click="submit">
         {{ saving ? $t('creation.customPreset.saving') : $t('creation.customPreset.save') }}
-      </button>
+      </AgaButton>
     </template>
   </Modal>
 </template>
@@ -209,9 +209,8 @@ function setVal(key: string, v: string): void {
    - Hardcoded rgba input bg (`rgba(255,255,255,0.04)`) → tokenized surface-input
    - Focus: raw indigo border → sage 3px ring + sage 3% wash (matches StepForm)
    - form-errors: Tailwind rgba rust + `#fca5a5` → tokenized color-mix
-   - Footer buttons: `#fff` on primary + `rgba(255,255,255,...)` secondary →
-     sage-muted beacon + neutral outline (matches AgaButton language)
-   - btn-spinner: `#fff` → currentColor (works against any button bg) */
+   DS migration 2026-06-30: footer buttons → <AgaButton> (one button source
+   of truth); dead .btn/.btn-spinner CSS removed. */
 
 .custom-preset-form {
   display: flex;
@@ -290,63 +289,4 @@ function setVal(key: string, v: string): void {
   box-shadow: inset 0 0 10px color-mix(in oklch, var(--color-danger) 6%, transparent);
 }
 .form-errors li { padding-left: 4px; }
-
-/* ── Footer buttons — sanctuary AgaButton language ── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 18px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-size: 0.82rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out);
-}
-.btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn--primary {
-  background: var(--color-sage-muted);
-  color: var(--color-sage-100);
-  border-color: color-mix(in oklch, var(--color-sage-400) 35%, transparent);
-}
-.btn--primary:not(:disabled):hover {
-  background: color-mix(in oklch, var(--color-sage-400) 22%, transparent);
-  border-color: var(--color-sage-400);
-  box-shadow: 0 0 14px color-mix(in oklch, var(--color-sage-400) 28%, transparent);
-}
-
-.btn--secondary {
-  background: transparent;
-  border-color: var(--color-border);
-  color: var(--color-text-secondary);
-}
-.btn--secondary:not(:disabled):hover {
-  color: var(--color-text);
-  background: color-mix(in oklch, var(--color-text) 4%, transparent);
-}
-
-.btn-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid color-mix(in oklch, currentColor 30%, transparent);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: cpm-spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-@keyframes cpm-spin {
-  to { transform: rotate(360deg); }
-}
 </style>

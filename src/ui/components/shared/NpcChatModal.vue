@@ -26,6 +26,7 @@ import { useLocale } from '@/ui/composables/useLocale';
 import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
 import FormattedText from '@/ui/components/common/FormattedText.vue';
+import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import type { NpcChatPipeline, NpcChatMessage } from '@/engine/pipeline/sub-pipelines/npc-chat';
 
 interface NpcForChat {
@@ -268,9 +269,9 @@ function formatTimestamp(ts: number): string {
 
 function affinityColor(value: number | undefined): string {
   const v = typeof value === 'number' ? value : 50;
-  if (v <= 30) return 'var(--color-danger, #ef4444)';
-  if (v <= 60) return 'var(--color-warning, #f59e0b)';
-  return 'var(--color-success, #22c55e)';
+  if (v <= 30) return 'var(--color-danger)';
+  if (v <= 60) return 'var(--color-warning)';
+  return 'var(--color-success)';
 }
 </script>
 
@@ -296,12 +297,14 @@ function affinityColor(value: number | undefined): string {
                 </span>
               </div>
             </div>
-            <button class="btn-close" @click="close" :aria-label="$t('modal.npcChat.ariaClose')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+            <Tooltip :text="$t('modal.npcChat.ariaClose')" interactive position="bottom">
+              <button class="btn-close" @click="close" :aria-label="$t('modal.npcChat.ariaClose')">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </Tooltip>
           </header>
 
           <!-- ─── Message list ─── -->
@@ -417,8 +420,8 @@ function affinityColor(value: number | undefined): string {
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background: var(--color-surface, #1c1c28);
-  border-bottom: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .npc-avatar {
@@ -445,7 +448,7 @@ function affinityColor(value: number | undefined): string {
   margin: 0 0 4px;
   font-size: 1rem;
   font-weight: 700;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -455,7 +458,7 @@ function affinityColor(value: number | undefined): string {
   display: flex;
   gap: 10px;
   font-size: 0.72rem;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -482,7 +485,7 @@ function affinityColor(value: number | undefined): string {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -491,9 +494,9 @@ function affinityColor(value: number | undefined): string {
   flex-shrink: 0;
 }
 .btn-close:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text, #e0e0e6);
-  border-color: var(--color-border, #2a2a3a);
+  background: color-mix(in oklch, var(--color-text) 6%, transparent);
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 
 /* ── Messages area ── */
@@ -519,7 +522,7 @@ function affinityColor(value: number | undefined): string {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   opacity: 0.6;
   font-size: 0.85rem;
 }
@@ -558,15 +561,15 @@ function affinityColor(value: number | undefined): string {
 }
 
 .chat-message--npc .chat-bubble {
-  background: var(--color-surface, #1c1c28);
-  border: 1px solid var(--color-border, #2a2a3a);
-  color: var(--color-text, #e0e0e6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   border-bottom-left-radius: 4px;
 }
 
 .chat-timestamp {
   font-size: 0.65rem;
-  color: var(--color-text-secondary, #8888a0);
+  color: var(--color-text-secondary);
   opacity: 0.6;
   padding: 0 4px;
 }
@@ -582,7 +585,7 @@ function affinityColor(value: number | undefined): string {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-text-secondary, #8888a0);
+  background: var(--color-text-secondary);
   animation: bounce 1.2s infinite;
 }
 .chat-bubble--loading .dot:nth-child(2) { animation-delay: 0.15s; }
@@ -599,16 +602,16 @@ function affinityColor(value: number | undefined): string {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  background: rgba(239, 68, 68, 0.12);
-  border-top: 1px solid var(--color-danger, #ef4444);
-  color: var(--color-danger, #ef4444);
+  background: color-mix(in oklch, var(--color-danger) 12%, transparent);
+  border-top: 1px solid var(--color-danger);
+  color: var(--color-danger);
   font-size: 0.78rem;
 }
 .chat-error span { flex: 1; }
 .btn-error-dismiss {
   background: transparent;
   border: none;
-  color: var(--color-danger, #ef4444);
+  color: var(--color-danger);
   cursor: pointer;
   font-size: 1.2rem;
   line-height: 1;
@@ -620,8 +623,8 @@ function affinityColor(value: number | undefined): string {
   display: flex;
   gap: 10px;
   padding: 12px 16px;
-  background: var(--color-surface, #1c1c28);
-  border-top: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
   align-items: flex-end;
 }
 
@@ -630,10 +633,10 @@ function affinityColor(value: number | undefined): string {
   min-height: 44px;
   max-height: 120px;
   padding: 10px 12px;
-  background: var(--color-bg, #17171f);
-  border: 1px solid var(--color-border, #2a2a3a);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: var(--color-text, #e0e0e6);
+  color: var(--color-text);
   font-size: 0.88rem;
   font-family: inherit;
   line-height: 1.5;
