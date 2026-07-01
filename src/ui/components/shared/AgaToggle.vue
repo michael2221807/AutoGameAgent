@@ -15,6 +15,8 @@
  * inheritAttrs:false so pass-through attrs (data-testid, class, …) always land
  * on the inner <button> in BOTH render branches, never on the labeled wrapper.
  */
+import { computed, useAttrs } from 'vue';
+
 defineOptions({ inheritAttrs: false });
 
 const props = defineProps<{
@@ -29,6 +31,17 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
 }>();
 
+const attrs = useAttrs();
+
+// In labeled mode a consumer `class`/`style` should style the ROW wrapper (its
+// layout: full-width, a top separator, a smaller label font, …), NOT the 36px
+// pill. Everything else (data-testid, aria-*, …) still goes to the <button>.
+const buttonAttrs = computed(() => {
+  if (!props.showLabel) return attrs;
+  const { class: _class, style: _style, ...rest } = attrs;
+  return rest;
+});
+
 function toggle() {
   if (props.disabled) return;
   emit('update:modelValue', !props.modelValue);
@@ -40,7 +53,8 @@ function toggle() {
   <span
     v-if="showLabel && label"
     class="aga-toggle-labeled"
-    :class="{ 'aga-toggle-labeled--disabled': disabled }"
+    :class="[attrs.class, { 'aga-toggle-labeled--disabled': disabled }]"
+    :style="attrs.style"
   >
     <button
       class="aga-toggle"
@@ -49,7 +63,7 @@ function toggle() {
       :aria-checked="modelValue"
       :aria-label="label"
       :disabled="disabled"
-      v-bind="$attrs"
+      v-bind="buttonAttrs"
       @click="toggle"
     >
       <span class="aga-toggle__thumb" />
