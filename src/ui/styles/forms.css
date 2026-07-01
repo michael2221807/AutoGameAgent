@@ -173,21 +173,3 @@ input:focus-visible::-moz-range-thumb {
 :where(input[type='file'])::file-selector-button:hover {
   background: color-mix(in oklch, var(--color-sage-400) 22%, transparent);
 }
-
-/* ─────────────────────────────────────────────────────────────
-   TOGGLE ROW — the canonical "<AgaToggle> + label" layout used when a
-   feature on/off control needs a visible text label beside the pill.
-   Zero-specificity (:where) so any component's own scoped copy wins;
-   this is the single source of truth so new panels don't re-declare it.
-   The label span should carry aria-hidden="true" (the AgaToggle :label
-   already provides the accessible name).
-   ───────────────────────────────────────────────────────────── */
-:where(.aga-toggle-row) {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-:where(.aga-toggle-row__label) {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
