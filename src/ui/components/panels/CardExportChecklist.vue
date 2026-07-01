@@ -62,32 +62,32 @@ function toggle(field: keyof ExportFlags): void {
     <p class="ckl-group-title">{{ t('save.export.images.sectionTitle') }}</p>
     <div class="ckl-list">
       <p class="ckl-static">{{ t('save.export.images.selectedOnly') }}</p>
-      <div class="aga-toggle-row">
+      <div class="ckl-toggle">
         <AgaToggle
           :model-value="modelValue.includedGenerationHistory"
           :label="t('save.export.images.includeHistory')"
+          show-label
           @update:model-value="() => toggle('includedGenerationHistory')"
         />
-        <span class="aga-toggle-row__label" aria-hidden="true">{{ t('save.export.images.includeHistory') }}</span>
       </div>
-      <div class="aga-toggle-row">
+      <div class="ckl-toggle">
         <AgaToggle
           :model-value="modelValue.includedReferenceGallery"
           :label="t('save.export.images.includeGallery')"
+          show-label
           @update:model-value="() => toggle('includedReferenceGallery')"
         />
-        <span class="aga-toggle-row__label" aria-hidden="true">{{ t('save.export.images.includeGallery') }}</span>
       </div>
     </div>
 
     <!-- Content rating -->
-    <div class="aga-toggle-row aga-toggle-row--nsfw">
+    <div class="ckl-toggle ckl-toggle--nsfw">
       <AgaToggle
         :model-value="modelValue.containsNsfw"
         :label="t('save.export.images.nsfw')"
+        show-label
         @update:model-value="() => toggle('containsNsfw')"
       />
-      <span class="aga-toggle-row__label aga-toggle-row__label--nsfw" aria-hidden="true">{{ t('save.export.images.nsfw') }}</span>
     </div>
   </div>
 </template>
@@ -134,20 +134,15 @@ function toggle(field: keyof ExportFlags): void {
 @media (hover: hover) {
   .ckl-row:hover { background: color-mix(in oklch, var(--color-text) 4%, transparent); }
 }
-.aga-toggle-row {
+.ckl-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
   padding: 5px 4px;
 }
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-.aga-toggle-row--nsfw {
+.ckl-toggle--nsfw {
   margin-top: 12px;
 }
-.aga-toggle-row__label--nsfw {
+.ckl-toggle--nsfw :deep(.aga-toggle-labeled__text) {
   color: var(--color-amber-400);
 }
 .ckl-box {

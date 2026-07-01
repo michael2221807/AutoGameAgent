@@ -101,10 +101,7 @@ const hasTarget = computed(() => targetPath.value !== null);
   >
     <div class="picker-body">
       <div class="picker-header">
-        <div class="aga-toggle-row">
-          <AgaToggle v-model="showOnlyEditable" :label="t('assistant.picker.editableOnly')" />
-          <span class="aga-toggle-row__label" aria-hidden="true">{{ t('assistant.picker.editableOnly') }}</span>
-        </div>
+        <AgaToggle v-model="showOnlyEditable" :label="t('assistant.picker.editableOnly')" show-label />
         <p class="hint">
           {{ t('assistant.picker.hint') }}
         </p>

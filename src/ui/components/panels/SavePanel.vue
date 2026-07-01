@@ -990,10 +990,7 @@ const showSettings = ref(false);
         <section v-if="showSettings" class="settings-section">
           <p class="settings-title">{{ $t('save.settingsTitle') }}</p>
           <div class="settings-row">
-            <div class="aga-toggle-row">
-              <AgaToggle v-model="autoSaveSettings.timepointEnabled" :label="$t('save.autoSave.timepoint.label')" />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('save.autoSave.timepoint.label') }}</span>
-            </div>
+            <AgaToggle v-model="autoSaveSettings.timepointEnabled" :label="$t('save.autoSave.timepoint.label')" show-label />
             <Transition name="fade-in">
               <div v-if="autoSaveSettings.timepointEnabled" class="inline-row">
                 <span class="cfg-label">{{ $t('save.autoSave.timepoint.every') }}</span>
@@ -1014,10 +1011,7 @@ const showSettings = ref(false);
             <p class="settings-title">{{ $t('save.backup.sectionTitle') }}</p>
             <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.hint') }}</p>
             <p class="settings-hint backup-hint--full-width" style="color: var(--color-amber-400);">{{ $t('save.backup.fullBackup.secretWarning') }}</p>
-            <div class="aga-toggle-row backup-include-ref">
-              <AgaToggle v-model="includeReferenceAssets" :label="$t('save.backup.includeRef')" />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('save.backup.includeRef') }}</span>
-            </div>
+            <AgaToggle class="backup-include-ref" v-model="includeReferenceAssets" :label="$t('save.backup.includeRef')" show-label />
             <p class="settings-hint backup-hint--full-width">{{ $t('save.backup.includeRefHint') }}</p>
             <div class="backup-btns">
               <button class="btn btn--secondary btn--sm" data-testid="backup-export" :disabled="isExportingBackup" @click="exportFullBackup">
@@ -1036,10 +1030,7 @@ const showSettings = ref(false);
           <div v-if="lanAvailable" class="gh-section">
             <div class="gh-header">
               <p class="settings-title">{{ $t('save.lan.sectionTitle') }}</p>
-              <div class="aga-toggle-row lan-toggle-label">
-                <AgaToggle :modelValue="lanEnabled" @update:modelValue="() => lanToggle()" :label="lanEnabled ? $t('save.lan.enabled') : $t('save.lan.disabled')" />
-                <span class="lan-toggle-text" aria-hidden="true">{{ lanEnabled ? $t('save.lan.enabled') : $t('save.lan.disabled') }}</span>
-              </div>
+              <AgaToggle class="lan-toggle-label" :modelValue="lanEnabled" @update:modelValue="() => lanToggle()" :label="lanEnabled ? $t('save.lan.enabled') : $t('save.lan.disabled')" show-label />
             </div>
             <template v-if="lanEnabled">
               <p class="settings-hint">
@@ -1245,10 +1236,7 @@ const showSettings = ref(false);
             <li>{{ $t('save.import.warningFullList3') }}</li>
             <li>{{ $t('save.import.warningFullList4') }}</li>
           </ul>
-          <div class="aga-toggle-row import-acknowledge">
-            <AgaToggle v-model="fullImportAcknowledged" data-testid="backup-acknowledge" :label="$t('save.import.acknowledge')" />
-            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('save.import.acknowledge') }}</span>
-          </div>
+          <AgaToggle class="import-acknowledge" v-model="fullImportAcknowledged" data-testid="backup-acknowledge" :label="$t('save.import.acknowledge')" show-label />
         </div>
         <div v-else class="import-warning import-warning--info">
           <strong>{{ $t('save.import.warningProfile') }}</strong>
@@ -1348,18 +1336,6 @@ const showSettings = ref(false);
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-/* AgaToggle row: switch + descriptive label (label span is aria-hidden) */
-.aga-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  user-select: none;
 }
 
 .inline-row {
@@ -1532,9 +1508,6 @@ const showSettings = ref(false);
 .gh-icon-btn { padding: var(--space-2xs) var(--space-xs); }
 .lan-toggle-label {
   font-size: 0.72rem;
-}
-.lan-toggle-text {
-  color: var(--color-text-secondary, #8888a0);
 }
 .gh-error {
   margin: 6px 0 0;

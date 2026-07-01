@@ -3,11 +3,26 @@
  * AgaToggle — pill switch toggle.
  *
  * v-model binding for boolean state. Accessible: role="switch" + aria-checked.
+ *
+ * `showLabel`: render `label` as a VISIBLE, clickable text beside the pill (the
+ * whole control — pill or text — toggles on click). This replaces the older
+ * `<div class="aga-toggle-row"><AgaToggle :label/><span>…</span></div>` pattern
+ * where the adjacent label text was not clickable. Without `showLabel`, `label`
+ * is only the aria-label (invisible), i.e. the classic bare pill — that render
+ * path is intentionally byte-identical to the pre-showLabel component so every
+ * existing plain toggle is unaffected.
+ *
+ * inheritAttrs:false so pass-through attrs (data-testid, class, …) always land
+ * on the inner <button> in BOTH render branches, never on the labeled wrapper.
  */
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{
   modelValue: boolean;
   disabled?: boolean;
   label?: string;
+  /** Render `label` as visible, clickable text beside the pill. */
+  showLabel?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -21,13 +36,37 @@ function toggle() {
 </script>
 
 <template>
+  <!-- Labeled: pill + clickable text (aria-hidden so the switch isn't announced twice). -->
+  <span
+    v-if="showLabel && label"
+    class="aga-toggle-labeled"
+    :class="{ 'aga-toggle-labeled--disabled': disabled }"
+  >
+    <button
+      class="aga-toggle"
+      :class="{ 'aga-toggle--on': modelValue, 'aga-toggle--disabled': disabled }"
+      role="switch"
+      :aria-checked="modelValue"
+      :aria-label="label"
+      :disabled="disabled"
+      v-bind="$attrs"
+      @click="toggle"
+    >
+      <span class="aga-toggle__thumb" />
+    </button>
+    <span class="aga-toggle-labeled__text" aria-hidden="true" @click="toggle">{{ label }}</span>
+  </span>
+
+  <!-- Bare pill (unchanged) -->
   <button
+    v-else
     class="aga-toggle"
     :class="{ 'aga-toggle--on': modelValue, 'aga-toggle--disabled': disabled }"
     role="switch"
     :aria-checked="modelValue"
     :aria-label="label"
     :disabled="disabled"
+    v-bind="$attrs"
     @click="toggle"
   >
     <span class="aga-toggle__thumb" />
@@ -90,5 +129,22 @@ function toggle() {
 
 .aga-toggle--on .aga-toggle__thumb {
   transform: translateX(16px);
+}
+
+/* Labeled mode — pill + clickable text row. */
+.aga-toggle-labeled {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.aga-toggle-labeled__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.aga-toggle-labeled--disabled .aga-toggle-labeled__text {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>

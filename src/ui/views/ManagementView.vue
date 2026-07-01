@@ -555,10 +555,7 @@ function triggerImportRawStateTree(): void {
       </Tooltip>
       <h1 class="mgmt-title">{{ $t('management.title') }}</h1>
       <div class="header-actions">
-        <div class="aga-toggle-row">
-          <AgaToggle v-model="mgmtIncludeRefAssets" :label="$t('management.options.includeRefAssets')" />
-          <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('management.options.includeRefAssets') }}</span>
-        </div>
+        <AgaToggle v-model="mgmtIncludeRefAssets" :label="$t('management.options.includeRefAssets')" show-label />
         <Tooltip :text="$t('management.buttons.exportFullTitle')" interactive>
           <button
             class="btn btn-small btn-outline"
@@ -809,16 +806,6 @@ function triggerImportRawStateTree(): void {
   display: flex;
   gap: 0.375rem;
   flex-wrap: wrap;
-}
-
-.aga-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 /* ── Buttons ─────────────────────────────────────────────────

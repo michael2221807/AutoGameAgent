@@ -204,16 +204,13 @@ function onChildReset(childPath: string): void {
     />
 
     <!-- Boolean toggle -->
-    <div v-else-if="fieldType === 'boolean'" class="aga-toggle-row">
-      <AgaToggle
-        :model-value="!!value"
-        :label="value ? t('schemaField.toggleEnabled') : t('schemaField.toggleDisabled')"
-        @update:model-value="onBooleanToggle"
-      />
-      <span class="aga-toggle-row__label" aria-hidden="true">
-        {{ value ? t('schemaField.toggleEnabled') : t('schemaField.toggleDisabled') }}
-      </span>
-    </div>
+    <AgaToggle
+      v-else-if="fieldType === 'boolean'"
+      :model-value="!!value"
+      :label="value ? t('schemaField.toggleEnabled') : t('schemaField.toggleDisabled')"
+      show-label
+      @update:model-value="onBooleanToggle"
+    />
 
     <!-- Enum (select) -->
     <AgaSelect
@@ -311,18 +308,6 @@ function onChildReset(childPath: string): void {
 .field-input:focus {
   border-color: var(--color-sage-400);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 10%, transparent);
-}
-
-/* Boolean toggle row */
-.aga-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 /* Array field */

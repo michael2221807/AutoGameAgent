@@ -800,10 +800,7 @@ const edgeSectionOpen = ref(true);
               <label class="form-label">{{ t('engram.editor.edge.fact') }}</label>
               <textarea v-model="edgeFormFact" class="form-textarea" rows="3" />
             </div>
-            <div class="aga-toggle-row">
-              <AgaToggle v-model="edgeFormCore" :label="t('engram.editor.edge.core')" />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ t('engram.editor.edge.core') }}</span>
-            </div>
+            <AgaToggle v-model="edgeFormCore" :label="t('engram.editor.edge.core')" show-label />
             <div class="inline-form__actions">
               <AgaButton variant="secondary" size="sm" @click="cancelEdgeForm">{{ t('engram.editor.edge.cancel') }}</AgaButton>
               <AgaButton
@@ -1417,19 +1414,6 @@ const edgeSectionOpen = ref(true);
 .segmented__item:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 22%, transparent);
-}
-
-/* ── AgaToggle row (edge 'core' flag) ── */
-.aga-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-top: 8px;
-}
-
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 /* ── Item list ── */

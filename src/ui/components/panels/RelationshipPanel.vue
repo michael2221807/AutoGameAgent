@@ -1277,14 +1277,12 @@ const genderSelectOptions = computed<SelectOption[]>(() => [
 
           <!-- 处女状态 + 初夜（非处女时显示） -->
           <div class="form-group">
-            <div class="aga-toggle-row">
-              <AgaToggle
-                :model-value="editForm.私密信息['是否为处女/处男'] === true"
-                :label="$t('relationship.editForm.nsfw.virginCheckbox')"
-                @update:model-value="(v) => editForm.私密信息['是否为处女/处男'] = v"
-              />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('relationship.editForm.nsfw.virginCheckbox') }}</span>
-            </div>
+            <AgaToggle
+              :model-value="editForm.私密信息['是否为处女/处男'] === true"
+              :label="$t('relationship.editForm.nsfw.virginCheckbox')"
+              show-label
+              @update:model-value="(v) => editForm.私密信息['是否为处女/处男'] = v"
+            />
             <span class="form-hint">{{ $t('relationship.editForm.nsfw.virginHint') }}</span>
           </div>
 
@@ -1434,14 +1432,8 @@ const genderSelectOptions = computed<SelectOption[]>(() => [
           <h4 class="form-section-title">{{ $t('relationship.editForm.sectionFlags') }}</h4>
 
           <div class="form-group form-group--row">
-            <div class="aga-toggle-row">
-              <AgaToggle v-model="editForm.关注" :label="$t('relationship.editForm.flags.watch')" />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('relationship.editForm.flags.watch') }}</span>
-            </div>
-            <div class="aga-toggle-row">
-              <AgaToggle v-model="editForm.心跳锁定" :label="$t('relationship.editForm.flags.heartbeatLock')" />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('relationship.editForm.flags.heartbeatLock') }}</span>
-            </div>
+            <AgaToggle v-model="editForm.关注" :label="$t('relationship.editForm.flags.watch')" show-label />
+            <AgaToggle v-model="editForm.心跳锁定" :label="$t('relationship.editForm.flags.heartbeatLock')" show-label />
           </div>
         </div>
       </div>
@@ -2584,17 +2576,6 @@ const genderSelectOptions = computed<SelectOption[]>(() => [
 }
 .form-section-title--nsfw {
   color: var(--color-nsfw);
-}
-
-/* ── AgaToggle inline rows (label + pill switch) ── */
-.aga-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 .form-row {

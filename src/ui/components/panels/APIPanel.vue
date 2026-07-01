@@ -1067,10 +1067,7 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
 
         <!-- Disable prefill toggle (LLM only) -->
         <div v-if="form.apiCategory === 'llm'" class="form-group">
-          <div class="aga-toggle-row">
-            <AgaToggle v-model="form.disablePrefill" :label="$t('api.form.disablePrefill')" />
-            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('api.form.disablePrefill') }}</span>
-          </div>
+          <AgaToggle v-model="form.disablePrefill" :label="$t('api.form.disablePrefill')" show-label />
           <span class="form-hint">
             {{ $t('api.form.disablePrefillHint') }}
           </span>
@@ -1080,10 +1077,7 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
         <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-advanced">
           <summary>{{ $t('api.form.advancedOptions') }}</summary>
           <div class="form-group">
-            <div class="aga-toggle-row">
-              <AgaToggle v-model="form.useCustomRouting" :label="$t('api.form.useCustomRouting')" />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('api.form.useCustomRouting') }}</span>
-            </div>
+            <AgaToggle v-model="form.useCustomRouting" :label="$t('api.form.useCustomRouting')" show-label />
             <span class="form-hint">
               {{ $t('api.form.customRoutingHint') }}
             </span>
@@ -1627,17 +1621,6 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
   margin-bottom: 8px;
   color: var(--color-text, #e0e0e6);
 }
-/* Inline toggle row (replaces former checkbox-in-label controls) */
-.aga-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
 /* ── Preset toolbar ── */
 .preset-toolbar {
   display: flex;

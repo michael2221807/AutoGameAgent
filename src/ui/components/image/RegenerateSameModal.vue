@@ -181,16 +181,12 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
           </div>
 
           <div v-if="canUseReference" class="regen-ref-block">
-            <div class="aga-toggle-row">
-              <AgaToggle
-                v-model="useReference"
-                :disabled="busy"
-                :label="$t('image.regenerate.useRefRedraw')"
-              />
-              <!-- aria-hidden: AgaToggle's :label already names the switch for AT; this span is a
-                   mouse-convenience click target (clicking the text toggles, like the old <label>). -->
-              <span class="aga-toggle-row__label aga-toggle-row__label--clickable" aria-hidden="true" @click="!busy && (useReference = !useReference)">{{ $t('image.regenerate.useRefRedraw') }}</span>
-            </div>
+            <AgaToggle
+              v-model="useReference"
+              :disabled="busy"
+              :label="$t('image.regenerate.useRefRedraw')"
+              show-label
+            />
             <div v-if="useReference" class="regen-ref-controls">
               <div class="regen-label">{{ $t('image.regenerate.redrawStrength') }}</div>
               <div class="regen-ref-slider">
@@ -325,10 +321,6 @@ onUnmounted(() => { document.removeEventListener('keydown', onKeydown); });
 .regen-label { font-size: var(--font-size-sm); color: var(--color-text-secondary); font-weight: 500; }
 .regen-hint { font-size: var(--font-size-xs); color: var(--color-text-muted); margin: 0; }
 .regen-hint--error { color: var(--color-danger); margin-top: var(--space-2xs); }
-
-.aga-toggle-row { display: flex; align-items: center; gap: var(--space-sm); }
-.aga-toggle-row__label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
-.aga-toggle-row__label--clickable { cursor: pointer; }
 
 .regen-meta { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .regen-meta-chip {

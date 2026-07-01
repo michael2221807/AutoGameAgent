@@ -485,14 +485,8 @@ function saveCurrency(): void {
           <textarea v-model="itemForm.描述" class="form-textarea" rows="2" :placeholder="t('inventory.edit.placeholder.desc')" />
         </div>
         <div class="form-group form-group--row">
-          <div class="aga-toggle-row">
-            <AgaToggle v-model="itemForm.可装备" :label="t('inventory.edit.label.equippable')" />
-            <span class="aga-toggle-row__label" aria-hidden="true">{{ t('inventory.edit.label.equippable') }}</span>
-          </div>
-          <div v-if="itemForm.可装备" class="aga-toggle-row">
-            <AgaToggle v-model="itemForm.已装备" :label="t('inventory.edit.label.equipped')" />
-            <span class="aga-toggle-row__label" aria-hidden="true">{{ t('inventory.edit.label.equipped') }}</span>
-          </div>
+          <AgaToggle v-model="itemForm.可装备" :label="t('inventory.edit.label.equippable')" show-label />
+          <AgaToggle v-if="itemForm.可装备" v-model="itemForm.已装备" :label="t('inventory.edit.label.equipped')" show-label />
         </div>
       </div>
       <template #footer>
@@ -628,8 +622,6 @@ function saveCurrency(): void {
 
 .filter-select-aga { min-width: 130px; }
 .form-select-aga { width: 100%; }
-.aga-toggle-row { display: flex; align-items: center; gap: var(--space-sm); }
-.aga-toggle-row__label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
 
 /* ── Item summary ── */
 .item-summary {

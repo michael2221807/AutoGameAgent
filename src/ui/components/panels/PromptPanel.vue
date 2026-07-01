@@ -733,28 +733,24 @@ function previewContent(content: string, maxLen = 100): string {
         <div class="settings-group">
           <h3 class="settings-group-title">{{ $t('prompt.settings.roleBoundaryTitle') }}</h3>
           <div class="settings-row">
-            <div class="aga-toggle-row">
-              <AgaToggle
-                :modelValue="promptSettings.enableNoControl"
-                :label="$t('prompt.settings.enableNoControl')"
-                @update:modelValue="v => updatePromptSetting('enableNoControl', v)"
-              />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('prompt.settings.enableNoControl') }}</span>
-            </div>
+            <AgaToggle
+              :modelValue="promptSettings.enableNoControl"
+              :label="$t('prompt.settings.enableNoControl')"
+              show-label
+              @update:modelValue="v => updatePromptSetting('enableNoControl', v)"
+            />
           </div>
         </div>
 
         <div class="settings-group">
           <h3 class="settings-group-title">{{ $t('prompt.settings.worldBookTitle') }}</h3>
           <div class="settings-row">
-            <div class="aga-toggle-row">
-              <AgaToggle
-                :modelValue="promptSettings.enableWorldBook !== false"
-                :label="$t('prompt.settings.enableWorldBook')"
-                @update:modelValue="v => updatePromptSetting('enableWorldBook', v)"
-              />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('prompt.settings.enableWorldBook') }}</span>
-            </div>
+            <AgaToggle
+              :modelValue="promptSettings.enableWorldBook !== false"
+              :label="$t('prompt.settings.enableWorldBook')"
+              show-label
+              @update:modelValue="v => updatePromptSetting('enableWorldBook', v)"
+            />
           </div>
           <p class="settings-desc">{{ $t('prompt.settings.enableWorldBookDesc') }}</p>
         </div>
@@ -762,14 +758,12 @@ function previewContent(content: string, maxLen = 100): string {
         <div class="settings-group">
           <h3 class="settings-group-title">{{ $t('prompt.settings.actionOptionsTitle') }}</h3>
           <div class="settings-row">
-            <div class="aga-toggle-row">
-              <AgaToggle
-                :modelValue="promptSettings.enableActionOptions"
-                :label="$t('prompt.settings.enableActionOptions')"
-                @update:modelValue="v => updatePromptSetting('enableActionOptions', v)"
-              />
-              <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('prompt.settings.enableActionOptions') }}</span>
-            </div>
+            <AgaToggle
+              :modelValue="promptSettings.enableActionOptions"
+              :label="$t('prompt.settings.enableActionOptions')"
+              show-label
+              @update:modelValue="v => updatePromptSetting('enableActionOptions', v)"
+            />
           </div>
           <div v-if="promptSettings.enableActionOptions" class="settings-row">
             <AgaSelect
@@ -1111,10 +1105,6 @@ function previewContent(content: string, maxLen = 100): string {
 .settings-textarea:focus { outline: none; border-color: var(--color-sage-400); }
 .settings-row { display: flex; gap: 8px; align-items: center; }
 .settings-label { font-size: 13px; color: var(--color-text-secondary); display: flex; align-items: center; gap: 6px; cursor: pointer; }
-
-/* AgaToggle inline row (feature/setting boolean) */
-.aga-toggle-row { display: flex; align-items: center; gap: var(--space-sm); }
-.aga-toggle-row__label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
 
 /* AgaSelect sizing on chrome surfaces */
 .settings-select-control { max-width: 300px; min-width: 160px; }

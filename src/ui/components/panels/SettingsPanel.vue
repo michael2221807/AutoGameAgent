@@ -1740,14 +1740,8 @@ onBeforeUnmount(() => {
 
       <Transition name="fade-row">
         <div v-if="debugSettings.debugMode" class="debug-sub">
-          <div class="aga-toggle-row">
-            <AgaToggle v-model="debugSettings.consoleDebug" :label="$t('settings.advanced.consoleDebug.label')" />
-            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('settings.advanced.consoleDebug.label') }}</span>
-          </div>
-          <div class="aga-toggle-row">
-            <AgaToggle v-model="debugSettings.aiLogging" :label="$t('settings.advanced.aiLogging.label')" />
-            <span class="aga-toggle-row__label" aria-hidden="true">{{ $t('settings.advanced.aiLogging.label') }}</span>
-          </div>
+          <AgaToggle v-model="debugSettings.consoleDebug" :label="$t('settings.advanced.consoleDebug.label')" show-label />
+          <AgaToggle v-model="debugSettings.aiLogging" :label="$t('settings.advanced.aiLogging.label')" show-label />
         </div>
       </Transition>
 
@@ -2569,16 +2563,6 @@ onBeforeUnmount(() => {
   background: rgba(255,255,255,0.02);
   border-radius: 7px;
   margin: -4px 0 4px;
-}
-
-.aga-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.aga-toggle-row__label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 .range-pair {
