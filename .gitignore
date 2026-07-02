@@ -31,7 +31,11 @@ dist-ssr
 skills-lock.json
 .impeccable.md
 
-# E2E tests — screenshots and artifacts are local-only
+# E2E tests — screenshots and artifacts are local-only.
+# ALL Playwright MCP verify artifacts (screenshots, snapshot dumps, console/page logs)
+# MUST be written under .playwright-mcp/ — never the repo root. See /e2e skill §7
+# "Artifact hygiene". Bare-filename screenshots at the root stay un-ignored on purpose
+# (so a stray one is visible in git status and gets cleaned up, not silently buried).
 e2e/screenshots/
 e2e/test-results/
 e2e/smoke.spec.ts
