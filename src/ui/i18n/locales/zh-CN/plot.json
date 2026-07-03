@@ -71,7 +71,9 @@
 
   "plot.node.requires": "需要：",
   "plot.node.completionConditions": "完成条件：",
-  "plot.node.insertAfter": "在此节点后插入",
+  "plot.node.insertHere": "在此处插入节点",
+  "plot.node.dragToReorder": "拖拽调整顺序",
+  "plot.node.dragHandleAria": "拖拽或用上下方向键移动节点",
   "plot.node.removeNode": "移除节点",
   "plot.node.addAtEnd": "在末尾添加节点",
   "plot.node.roundUnit": "轮",

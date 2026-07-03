@@ -2,6 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
 
+// Overridable because "port 5173 is listening" does NOT mean "our dev server is
+// up" — reuseExistingServer only probes the port, and unrelated software can
+// squat on it (seen 2026-07-02: Oculus OVRServer_x64 on 5173 → every spec died
+// with ERR_CONNECTION_RESET). Set AGA_E2E_PORT to sidestep such a squatter.
+const PORT = Number(process.env.AGA_E2E_PORT ?? 5173);
+
 export default defineConfig({
   testDir: './e2e',
   outputDir: './e2e/test-results',
@@ -18,7 +24,7 @@ export default defineConfig({
   retries: isCI ? 2 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${PORT}`,
     // Pin locale + timezone so zh-CN selectors and formatted time/dates are
     // machine-stable and intentional (the suite asserts on Chinese display text).
     locale: 'zh-CN',
@@ -58,8 +64,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
-    port: 5173,
+    // --strictPort: if the port is taken, fail loudly instead of letting Vite
+    // auto-increment to a port nobody is watching.
+    command: `npm run dev -- --port ${PORT} --strictPort`,
+    port: PORT,
     // Reuse a running dev server locally; always start a fresh one in CI.
     reuseExistingServer: !isCI,
     // Generous for a cold Vite + TS start on an underpowered CI runner.

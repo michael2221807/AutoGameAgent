@@ -1,4 +1,5 @@
 // Design: docs/design/plot-direction-system.md
+// App doc: docs/user-guide/pages/game-plot.md §节点链 (Node Chain) — moveNode/insertNode back the drag-reorder + gap-insert UI
 /**
  * Plot Direction System — Pinia Store
  *
@@ -201,6 +202,16 @@ export const usePlotStore = defineStore('plot-direction', () => {
     return full;
   }
 
+  /**
+   * Last index still occupied by a non-pending node (active/completed/skipped).
+   * A pending node placed at or before this index is unreachable: the
+   * evaluation pipeline's activateNextPending only scans forward from the
+   * node that just completed, so it would never activate.
+   */
+  function _reachableFloor(nodes: PlotNode[]): number {
+    return nodes.reduce((max, n, i) => (n.status !== 'pending' ? i : max), -1);
+  }
+
   function insertNode(arcId: string, afterIndex: number, node: Partial<PlotNode>): PlotNode | null {
     let result: PlotNode | null = null;
     _withMutex(() => {
@@ -228,7 +239,12 @@ export const usePlotStore = defineStore('plot-direction', () => {
         consecutiveReachedCount: 0,
       };
 
-      const insertAt = Math.min(afterIndex + 1, arc.nodes.length);
+      // Clamp into the reachable zone instead of rejecting — the caller has
+      // already collected user-typed node content that must not be lost.
+      const insertAt = Math.max(
+        _reachableFloor(arc.nodes) + 1,
+        Math.min(afterIndex + 1, arc.nodes.length),
+      );
       arc.nodes.splice(insertAt, 0, full);
       result = full;
     });
@@ -249,6 +265,14 @@ export const usePlotStore = defineStore('plot-direction', () => {
     return removed;
   }
 
+  /**
+   * Move a pending node so it ends up at `newIndex` in the resulting array
+   * (final-resting-index semantics — callers do not need to compensate for
+   * the removal shift when moving a node downward).
+   *
+   * Rejected when the node is not pending, or when the target position falls
+   * inside the non-pending prefix (see _reachableFloor).
+   */
   function moveNode(arcId: string, nodeId: string, newIndex: number): boolean {
     let moved = false;
     _withMutex(() => {
@@ -257,14 +281,12 @@ export const usePlotStore = defineStore('plot-direction', () => {
       const idx = arc.nodes.findIndex(n => n.id === nodeId);
       if (idx === -1 || arc.nodes[idx].status !== 'pending') return;
 
-      const lastCompletedIdx = arc.nodes.reduce(
-        (max, n, i) => (n.status === 'completed' || n.status === 'skipped' ? i : max), -1,
-      );
-      if (newIndex <= lastCompletedIdx) return;
-
       const [node] = arc.nodes.splice(idx, 1);
-      const clamped = Math.min(newIndex, arc.nodes.length);
-      arc.nodes.splice(clamped, 0, node);
+      if (newIndex <= _reachableFloor(arc.nodes)) {
+        arc.nodes.splice(idx, 0, node);
+        return;
+      }
+      arc.nodes.splice(Math.min(newIndex, arc.nodes.length), 0, node);
       moved = true;
     });
     return moved;

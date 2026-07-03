@@ -71,7 +71,9 @@
 
   "plot.node.requires": "Requires:",
   "plot.node.completionConditions": "Completion conditions:",
-  "plot.node.insertAfter": "Insert after this node",
+  "plot.node.insertHere": "Insert a node here",
+  "plot.node.dragToReorder": "Drag to reorder",
+  "plot.node.dragHandleAria": "Drag or use arrow keys to move this node",
   "plot.node.removeNode": "Remove node",
   "plot.node.addAtEnd": "Add node at end",
   "plot.node.roundUnit": "rounds",

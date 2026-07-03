@@ -250,8 +250,18 @@ const newNodeDirective = ref('');
 const newNodeHint = ref('');
 
 function addNode(): void {
-  const arc = displayArc.value;
-  if (!arc || !newNodeTitle.value.trim()) return;
+  if (!newNodeTitle.value.trim()) return;
+  // Resolve the arc captured at gap-click time, NOT displayArc at submit time —
+  // displayArc can silently flip while the modal is open (e.g. the active arc
+  // completes mid-round and the panel falls back to arcs[0]).
+  const arc = plotStore.arcs.find(a => a.id === insertArcId.value) ?? null;
+  if (!arc) {
+    eventBus.emit('ui:toast', { type: 'error', i18nKey: 'plot.validate.arcNotFound', message: 'Arc not found', duration: 3000 });
+    showAddNode.value = false;
+    insertAtGap.value = null;
+    insertArcId.value = null;
+    return;
+  }
 
   const nodeData: Partial<import('@/engine/plot/types').PlotNode> = {
     title: newNodeTitle.value.trim(),
@@ -266,27 +276,37 @@ function addNode(): void {
     maxRounds: 6,
   };
 
-  if (insertAfterIndex.value >= 0) {
-    plotStore.insertNode(arc.id, insertAfterIndex.value, nodeData);
-  } else {
-    plotStore.addNode(arc.id, nodeData as Parameters<typeof plotStore.addNode>[1]);
-  }
+  // Gap semantics: insert before nodes[gap]; null = append, resolved against
+  // the CURRENT length so nodes appended while the modal was open (AI
+  // decompose) stay ahead of this one.
+  const gap = insertAtGap.value ?? arc.nodes.length;
+  plotStore.insertNode(arc.id, gap - 1, nodeData);
 
   newNodeTitle.value = '';
   newNodeGoal.value = '';
   newNodeDirective.value = '';
   newNodeHint.value = '';
-  insertAfterIndex.value = -1;
+  insertAtGap.value = null;
+  insertArcId.value = null;
   showAddNode.value = false;
   persist();
 }
 
-const insertAfterIndex = ref(-1);
+const insertAtGap = ref<number | null>(null);
+const insertArcId = ref<string | null>(null);
 
-function handleInsertAfter(index: number): void {
-  if (!displayArc.value) return;
-  insertAfterIndex.value = index;
+function handleInsertAt(gapIndex: number | null): void {
+  const arc = displayArc.value;
+  if (!arc) return;
+  insertArcId.value = arc.id;
+  insertAtGap.value = gapIndex;
   showAddNode.value = true;
+}
+
+function handleReorder(nodeId: string, toIndex: number): void {
+  const arc = displayArc.value;
+  if (!arc) return;
+  if (plotStore.moveNode(arc.id, nodeId, toIndex)) persist();
 }
 
 function handleRemoveNode(nodeId: string): void {
@@ -604,7 +624,8 @@ function rejectAdvancement(): void {
             :gauges="displayArc.gauges"
             :current-round="currentRound ?? 0"
             :last-eval-log="latestEvalLog"
-            @insert-after="handleInsertAfter"
+            @insert-at="handleInsertAt"
+            @reorder="handleReorder"
             @remove="handleRemoveNode"
             @select="handleSelectNode"
           />
