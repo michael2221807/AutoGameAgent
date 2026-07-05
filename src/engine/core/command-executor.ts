@@ -19,20 +19,45 @@
  * 但**命令仍然执行**（warn-only）。这能让开发者发现 AI 产生的意外路径，
  * 收集数据后决定是否升级到严格拒绝模式。
  */
-import type { Command, CommandResult, BatchCommandResult, ChangeLog } from '../types';
+import type { Command, CommandResult, BatchCommandResult, ChangeLog, StateChange } from '../types';
 import type { StateManager } from './state-manager';
 import { eventBus } from './event-bus';
 
 /**
- * Optional guard for push operations — returns `false` to suppress a
- * duplicate push. Injected at construction time so the executor stays
- * content-agnostic (the caller decides which paths need dedup and how).
+ * Optional guard for push operations. Injected at construction time so the
+ * executor stays content-agnostic (the caller decides which paths need
+ * dedup/merge and how). Verdicts:
+ *
+ * - `true`  — allow the push to proceed normally
+ * - `false` — suppress the push (treated as a no-op success)
+ * - `StateChange` — the guard already applied a SUBSTITUTE write (e.g. fused
+ *   a duplicate NPC into its existing entry); the push itself is suppressed
+ *   but the returned change is recorded as the command's change so the
+ *   round's changeLog / delta audit trail reflects what actually happened.
  */
+export type PushGuardVerdict = boolean | StateChange;
+
 export type PushDedupGuard = (
   path: string,
   newValue: unknown,
   existingArray: unknown[],
-) => boolean;
+) => PushGuardVerdict;
+
+/**
+ * Compose multiple push guards into one. Guards run in order; the first
+ * non-`true` verdict (suppress or substitute-change) short-circuits the rest.
+ * Guards are expected to self-select by path (return `true` for paths they
+ * do not own), so composition order only matters for overlapping paths.
+ */
+export function composePushGuards(...guards: PushDedupGuard[]): PushDedupGuard {
+  return (path, newValue, existingArray) => {
+    for (const guard of guards) {
+      const verdict = guard(path, newValue, existingArray);
+      if (verdict !== true) return verdict;
+    }
+    return true;
+  };
+}
 
 /** 单字段数值写入的安全上限（防止 AI 生成极端值破坏 UI 渲染） */
 const MAX_NUMERIC_VALUE = 999_999;
@@ -109,11 +134,19 @@ export class CommandExecutor {
           // ── 步骤 4：数组容量限制 ──
           const arr = this.stateManager.get<unknown[]>(command.key);
 
-          // ── 步骤 4b：push 去重守卫 ──
+          // ── 步骤 4b：push 去重/融合守卫 ──
           if (this.pushDedupGuard && Array.isArray(arr)) {
-            const shouldPush = this.pushDedupGuard(command.key, command.value, arr);
-            if (!shouldPush) {
+            const verdict = this.pushDedupGuard(command.key, command.value, arr);
+            if (verdict === false) {
+              // 抑制：视为 no-op 成功
               change = undefined;
+              break;
+            }
+            if (verdict !== true) {
+              // 守卫已执行替代写入（如同名 NPC 融合）——push 本身被抑制，
+              // 但替代写入的 StateChange 记入命令结果，保证回合 changeLog /
+              // Δ 审计能看到真实发生的变更
+              change = verdict;
               break;
             }
           }

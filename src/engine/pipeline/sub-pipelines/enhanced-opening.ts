@@ -31,6 +31,7 @@ import {
   extractThinkingFromRaw,
 } from '../../core/prompt-debug';
 import { eventBus } from '../../core/event-bus';
+import { mergeDuplicateNpcArray } from '../../social/npc-merge';
 
 // ═══════════════════════════════════════════════════════════════
 //  Public types
@@ -421,6 +422,22 @@ async function executePhaseC(ctx: PhaseContext): Promise<string> {
     if (!Array.isArray(npc['关系网变量'])) npc['关系网变量'] = [];
 
     ctx.stateManager.push(ctx.paths.relationships, npc, 'system');
+  }
+
+  // C-2: Phase C bypasses CommandExecutor (direct stateManager.push), so the
+  // relationship merge guard never sees these writes. Fuse any duplicate 名称
+  // here — batch-internal (AI returned the same name twice) or vs entries
+  // already in the tree — instead of letting a second entry survive.
+  const relArr = ctx.stateManager.get<Record<string, unknown>[]>(ctx.paths.relationships);
+  if (Array.isArray(relArr)) {
+    const mergeResult = mergeDuplicateNpcArray(relArr, ctx.paths.npcFieldNames);
+    if (mergeResult.mergedCount > 0) {
+      ctx.stateManager.set(ctx.paths.relationships, mergeResult.result, 'system');
+      console.log(
+        `[EnhancedOpening] Phase C: fused ${mergeResult.mergedCount} duplicate NPC entr(ies): ` +
+        mergeResult.mergedNames.join('、'),
+      );
+    }
   }
 
   const npcSummaryList = npcs

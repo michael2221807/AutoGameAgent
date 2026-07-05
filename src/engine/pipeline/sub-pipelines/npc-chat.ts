@@ -296,7 +296,12 @@ export class NpcChatPipeline {
     // ── 6. 作用域限制 + 执行 commands ──
     // CR-R8/R15: 只允许修改本 NPC 自己的字段，严格按 npcIndex 匹配
     // npcName + npcIndex 一起传入 filterScopedCommands 以支持过滤器和索引两种语法
-    const scopedCommands = this.filterScopedCommands(parsed.commands ?? [], npcName, index);
+    // CR 2026-07-05: index 是 AI 调用 await 之前捕获的，等待期间 NpcDedupModule
+    // 的同名融合可能收缩/重排 关系 数组 —— 在校验索引形式命令前必须重新解析，
+    // 否则索引形式命令会落在错误的 NPC 上（过滤器形式不受影响，执行时按名重解析）
+    const preExecInfo = this.findNpc(npcName);
+    const scopeIndex = preExecInfo?.index ?? index;
+    const scopedCommands = this.filterScopedCommands(parsed.commands ?? [], npcName, scopeIndex);
     if (scopedCommands.length > 0) {
       this.commandExecutor.executeBatch(scopedCommands);
     }

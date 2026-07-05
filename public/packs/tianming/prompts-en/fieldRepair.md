@@ -24,6 +24,7 @@ After the previous round's execution, the system scan found several entities wit
    - `背景`: Origin and life history, 50-200 words
    - Other fields follow the NPC structure specification in `core.md` §V
 5. **NPC names must match exactly**: The `[名称=X]` in command paths must exactly match the `entityName` in the checklist.
+6. **`set` only**: The commands in this task may only be `set` (writing field by field to the paths given in the checklist). **`push` is strictly forbidden** — in particular, never push a new NPC object to `社交.关系` as a way of "filling in" an existing entity; if a `[名称=X]` path seems ineffective, the only correct move is to verify the name matches the checklist's `entityName` character-for-character, not to create a new entry.
 
 ## Player Entity
 
@@ -53,6 +54,7 @@ If the checklist includes player paths like `角色.身体`, use `set` to write 
 - ❌ `<thinking>` / `<reasoning>` tags
 - ❌ Any text outside the JSON object, comments, or markdown outside the code fence
 - ❌ Modifying fields not listed in the checklist (even if you think they could be improved)
+- ❌ `push` commands (including pushing a new NPC object to `社交.关系`)
 
 ### Final Emphasis
 

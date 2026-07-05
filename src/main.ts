@@ -56,8 +56,9 @@ import { eventBus } from './engine/core/event-bus';
 import { GamePackLoader } from './engine/core/pack-loader';
 import { ConfigRegistry, ConfigStore, ConfigResolver } from './engine/core/config-system';
 import { StateManager } from './engine/core/state-manager';
-import { CommandExecutor } from './engine/core/command-executor';
+import { CommandExecutor, composePushGuards } from './engine/core/command-executor';
 import { buildMemoryPushDedupGuard } from './engine/social/memory-dedup';
+import { buildRelationshipMergeGuard } from './engine/social/relationship-merge-guard';
 import { BehaviorRunner } from './engine/behaviors/behavior-runner';
 import { AIService, applyPersistedAISettings } from './engine/ai/ai-service';
 import { ResponseParser } from './engine/ai/response-parser';
@@ -87,6 +88,7 @@ import { NpcChatPipeline } from './engine/pipeline/sub-pipelines/npc-chat';
 import { DEFAULT_ENGINE_PATHS } from './engine/pipeline/types';
 import { setBootstrapGamePack } from './engine/bootstrap-pack';
 import { TimeService } from './engine/behaviors/time-service';
+import { NpcDedupModule } from './engine/behaviors/npc-dedup';
 import { MemoryCompilerModule } from './engine/behaviors/memory-compiler';
 import { ComputedFieldsModule } from './engine/behaviors/computed-fields';
 import { EffectLifecycleModule } from './engine/behaviors/effect-lifecycle';
@@ -303,7 +305,16 @@ async function bootstrap(): Promise<void> {
       )
     : null;
   const memoryFieldName = DEFAULT_ENGINE_PATHS.npcFieldNames.memory;
-  const pushDedupGuard = buildMemoryPushDedupGuard(memoryFieldName);
+  // Push 守卫组合：.记忆 近似去重（抑制）+ 社交.关系 同名 NPC 融合（合并进已有条目，
+  // 不丢数据、不打断回合 — 见 relationship-merge-guard.ts / npc-merge.ts 的合并策略）
+  const pushDedupGuard = composePushGuards(
+    buildMemoryPushDedupGuard(memoryFieldName),
+    buildRelationshipMergeGuard(
+      stateManager,
+      DEFAULT_ENGINE_PATHS.relationships,
+      DEFAULT_ENGINE_PATHS.npcFieldNames,
+    ),
+  );
   const commandExecutor = new CommandExecutor(stateManager, schemaRoots, pushDedupGuard);
 
   const behaviorRunner = new BehaviorRunner();
@@ -322,11 +333,22 @@ async function bootstrap(): Promise<void> {
     DEFAULT_ENGINE_PATHS.characterAge,
   ));
 
+  // NpcDedupModule：社交.关系 同名 NPC 兜底融合（onRoundEnd + onGameLoad）
+  // push 级守卫（relationship-merge-guard）覆盖 CommandExecutor 路径；此模块
+  // 兜住整数组 set（助手 replace-array / GameVariablePanel 原始 JSON）与历史脏存档
+  behaviorRunner.register(new NpcDedupModule(
+    DEFAULT_ENGINE_PATHS.relationships,
+    DEFAULT_ENGINE_PATHS.npcFieldNames,
+  ));
+
   // ── #3: 将 Pinia tree 绑定到 StateManager 的 reactive 对象 ──
   // 必须在 createPinia() 之后、任何 UI 读取状态之前调用。
   // 绑定后 StateManager 的所有写操作自动反映到 Vue 响应式系统。
   const engineStateStore = useEngineStateStore();
   engineStateStore.linkStateManager(stateManager);
+  // 读档时分发 onGameLoad 行为钩子（npc-dedup 融合 / effect-lifecycle 清理 /
+  // validation-repair 修复）——2026-07-05 前这些钩子只在创角后触发，真实读档从不执行
+  engineStateStore.linkBehaviorRunner(behaviorRunner);
 
   // ── #2: 实例化记忆服务 ──
   //

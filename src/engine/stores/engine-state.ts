@@ -32,6 +32,17 @@ export const useEngineStateStore = defineStore('engineState', () => {
    */
   let _linkedStateManager: StateManager | null = null;
 
+  /**
+   * 持有 linkBehaviorRunner 注入的 BehaviorRunner 引用（与 linkStateManager 同模式）。
+   *
+   * 2026-07-05 之前 runOnGameLoad 只在 CharacterInitPipeline（创角）里触发，
+   * 真实读档（HomeView / ManagementView / 卡片导入 activateSave）从不执行
+   * onGameLoad 钩子——effect-lifecycle 的过期清理、npc-dedup 的同名 NPC 融合、
+   * validation-repair 的存档修复在读档时全部是死钩子。注入后 loadGame() 在
+   * loadTree 之后统一分发 onGameLoad，历史脏存档读档即自愈。
+   */
+  let _linkedBehaviorRunner: { runOnGameLoad(sm: StateManager): void } | null = null;
+
   /** Convenience getter: retrieve a value by dot-path */
   function get<T = unknown>(path: StatePath): T | undefined {
     return _get(tree.value, path) as T | undefined;
@@ -119,6 +130,9 @@ export const useEngineStateStore = defineStore('engineState', () => {
     if (_linkedStateManager) {
       // 就地写入：保持 tree.value 与 StateManager.state 是同一个 reactive proxy
       _linkedStateManager.loadTree(data as Record<string, unknown>);
+      // 读档后行为钩子：npc-dedup 同名融合 / effect-lifecycle 过期清理 /
+      // validation-repair 存档修复等（各模块 onGameLoad JSDoc 均声明面向读档场景）
+      _linkedBehaviorRunner?.runOnGameLoad(_linkedStateManager);
     } else {
       // 降级路径：StateManager 未注入时（如测试或 fallback），直接替换 ref
       tree.value = data;
@@ -335,6 +349,14 @@ export const useEngineStateStore = defineStore('engineState', () => {
     });
   }
 
+  /**
+   * 注入 BehaviorRunner（main.ts 启动时调用，与 linkStateManager 同模式）。
+   * 结构化类型（只要求 runOnGameLoad）避免 store 依赖 BehaviorRunner 具体类。
+   */
+  function linkBehaviorRunner(runner: { runOnGameLoad(sm: StateManager): void }): void {
+    _linkedBehaviorRunner = runner;
+  }
+
   /** Clear all game state */
   function clearGame(): void {
     if (_linkedStateManager) {
@@ -373,6 +395,7 @@ export const useEngineStateStore = defineStore('engineState', () => {
     toSnapshot,
     setValue,
     linkStateManager,
+    linkBehaviorRunner,
     clearGame,
   };
 });

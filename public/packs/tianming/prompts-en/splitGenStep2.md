@@ -38,6 +38,8 @@ Output only a single JSON object — no prefix or suffix text, no ` ``` ` code b
 
 ## NPC Operation Standards
 
+**Push is for brand-new characters ONLY (hard constraint)**: Before any push, check the NPC rosters already in context (present/absent lists, the game state JSON, and NPCs already created earlier in this conversation). Any character that already exists — including those created in opening step 1 and those currently absent — must NEVER be pushed again; use the `set` / `add` commands under "Updating NPC fields" below instead.
+
 **Creating a new NPC** (must push a complete object in one go, with `类型` field):
 ```json
 {"action": "push", "path": "社交.关系", "value": {
