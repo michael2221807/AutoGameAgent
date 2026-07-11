@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GitHubSyncService, type SyncStatus } from './github-sync';
+import { GitHubSyncService, DegradedUploadError, type SyncStatus } from './github-sync';
 import { pack } from './chunked-bundle-packer';
 import type { ChunkManifest } from './chunked-bundle-packer';
 
 // ─── Mock infrastructure ───
 
-function createMockBackup(jsonOverride?: string) {
+function createMockBackup(
+  jsonOverride?: string,
+  integrity: { referencedAssets: number; exportedAssets: number } = { referencedAssets: 2, exportedAssets: 2 },
+) {
   const json = jsonOverride ?? JSON.stringify({
     version: 1,
     exportedAt: '2026-05-09T12:00:00Z',
@@ -24,8 +27,10 @@ function createMockBackup(jsonOverride?: string) {
     ],
   }, null, 2);
 
+  const blob = new Blob([json], { type: 'application/json' });
   return {
-    exportAll: vi.fn().mockResolvedValue(new Blob([json], { type: 'application/json' })),
+    exportAll: vi.fn().mockResolvedValue(blob),
+    exportForSync: vi.fn().mockResolvedValue({ blob, imageIntegrity: integrity }),
     importAll: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -115,14 +120,16 @@ describe('upload — v2 chunked pipeline', () => {
 
     await sync.upload();
 
-    expect(backup.exportAll).toHaveBeenCalledOnce();
+    expect(backup.exportForSync).toHaveBeenCalledOnce();
 
     // Should have PUT calls for state.gz, img-0.gz, manifest.json
     const puts = fetchCalls.filter(c => c.method === 'PUT');
     const putPaths = puts.map(c => c.url);
 
-    expect(putPaths.some(p => p.includes('v2/state.gz'))).toBe(true);
-    expect(putPaths.some(p => p.includes('v2/img-0.gz'))).toBe(true);
+    // Chunks are written to per-upload generation-suffixed paths (atomicity fix),
+    // e.g. v2/state.<tag>.gz — never the bare v2/state.gz a prior upload used.
+    expect(putPaths.some(p => /\/v2\/state\.[a-z0-9]+\.gz$/.test(p))).toBe(true);
+    expect(putPaths.some(p => /\/v2\/img-0\.[a-z0-9]+\.gz$/.test(p))).toBe(true);
     expect(putPaths.some(p => p.includes('v2/manifest.json'))).toBe(true);
   });
 
@@ -139,7 +146,7 @@ describe('upload — v2 chunked pipeline', () => {
     expect(manifestIdx).toBeGreaterThan(lastChunkIdx);
   });
 
-  it('includes SHA when file already exists (update mode)', async () => {
+  it('writes chunks to fresh generation paths without a SHA, never overwriting existing chunk paths (atomicity)', async () => {
     setupV2DirectoryListing([
       { path: 'v2/manifest.json', sha: 'sha_manifest_old' },
       { path: 'v2/state.gz', sha: 'existing_sha_123' },
@@ -151,9 +158,17 @@ describe('upload — v2 chunked pipeline', () => {
 
     await sync.upload();
 
-    const statePut = fetchCalls.find(c => c.method === 'PUT' && c.url.includes('state.gz'));
+    // The new state chunk goes to a FRESH generation path with NO sha (create, not
+    // in-place overwrite) — so an interrupted upload cannot clobber the live
+    // v2/state.gz the current manifest still references.
+    const statePut = fetchCalls.find(c => c.method === 'PUT' && /\/v2\/state\.[a-z0-9]+\.gz$/.test(c.url));
     expect(statePut).toBeDefined();
-    expect((statePut!.body as Record<string, string>).sha).toBe('existing_sha_123');
+    expect(statePut!.url).not.toContain('/v2/state.gz');
+    expect((statePut!.body as Record<string, string>).sha).toBeUndefined();
+
+    // The manifest pointer is the ONLY in-place write, carrying the old sha.
+    const manifestPut = fetchCalls.find(c => c.method === 'PUT' && c.url.includes('manifest.json'));
+    expect((manifestPut!.body as Record<string, string>).sha).toBe('sha_manifest_old');
   });
 
   it('omits SHA when file is new (first upload, v2/ empty)', async () => {
@@ -163,7 +178,7 @@ describe('upload — v2 chunked pipeline', () => {
 
     await sync.upload();
 
-    const statePut = fetchCalls.find(c => c.method === 'PUT' && c.url.includes('state.gz'));
+    const statePut = fetchCalls.find(c => c.method === 'PUT' && /\/v2\/state\.[a-z0-9]+\.gz$/.test(c.url));
     expect(statePut).toBeDefined();
     expect((statePut!.body as Record<string, string>).sha).toBeUndefined();
   });
@@ -239,7 +254,7 @@ describe('upload — bundle without images', () => {
     const puts = fetchCalls.filter(c => c.method === 'PUT');
     const putPaths = puts.map(c => c.url);
 
-    expect(putPaths.some(p => p.includes('v2/state.gz'))).toBe(true);
+    expect(putPaths.some(p => /\/v2\/state\.[a-z0-9]+\.gz$/.test(p))).toBe(true);
     expect(putPaths.some(p => p.includes('v2/manifest.json'))).toBe(true);
     expect(putPaths.some(p => p.includes('v2/img-'))).toBe(false);
   });
@@ -248,9 +263,10 @@ describe('upload — bundle without images', () => {
 // ─── upload: stale chunk cleanup ───
 
 describe('upload — stale chunk cleanup', () => {
-  it('deletes old img chunks not in new manifest', async () => {
-    // Simulate: v2/ has img-0, img-1, img-2 from previous upload
-    // New upload only produces img-0 → img-1 and img-2 should be deleted
+  it('deletes ALL previous-generation chunks after committing the new manifest', async () => {
+    // v2/ holds the previous upload's chunks. Under generation-suffixed paths, the
+    // new upload writes fresh paths, so EVERY previous chunk path is now stale and
+    // is pruned — while the manifest pointer is preserved (updated in place).
     setupV2DirectoryListing([
       { path: 'v2/manifest.json', sha: 'sha_manifest' },
       { path: 'v2/state.gz', sha: 'sha_state' },
@@ -264,14 +280,14 @@ describe('upload — stale chunk cleanup', () => {
 
     await sync.upload();
 
-    const deletes = fetchCalls.filter(c => c.method === 'DELETE');
-    const deletePaths = deletes.map(c => c.url);
+    const deletePaths = fetchCalls.filter(c => c.method === 'DELETE').map(c => c.url);
 
-    // img-1 and img-2 should be deleted (new upload only has img-0)
-    expect(deletePaths.some(p => p.includes('img-1.gz'))).toBe(true);
-    expect(deletePaths.some(p => p.includes('img-2.gz'))).toBe(true);
-    // state, manifest, img-0 should NOT be deleted
-    expect(deletePaths.some(p => p.includes('state.gz'))).toBe(false);
+    // Every previous-generation chunk is stale → deleted.
+    expect(deletePaths.some(p => p.includes('v2/state.gz'))).toBe(true);
+    expect(deletePaths.some(p => p.includes('v2/img-0.gz'))).toBe(true);
+    expect(deletePaths.some(p => p.includes('v2/img-1.gz'))).toBe(true);
+    expect(deletePaths.some(p => p.includes('v2/img-2.gz'))).toBe(true);
+    // The manifest pointer is NOT deleted (it is the in-place commit point).
     expect(deletePaths.some(p => p.includes('manifest.json'))).toBe(false);
   });
 
@@ -320,8 +336,10 @@ describe('upload — error handling', () => {
   });
 
   it('throws when PUT returns error', async () => {
+    // State chunk now uploads to a generation-suffixed path (v2/state.<tag>.gz);
+    // register the 422 on the v2/state prefix so the mock's startsWith match fires.
     fetchResponses.set(
-      'PUT https://api.github.com/repos/testuser/aga-cloud-save/contents/v2/state.gz',
+      'PUT https://api.github.com/repos/testuser/aga-cloud-save/contents/v2/state',
       { status: 422, body: { message: 'Validation Failed' } },
     );
 
@@ -332,7 +350,92 @@ describe('upload — error handling', () => {
   });
 });
 
+// ─── upload: degraded-overwrite guardrail ───
+
+describe('upload — degraded-overwrite guardrail', () => {
+  it('blocks (throws DegradedUploadError) on a TOTAL image-cache wipe (references 5, exported 0)', async () => {
+    const backup = createMockBackup(undefined, { referencedAssets: 5, exportedAssets: 0 });
+    const sync = new GitHubSyncService(backup as never);
+
+    await expect(sync.upload()).rejects.toBeInstanceOf(DegradedUploadError);
+
+    // Guardrail runs BEFORE any cloud mutation → nothing was PUT or DELETEd.
+    expect(fetchCalls.some(c => c.method === 'PUT')).toBe(false);
+    expect(fetchCalls.some(c => c.method === 'DELETE')).toBe(false);
+  });
+
+  it('blocks on a PARTIAL image-cache eviction (references 21, exported 15)', async () => {
+    const backup = createMockBackup(undefined, { referencedAssets: 21, exportedAssets: 15 });
+    const sync = new GitHubSyncService(backup as never);
+
+    const err = await sync.upload().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DegradedUploadError);
+    expect((err as DegradedUploadError).detail.referencedAssets).toBe(21);
+    expect((err as DegradedUploadError).detail.exportedAssets).toBe(15);
+    expect((err as DegradedUploadError).detail.missingAssets).toBe(6);
+    expect(fetchCalls.some(c => c.method === 'PUT')).toBe(false);
+  });
+
+  it('does NOT block a legitimately imageless upload (references 0, exported 0)', async () => {
+    // Deliberate deletion of all image-bearing profiles → internally consistent
+    // export → must upload freely, no false alarm (audit finding #2).
+    const backup = createMockBackup(undefined, { referencedAssets: 0, exportedAssets: 0 });
+    const sync = new GitHubSyncService(backup as never);
+
+    await sync.upload();
+
+    expect(fetchCalls.some(c => c.method === 'PUT' && c.url.includes('manifest.json'))).toBe(true);
+  });
+
+  it('force:true bypasses the guardrail and uploads', async () => {
+    const backup = createMockBackup(undefined, { referencedAssets: 5, exportedAssets: 0 });
+    const sync = new GitHubSyncService(backup as never);
+
+    await sync.upload(undefined, { force: true });
+
+    const puts = fetchCalls.filter(c => c.method === 'PUT');
+    expect(puts.some(c => /\/v2\/state\.[a-z0-9]+\.gz$/.test(c.url))).toBe(true);
+    expect(puts.some(c => c.url.includes('v2/manifest.json'))).toBe(true);
+  });
+
+  it('does not block a healthy image-bearing upload (references 2, exported 2)', async () => {
+    const backup = createMockBackup(); // default integrity { referenced: 2, exported: 2 }
+    const sync = new GitHubSyncService(backup as never);
+
+    await sync.upload();
+
+    expect(fetchCalls.some(c => c.method === 'PUT' && c.url.includes('manifest.json'))).toBe(true);
+  });
+});
+
 // ─── upload: API request format ───
+
+describe('upload — atomicity (generation-suffixed chunk paths)', () => {
+  it('committed manifest references exactly the generation paths that were uploaded', async () => {
+    const backup = createMockBackup();
+    const sync = new GitHubSyncService(backup as never);
+
+    await sync.upload();
+
+    const manifestPut = fetchCalls.find(c => c.method === 'PUT' && c.url.includes('manifest.json'));
+    const b64 = (manifestPut!.body as Record<string, string>).content;
+    const manifestStr = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+    const manifest = JSON.parse(manifestStr) as { chunks: Array<{ path: string }> };
+
+    const chunkPutPaths = fetchCalls
+      .filter(c => c.method === 'PUT' && c.url.endsWith('.gz'))
+      .map(c => c.url.replace(/^.*\/contents\//, '')); // → "v2/state.<tag>.gz"
+
+    // Every manifest chunk path was actually written → a download finds its chunks.
+    for (const ch of manifest.chunks) {
+      expect(chunkPutPaths).toContain(ch.path);
+    }
+    // And none of them is a bare (prior-generation) path.
+    for (const ch of manifest.chunks) {
+      expect(ch.path).toMatch(/^v2\/(state|state-\d+|img-\d+)\.[a-z0-9]+\.gz$/);
+    }
+  });
+});
 
 describe('upload — API request details', () => {
   it('sends correct Authorization header', async () => {
@@ -377,7 +480,8 @@ describe('upload — API request details', () => {
     expect(manifest.bundleChecksum).toHaveLength(64);
     expect(manifest.chunks.length).toBeGreaterThanOrEqual(2);
     expect(manifest.chunks[0].name).toBe('state');
-    expect(manifest.chunks[0].path).toBe('v2/state.gz');
+    // Path carries the per-upload generation tag; the name stays canonical.
+    expect(manifest.chunks[0].path).toMatch(/^v2\/state\.[a-z0-9]+\.gz$/);
   });
 });
 
@@ -390,7 +494,7 @@ describe('upload — chunk contents are valid gzipped data', () => {
 
     await sync.upload();
 
-    const statePut = fetchCalls.find(c => c.method === 'PUT' && c.url.includes('state.gz'));
+    const statePut = fetchCalls.find(c => c.method === 'PUT' && /\/v2\/state\.[a-z0-9]+\.gz$/.test(c.url));
     const b64 = (statePut!.body as Record<string, string>).content;
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     const blob = new Blob([bytes]);
@@ -414,7 +518,7 @@ describe('upload — chunk contents are valid gzipped data', () => {
 
     await sync.upload();
 
-    const imgPut = fetchCalls.find(c => c.method === 'PUT' && c.url.includes('img-0.gz'));
+    const imgPut = fetchCalls.find(c => c.method === 'PUT' && /\/v2\/img-0\.[a-z0-9]+\.gz$/.test(c.url));
     expect(imgPut).toBeDefined();
 
     const b64 = (imgPut!.body as Record<string, string>).content;

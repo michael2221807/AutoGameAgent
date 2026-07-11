@@ -124,6 +124,17 @@ export const idbAdapter = {
     } catch (err) {
       if (err instanceof DOMException && err.name === 'QuotaExceededError') {
         console.error('[IDB] QuotaExceededError — storage full');
+        // Acute failure — a write was rejected. Loudly warn: the browser is at its
+        // storage ceiling and may evict IndexedDB (incl. the separate image cache),
+        // which is exactly what silently wiped a user's images before an upload
+        // overwrote the good cloud save (2026-07-10). Push them to back up NOW.
+        eventBus.emit('ui:toast', {
+          type: 'error',
+          i18nKey: 'engine.toast.storageQuotaExceeded',
+          message: '浏览器存储已满，写入失败！存档与图片可能随时被自动清除，请立即进行云备份/导出。',
+          id: 'storage-quota-exceeded',
+          duration: 0,
+        });
       }
       throw err;
     }
@@ -133,7 +144,18 @@ export const idbAdapter = {
       _lastQuotaCheck = now;
       navigator.storage.estimate().then(({ usage, quota }) => {
         if (usage && quota && usage > quota * 0.85) {
-          console.warn(`[IDB] Storage ${Math.round(usage / 1024 / 1024)}MB / ${Math.round(quota / 1024 / 1024)}MB (>85%)`);
+          const usedMB = Math.round(usage / 1024 / 1024);
+          const quotaMB = Math.round(quota / 1024 / 1024);
+          console.warn(`[IDB] Storage ${usedMB}MB / ${quotaMB}MB (>85%)`);
+          // Early warning BEFORE eviction. Deduped by id so it doesn't spam.
+          eventBus.emit('ui:toast', {
+            type: 'warning',
+            i18nKey: 'engine.toast.storagePressure',
+            i18nParams: { usedMB, quotaMB },
+            message: `本地存储已用 ${usedMB}MB / ${quotaMB}MB（>85%），空间不足时浏览器可能自动清除存档与图片，请及时云备份。`,
+            id: 'storage-pressure',
+            duration: 10000,
+          });
         }
       }).catch(() => { /* estimate() unavailable */ });
     }

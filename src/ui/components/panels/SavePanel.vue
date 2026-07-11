@@ -719,7 +719,8 @@ async function executeImport(): Promise<void> {
 
 // ─── GitHub Cloud Sync ───────────────────────────────────────
 
-import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
+import type { GitHubSyncService, SyncStatus, DegradedUploadDetail } from '@/engine/sync/github-sync';
+import { DegradedUploadError } from '@/engine/sync/github-sync';
 
 const githubSync = inject<GitHubSyncService>('githubSync');
 const ghToken = ref(githubSync?.getToken() ?? '');
@@ -779,8 +780,12 @@ function ghCopyToken(): void {
   eventBus.emit('ui:toast', { type: 'success', message: t('save.github.tokenCopied'), duration: 1200 });
 }
 
-async function ghUpload(): Promise<void> {
+const ghShowUploadConfirm = ref(false);
+const ghUploadConfirmDetail = ref<DegradedUploadDetail | null>(null);
+
+async function ghUpload(force = false): Promise<void> {
   if (!githubSync || ghBusy()) return;
+  ghShowUploadConfirm.value = false;
   try {
     // Auto-save current state before uploading so cloud gets the latest data
     const pid = activeProfileId.value;
@@ -798,11 +803,24 @@ async function ghUpload(): Promise<void> {
         saveType: 'auto',
       });
     }
-    await githubSync.upload((s) => { ghStatus.value = s; });
+    await githubSync.upload((s) => { ghStatus.value = s; }, { force });
     void ghRefreshCloudInfo();
   } catch (err) {
+    // Guardrail: the export would overwrite a healthy cloud backup with a degraded
+    // (imageless) one. Do NOT auto-proceed — surface the specifics and require an
+    // explicit second confirmation before re-uploading with force.
+    if (err instanceof DegradedUploadError) {
+      ghUploadConfirmDetail.value = err.detail;
+      ghShowUploadConfirm.value = true;
+      ghStatus.value = { stage: 'idle', message: '' };
+      return;
+    }
     ghStatus.value = { stage: 'error', message: err instanceof Error ? err.message : t('save.github.uploadFailed') };
   }
+}
+
+function ghConfirmForcedUpload(): void {
+  void ghUpload(true);
 }
 
 const ghShowDownloadConfirm = ref(false);
@@ -953,7 +971,7 @@ const showSettings = ref(false);
               </AgaButton>
             </Tooltip>
             <div class="gh-actions">
-              <AgaButton variant="primary" size="sm" :disabled="ghBusy()" @click="ghUpload">
+              <AgaButton variant="primary" size="sm" :disabled="ghBusy()" @click="ghUpload()">
                 <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM8.53 1.22a.75.75 0 0 0-1.06 0L3.72 4.97a.75.75 0 0 0 1.06 1.06l2.47-2.47v6.69a.75.75 0 0 0 1.5 0V3.56l2.47 2.47a.75.75 0 1 0 1.06-1.06z"/></svg>
                 {{ ghStatus.stage === 'uploading' ? $t('save.github.uploading') : $t('save.github.uploadBtn') }}
               </AgaButton>
@@ -1271,6 +1289,21 @@ const showSettings = ref(false);
       <template #footer>
         <AgaButton variant="secondary" @click="ghShowDownloadConfirm = false">{{ $t('save.github.downloadConfirmCancel') }}</AgaButton>
         <AgaButton variant="danger" @click="ghDownload">{{ $t('save.github.downloadConfirmOk') }}</AgaButton>
+      </template>
+    </Modal>
+
+    <!-- GitHub degraded-upload guard: hard block + explicit second confirmation -->
+    <Modal v-model="ghShowUploadConfirm" :title="$t('save.github.uploadGuardTitle')" width="440px">
+      <p class="confirm-text confirm-text--danger">
+        {{ $t('save.github.uploadGuardText') }}
+      </p>
+      <p v-if="ghUploadConfirmDetail" class="upload-guard-detail">
+        {{ $t('save.github.uploadGuardMissing', { referenced: ghUploadConfirmDetail.referencedAssets, missing: ghUploadConfirmDetail.missingAssets }) }}
+      </p>
+      <p class="confirm-warning">{{ $t('save.github.uploadGuardHint') }}</p>
+      <template #footer>
+        <AgaButton variant="secondary" @click="ghShowUploadConfirm = false">{{ $t('save.github.uploadGuardCancel') }}</AgaButton>
+        <AgaButton variant="danger" @click="ghConfirmForcedUpload">{{ $t('save.github.uploadGuardConfirm') }}</AgaButton>
       </template>
     </Modal>
 
@@ -1684,6 +1717,14 @@ const showSettings = ref(false);
   margin: 0 0 8px;
 }
 .confirm-text--danger { color: var(--color-danger); }
+.upload-guard-detail {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  color: var(--color-text, #e0e0e6);
+  line-height: 1.5;
+}
+.upload-guard-detail li { margin: 2px 0; }
 .confirm-warning {
   font-size: 0.78rem;
   color: var(--color-amber-400);
