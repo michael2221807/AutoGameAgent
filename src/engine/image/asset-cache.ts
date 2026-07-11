@@ -173,6 +173,32 @@ export class ImageAssetCache {
     });
   }
 
+  /**
+   * Count how many of the given asset ids are actually present in the cache.
+   *
+   * Cheap keys-only existence check (no blob decode). Used by the export
+   * integrity guard: if a save references N assets but only M<N are present,
+   * the image cache was evicted/cleared and the export would silently drop
+   * images — the sync layer must treat that as a degraded upload rather than
+   * overwrite a healthy cloud backup. Distinguishes "cache is empty" from
+   * "no images referenced", which {@link exportByIds} alone cannot.
+   */
+  async countPresent(assetIds: Set<string>): Promise<number> {
+    if (assetIds.size === 0) return 0;
+    return this.withRetry((db) => new Promise<number>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.getAllKeys();
+      request.onsuccess = () => {
+        const keys = request.result as IDBValidKey[];
+        let n = 0;
+        for (const k of keys) if (typeof k === 'string' && assetIds.has(k)) n++;
+        resolve(n);
+      };
+      request.onerror = () => reject(request.error);
+    }));
+  }
+
   /** Import base64-encoded assets back into the cache */
   async importEntries(entries: Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }>): Promise<void> {
     if (entries.length === 0) return;

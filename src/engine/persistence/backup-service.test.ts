@@ -19,6 +19,7 @@ const {
   parseCompositeKey,
   hasVectorContent,
   collectAssetIdsFromTree,
+  bundleImagesLookDropped,
   BACKUP_FORMAT_VERSION,
 } = _testExports;
 
@@ -356,5 +357,43 @@ describe('collectAssetIdsFromTree', () => {
     } as Record<string, unknown>, ids, true);
     expect(ids.has('')).toBe(false);
     expect(ids.has('valid')).toBe(true);
+  });
+});
+
+// ─── bundleImagesLookDropped (anti-amplification detection) ─────
+
+describe('bundleImagesLookDropped', () => {
+  const withRefButNoImages = () => ({
+    version: 1, exportedAt: 'x', engineVersion: '0.1.0',
+    profiles: {}, saves: {
+      'p1/auto': { 角色: { 图片档案: { 已选头像图片ID: 'asset_abc' } } },
+    },
+    vectors: {}, configs: {}, prompts: {}, engineSettings: {},
+    imageAssets: [] as unknown[],
+  });
+
+  it('true: bundle references image assets but carries zero image payloads (evicted-cache fingerprint)', () => {
+    expect(bundleImagesLookDropped(withRefButNoImages() as never)).toBe(true);
+  });
+
+  it('true: imageAssets field entirely absent but state references assets', () => {
+    const b = withRefButNoImages() as Record<string, unknown>;
+    delete b.imageAssets;
+    expect(bundleImagesLookDropped(b as never)).toBe(true);
+  });
+
+  it('false: bundle carries image payloads (healthy backup)', () => {
+    const b = withRefButNoImages() as Record<string, unknown>;
+    b.imageAssets = [{ id: 'asset_abc', metadata: { id: 'asset_abc' }, base64: 'AA', mimeType: 'image/png' }];
+    expect(bundleImagesLookDropped(b as never)).toBe(false);
+  });
+
+  it('false: bundle references no image assets at all (legitimately imageless save)', () => {
+    const b = {
+      version: 1, exportedAt: 'x', engineVersion: '0.1.0',
+      profiles: {}, saves: { 'p1/auto': { 角色: { 姓名: '李明' } } },
+      vectors: {}, configs: {}, prompts: {}, engineSettings: {}, imageAssets: [],
+    };
+    expect(bundleImagesLookDropped(b as never)).toBe(false);
   });
 });

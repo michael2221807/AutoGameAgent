@@ -1,5 +1,5 @@
 // Archived research: docs/design/archive/cloud-sync-options.md
-// App doc: docs/user-guide/cloud-sync.md, docs/user-guide/pages/game-save.md §2.3, docs/user-guide/pages/home.md §1.3.3
+// App doc: docs/user-guide/cloud-sync.md, docs/user-guide/pages/game-save.md §2.2 + §7.5 (上传保护), docs/user-guide/pages/home.md §1.3.3
 /**
  * GitHub Sync Service — 通过 GitHub Contents API 实现存档云同步
  *
@@ -17,7 +17,7 @@
  * - 用户需提供 GitHub 用户名（fine-grained PAT 可能无法通过 GET /user 获取）
  */
 
-import type { BackupService } from '../persistence/backup-service';
+import type { BackupService, ExportImageIntegrity } from '../persistence/backup-service';
 import { packChunks, unpack, type ChunkManifest } from './chunked-bundle-packer';
 
 // ─── 常量 ───
@@ -37,6 +37,30 @@ const API_VERSION = '2022-11-28';
 export interface SyncStatus {
   stage: 'idle' | 'checking' | 'uploading' | 'downloading' | 'done' | 'error';
   message: string;
+}
+
+export interface DegradedUploadDetail {
+  /** distinct image asset ids referenced by the local save being exported */
+  referencedAssets: number;
+  /** how many of those were actually exported (fewer = local image cache evicted) */
+  exportedAssets: number;
+  /** referencedAssets − exportedAssets: images that would be MISSING from the upload */
+  missingAssets: number;
+}
+
+/**
+ * Thrown by {@link GitHubSyncService.upload} BEFORE any cloud file is touched when
+ * the outgoing backup references more image assets than it could actually export —
+ * i.e. the local image cache was evicted (TOTALLY or PARTIALLY), so uploading would
+ * replace a healthy cloud save with an image-degraded one. The UI catches this,
+ * shows the specifics, and may re-call upload with `{ force: true }` after explicit
+ * user confirmation. Primary guard against the 2026-07-10 class of incident.
+ */
+export class DegradedUploadError extends Error {
+  constructor(public readonly detail: DegradedUploadDetail) {
+    super('degraded-upload-blocked');
+    this.name = 'DegradedUploadError';
+  }
 }
 
 // ─── 服务 ───
@@ -91,21 +115,42 @@ export class GitHubSyncService {
 
   // ── 上传存档（v2 分块管道）──
 
-  async upload(onStatus?: (s: SyncStatus) => void): Promise<void> {
+  async upload(onStatus?: (s: SyncStatus) => void, opts?: { force?: boolean }): Promise<void> {
     const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
     const { owner, repo } = this.resolveTarget();
 
     emit('uploading', '正在导出存档…');
     let exportBlob: Blob;
+    let imageIntegrity: ExportImageIntegrity;
     try {
-      exportBlob = await this.backup.exportAll();
+      // Atomic export: the blob AND its image integrity come from the SAME call, so
+      // the guard evaluates exactly this export (no shared-field TOCTOU with a
+      // concurrent export).
+      ({ blob: exportBlob, imageIntegrity } = await this.backup.exportForSync());
     } catch (err) {
       throw stageError('导出存档', err);
     }
     const approxMB = Math.round(exportBlob.size / 1_048_576);
 
-    // Batch-fetch existing file SHAs (chunks at a shared path are updated in
-    // place). Must run BEFORE the first chunk PUT, so it is fetched up front.
+    // ── Overwrite guardrail (hard block unless forced) ──
+    // Runs BEFORE any cloud file is created/overwritten, so a block leaves the cloud
+    // save fully intact. Fires whenever the export references MORE image assets than
+    // it could actually produce (referencedAssets > exportedAssets) — the local
+    // image cache was evicted, TOTALLY (21→0, the reported incident) or PARTIALLY
+    // (21→15). An internally-consistent export (referenced === exported, incl. a
+    // legitimately imageless save) is never blocked, so deliberate profile/image
+    // deletion uploads freely without a false alarm.
+    if (!opts?.force && imageIntegrity.referencedAssets > imageIntegrity.exportedAssets) {
+      throw new DegradedUploadError({
+        referencedAssets: imageIntegrity.referencedAssets,
+        exportedAssets: imageIntegrity.exportedAssets,
+        missingAssets: imageIntegrity.referencedAssets - imageIntegrity.exportedAssets,
+      });
+    }
+
+    // Batch-fetch the existing v2/ listing up front (needed for the manifest.json
+    // SHA on the in-place manifest write, and for cleaning up old chunks after the
+    // commit). Must run BEFORE the first chunk PUT.
     let existingFiles: Array<{ path: string; sha: string }>;
     try {
       existingFiles = await this.listV2Files(owner, repo);
@@ -121,13 +166,18 @@ export class GitHubSyncService {
     // (not exportBlob.text()) also keeps the decoded JSON string generator-local
     // so the caller never holds a second ~100MB copy.
     //
-    // Safe to stream now — the two reasons it was once reverted to eager are both
-    // resolved: (1) the gzip "Failed to fetch" that forced eager ordering was
-    // fixed by the reader/writer gzipCompress rewrite; (2) the manifest is still
-    // written LAST as the commit point, so a mid-stream compression OR network
-    // failure leaves the OLD manifest → OLD chunks intact (download stays correct
-    // via the per-chunk SHA-256 check); any new chunks already PUT are harmless
-    // orphans removed by the next successful upload's cleanupStaleFromList.
+    // ATOMICITY (2026-07-09 audit fix): each chunk is written to a per-upload,
+    // GENERATION-SUFFIXED path (v2/state-0.<genTag>.gz), never the bare path a
+    // PRIOR upload used. So a re-upload can NEVER overwrite a chunk the CURRENT
+    // cloud manifest still references. Combined with writing the manifest LAST,
+    // this makes an interrupted upload truly non-destructive: the old manifest
+    // keeps pointing at its old chunks, whose bytes are untouched (the new bytes
+    // went to fresh paths), so the previously-healthy cloud save stays
+    // downloadable. Old-generation chunks are pruned by cleanupStaleFromList only
+    // AFTER the new manifest commits. (Previously chunks were overwritten in place
+    // at stable paths, so an interrupted upload could brick the live save — the
+    // "old chunks intact" claim was false whenever a path was reused.)
+    const genTag = uploadGenTag();
     emit('uploading', '正在压缩并上传…');
     const gen = packChunks(exportBlob);
     let res: IteratorResult<{ path: string; blob: Blob }, ChunkManifest>;
@@ -137,14 +187,19 @@ export class GitHubSyncService {
       throw stageError(`压缩存档（约 ${approxMB}MB）`, err);
     }
     let uploaded = 0;
+    const genPathByOriginal = new Map<string, string>();
     while (!res.done) {
       const { path, blob } = res.value;
+      const genPath = withGenTag(path, genTag);
+      genPathByOriginal.set(path, genPath);
       uploaded++;
       emit('uploading', `正在压缩并上传分块 ${uploaded}…`);
       try {
-        await this.uploadFile(owner, repo, path, await blobToBase64(blob), shaMap.get(path));
+        // Fresh generation path → always a NEW file → create (no SHA, never an
+        // in-place overwrite of a live-referenced chunk).
+        await this.uploadFile(owner, repo, genPath, await blobToBase64(blob), undefined);
       } catch (err) {
-        throw stageError(`上传分块 ${path}`, err);
+        throw stageError(`上传分块 ${genPath}`, err);
       }
       // Advance the generator only after the current chunk is uploaded + released,
       // so the next chunk's compression peak never overlaps a retained prior chunk.
@@ -155,6 +210,13 @@ export class GitHubSyncService {
       }
     }
     const manifest = res.value;
+    // Point the manifest at the generation-suffixed paths we actually wrote, so a
+    // download fetches the freshly-written chunks. (Names stay canonical —
+    // 'state'/'state-N'/'img-N' — only paths carry the generation tag.)
+    for (const c of manifest.chunks) {
+      const gp = genPathByOriginal.get(c.path);
+      if (gp) c.path = gp;
+    }
 
     // The manifest is written LAST so it is the commit point: if any chunk PUT
     // above fails, the cloud still has the OLD manifest pointing at OLD chunks,
@@ -473,6 +535,22 @@ export class ApiError extends Error {
 
 function fmtErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Per-upload generation tag. Chunk filenames are suffixed with it so each upload
+ * writes to fresh paths and never overwrites a chunk the current cloud manifest
+ * still references — the property that makes "manifest written last" atomic.
+ * Timestamp + a small random suffix keeps it unique even for two uploads in the
+ * same millisecond.
+ */
+function uploadGenTag(): string {
+  return `${Date.now().toString(36)}${Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0')}`;
+}
+
+/** Insert the generation tag before the `.gz` extension: `v2/state-0.gz` → `v2/state-0.<tag>.gz`. */
+function withGenTag(path: string, tag: string): string {
+  return path.replace(/\.gz$/, `.${tag}.gz`);
 }
 
 /**

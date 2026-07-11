@@ -16,6 +16,7 @@
  * 对应 STEP-03B M5 全量备份/恢复。
  */
 import { idbAdapter } from './idb-adapter';
+import { eventBus } from '../core/event-bus';
 import type { ProfileManager } from './profile-manager';
 import type { SaveManager } from './save-manager';
 import type { ConfigStore } from '../core/config-system';
@@ -110,6 +111,20 @@ export interface BackupBundle {
   worldBooks?: import('../prompt/world-book').WorldBookExportData;
   /** 2026-05-19 新增：内置提示词覆盖 */
   builtinPromptOverrides?: import('../prompt/world-book').BuiltinPromptExportData;
+}
+
+/**
+ * 图片导出完整性 — 记录最近一次 exportAll/exportProfile 的图片引用与实际导出数量。
+ *
+ * `referencedAssets`：导出的存档树中引用到的不同图片资产 ID 数。
+ * `exportedAssets`：其中实际在 ImageAssetCache 中找到并写入备份的数量。
+ *
+ * 当 `referencedAssets > 0` 而 `exportedAssets` 远小于它（尤其为 0）时，说明本地图片缓存
+ * 已被浏览器驱逐/清空，本次备份缺图。GitHubSyncService 依此拦截"用缺图存档覆盖云端好备份"。
+ */
+export interface ExportImageIntegrity {
+  referencedAssets: number;
+  exportedAssets: number;
 }
 
 /**
@@ -208,6 +223,23 @@ export class BackupService {
    * @returns 包含 JSON 数据的 Blob（MIME: application/json）
    */
   async exportAll(options?: { includeReferenceAssets?: boolean }): Promise<Blob> {
+    return (await this.buildFullBundle(options)).blob;
+  }
+
+  /**
+   * 供云同步使用的导出：一次调用**原子地**返回 Blob 与图片完整性，供 upload 的覆盖防护
+   * 判定"引用图却没导出全"。不经共享实例字段，避免并发导出造成的 TOCTOU 误判。
+   */
+  async exportForSync(
+    options?: { includeReferenceAssets?: boolean },
+  ): Promise<{ blob: Blob; imageIntegrity: ExportImageIntegrity }> {
+    return this.buildFullBundle(options);
+  }
+
+  /** 组装完整备份包，返回 Blob 及本次导出的图片完整性（referenced vs exported）。 */
+  private async buildFullBundle(
+    options?: { includeReferenceAssets?: boolean },
+  ): Promise<{ blob: Blob; imageIntegrity: ExportImageIntegrity }> {
     const root = this.profileManager.getRoot();
 
     /* ── 1. 角色档案元数据 ── */
@@ -259,7 +291,8 @@ export class BackupService {
     const customPresets = await this.collectCustomPresets();
 
     /* ── 8. 图片资产（已选用的头像/立绘/壁纸/秘档 + opt-in 参考素材） ── */
-    const imageAssets = await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
+    const { assets: imageAssets, integrity: imageIntegrity } =
+      await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
 
     // World book export — collect from all profiles
     let worldBooksExport: BackupBundle['worldBooks'];
@@ -308,9 +341,10 @@ export class BackupService {
       builtinPromptOverrides: builtinOverridesExport,
     };
 
-    return new Blob([JSON.stringify(bundle, null, 2)], {
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: 'application/json',
     });
+    return { blob, imageIntegrity };
   }
 
   /**
@@ -404,11 +438,14 @@ export class BackupService {
    * 5. 成功则更新 ProfileManager.activeProfile
    */
   private async importFullReplace(bundle: BackupBundle): Promise<void> {
+    /* ── 0. 反放大检测：来档引用了图片却不含图片数据 → 保留本地现有图片，不连锁清空 ── */
+    const imagesLookDropped = bundleImagesLookDropped(bundle);
+
     /* ── 1. 捕获当前状态快照，供失败时回滚 ── */
     const snapshot = await this.captureCurrentState();
 
     try {
-      /* ── 2. 擦除本地数据 ── */
+      /* ── 2. 擦除本地数据（图片缓存不在此清，见 restoreImageAssets） ── */
       await this.wipeAll();
 
       /* ── 3. 恢复各模块 ── */
@@ -422,9 +459,6 @@ export class BackupService {
       /* ── 4. 恢复用户自定义创角预设（2026-04-14 新增） ── */
       await this.restoreCustomPresets(bundle.customPresets);
 
-      /* ── 4b. 恢复图片资产 ── */
-      await this.restoreImageAssets(bundle.imageAssets);
-
       /* ── 4c. 恢复世界书（2026-05-19 新增） ── */
       await this.restoreWorldBooks(bundle);
 
@@ -435,6 +469,22 @@ export class BackupService {
         if (exists) {
           await this.profileManager.setActiveProfile(profileId, slotId);
         }
+      }
+
+      /* ── 6. 图片资产恢复放到最后（merge-then-prune），使前序任一失败都不会丢图；
+             protectIds 保护"来档引用但未携带"的图片不被误删（防部分退化档删掉本地独有图）。 ── */
+      await this.restoreImageAssets(bundle.imageAssets, {
+        preserve: imagesLookDropped,
+        protectIds: collectBundleReferencedIds(bundle),
+      });
+      if (imagesLookDropped) {
+        eventBus.emit('ui:toast', {
+          type: 'warning',
+          i18nKey: 'engine.toast.importPreservedImages',
+          message: '导入的备份引用了图片却不含任何图片数据，已保留本地现有图片以防丢失。',
+          id: 'import-preserved-images',
+          duration: 9000,
+        });
       }
     } catch (err) {
       /* ── 失败 → 从快照回滚 ── */
@@ -617,8 +667,11 @@ export class BackupService {
   private async collectSelectedImageAssets(
     saves: Record<string, unknown>,
     includeReferenceAssets = false,
-  ): Promise<Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }>> {
-    if (!this.imageAssetCache) return [];
+  ): Promise<{ assets: Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }>; integrity: ExportImageIntegrity }> {
+    // Integrity travels back WITH the assets (not via shared instance state) so the
+    // sync guard evaluates exactly this export — no TOCTOU with a concurrent export.
+    const integrity: ExportImageIntegrity = { referencedAssets: 0, exportedAssets: 0 };
+    if (!this.imageAssetCache) return { assets: [], integrity };
     const assetIds = new Set<string>();
 
     for (const saveData of Object.values(saves)) {
@@ -626,13 +679,36 @@ export class BackupService {
       collectAssetIdsFromTree(saveData as Record<string, unknown>, assetIds, includeReferenceAssets);
     }
 
-    if (assetIds.size === 0) return [];
+    integrity.referencedAssets = assetIds.size;
+    if (assetIds.size === 0) return { assets: [], integrity };
+
+    let exported: Array<{ id: string; metadata: ImageAsset; base64: string; mimeType: string }> = [];
     try {
-      return await this.imageAssetCache.exportByIds(assetIds);
+      exported = await this.imageAssetCache.exportByIds(assetIds);
     } catch (err) {
       console.warn('[BackupService] collectSelectedImageAssets failed:', err);
-      return [];
+      exported = [];
     }
+    integrity.exportedAssets = exported.length;
+
+    // Loudness: the state references image assets but the cache returned fewer (or
+    // none). The local image cache was evicted/cleared (separate `aga_image_cache`
+    // IndexedDB). Surface it NOW so the user sees the loss BEFORE this degraded
+    // backup overwrites a healthy cloud/file backup. This is the exact fingerprint
+    // of the 2026-07-10 corruption incident (126 refs, 0 exported), and also fires
+    // on PARTIAL eviction (e.g. 15/21) — which the sync guard now hard-blocks too.
+    if (exported.length < assetIds.size) {
+      const missing = assetIds.size - exported.length;
+      eventBus.emit('ui:toast', {
+        type: 'warning',
+        i18nKey: 'engine.toast.imageAssetsMissingOnExport',
+        i18nParams: { missing, total: assetIds.size },
+        message: `本次备份有 ${missing}/${assetIds.size} 张已引用图片在本地缓存中找不到（可能被浏览器清除），备份将缺图。请勿用它覆盖含图的云端/旧备份。`,
+        id: 'image-assets-missing-on-export',
+        duration: 10000,
+      });
+    }
+    return { assets: exported, integrity };
   }
 
   /** 恢复世界书数据 — 从 BackupBundle 的 worldBooks 字段恢复 */
@@ -663,17 +739,82 @@ export class BackupService {
     }
   }
 
-  /** 恢复图片资产到 ImageAssetCache */
+  /**
+   * 恢复图片资产到 ImageAssetCache（全替换语义：clear-then-import）。
+   *
+   * 作为全替换导入的**最后一步**执行——此前 wipeAll 不再清图片缓存，任一较早
+   * restore 失败时图片仍原样保留，回滚不会丢图。
+   *
+   * @param opts.preserve 为 true 时完全跳过（既不清空也不导入），保留本地现有图片。
+   *   用于"来档引用了图片却不含任何图片数据"的可疑损坏备份，避免连锁清空本地图片
+   *   （2026-07-10 事故的放大环节）。
+   */
   private async restoreImageAssets(
     data: BackupBundle['imageAssets'],
+    opts?: { preserve?: boolean; protectIds?: Set<string> },
   ): Promise<void> {
-    if (!this.imageAssetCache || !data || data.length === 0) return;
+    if (!this.imageAssetCache) return;
+    if (opts?.preserve) return; // keep whatever images the user still has locally
+
+    // Never prune an image the INCOMING save still references but the bundle
+    // happened not to carry (a partially-degraded bundle, e.g. 15 of 21) — keep the
+    // local copy rather than destroying an image the restored state still points at.
+    const protectIds = opts?.protectIds ?? new Set<string>();
+
+    // No images carried → drop only images that are ALSO not referenced by the
+    // incoming state (truly orphaned); protected refs are kept.
+    if (!data || data.length === 0) {
+      try {
+        const existing = await this.imageAssetCache.listAll();
+        for (const meta of existing) {
+          if (!protectIds.has(meta.id)) {
+            try { await this.imageAssetCache.delete(meta.id); } catch { /* best effort */ }
+          }
+        }
+      } catch (err) {
+        this.warnImageRestoreFailed(err);
+      }
+      return;
+    }
+
+    // Merge-then-prune (crash-safe, no memory-heavy snapshot): import the new set
+    // FIRST (so the cache is never momentarily empty), THEN delete any image that is
+    // neither carried NOR referenced by the incoming save. A mid-way failure leaves
+    // EXTRA (harmless) images rather than wiping everything — which, combined with
+    // running this as the LAST import step, means a failed/rolled-back import can
+    // never lose the user's image library (audit 2026-07-09: rollback had no image
+    // snapshot to restore from).
     try {
       await this.imageAssetCache.importEntries(data);
+      const keepIds = new Set<string>(protectIds);
+      for (const d of data) keepIds.add(d.metadata?.id ?? d.id);
+      const existing = await this.imageAssetCache.listAll();
+      for (const meta of existing) {
+        if (!keepIds.has(meta.id)) {
+          try { await this.imageAssetCache.delete(meta.id); } catch { /* best effort */ }
+        }
+      }
     } catch (err) {
-      console.warn('[BackupService] restoreImageAssets failed:', err);
+      this.warnImageRestoreFailed(err);
     }
   }
+
+  /**
+   * Warn (console + visible toast) when image restore fails. It is the LAST import
+   * step and does not trigger snapshot rollback, so a silent failure would leave
+   * the user believing "import succeeded" while images were never restored.
+   */
+  private warnImageRestoreFailed(err: unknown): void {
+    console.warn('[BackupService] restoreImageAssets failed:', err);
+    eventBus.emit('ui:toast', {
+      type: 'warning',
+      i18nKey: 'engine.toast.imageRestoreFailed',
+      message: '存档已恢复，但图片写入本地失败（可能存储空间不足），部分图片可能缺失。',
+      id: 'image-restore-failed',
+      duration: 9000,
+    });
+  }
+
 
   /**
    * 擦除本地所有数据（IDB 全部 key + 所有 aga_* localStorage 键）
@@ -692,10 +833,10 @@ export class BackupService {
     await this.configStore.clear();
     await this.promptStorage.clear();
 
-    // 4. 清空图片缓存
-    if (this.imageAssetCache) {
-      try { await this.imageAssetCache.clear(); } catch { /* best effort */ }
-    }
+    // 4. 图片缓存不在此清空 —— 移到 restoreImageAssets（导入的最后一步）做
+    //    clear-then-import，确保任一较早步骤失败时图片仍在，回滚不会丢图。
+    //    （历史：wipeAll 曾在此 clear()，一旦后续 restore 失败，captureCurrentState
+    //    没有快照图片缓存 → 回滚也补不回图片 → 图片永久丢失。）
 
     // 5. 清空世界书 IDB (aga-worldbook)
     if (this.worldBookStorage) {
@@ -823,7 +964,7 @@ export class BackupService {
       }
     }
 
-    const imageAssets = await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
+    const { assets: imageAssets } = await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
 
     const bundle: BackupBundle = {
       version: BACKUP_FORMAT_VERSION,
@@ -1160,6 +1301,45 @@ export function collectAssetIdsFromTree(tree: Record<string, unknown>, ids: Set<
 }
 
 /**
+ * 收集来档存档树中引用到的全部图片 asset ID（含参考素材库）。
+ *
+ * 用于 restoreImageAssets 的 `protectIds`：全替换导入 merge-then-prune 时，绝不删除
+ * "来档引用了却没携带"的本地图片（防部分退化档误删本地独有图，审计 2026-07-09 #3）。
+ * 这里用 includeReferenceAssets=true（保护面尽量大，宁可多留不可误删）。
+ */
+export function collectBundleReferencedIds(bundle: BackupBundle): Set<string> {
+  const ids = new Set<string>();
+  for (const save of Object.values(bundle.saves ?? {})) {
+    if (save && typeof save === 'object') {
+      collectAssetIdsFromTree(save as Record<string, unknown>, ids, true);
+    }
+  }
+  return ids;
+}
+
+/**
+ * 判断来档是否"引用了图片却不含任何图片数据"——即在图片缓存被清空后所做的备份指纹。
+ *
+ * 命中时 importFullReplace 保留本地现有图片并提示（保守跳过 clear/import）。
+ * 这里用 includeReferenceAssets=false，与导出默认（`SavePanel` 参考素材开关默认关）
+ * 对齐：仅"选用类"引用（头像/立绘/壁纸/秘档）算数，避免把"仅引用参考素材库、
+ * 合法未携带"的正常导出误判为损坏而不必要地进入保留模式（审计 2026-07-09 #6）。
+ *
+ * 纯函数（不触达 IDB），供 importFullReplace 与单元测试复用。
+ */
+export function bundleImagesLookDropped(bundle: BackupBundle): boolean {
+  const carried = bundle.imageAssets?.length ?? 0;
+  if (carried > 0) return false;
+  const ids = new Set<string>();
+  for (const save of Object.values(bundle.saves ?? {})) {
+    if (save && typeof save === 'object') {
+      collectAssetIdsFromTree(save as Record<string, unknown>, ids, false);
+    }
+  }
+  return ids.size > 0;
+}
+
+/**
  * 测试用导出 —— 公开模块内部的纯函数供单元测试使用
  *
  * 不是公共 API，仅供 `backup-service.test.ts` 导入。
@@ -1173,6 +1353,7 @@ export const _testExports = {
   parseCompositeKey,
   hasVectorContent,
   collectAssetIdsFromTree,
+  bundleImagesLookDropped,
   BACKUP_FORMAT_VERSION,
   LS_KEY_PREFIXES,
 };
