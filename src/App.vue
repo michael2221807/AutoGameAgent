@@ -7,11 +7,14 @@
  * 对应 `implementation-standards`：错误/提示不吞、需对用户可见。
  */
 import Toast from '@/ui/components/common/Toast.vue';
+import CloudSyncManager from '@/ui/components/cloud/CloudSyncManager.vue';
 </script>
 
 <template>
   <router-view />
   <Toast />
+  <!-- App-level GitHub auto cloud-sync engine (no persistent UI; toast + conflict modal only) -->
+  <CloudSyncManager />
 </template>
 
 <style>

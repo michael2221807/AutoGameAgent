@@ -168,6 +168,22 @@ describe('collectLocalStorageSettings', () => {
     localStorage.setItem('foo', 'bar');
     expect(collectLocalStorageSettings()).toEqual({});
   });
+
+  it('EXCLUDES device-local cloud-sync keys (baseline + pending never travel)', () => {
+    // Device-local sync bookkeeping: exporting it and restoring on another device
+    // would corrupt that device's conflict detection / re-upload logic. Must not
+    // appear in the bundle.
+    localStorage.setItem('aga_user_settings', '{"theme":"dark"}');
+    localStorage.setItem('aga_github_sync_token', 'ghp_secret');   // token DOES travel (own repo)
+    localStorage.setItem('aga_github_sync_baseline', '2026-07-12T00:00:00.000Z');
+    localStorage.setItem('aga_github_sync_pending', '1');
+
+    const collected = collectLocalStorageSettings();
+    expect(collected).not.toHaveProperty('aga_github_sync_baseline');
+    expect(collected).not.toHaveProperty('aga_github_sync_pending');
+    expect(collected).toHaveProperty('aga_user_settings');
+    expect(collected).toHaveProperty('aga_github_sync_token');
+  });
 });
 
 // ─── wipeLocalStorageSettings ───────────────────────────────────
@@ -228,6 +244,21 @@ describe('wipeLocalStorageSettings', () => {
     wipeLocalStorageSettings();
     wipeLocalStorageSettings(); // should not throw
     expect(localStorage.getItem('aga_foo')).toBeNull();
+  });
+
+  it('PRESERVES device-local cloud-sync keys across a foreign full-restore wipe', () => {
+    // A full-backup restore wipes all aga_* keys, but this device's own sync
+    // bookkeeping must survive — it describes THIS device's relationship to the
+    // cloud, which importing someone else's backup does not change.
+    localStorage.setItem('aga_api_management', 'X');
+    localStorage.setItem('aga_github_sync_baseline', '2026-07-12T00:00:00.000Z');
+    localStorage.setItem('aga_github_sync_pending', '1');
+
+    wipeLocalStorageSettings();
+
+    expect(localStorage.getItem('aga_api_management')).toBeNull();
+    expect(localStorage.getItem('aga_github_sync_baseline')).toBe('2026-07-12T00:00:00.000Z');
+    expect(localStorage.getItem('aga_github_sync_pending')).toBe('1');
   });
 });
 

@@ -47,6 +47,32 @@ const ENGINE_VERSION = '0.1.0';
  */
 const LS_KEY_PREFIXES = ['aga_', 'aga-'] as const;
 
+/**
+ * Device-local localStorage keys that must NEVER travel in a backup / cloud sync.
+ *
+ * These hold per-device sync bookkeeping, not user content or portable settings.
+ * Exporting them and restoring on another device would corrupt that device's own
+ * state. Concretely `aga_github_sync_baseline` is *this* device's view of the
+ * last-synced cloud manifest `createdAt` — the multi-device conflict token
+ * (github-sync.ts). If device A's baseline landed on device B, B would either
+ * miss a real conflict or raise a false one.
+ *
+ * Excluded from FOUR places: collect (never exported), wipe (a foreign
+ * full-restore must not erase this device's sync state), restore (a bundle must
+ * never write it), and the import-rollback snapshot write-back (restoreFromSnapshot).
+ * Keys here still match LS_KEY_PREFIXES — the Set is the override that carves them
+ * back out.
+ *
+ * Members (both from github-sync.ts):
+ * - aga_github_sync_baseline — last-synced cloud manifest createdAt (conflict token)
+ * - aga_github_sync_pending  — "this device has a local save not yet auto-uploaded"
+ *   (survives across sessions so a failed tail-flush is retried next session)
+ */
+const LS_DEVICE_LOCAL_KEYS: ReadonlySet<string> = new Set([
+  'aga_github_sync_baseline',
+  'aga_github_sync_pending',
+]);
+
 // ─── 类型 ───
 
 /**
@@ -873,6 +899,7 @@ export class BackupService {
     // 3. 回写 localStorage
     for (const [key, value] of Object.entries(snapshot.ls)) {
       if (!LS_KEY_PREFIXES.some((p) => key.startsWith(p))) continue;
+      if (LS_DEVICE_LOCAL_KEYS.has(key)) continue; // never restore device-local sync state (defense-in-depth; source already excludes it)
       if (value === null) {
         localStorage.removeItem(key);
       } else {
@@ -1162,6 +1189,7 @@ function collectLocalStorageSettings(): Record<string, string | null> {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (!key) continue;
+    if (LS_DEVICE_LOCAL_KEYS.has(key)) continue; // device-local sync state never travels
     if (LS_KEY_PREFIXES.some((p) => key.startsWith(p))) {
       settings[key] = localStorage.getItem(key);
     }
@@ -1180,6 +1208,7 @@ function wipeLocalStorageSettings(): void {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (!key) continue;
+    if (LS_DEVICE_LOCAL_KEYS.has(key)) continue; // keep this device's own sync bookkeeping across a foreign restore
     if (LS_KEY_PREFIXES.some((p) => key.startsWith(p))) {
       keysToRemove.push(key);
     }
@@ -1203,6 +1232,7 @@ function restoreLocalStorageSettings(
 ): void {
   for (const [key, value] of Object.entries(settings)) {
     if (!LS_KEY_PREFIXES.some((p) => key.startsWith(p))) continue;
+    if (LS_DEVICE_LOCAL_KEYS.has(key)) continue; // a bundle must never overwrite device-local sync state
     if (value === null) {
       localStorage.removeItem(key);
     } else {

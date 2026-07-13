@@ -1,5 +1,5 @@
 // Archived research: docs/design/archive/cloud-sync-options.md
-// App doc: docs/user-guide/cloud-sync.md, docs/user-guide/pages/game-save.md §2.2 + §7.5 (上传保护), docs/user-guide/pages/home.md §1.3.3
+// App doc: docs/user-guide/cloud-sync.md, docs/user-guide/pages/game-save.md §2.2 + §7.5 (上传保护) + §7.6 (自动同步冲突), docs/user-guide/pages/home.md §1.3.3
 /**
  * GitHub Sync Service — 通过 GitHub Contents API 实现存档云同步
  *
@@ -29,6 +29,18 @@ const V2_DIR = 'v2';
 const LS_TOKEN = 'aga_github_sync_token';
 const LS_OWNER = 'aga_github_sync_owner';
 const LS_REPO = 'aga_github_sync_repo';
+// Auto-sync toggle (portable preference) + device-local conflict baseline.
+// The baseline is EXCLUDED from backup/cloud collection (backup-service.ts
+// LS_DEVICE_LOCAL_KEYS): it is *this* device's view of the last-synced cloud
+// manifest createdAt and must never travel, or another device would mis-detect
+// conflicts. See docs/design/github-auto-sync-design.md §5 + §7.
+const LS_AUTOSYNC = 'aga_github_autosync_enabled';
+const LS_BASELINE = 'aga_github_sync_baseline';
+// Device-local "there is a local save not yet auto-uploaded" flag. Persisted (not a
+// same-session ref) so a failed tail-flush is retried next session, and so a fresh
+// session that left data unsynced still uploads. Excluded from backup alongside the
+// baseline (backup-service LS_DEVICE_LOCAL_KEYS).
+const LS_PENDING = 'aga_github_sync_pending';
 const DEFAULT_REPO = 'aga-cloud-save';
 const API_VERSION = '2022-11-28';
 
@@ -63,10 +75,55 @@ export class DegradedUploadError extends Error {
   }
 }
 
+/** Cloud-save summary returned by {@link GitHubSyncService.getCloudInfo}. */
+export interface CloudInfo {
+  exists: boolean;
+  updatedAt?: string;
+  sizeKB?: number;
+}
+
+/**
+ * Thrown by {@link GitHubSyncService.upload} / {@link GitHubSyncService.download}
+ * when another cloud operation is already in flight. Upload and download share ONE
+ * lock so that WITHIN A TAB a manual action and an automatic one (or the on-exit
+ * flush) never interleave and race on the manifest/chunk PUTs. Callers that
+ * opportunistically trigger sync (auto-upload) should check
+ * {@link GitHubSyncService.isSyncing} first and skip rather than catch.
+ *
+ * NOTE — scope is per-tab: `_syncInFlight` is an instance field, and there is one
+ * service instance per browser tab, so two tabs of the same origin are NOT
+ * serialized by this lock. Cross-tab races are de-risked (not eliminated) by the
+ * unchanged upload atomicity: chunks go to per-upload generation paths, and the
+ * manifest PUT carries a `sha` precondition, so GitHub 409s the losing writer
+ * rather than silently accepting a stale overwrite (the loser's orphan chunks are
+ * pruned on the next successful upload). No silent corruption, but not a universal
+ * cross-tab mutex.
+ */
+export class SyncInProgressError extends Error {
+  constructor() {
+    super('sync-in-progress');
+    this.name = 'SyncInProgressError';
+  }
+}
+
+/** Result of {@link GitHubSyncService.detectConflict}. */
+export interface ConflictCheck {
+  /** true ⇒ cloud changed since this device last synced (or a fresh device meets a non-empty cloud). */
+  conflict: boolean;
+  cloud: CloudInfo;
+}
+
 // ─── 服务 ───
 
 export class GitHubSyncService {
   constructor(private backup: BackupService) {}
+
+  /**
+   * Single in-flight guard shared by upload() and download(). Only one cloud
+   * read-or-write runs at a time, so a manual action and an automatic one (or the
+   * on-exit flush) never interleave and race on the manifest/chunk PUTs.
+   */
+  private _syncInFlight = false;
 
   // ── 配置读写 ──
 
@@ -80,6 +137,62 @@ export class GitHubSyncService {
   setRepoName(v: string): void { localStorage.setItem(LS_REPO, v.trim() || DEFAULT_REPO); }
 
   isConfigured(): boolean { return !!(this.getToken() && this.getOwner()); }
+
+  // ── 自动同步开关（可移植偏好）──
+
+  /** Whether auto-upload-on-next-round is enabled. Off by default. */
+  getAutoSyncEnabled(): boolean { return localStorage.getItem(LS_AUTOSYNC) === '1'; }
+  setAutoSyncEnabled(v: boolean): void {
+    if (v) localStorage.setItem(LS_AUTOSYNC, '1');
+    else localStorage.removeItem(LS_AUTOSYNC);
+  }
+
+  // ── 冲突基线（设备本地，绝不随备份/云同步迁移）──
+
+  /**
+   * This device's view of the cloud manifest `createdAt` it last synced to (via a
+   * successful upload OR download). Empty string = never synced from this device.
+   */
+  getSyncBaseline(): string { return localStorage.getItem(LS_BASELINE) ?? ''; }
+  setSyncBaseline(createdAt: string): void {
+    if (createdAt) localStorage.setItem(LS_BASELINE, createdAt);
+    else localStorage.removeItem(LS_BASELINE);
+  }
+
+  /**
+   * "This device has a local save not yet successfully auto-uploaded." Persisted so
+   * it survives across sessions: a tail-flush that failed on close (browser killed
+   * the request) is retried on the next launch, and a session that left data unsynced
+   * still uploads. Set on every save, cleared only when an upload that covered that
+   * save succeeds (the caller compares an in-memory save epoch to avoid clearing a
+   * newer save that landed mid-upload). Device-local — excluded from backup.
+   */
+  hasPendingSync(): boolean { return localStorage.getItem(LS_PENDING) === '1'; }
+  setPendingSync(pending: boolean): void {
+    if (pending) localStorage.setItem(LS_PENDING, '1');
+    else localStorage.removeItem(LS_PENDING);
+  }
+
+  /** True while an upload or download is running. Auto-triggers should skip when set. */
+  isSyncing(): boolean { return this._syncInFlight; }
+
+  /**
+   * Compare the current cloud save against this device's sync baseline.
+   *
+   * conflict === true means the cloud moved on since we last synced — either a
+   * DIFFERENT device (or session) uploaded after our baseline, OR this is a fresh
+   * device (empty baseline) meeting a non-empty cloud. In both cases an automatic
+   * upload would silently clobber a cloud save the user may still want, so the
+   * caller must confirm first (docs/design/github-auto-sync-design.md §5). An
+   * imageless/empty cloud (`exists === false`) is never a conflict.
+   */
+  async detectConflict(): Promise<ConflictCheck> {
+    const cloud = await this.getCloudInfo();
+    if (!cloud.exists) return { conflict: false, cloud };
+    const baseline = this.getSyncBaseline();
+    const conflict = !baseline || cloud.updatedAt !== baseline;
+    return { conflict, cloud };
+  }
 
   // ── 验证连接 ──
 
@@ -115,7 +228,23 @@ export class GitHubSyncService {
 
   // ── 上传存档（v2 分块管道）──
 
+  /**
+   * Upload the local save to the cloud (full overwrite). Serialized against any
+   * other cloud op via the shared in-flight lock — throws {@link SyncInProgressError}
+   * if one is already running. On success, records the committed manifest's
+   * `createdAt` as this device's sync baseline (feeds conflict detection).
+   */
   async upload(onStatus?: (s: SyncStatus) => void, opts?: { force?: boolean }): Promise<void> {
+    if (this._syncInFlight) throw new SyncInProgressError();
+    this._syncInFlight = true;
+    try {
+      await this._uploadLocked(onStatus, opts);
+    } finally {
+      this._syncInFlight = false;
+    }
+  }
+
+  private async _uploadLocked(onStatus?: (s: SyncStatus) => void, opts?: { force?: boolean }): Promise<void> {
     const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
     const { owner, repo } = this.resolveTarget();
 
@@ -230,6 +359,12 @@ export class GitHubSyncService {
       throw stageError('更新云端索引', err);
     }
 
+    // Commit point reached: the manifest now points at the freshly-written chunks,
+    // so cloud == this export. Record its createdAt as our baseline BEFORE the
+    // best-effort cleanup, so conflict detection treats a later interrupted cleanup
+    // as already-synced (the save is valid) rather than a phantom conflict.
+    this.setSyncBaseline(manifest.createdAt);
+
     // Cleanup stale chunks using the already-fetched listing
     this.cleanupStaleFromList(owner, repo, manifest, existingFiles);
 
@@ -311,7 +446,23 @@ export class GitHubSyncService {
 
   // ── 下载存档（v2 分块管道）──
 
+  /**
+   * Download the cloud save and overwrite local (full replace). Serialized against
+   * any other cloud op via the shared lock. On success, records the downloaded
+   * manifest's `createdAt` as this device's sync baseline — local now equals cloud,
+   * so a subsequent auto-upload of unchanged data raises no false conflict.
+   */
   async download(onStatus?: (s: SyncStatus) => void): Promise<void> {
+    if (this._syncInFlight) throw new SyncInProgressError();
+    this._syncInFlight = true;
+    try {
+      await this._downloadLocked(onStatus);
+    } finally {
+      this._syncInFlight = false;
+    }
+  }
+
+  private async _downloadLocked(onStatus?: (s: SyncStatus) => void): Promise<void> {
     const emit = (stage: SyncStatus['stage'], message: string) => onStatus?.({ stage, message });
     const { owner, repo } = this.resolveTarget();
 
@@ -338,6 +489,10 @@ export class GitHubSyncService {
     emit('downloading', '正在校验并恢复…');
     const json = await unpack(manifest, chunks);
     await this.backup.importAll(new Blob([json], { type: 'application/json' }));
+    // Local now equals this cloud manifest. importAll's wipe preserves the
+    // device-local baseline (backup-service LS_DEVICE_LOCAL_KEYS), so overwrite it
+    // here with the cloud's createdAt — a later unchanged auto-upload sees no conflict.
+    this.setSyncBaseline(manifest.createdAt);
     emit('done', '下载并恢复完成');
   }
 
@@ -365,7 +520,7 @@ export class GitHubSyncService {
 
   // ── 查询云端信息（v2）──
 
-  async getCloudInfo(): Promise<{ exists: boolean; updatedAt?: string; sizeKB?: number }> {
+  async getCloudInfo(): Promise<CloudInfo> {
     const { owner, repo } = this.resolveTarget();
     try {
       const manifest = await this.fetchManifest(owner, repo);

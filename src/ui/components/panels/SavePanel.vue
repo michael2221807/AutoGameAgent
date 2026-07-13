@@ -16,6 +16,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useLocale } from '@/ui/composables/useLocale';
+import { useCloudAutoSyncToggle } from '@/ui/composables/useCloudAutoSyncToggle';
 import Modal from '@/ui/components/common/Modal.vue';
 import CardExportFlow from '@/ui/components/panels/CardExportFlow.vue';
 import SaveToCardFlow from '@/ui/components/panels/SaveToCardFlow.vue';
@@ -805,6 +806,7 @@ async function ghUpload(force = false): Promise<void> {
     }
     await githubSync.upload((s) => { ghStatus.value = s; }, { force });
     void ghRefreshCloudInfo();
+    refreshGhLastSync(); // manual upload moved the baseline → reflect it in the last-synced label
   } catch (err) {
     // Guardrail: the export would overwrite a healthy cloud backup with a degraded
     // (imageless) one. Do NOT auto-proceed — surface the specifics and require an
@@ -848,6 +850,14 @@ if (githubSync?.isConfigured()) {
     }
   })();
 }
+
+// ── GitHub auto cloud-sync toggle (shared composable; engine runs in CloudSyncManager.vue) ──
+const {
+  autoSyncOn: ghAutoSync,
+  lastSynced: ghLastSync,
+  toggle: ghToggleAutoSync,
+  refreshLastSync: refreshGhLastSync,
+} = useCloudAutoSyncToggle(githubSync);
 
 // ─── LAN Sync ────────────────────────────────────────────────
 
@@ -986,6 +996,19 @@ const showSettings = ref(false);
               </Tooltip>
             </div>
           </div>
+
+          <!-- Auto cloud-sync toggle — engine runs app-wide in CloudSyncManager.vue -->
+          <div class="gh-autosync-row">
+            <AgaToggle
+              :modelValue="ghAutoSync"
+              @update:modelValue="ghToggleAutoSync"
+              :label="$t('save.autoSyncCloud.toggleLabel')"
+              show-label
+              data-testid="gh-autosync-toggle"
+            />
+            <span v-if="ghAutoSync && ghLastSync" class="gh-autosync-time">{{ $t('save.autoSyncCloud.lastSynced', { time: ghLastSync }) }}</span>
+          </div>
+          <p class="gh-autosync-hint">{{ $t('save.autoSyncCloud.toggleHint') }}</p>
         </template>
 
         <p v-if="ghStatus.stage === 'error'" class="gh-error">{{ ghStatus.message }}</p>
@@ -1539,6 +1562,25 @@ const showSettings = ref(false);
 }
 /* icon-only AgaButton: tighten padding so the X / copy glyph reads as a compact chip */
 .gh-icon-btn { padding: var(--space-2xs) var(--space-xs); }
+.gh-autosync-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.gh-autosync-time {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #8888a0);
+}
+.gh-autosync-hint {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--color-text-secondary, #8888a0);
+}
 .lan-toggle-label {
   font-size: 0.72rem;
 }

@@ -34,9 +34,11 @@ import APIPanel from '@/ui/components/panels/APIPanel.vue';
 import SettingsPanel from '@/ui/components/panels/SettingsPanel.vue';
 import CardImportFlow from '@/ui/components/panels/CardImportFlow.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
+import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
 import { eventBus } from '@/engine/core/event-bus';
 import { useLocale } from '@/ui/composables/useLocale';
+import { useCloudAutoSyncToggle } from '@/ui/composables/useCloudAutoSyncToggle';
 
 const router = useRouter();
 const { t } = useI18n();
@@ -342,6 +344,13 @@ if (githubSync?.isConfigured()) {
   })();
 }
 
+// ── GitHub auto cloud-sync toggle (shared composable; engine runs in CloudSyncManager.vue) ──
+const {
+  autoSyncOn: ghAutoSync,
+  lastSynced: ghLastSync,
+  toggle: ghToggleAutoSync,
+} = useCloudAutoSyncToggle(githubSync);
+
 onMounted(async () => {
   if (profileManager) {
     profiles.value = profileManager.listProfiles();
@@ -612,6 +621,19 @@ onMounted(async () => {
             <template v-else>
               <div class="sync-cloud-label">{{ $t('home.cloudStatus.checking') }}</div>
             </template>
+          </div>
+
+          <!-- Auto cloud-sync toggle — engine runs app-wide in CloudSyncManager.vue -->
+          <div class="sync-autosync">
+            <AgaToggle
+              :modelValue="ghAutoSync"
+              @update:modelValue="ghToggleAutoSync"
+              :label="$t('save.autoSyncCloud.toggleLabel')"
+              show-label
+              data-testid="home-autosync-toggle"
+            />
+            <span v-if="ghAutoSync && ghLastSync" class="sync-autosync-time">{{ $t('save.autoSyncCloud.lastSynced', { time: ghLastSync }) }}</span>
+            <p class="sync-autosync-hint">{{ $t('save.autoSyncCloud.toggleHint') }}</p>
           </div>
 
           <div class="sync-actions">
@@ -1348,6 +1370,26 @@ onMounted(async () => {
   font-size: 0.82rem;
   color: var(--color-text-secondary);
   margin-top: 2px;
+}
+
+/* Auto cloud-sync toggle */
+.sync-autosync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.sync-autosync-time {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+.sync-autosync-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 .sync-cloud-size {
   margin-left: 6px;

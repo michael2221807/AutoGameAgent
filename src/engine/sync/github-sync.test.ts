@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GitHubSyncService, DegradedUploadError, type SyncStatus } from './github-sync';
+import { GitHubSyncService, DegradedUploadError, SyncInProgressError, type SyncStatus } from './github-sync';
 import { pack } from './chunked-bundle-packer';
 import type { ChunkManifest } from './chunked-bundle-packer';
 
@@ -809,5 +809,165 @@ describe('getCloudInfo — v2 manifest', () => {
     const gets = fetchCalls.filter(c => c.method === 'GET');
     const backupJsonCalls = gets.filter(c => c.url.includes('backup.json'));
     expect(backupJsonCalls).toHaveLength(0);
+  });
+});
+
+// ─── Auto-sync toggle (portable preference) ───
+
+describe('auto-sync toggle', () => {
+  it('defaults to OFF', () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    expect(sync.getAutoSyncEnabled()).toBe(false);
+  });
+
+  it('persists on/off via localStorage', () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    sync.setAutoSyncEnabled(true);
+    expect(sync.getAutoSyncEnabled()).toBe(true);
+    expect(storage.get('aga_github_autosync_enabled')).toBe('1');
+    sync.setAutoSyncEnabled(false);
+    expect(sync.getAutoSyncEnabled()).toBe(false);
+    expect(storage.has('aga_github_autosync_enabled')).toBe(false);
+  });
+});
+
+// ─── Pending-sync flag (persisted "local save not yet uploaded") ───
+
+describe('pending-sync flag', () => {
+  it('defaults to false', () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    expect(sync.hasPendingSync()).toBe(false);
+  });
+
+  it('persists set/clear via localStorage (survives across service instances = across sessions)', () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    sync.setPendingSync(true);
+    expect(sync.hasPendingSync()).toBe(true);
+    expect(storage.get('aga_github_sync_pending')).toBe('1');
+
+    // A fresh instance (simulating a new session/tab) still sees the persisted flag.
+    const next = new GitHubSyncService(createMockBackup() as never);
+    expect(next.hasPendingSync()).toBe(true);
+
+    next.setPendingSync(false);
+    expect(next.hasPendingSync()).toBe(false);
+    expect(storage.has('aga_github_sync_pending')).toBe(false);
+  });
+});
+
+// ─── Sync baseline + conflict detection (multi-device guard) ───
+
+/** Read the createdAt out of the committed manifest PUT (the upload's commit point). */
+function committedManifestCreatedAt(): string {
+  const manifestPut = fetchCalls.find(c => c.method === 'PUT' && c.url.includes('manifest.json'));
+  const b64 = (manifestPut!.body as Record<string, string>).content;
+  const str = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+  return (JSON.parse(str) as { createdAt: string }).createdAt;
+}
+
+describe('sync baseline', () => {
+  it('starts empty (never synced from this device)', () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    expect(sync.getSyncBaseline()).toBe('');
+  });
+
+  it('upload records the committed manifest createdAt as the baseline', async () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    expect(sync.getSyncBaseline()).toBe('');
+
+    await sync.upload();
+
+    expect(sync.getSyncBaseline()).toBe(committedManifestCreatedAt());
+    expect(sync.getSyncBaseline()).not.toBe('');
+  });
+
+  it('download records the downloaded manifest createdAt as the baseline', async () => {
+    const backup = createMockBackup();
+    const sync = new GitHubSyncService(backup as never);
+    const { manifest } = await setupDownloadableBundle();
+
+    await sync.download();
+
+    expect(sync.getSyncBaseline()).toBe(manifest.createdAt);
+  });
+
+  it('a blocked degraded upload does NOT move the baseline (nothing was committed)', async () => {
+    const sync = new GitHubSyncService(createMockBackup(undefined, { referencedAssets: 5, exportedAssets: 0 }) as never);
+    await expect(sync.upload()).rejects.toBeInstanceOf(DegradedUploadError);
+    expect(sync.getSyncBaseline()).toBe('');
+  });
+});
+
+describe('detectConflict', () => {
+  it('no conflict when the cloud is empty', async () => {
+    const sync = new GitHubSyncService(createMockBackup() as never); // default mock → manifest 404
+    const { conflict, cloud } = await sync.detectConflict();
+    expect(cloud.exists).toBe(false);
+    expect(conflict).toBe(false);
+  });
+
+  it('conflict on a fresh device (no baseline) meeting a non-empty cloud', async () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    await setupDownloadableBundle(); // cloud now exists
+    expect(sync.getSyncBaseline()).toBe('');
+
+    const { conflict, cloud } = await sync.detectConflict();
+    expect(cloud.exists).toBe(true);
+    expect(conflict).toBe(true);
+  });
+
+  it('no conflict when the cloud createdAt equals our baseline (unchanged since we synced)', async () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    const { manifest } = await setupDownloadableBundle();
+    sync.setSyncBaseline(manifest.createdAt);
+
+    const { conflict } = await sync.detectConflict();
+    expect(conflict).toBe(false);
+  });
+
+  it('conflict when the cloud createdAt differs from our baseline (another device uploaded)', async () => {
+    const sync = new GitHubSyncService(createMockBackup() as never);
+    await setupDownloadableBundle();
+    sync.setSyncBaseline('2000-01-01T00:00:00.000Z'); // stale baseline
+
+    const { conflict } = await sync.detectConflict();
+    expect(conflict).toBe(true);
+  });
+});
+
+// ─── Shared upload/download concurrency lock ───
+
+describe('sync concurrency lock', () => {
+  it('rejects a second upload while one is in flight (SyncInProgressError)', async () => {
+    // Hold the first upload at its export step with a deferred promise so it stays
+    // in flight deterministically.
+    let releaseExport!: (v: { blob: Blob; imageIntegrity: { referencedAssets: number; exportedAssets: number } }) => void;
+    const blob = new Blob([JSON.stringify({ version: 1, profiles: {}, saves: {}, vectors: {}, configs: {}, prompts: {}, engineSettings: {} })], { type: 'application/json' });
+    const backup = {
+      exportForSync: vi.fn().mockReturnValue(new Promise((res) => { releaseExport = res; })),
+      importAll: vi.fn().mockResolvedValue(undefined),
+    };
+    const sync = new GitHubSyncService(backup as never);
+
+    const p1 = sync.upload();          // enters lock, awaits export (pending)
+    expect(sync.isSyncing()).toBe(true);
+
+    await expect(sync.upload()).rejects.toBeInstanceOf(SyncInProgressError);
+    await expect(sync.download()).rejects.toBeInstanceOf(SyncInProgressError); // download shares the lock
+
+    releaseExport({ blob, imageIntegrity: { referencedAssets: 0, exportedAssets: 0 } });
+    await p1;
+    expect(sync.isSyncing()).toBe(false); // lock released
+  });
+
+  it('releases the lock after a blocked degraded upload, so a later upload can proceed', async () => {
+    const sync = new GitHubSyncService(createMockBackup(undefined, { referencedAssets: 5, exportedAssets: 0 }) as never);
+
+    await expect(sync.upload()).rejects.toBeInstanceOf(DegradedUploadError);
+    expect(sync.isSyncing()).toBe(false);
+
+    // force:true now succeeds — proving the lock was released by the finally, not stuck.
+    await sync.upload(undefined, { force: true });
+    expect(fetchCalls.some(c => c.method === 'PUT' && c.url.includes('manifest.json'))).toBe(true);
   });
 });

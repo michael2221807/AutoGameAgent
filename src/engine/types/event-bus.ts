@@ -26,6 +26,10 @@ export type EngineEventName =
   | 'ui:debug-prompt-response'
   | 'ui:toast'
   | 'ui:modal'
+  // Cloud auto-sync toggle changed anywhere (SavePanel / HomeView / auto-pause).
+  // Payload: { enabled: boolean }. Lets every sync surface + CloudSyncManager keep
+  // their local view of the toggle consistent without cross-component reactive wiring.
+  | 'ui:cloud-autosync-changed'
   | 'worldbook:updated'
   | string; // allow custom events
 
