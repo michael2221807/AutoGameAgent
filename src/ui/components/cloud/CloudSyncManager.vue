@@ -81,8 +81,9 @@ function toast(type: 'success' | 'warning' | 'error' | 'info', message: string, 
 // ─── Core ─────────────────────────────────────────────────────
 
 /**
- * Attempt an auto-upload if all guards pass. Called on next-round-start and on
- * page-hide (best-effort tail flush). Never throws.
+ * Attempt an auto-upload if all guards pass. Called ONLY on next-round-start
+ * (pipeline:user-input); it no-ops unless the previous round is still unuploaded
+ * (pending flag). Never throws.
  */
 async function maybeAutoUpload(): Promise<void> {
   const gh = githubSync;
@@ -207,40 +208,34 @@ let offInput: (() => void) | null = null;
 let offSave: (() => void) | null = null;
 let offToggle: (() => void) | null = null;
 
-function onVisibility(): void {
-  // Tail flush: the last round the player accepts has no "next round" to trigger it.
-  // On hide (tab switch / minimize) attempt the SAME guarded upload — if the page
-  // survives (tab switch) it completes.
-  if (document.visibilityState === 'hidden') void maybeAutoUpload();
-}
-function onPageHide(): void {
-  // Tail flush on navigation-away / close (design doc §3 names both visibilitychange
-  // AND pagehide). Best-effort: the browser may kill the request before it finishes —
-  // the PERSISTED pending flag then retries on the next launch, so nothing is lost.
-  void maybeAutoUpload();
-}
-
 onMounted(() => {
+  // SINGLE trigger: the start of a new round. maybeAutoUpload uploads only if the
+  // previous round has not been uploaded yet (the pending flag) — i.e. "before each
+  // round, if the last round wasn't uploaded, upload it".
+  //
+  // Deliberately NO visibilitychange / pagehide triggers. Those fired on every
+  // tab-switch / minimize ("upload on the slightest move", user report 2026-07-14)
+  // and, combined with per-round uploads + the old fire-and-forget cleanup, produced
+  // a storm of chunk generations + a 409 flood. The LAST round of a session is still
+  // covered without a tail-flush: the pending flag is PERSISTED (localStorage), so
+  // the next launch's first round-start uploads it. Local data is never at risk
+  // either way (uploads only READ local state).
   offInput = eventBus.on('pipeline:user-input', () => { void maybeAutoUpload(); });
   offSave = eventBus.on('engine:save-complete', () => {
-    githubSync?.setPendingSync(true); // persisted: survives a failed tail-flush / session end
+    githubSync?.setPendingSync(true); // persisted: the last round uploads on the next launch's first round-start
     saveEpoch++;
   });
   // Re-enabling the toggle from ANY surface clears a degraded soft-suspend, so the
-  // user can retry auto-upload without a full page reload (finding #2).
+  // user can retry auto-upload without a full page reload.
   offToggle = eventBus.on<{ enabled: boolean }>('ui:cloud-autosync-changed', (p) => {
     if (p?.enabled) degradedActive.value = false;
   });
-  document.addEventListener('visibilitychange', onVisibility);
-  window.addEventListener('pagehide', onPageHide);
 });
 
 onBeforeUnmount(() => {
   offInput?.();
   offSave?.();
   offToggle?.();
-  document.removeEventListener('visibilitychange', onVisibility);
-  window.removeEventListener('pagehide', onPageHide);
 });
 </script>
 

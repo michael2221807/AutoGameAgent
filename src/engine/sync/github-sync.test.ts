@@ -314,6 +314,49 @@ describe('upload — stale chunk cleanup', () => {
     // Should throw because listV2Files throws on non-404 errors
     await expect(sync.upload()).rejects.toThrow();
   });
+
+  it('a cleanup DELETE 409 does NOT fail an already-committed upload (best-effort)', async () => {
+    // Regression guard for the 2026-07-13 "409 storm": cleanup is now awaited inside
+    // the lock, but a stale-sha 409 on an orphan DELETE must never fail the upload —
+    // the manifest already committed; a leftover orphan is harmless.
+    setupV2DirectoryListing([
+      { path: 'v2/manifest.json', sha: 'sha_manifest' },
+      { path: 'v2/state.gz', sha: 'stale_sha' }, // prior-generation orphan to be cleaned
+    ]);
+    // The orphan DELETE 409s (sha drifted); the refetch GET is the default 404 → give up.
+    fetchResponses.set(
+      'DELETE https://api.github.com/repos/testuser/aga-cloud-save/contents/v2/state.gz',
+      { status: 409, body: { message: 'Conflict' } },
+    );
+
+    const backup = createMockBackup();
+    const sync = new GitHubSyncService(backup as never);
+
+    await expect(sync.upload()).resolves.toBeUndefined(); // did NOT throw
+    // The commit (manifest PUT) still happened → the cloud save is valid.
+    expect(fetchCalls.some(c => c.method === 'PUT' && c.url.includes('manifest.json'))).toBe(true);
+    // And the baseline advanced (upload treated as successful).
+    expect(sync.getSyncBaseline()).not.toBe('');
+  });
+
+  it('cleanup is awaited before upload() resolves (deletes complete, not fire-and-forget)', async () => {
+    setupV2DirectoryListing([
+      { path: 'v2/manifest.json', sha: 'sha_manifest' },
+      { path: 'v2/state.gz', sha: 'sha_state_old' },
+      { path: 'v2/img-0.gz', sha: 'sha_img0_old' },
+    ]);
+
+    const backup = createMockBackup();
+    const sync = new GitHubSyncService(backup as never);
+
+    await sync.upload();
+
+    // By the time upload() resolves, the stale DELETEs have already been issued
+    // (awaited inside the lock) — so a follow-up upload can never race them.
+    const deletePaths = fetchCalls.filter(c => c.method === 'DELETE').map(c => c.url);
+    expect(deletePaths.some(p => p.includes('v2/state.gz'))).toBe(true);
+    expect(deletePaths.some(p => p.includes('v2/img-0.gz'))).toBe(true);
+  });
 });
 
 // ─── upload: error handling ───

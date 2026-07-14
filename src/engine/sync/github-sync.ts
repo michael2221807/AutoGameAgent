@@ -365,8 +365,17 @@ export class GitHubSyncService {
     // as already-synced (the save is valid) rather than a phantom conflict.
     this.setSyncBaseline(manifest.createdAt);
 
-    // Cleanup stale chunks using the already-fetched listing
-    this.cleanupStaleFromList(owner, repo, manifest, existingFiles);
+    // Cleanup stale chunks — AWAITED, still inside the shared upload lock, so the
+    // NEXT upload cannot start until this cleanup finishes. That serialization is
+    // what prevents the 2026-07-13 "409 storm": previously cleanup was
+    // fire-and-forget, so back-to-back uploads' DELETEs raced each other with
+    // stale shas and every prior generation piled up as orphans. Best-effort:
+    // wrapped so a cleanup failure never fails an ALREADY-committed upload (the
+    // manifest + its chunks are safe; leftover orphans are pruned next time).
+    emit('uploading', '正在清理旧分块…');
+    try {
+      await this.cleanupStaleFromList(owner, repo, manifest, existingFiles);
+    } catch { /* best-effort — orphans are harmless and retried on the next upload */ }
 
     emit('done', '上传完成');
   }
@@ -575,22 +584,42 @@ export class GitHubSyncService {
     await this.put(`/repos/${owner}/${repo}/contents/${path}`, body);
   }
 
-  private cleanupStaleFromList(
+  private async cleanupStaleFromList(
     owner: string, repo: string, manifest: ChunkManifest,
     existingFiles: Array<{ path: string; sha: string }>,
-  ): void {
+  ): Promise<void> {
     const validPaths = new Set([
       MANIFEST_PATH,
       ...manifest.chunks.map(c => c.path),
     ]);
+    const stale = existingFiles.filter(f => !validPaths.has(f.path));
 
-    for (const file of existingFiles) {
-      if (!validPaths.has(file.path)) {
-        this.del(`/repos/${owner}/${repo}/contents/${file.path}`, {
-          message: `cleanup ${file.path}`,
-          sha: file.sha,
-        }).catch(() => { /* stale chunk deletion is best-effort */ });
+    // Sequential (not Promise.all): gentler on the API and, being awaited inside
+    // the lock, no other upload is mutating v2/ meanwhile, so each sha stays fresh.
+    for (const file of stale) {
+      await this.deleteStale(owner, repo, file.path, file.sha);
+    }
+  }
+
+  /**
+   * Delete one stale chunk, tolerating the two benign failures: 404 (already gone)
+   * and 409/422 (sha drifted — e.g. a manual upload from another tab touched it;
+   * refetch the current sha and retry once). Any residual failure is swallowed —
+   * an orphan chunk is harmless and the next upload's cleanup will retry it.
+   */
+  private async deleteStale(owner: string, repo: string, path: string, sha: string): Promise<void> {
+    try {
+      await this.del(`/repos/${owner}/${repo}/contents/${path}`, { message: `cleanup ${path}`, sha });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return; // already deleted
+      if (err instanceof ApiError && (err.status === 409 || err.status === 422)) {
+        const fresh = await this.getFileSha(owner, repo, path).catch(() => null);
+        if (!fresh) return; // gone in the meantime
+        await this.del(`/repos/${owner}/${repo}/contents/${path}`, { message: `cleanup ${path}`, sha: fresh })
+          .catch(() => { /* give up; harmless orphan */ });
+        return;
       }
+      /* other errors (network etc.): swallow — best-effort */
     }
   }
 
