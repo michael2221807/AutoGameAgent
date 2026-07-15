@@ -69,6 +69,13 @@ export class ImageService {
       onPersist: (tasks) => {
         stateManager.set('系统.扩展.image.tasks', tasks, 'system');
         eventBus.emit('engine:request-save');
+        // Notify UI to re-render the queue list on ANY queue mutation
+        // (create/update/remove/clear). The task queue is an in-memory Map
+        // that Vue cannot track, so the panel's computeds rely on the
+        // 'image:task-update' tick. Without this, clear/remove buttons had
+        // no visible effect until the next generation fired the event.
+        // Empty payload → the global toast listener ignores it (no status).
+        eventBus.emit('image:task-update', {});
       },
     });
 
@@ -107,10 +114,18 @@ export class ImageService {
   /** Restore task queue from state tree (called after game load) */
   restoreTasksFromState(): void {
     const savedTasks = this.stateManager.get<ImageTask[]>('系统.扩展.image.tasks');
-    if (Array.isArray(savedTasks) && savedTasks.length > 0) {
-      this.queue.restore(savedTasks);
-      this.recoverStuckTasks();
-    }
+    // Always restore (even to empty): ImageService is a singleton that survives
+    // game loads, so skipping the empty case would leak the previous game's
+    // tasks into the newly-loaded save (they'd be re-persisted on the next
+    // generation) and leave them showing in the queue tab.
+    this.queue.restore(Array.isArray(savedTasks) ? savedTasks : []);
+    this.recoverStuckTasks();
+    // restore() deliberately does NOT persist (avoids a save-on-load), so it
+    // never emits 'image:task-update' on its own. Emit here so a mounted
+    // ImagePanel re-renders its queue computeds — otherwise a loaded save whose
+    // tasks are all complete/failed (no stuck-task recovery to trigger it)
+    // leaves the queue tab stale. Empty payload → global toast listener ignores.
+    eventBus.emit('image:task-update', {});
   }
 
   private recoverStuckTasks(): void {
