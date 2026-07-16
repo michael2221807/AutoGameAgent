@@ -8,6 +8,7 @@ import { useLocale } from '@/ui/composables/useLocale';
 import { eventBus } from '@/engine/core/event-bus';
 import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
+import FormattedText from '@/ui/components/common/FormattedText.vue';
 
 const { t } = useI18n();
 const { locale } = useLocale();
@@ -355,7 +356,7 @@ function exportNarrative(): void {
                   :class="['mem-entry', { 'mem-entry--expanded': isEntryExpanded(tier.key, entry.id) }]"
                   @click="toggleEntry(tier.key, entry.id)"
                 >
-                  <div class="mem-text">{{ entry.content }}</div>
+                  <div class="mem-text"><FormattedText :text="entry.content" /></div>
                   <div v-if="isEntryExpanded(tier.key, entry.id)" class="mem-meta">
                     <span v-if="entry.round != null" class="mem-round-badge">Round {{ entry.round }}</span>
                     <span v-if="entry.timestamp" class="mem-time">{{ entry.timestamp }}</span>
@@ -383,7 +384,7 @@ function exportNarrative(): void {
                 <span class="narrative-role-dot" />
                 {{ msg.role === 'user' ? $t('memory.narrative.rolePlayer') : $t('memory.narrative.roleNarrator') }}
               </div>
-              <div class="narrative-prose">{{ msg.content }}</div>
+              <div class="narrative-prose"><FormattedText :text="msg.content" /></div>
             </div>
             <div
               v-if="idx < narrativeEntries.length - 1 && msg.role === 'assistant' && narrativeEntries[idx + 1]?.role === 'user'"
@@ -751,14 +752,20 @@ function exportNarrative(): void {
   font-size: 0.82rem;
   line-height: 1.75;
   color: var(--color-text);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  /* max-height collapse (not -webkit-line-clamp) so rendered markdown blocks
+     — headings, lists, quotes — clamp reliably in the 3-line preview. */
+  max-height: 4.6em;
   overflow: hidden;
   letter-spacing: 0.01em;
 }
 .mem-entry--expanded .mem-text {
-  -webkit-line-clamp: unset;
+  max-height: none;
+}
+/* FormattedText emits block <p>; strip its font styling so memory typography wins */
+.mem-text :deep(.formatted-text) {
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
 }
 
 /* Entry metadata (shown on expand) */

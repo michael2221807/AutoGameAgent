@@ -1,0 +1,551 @@
+/**
+ * formatted-text-parser — 叙事正文的块级 + 行内解析器（纯函数，无 Vue / i18n 依赖）
+ *
+ * 从 FormattedText.vue 抽出，升级为两层解析，供富格式叙事渲染使用，并可单测。
+ *
+ * ── 两层结构 ──────────────────────────────────────────────────
+ *
+ * 块级（block）：按行拆分为 段落 / 标题 / 有序·无序列表 / 引用 / 分割线。
+ *   - 引用与嵌套列表以「原始子文本」形式返回（`text` / `childText`），交由
+ *     FormattedText 递归自调用渲染，天然支持任意嵌套且不必在此层递归。
+ *
+ * 行内（inline）：对每个块的文本内容按以下优先级解析——
+ *   1. 〖类型:结果,...〗 判定块（最高优先级原子单位，即使包在对话引号内也先抽出）
+ *   2. AGA 语义记号：【环境】 / `内心`（反引号） / "对话" / “对话”
+ *   3. markdown 强调与链接：**粗** / __粗__ / *斜* / _斜_ / [text](url)
+ *   NPC 名高亮不在此处理——它依赖运行时 props，由组件层在解析结果上二次注入。
+ *
+ * ── 关键取舍 ──────────────────────────────────────────────────
+ * - 反引号 `` ` `` 保留 AGA「内心独白」语义，**不**当作 markdown 行内代码。
+ * - 强调用 bold/italic 标志位附加在叶子 part 上（而非嵌套 part 树），使其能与
+ *   对话 / 环境 / 内心等 AGA 语义颜色叠加（如 `"我**一定**回来"`）。
+ * - 未闭合 / 不匹配的记号一律按普通文本保留，不吞后文。
+ * - 表格、三反引号代码块、脚注等超出「常用排版全套」范围，本模块不解析。
+ */
+
+// App doc: docs/user-guide/pages/game-main.md §3.4
+
+// ─── Types ────────────────────────────────────────────────────
+
+export interface JudgementData {
+  type: string;
+  result: string;
+  finalValue?: string;
+  difficulty?: string;
+  base?: string;
+  lucky?: string;
+  environment?: string;
+  status?: string;
+  details: string[];
+}
+
+/** 行内叶子片段种类 */
+export type InlineKind =
+  | 'normal'
+  | 'environment'
+  | 'psychology'
+  | 'dialogue'
+  | 'judgement'
+  | 'link'
+  | 'npc-name';
+
+/** 行内叶子片段。emphasis 用 bold/italic 标志位叠加。 */
+export interface InlinePart {
+  kind: InlineKind;
+  text?: string;
+  judgement?: JudgementData;
+  href?: string;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+/** 列表项：本项行内内容 + 可选的嵌套原始子文本（递归渲染） */
+export interface ListItem {
+  parts: InlinePart[];
+  /** 缩进的嵌套内容（子列表 / 续行），交由上层递归渲染；无则 undefined */
+  childText?: string;
+}
+
+/** 块级节点 */
+export type Block =
+  | { type: 'paragraph'; lines: InlinePart[][] }
+  | { type: 'heading'; level: number; parts: InlinePart[] }
+  | { type: 'hr' }
+  | { type: 'blockquote'; text: string }
+  | { type: 'list'; ordered: boolean; items: ListItem[] };
+
+// ─── Judgement parsing ────────────────────────────────────────
+
+/**
+ * Parse 〖类型:结果,判定值:X,难度:Y,基础:B,幸运:L,环境:E,状态:S〗。
+ * 纯解析——缺省类型返回空串，展示层自行兜底文案（避免 i18n 依赖）。
+ */
+export function parseJudgement(raw: string): JudgementData {
+  const normalized = raw.replace(/：/g, ':').replace(/，/g, ',');
+  const parts = normalized.split(',').map((p) => p.trim());
+  const [typeStr, resultStr] = (parts[0] ?? '').split(':').map((s) => s.trim());
+  const data: JudgementData = {
+    type: typeStr ?? '',
+    result: resultStr ?? '',
+    details: [],
+  };
+  for (let i = 1; i < parts.length; i++) {
+    const colonIdx = parts[i].indexOf(':');
+    if (colonIdx === -1) continue;
+    const key = parts[i].slice(0, colonIdx).trim();
+    const val = parts[i].slice(colonIdx + 1).trim();
+    if (!key || !val) continue;
+    if (key === '判定值') data.finalValue = val;
+    else if (key === '难度') data.difficulty = val;
+    else if (key === '基础') data.base = val;
+    else if (key === '幸运') data.lucky = val;
+    else if (key === '环境') data.environment = val;
+    else if (key === '状态') data.status = val;
+    else if (key === '结果') {
+      // AI sometimes generates 〖社交:判定,结果:成功,...〗 instead of 〖社交:成功,...〗
+      if (!data.result || data.result === '判定') data.result = val;
+    }
+    else data.details.push(`${key}:${val}`);
+  }
+  return data;
+}
+
+interface JudgementSlice {
+  start: number;
+  end: number;
+  judgement: JudgementData;
+}
+
+/**
+ * 扫描所有 `〖...〗` 区间（非嵌套原子块）。未闭合的 `〖` 被忽略，留给后续解析。
+ */
+function findJudgementSlices(text: string): JudgementSlice[] {
+  const slices: JudgementSlice[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const openPos = text.indexOf('〖', cursor);
+    if (openPos === -1) break;
+    const closePos = text.indexOf('〗', openPos + 1);
+    if (closePos === -1) break;
+    const inner = text.slice(openPos + 1, closePos);
+    slices.push({ start: openPos, end: closePos + 1, judgement: parseJudgement(inner) });
+    cursor = closePos + 1;
+  }
+  return slices;
+}
+
+// ─── Inline: markdown emphasis / link enrichment ──────────────
+
+// 链接：[text](url)。url 不含空白与右括号。text 不跨行。
+const LINK_RE = /\[([^\]\n]+)\]\(([^)\s]+)\)/;
+// 粗+斜：***...*** 或 ___...___，内部首尾非空白。
+const BOLD_ITALIC_RE = /(\*\*\*|___)(?=\S)([\s\S]+?)(?<=\S)\1/;
+// 加粗：**...** 或 __...__，内部首尾非空白。
+const STRONG_RE = /(\*\*|__)(?=\S)([\s\S]+?)(?<=\S)\1/;
+// 斜体：*...* 或 _..._，内部首尾不是空白/相同强调符（避免吞掉 ** 的一半）。
+const EM_RE = /(\*|_)(?=[^\s*_])([\s\S]*?[^\s*_]|[^\s*_])\1/;
+
+/**
+ * 安全化链接 href：仅放行 http/https/mailto 与站内相对路径，其余（含
+ * javascript: / data: 等）降级为 '#'，防止 XSS。
+ *
+ * 先剥离 ASCII 控制字符（含 TAB / CR / LF）——浏览器解析 URL 时会忽略串内任意
+ * 位置的这些字符，若不剥离，`java\tscript:` 会绕过 scheme 检测直达 href。
+ */
+export function sanitizeUrl(raw: string): string {
+  const url = raw.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  if (url === '') return '#';
+  // 站内绝对路径（单 /，非协议相对 //）/ 锚点 / 查询：安全
+  if (/^\/(?!\/)/.test(url) || /^[#?]/.test(url)) return url;
+  // 带 scheme 的（含被伪装的 //协议相对）：仅放行白名单
+  const schemeMatch = /^([a-z][a-z0-9+.-]*):/i.exec(url);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1].toLowerCase();
+    if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') return url;
+    return '#';
+  }
+  // 协议相对 //host → 视为跨源，不放行
+  if (url.startsWith('//')) return '#';
+  // 无 scheme 的裸域名 / 文件名：按相对处理，安全
+  return url;
+}
+
+/**
+ * markdown 记号预算：一段文本中 `*` `_` `[` 的数量上限。超过则跳过 markdown
+ * 富化（仅按普通文本渲染），防止 emphasis / link 正则在含大量未闭合记号的
+ * 病态输入（如 AI 写的 `3 * 5`、错列表）上退化到 O(n²) 拖垮流式主线程。
+ * 真实叙事正文一段内的强调记号远不及此，几乎不会触发降级。
+ */
+const MARKDOWN_DELIM_BUDGET = 200;
+
+function withinMarkdownBudget(text: string): boolean {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    // '*' = 42, '[' = 91, '_' = 95
+    if (c === 42 || c === 91 || c === 95) {
+      if (++n > MARKDOWN_DELIM_BUDGET) return false;
+    }
+  }
+  return true;
+}
+
+interface EmphasisCandidate {
+  idx: number;
+  type: 'link' | 'bolditalic' | 'strong' | 'em';
+  match: RegExpExecArray;
+}
+
+/**
+ * 对一段（已确定 baseKind 的）文本做 markdown 强调 / 链接富化，递归下降。
+ * bold / italic 为继承的强调状态。不匹配的强调符按普通文本保留。
+ */
+function enrichInline(
+  text: string,
+  baseKind: InlineKind,
+  bold: boolean,
+  italic: boolean,
+): InlinePart[] {
+  if (text === '') return [];
+
+  // 病态输入护栏：记号过多时跳过 markdown 富化，直接按普通文本渲染，
+  // 避免 emphasis/link 正则退化到 O(n²) 拖垮流式主线程。
+  if (!withinMarkdownBudget(text)) {
+    return [makeLeaf(baseKind, text, bold, italic)];
+  }
+
+  const candidates: EmphasisCandidate[] = [];
+  const link = LINK_RE.exec(text);
+  if (link) candidates.push({ idx: link.index, type: 'link', match: link });
+  const boldItalic = BOLD_ITALIC_RE.exec(text);
+  if (boldItalic) candidates.push({ idx: boldItalic.index, type: 'bolditalic', match: boldItalic });
+  const strong = STRONG_RE.exec(text);
+  if (strong) candidates.push({ idx: strong.index, type: 'strong', match: strong });
+  const em = EM_RE.exec(text);
+  if (em) candidates.push({ idx: em.index, type: 'em', match: em });
+
+  if (candidates.length === 0) {
+    return [makeLeaf(baseKind, text, bold, italic)];
+  }
+
+  // 最靠前者优先；同位置时 link > ***粗斜*** > **粗** > *斜*
+  const order = { link: 0, bolditalic: 1, strong: 2, em: 3 };
+  candidates.sort((a, b) => a.idx - b.idx || order[a.type] - order[b.type]);
+  const c = candidates[0];
+  const m = c.match;
+  const before = text.slice(0, c.idx);
+  const after = text.slice(c.idx + m[0].length);
+
+  const parts: InlinePart[] = [];
+  if (before) parts.push(...enrichInline(before, baseKind, bold, italic));
+
+  if (c.type === 'link') {
+    const leaf: InlinePart = { kind: 'link', text: m[1], href: sanitizeUrl(m[2]) };
+    if (bold) leaf.bold = true;
+    if (italic) leaf.italic = true;
+    parts.push(leaf);
+  } else if (c.type === 'bolditalic') {
+    parts.push(...enrichInline(m[2], baseKind, true, true));
+  } else if (c.type === 'strong') {
+    parts.push(...enrichInline(m[2], baseKind, true, italic));
+  } else {
+    parts.push(...enrichInline(m[2], baseKind, bold, true));
+  }
+
+  if (after) parts.push(...enrichInline(after, baseKind, bold, italic));
+  return parts;
+}
+
+function makeLeaf(kind: InlineKind, text: string, bold: boolean, italic: boolean): InlinePart {
+  const leaf: InlinePart = { kind, text };
+  if (bold) leaf.bold = true;
+  if (italic) leaf.italic = true;
+  return leaf;
+}
+
+// ─── Inline: AGA markers (environment / psychology / dialogue) ─
+
+interface AgaSpan {
+  kind: InlineKind;
+  text: string;
+}
+
+/**
+ * 对不含 `〖...〗` 的一段文本按 AGA 记号优先策略拆分：
+ * 【环境】 / `内心`（反引号） / "对话" / “对话” / 普通文本。
+ * （移植自原 parseNonJudgementSegment，仅返回 {kind,text}，强调交给 enrichInline。）
+ */
+function parseAgaMarkers(text: string): AgaSpan[] {
+  const spans: AgaSpan[] = [];
+  let idx = 0;
+
+  while (idx < text.length) {
+    const markers: Array<{ pos: number; close: string; kind: InlineKind }> = ([
+      { pos: text.indexOf('【', idx), close: '】', kind: 'environment' as const },
+      { pos: text.indexOf('`', idx), close: '`', kind: 'psychology' as const },
+      { pos: text.indexOf('"', idx), close: '"', kind: 'dialogue' as const },
+      { pos: text.indexOf('“', idx), close: '”', kind: 'dialogue' as const },
+    ] as const).filter((mk) => mk.pos !== -1);
+
+    if (markers.length === 0) {
+      const remaining = text.slice(idx);
+      if (remaining) spans.push({ kind: 'normal', text: remaining });
+      break;
+    }
+
+    markers.sort((a, b) => a.pos - b.pos);
+    const { pos: openPos, close, kind } = markers[0];
+
+    if (openPos > idx) {
+      spans.push({ kind: 'normal', text: text.slice(idx, openPos) });
+    }
+
+    const closePos = text.indexOf(close, openPos + 1);
+    if (closePos === -1) {
+      spans.push({ kind: 'normal', text: text.slice(openPos) });
+      break;
+    }
+
+    const inner = text.slice(openPos + 1, closePos);
+    const displayText = kind === 'environment'
+      ? `【${inner}】`
+      : kind === 'psychology'
+        ? `\`${inner}\``
+        : (text[openPos] === '"' ? `"${inner}"` : `“${inner}”`);
+    spans.push({ kind, text: displayText });
+
+    idx = closePos + close.length;
+  }
+
+  return spans;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 在已解析的行内片段上注入 NPC 名高亮。只切分 `normal` 片段，保留其
+ * bold/italic 标志位。依赖运行时 names，故独立于 parseInline 由展示层调用。
+ */
+export function highlightNpcNames(parts: InlinePart[], names: string[]): InlinePart[] {
+  const sorted = [...new Set(names.filter(Boolean))].sort((a, b) => b.length - a.length);
+  if (sorted.length === 0) return parts;
+  const pattern = new RegExp(`(${sorted.map(escapeRegExp).join('|')})`, 'g');
+
+  const result: InlinePart[] = [];
+  for (const part of parts) {
+    if (part.kind !== 'normal' || !part.text) {
+      result.push(part);
+      continue;
+    }
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+    pattern.lastIndex = 0;
+    while ((match = pattern.exec(part.text)) !== null) {
+      if (match.index > lastIdx) {
+        result.push({ ...part, text: part.text.slice(lastIdx, match.index) });
+      }
+      const npc: InlinePart = { kind: 'npc-name', text: match[0] };
+      if (part.bold) npc.bold = true;
+      if (part.italic) npc.italic = true;
+      result.push(npc);
+      lastIdx = match.index + match[0].length;
+    }
+    if (lastIdx === 0) {
+      result.push(part);
+    } else if (lastIdx < part.text.length) {
+      result.push({ ...part, text: part.text.slice(lastIdx) });
+    }
+  }
+  return result;
+}
+
+/**
+ * 行内解析入口：先抽出 〖判定〗 原子块，其余文本走 AGA 记号 + markdown 富化。
+ */
+export function parseInline(text: string): InlinePart[] {
+  if (!text) return [];
+  const slices = findJudgementSlices(text);
+
+  const runSegment = (seg: string): InlinePart[] => {
+    const spans = parseAgaMarkers(seg);
+    const out: InlinePart[] = [];
+    for (const span of spans) {
+      out.push(...enrichInline(span.text, span.kind, false, false));
+    }
+    return out;
+  };
+
+  if (slices.length === 0) return runSegment(text);
+
+  const parts: InlinePart[] = [];
+  let cursor = 0;
+  for (const s of slices) {
+    if (s.start > cursor) parts.push(...runSegment(text.slice(cursor, s.start)));
+    parts.push({ kind: 'judgement', judgement: s.judgement });
+    cursor = s.end;
+  }
+  if (cursor < text.length) parts.push(...runSegment(text.slice(cursor)));
+  return parts;
+}
+
+// ─── Block parsing ────────────────────────────────────────────
+
+// 分割线：三个及以上的 - * _（可夹空白），独占一行。
+const HR_RE = /^ {0,3}([-*_])[ \t]*(?:\1[ \t]*){2,}$/;
+// ATX 标题：1~6 个 #，后跟空白，尾部可选 # 收尾。
+const HEADING_RE = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/;
+// 引用：> 前缀，可选一个空格。
+const BLOCKQUOTE_RE = /^ {0,3}>[ \t]?(.*)$/;
+// 列表项：缩进 + 标记（- * + 或 数字. / 数字)）+ 空白 + 内容。
+const LIST_RE = /^([ \t]*)([-*+]|\d{1,9}[.)])[ \t]+(.*)$/;
+
+/** 缩进宽度（Tab 记为 2）。 */
+function indentWidth(s: string): number {
+  const lead = /^[ \t]*/.exec(s)?.[0] ?? '';
+  return lead.replace(/\t/g, '  ').length;
+}
+
+/** 从行首去掉 n 列缩进（含 Tab 展开）。 */
+function dedent(line: string, n: number): string {
+  let removed = 0;
+  let i = 0;
+  while (i < line.length && removed < n) {
+    const ch = line[i];
+    if (ch === ' ') { removed += 1; i += 1; }
+    else if (ch === '\t') { removed += 2; i += 1; }
+    else break;
+  }
+  return line.slice(i);
+}
+
+interface ParsedList {
+  block: Extract<Block, { type: 'list' }>;
+  next: number;
+}
+
+/**
+ * 从 lines[start] 起解析一个列表。缩进 ≥ baseIndent+2 的行归入当前项的
+ * childText（嵌套子列表 / 续行），交由上层递归渲染；空行或更浅缩进结束列表。
+ */
+function parseList(lines: string[], start: number): ParsedList {
+  const first = LIST_RE.exec(lines[start]);
+  // first 一定匹配（调用前已判定），此断言仅为类型收窄。
+  const baseIndent = first ? indentWidth(first[1]) : 0;
+  const ordered = first ? /\d/.test(first[2]) : false;
+
+  const items: ListItem[] = [];
+  let current: ListItem | null = null;
+  let childLines: string[] = [];
+  let i = start;
+
+  const flushChild = (): void => {
+    if (current && childLines.length) {
+      current.childText = childLines.join('\n').replace(/\s+$/, '');
+    }
+    childLines = [];
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === '') break;
+
+    const indent = indentWidth(line);
+    const m = LIST_RE.exec(line);
+
+    if (m && indent <= baseIndent + 1) {
+      // 同级列表项
+      flushChild();
+      current = { parts: parseInline(m[3]) };
+      items.push(current);
+      i += 1;
+      continue;
+    }
+
+    if (indent >= baseIndent + 2 && current) {
+      // 嵌套内容（子列表 / 缩进续行）→ 归入当前项 childText，去掉基础缩进
+      childLines.push(dedent(line, baseIndent + 2));
+      i += 1;
+      continue;
+    }
+
+    if (m && indent < baseIndent) break; // 更浅的列表 → 交回上层
+    break; // 其它非列表行 → 结束列表
+  }
+
+  flushChild();
+  return { block: { type: 'list', ordered, items }, next: i };
+}
+
+/** 归一化换行：字面 "\n"、CRLF、CR 一律转为 \n。 */
+function normalizeNewlines(raw: string): string {
+  return (raw ?? '')
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+}
+
+/**
+ * 顶层解析：原始正文 → 块级节点数组。段落内单换行保留为软换行（每行一条
+ * InlinePart[]，展示层以 <br> 呈现），与既有 pre-wrap 观感一致。
+ */
+export function parseNarrative(raw: string): Block[] {
+  const text = normalizeNewlines(raw);
+  if (!text.trim()) {
+    // 全空白 → 单段落，保留原文（可能是有意的空白占位）
+    return [{ type: 'paragraph', lines: [[{ kind: 'normal', text }]] }];
+  }
+
+  const lines = text.split('\n');
+  const blocks: Block[] = [];
+  let para: InlinePart[][] | null = null;
+
+  const flushPara = (): void => {
+    if (para && para.length) blocks.push({ type: 'paragraph', lines: para });
+    para = null;
+  };
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.trim() === '') { flushPara(); i += 1; continue; }
+
+    if (HR_RE.test(line)) { flushPara(); blocks.push({ type: 'hr' }); i += 1; continue; }
+
+    const h = HEADING_RE.exec(line);
+    if (h) {
+      flushPara();
+      blocks.push({ type: 'heading', level: h[1].length, parts: parseInline(h[2]) });
+      i += 1;
+      continue;
+    }
+
+    if (BLOCKQUOTE_RE.test(line)) {
+      flushPara();
+      const inner: string[] = [];
+      while (i < lines.length && BLOCKQUOTE_RE.test(lines[i])) {
+        inner.push(lines[i].replace(BLOCKQUOTE_RE, '$1'));
+        i += 1;
+      }
+      blocks.push({ type: 'blockquote', text: inner.join('\n') });
+      continue;
+    }
+
+    if (LIST_RE.test(line)) {
+      flushPara();
+      const { block, next } = parseList(lines, i);
+      blocks.push(block);
+      i = next;
+      continue;
+    }
+
+    if (!para) para = [];
+    para.push(parseInline(line));
+    i += 1;
+  }
+
+  flushPara();
+  return blocks;
+}
