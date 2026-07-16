@@ -85,8 +85,15 @@ const blocks = computed<Block[]>(() =>
         <FormattedInline :parts="block.parts" :npc-data="npcData" />
       </component>
 
-      <!-- Horizontal rule -->
-      <hr v-else-if="block.type === 'hr'" class="ft-hr" />
+      <!-- Thematic break — centered dot ornament (NOT a full-width line, so it
+           never reads as a structural round divider). -->
+      <div
+        v-else-if="block.type === 'hr'"
+        class="ft-hr"
+        role="separator"
+        aria-orientation="horizontal"
+      />
+
 
       <!-- Blockquote — recurse on raw inner text -->
       <blockquote v-else-if="block.type === 'blockquote'" class="ft-quote">
@@ -129,12 +136,15 @@ const blocks = computed<Block[]>(() =>
   margin: 0;
   white-space: pre-wrap;
 }
+/* Inter-paragraph gap = one line-height, reproducing the old pre-wrap `\n\n`
+   blank-line spacing exactly (measured old gap ≈ 1 line-height; user flagged
+   the tighter 0.72em as cramped, 2026-07-16). */
 .ft-p + .ft-p,
 .ft-p + .ft-list,
 .ft-p + .ft-quote,
 .ft-list + .ft-p,
 .ft-quote + .ft-p {
-  margin-top: 0.72em;
+  margin-top: 1.88em;
 }
 
 /* ── Headings — restrained scale so a stray '#' never dominates the prose.
@@ -158,17 +168,30 @@ const blocks = computed<Block[]>(() =>
   color: var(--color-text-secondary);
 }
 
-/* ── Horizontal rule — gradient hairline scene break, not a hard line ── */
+/* ── Thematic break (markdown `---`) — centered dot ornament (asterism).
+      Deliberately NOT a full-width horizontal line: a sage hairline would be
+      confused with the structural round divider (RoundDivider.vue — full-width
+      sage line + 第 N 回合 badge). A centered dot cluster reads as an in-scene
+      pause, never as a round boundary. (user flagged the line as misleading,
+      2026-07-16) ── */
 .ft-hr {
   border: none;
-  height: 1px;
-  margin: 1em 12%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in oklch, var(--color-sage-400) 35%, transparent) 50%,
-    transparent 100%
-  );
+  height: auto;
+  margin: 1.4em 0;
+  padding: 0;
+  background: none;
+  text-align: center;
+  line-height: 1;
+}
+.ft-hr::before {
+  content: '···';
+  color: var(--color-text-umber);
+  font-size: 1.3em;
+  letter-spacing: 0.55em;
+  /* letter-spacing adds trailing space after the last dot — nudge left to keep
+     the cluster optically centered. */
+  padding-left: 0.55em;
+  opacity: 0.5;
 }
 
 /* ── Blockquote — inset warm wash with a soft sage edge (no hard side-stripe) ── */
