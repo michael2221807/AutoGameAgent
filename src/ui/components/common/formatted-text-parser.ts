@@ -20,7 +20,8 @@
  * - 强调用 bold/italic 标志位附加在叶子 part 上（而非嵌套 part 树），使其能与
  *   对话 / 环境 / 内心等 AGA 语义颜色叠加（如 `"我**一定**回来"`）。
  * - 未闭合 / 不匹配的记号一律按普通文本保留，不吞后文。
- * - 表格、三反引号代码块、脚注等超出「常用排版全套」范围，本模块不解析。
+ * - GFM 管道表格（`| … |` + `|---|` 分隔行）支持（2026-07-16 增补）。
+ * - 三反引号代码块、脚注等超出「常用排版全套」范围，本模块不解析。
  */
 
 // App doc: docs/user-guide/pages/game-main.md §3.4
@@ -66,13 +67,17 @@ export interface ListItem {
   childText?: string;
 }
 
+/** 单元格对齐（来自表格分隔行 `:---` / `:--:` / `---:`）；null = 默认左对齐 */
+export type TableAlign = 'left' | 'center' | 'right' | null;
+
 /** 块级节点 */
 export type Block =
   | { type: 'paragraph'; lines: InlinePart[][] }
   | { type: 'heading'; level: number; parts: InlinePart[] }
   | { type: 'hr' }
   | { type: 'blockquote'; text: string }
-  | { type: 'list'; ordered: boolean; items: ListItem[] };
+  | { type: 'list'; ordered: boolean; items: ListItem[] }
+  | { type: 'table'; headers: InlinePart[][]; align: TableAlign[]; rows: InlinePart[][][] };
 
 // ─── Judgement parsing ────────────────────────────────────────
 
@@ -401,6 +406,83 @@ const BLOCKQUOTE_RE = /^ {0,3}>[ \t]?(.*)$/;
 // 列表项：缩进 + 标记（- * + 或 数字. / 数字)）+ 空白 + 内容。
 const LIST_RE = /^([ \t]*)([-*+]|\d{1,9}[.)])[ \t]+(.*)$/;
 
+// ─── Table parsing (GFM pipe tables) ──────────────────────────
+
+// Runaway backstops (far above any real narrative table) so pathological AI
+// output — a line with thousands of `|`, or an enormous body — can't spawn an
+// unbounded DOM / parseInline fan-out. Mirrors MARKDOWN_DELIM_BUDGET's intent.
+const MAX_TABLE_COLS = 64;
+const MAX_TABLE_ROWS = 500;
+
+/** 表格分隔行：`|:---|:--:|---:|`（每格为 `:?-+:?`，至少一根 `-`）。 */
+function isTableDelimiterRow(line: string): boolean {
+  const t = line.trim();
+  if (!t.includes('|')) return false;
+  const inner = t.replace(/^\|/, '').replace(/\|$/, '');
+  return inner.split('|').every((c) => /^\s*:?-+:?\s*$/.test(c));
+}
+
+/** 按未转义的 `|` 切分表格行，去掉首尾竖线，还原 `\|` 转义。 */
+function splitTableRow(line: string): string[] {
+  let t = line.trim();
+  if (t.startsWith('|')) t = t.slice(1);
+  if (t.endsWith('|') && !t.endsWith('\\|')) t = t.slice(0, -1);
+  return t.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
+}
+
+/** 从分隔行单元格推断对齐。 */
+function parseTableAlign(cell: string): TableAlign {
+  const c = cell.trim();
+  const left = c.startsWith(':');
+  const right = c.endsWith(':');
+  if (left && right) return 'center';
+  if (right) return 'right';
+  if (left) return 'left';
+  return null;
+}
+
+/** 把一行 cells 规整到 colCount 列（不足补空、超出截断），逐格行内解析。 */
+function toRowCells(raw: string[], colCount: number): InlinePart[][] {
+  const cells: InlinePart[][] = [];
+  for (let c = 0; c < colCount; c++) {
+    cells.push(parseInline(raw[c] ?? ''));
+  }
+  return cells;
+}
+
+interface ParsedTable {
+  block: Extract<Block, { type: 'table' }>;
+  next: number;
+}
+
+/**
+ * 从 lines[start]（表头行）解析一个 GFM 管道表格。调用前须确认 lines[start]
+ * 含 `|` 且 lines[start+1] 是分隔行。
+ */
+function parseTable(lines: string[], start: number): ParsedTable {
+  const headerCells = splitTableRow(lines[start]);
+  const colCount = headerCells.length;
+  const alignCells = splitTableRow(lines[start + 1]);
+  const align: TableAlign[] = [];
+  for (let c = 0; c < colCount; c++) align.push(parseTableAlign(alignCells[c] ?? ''));
+
+  const headers = toRowCells(headerCells, colCount);
+  const rows: InlinePart[][][] = [];
+  let i = start + 2;
+  while (
+    i < lines.length &&
+    lines[i].trim() !== '' &&
+    lines[i].includes('|') &&
+    !isTableDelimiterRow(lines[i])
+  ) {
+    // Consume every body row (advance i) but cap what we materialize, so an
+    // absurdly tall table can't spawn an unbounded DOM.
+    if (rows.length < MAX_TABLE_ROWS) rows.push(toRowCells(splitTableRow(lines[i]), colCount));
+    i += 1;
+  }
+  return { block: { type: 'table', headers, align, rows }, next: i };
+}
+
 /** 缩进宽度（Tab 记为 2）。 */
 function indentWidth(s: string): number {
   const lead = /^[ \t]*/.exec(s)?.[0] ?? '';
@@ -539,6 +621,25 @@ export function parseNarrative(raw: string): Block[] {
       blocks.push(block);
       i = next;
       continue;
+    }
+
+    // Table (checked AFTER lists so a `- a | b` list item is never mistaken for
+    // a header): a `|`-bearing header row immediately followed by a delimiter
+    // row whose cell count MATCHES the header (GFM strictness → far fewer false
+    // positives on ad-hoc `---|---` prose dividers), within the column cap.
+    if (line.includes('|') && i + 1 < lines.length && isTableDelimiterRow(lines[i + 1])) {
+      const headerCols = splitTableRow(line).length;
+      if (
+        headerCols >= 1 &&
+        headerCols <= MAX_TABLE_COLS &&
+        splitTableRow(lines[i + 1]).length === headerCols
+      ) {
+        flushPara();
+        const { block, next } = parseTable(lines, i);
+        blocks.push(block);
+        i = next;
+        continue;
+      }
     }
 
     if (!para) para = [];

@@ -226,6 +226,83 @@ describe('block parsing', () => {
   });
 });
 
+// ─── Tables (GFM pipe tables) ─────────────────────────────────
+describe('table parsing', () => {
+  const md = '| 编号 | 课程 | 学分 |\n|:-----|:----:|-----:|\n| SSC-101 | 形象管理 | 1 |\n| SSC-102 | 心理建设 | 2 |';
+
+  it('parses a pipe table into a table block', () => {
+    const blocks = parseNarrative(md);
+    const table = blocks.find((b) => b.type === 'table');
+    expect(table?.type).toBe('table');
+    if (table?.type === 'table') {
+      expect(table.headers).toHaveLength(3);
+      expect(table.headers[0].map((p) => p.text).join('')).toBe('编号');
+      expect(table.rows).toHaveLength(2);
+      expect(table.rows[0][0].map((p) => p.text).join('')).toBe('SSC-101');
+    }
+  });
+
+  it('reads per-column alignment from the delimiter row', () => {
+    const blocks = parseNarrative(md);
+    const table = blocks.find((b) => b.type === 'table');
+    if (table?.type === 'table') {
+      expect(table.align).toEqual(['left', 'center', 'right']);
+    }
+  });
+
+  it('normalizes rows to the header column count (pad + truncate)', () => {
+    const t = '| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |';
+    const blocks = parseNarrative(t);
+    const table = blocks.find((b) => b.type === 'table');
+    if (table?.type === 'table') {
+      expect(table.rows[0]).toHaveLength(3); // padded
+      expect(table.rows[1]).toHaveLength(3); // truncated
+      expect(table.rows[0][1]).toEqual([]);  // missing cell → empty
+    }
+  });
+
+  it('renders markdown inside cells', () => {
+    const t = '| 名称 | 说明 |\n|---|---|\n| **粗** | 见 [文档](https://x.com) |';
+    const blocks = parseNarrative(t);
+    const table = blocks.find((b) => b.type === 'table');
+    if (table?.type === 'table') {
+      expect(table.rows[0][0].find((p) => p.bold)?.text).toBe('粗');
+      expect(table.rows[0][1].find((p) => p.kind === 'link')?.href).toBe('https://x.com');
+    }
+  });
+
+  it('does NOT treat a lone pipe line as a table (no delimiter row)', () => {
+    const blocks = parseNarrative('他说 A | B 都行。\n然后离开了。');
+    expect(blocks.every((b) => b.type !== 'table')).toBe(true);
+  });
+
+  it('rejects a table when delimiter column count does not match the header (GFM)', () => {
+    // 3-col header, 2-col delimiter → not a valid GFM table → stays prose
+    const blocks = parseNarrative('| a | b | c |\n|---|---|\n| 1 | 2 | 3 |');
+    expect(blocks.every((b) => b.type !== 'table')).toBe(true);
+  });
+
+  it('parses a table without leading/trailing pipes', () => {
+    const t = 'a | b\n--- | ---\n1 | 2';
+    const blocks = parseNarrative(t);
+    const table = blocks.find((b) => b.type === 'table');
+    expect(table?.type).toBe('table');
+    if (table?.type === 'table') expect(table.headers).toHaveLength(2);
+  });
+
+  it('parses a table inside a blockquote inner text (recursive render path)', () => {
+    // parseNarrative on a blockquote yields a blockquote block whose raw text
+    // is re-parsed by the recursive component; that inner text must parse to a table.
+    const outer = parseNarrative('> | a | b |\n> |---|---|\n> | 1 | 2 |');
+    const q = outer.find((b) => b.type === 'blockquote');
+    expect(q?.type).toBe('blockquote');
+    if (q?.type === 'blockquote') {
+      const inner = parseNarrative(q.text);
+      expect(inner.some((b) => b.type === 'table')).toBe(true);
+    }
+  });
+});
+
 // ─── NPC highlight ────────────────────────────────────────────
 describe('highlightNpcNames', () => {
   it('splits normal parts on NPC names', () => {

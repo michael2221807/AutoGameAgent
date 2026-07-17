@@ -33,10 +33,16 @@ import {
   highlightNpcNames,
   type Block,
   type InlinePart,
+  type TableAlign,
 } from './formatted-text-parser';
 
 // App doc: docs/user-guide/pages/game-main.md §3.4
 defineOptions({ name: 'FormattedText' });
+
+/** Per-column text-align style for table cells. */
+function alignStyle(a: TableAlign): Record<string, string> {
+  return a ? { textAlign: a } : {};
+}
 
 const props = defineProps<{
   text: string;
@@ -55,6 +61,11 @@ function highlightBlocks(blocks: Block[], names: string[]): Block[] {
     if (b.type === 'paragraph') return { ...b, lines: b.lines.map(hl) };
     if (b.type === 'heading') return { ...b, parts: hl(b.parts) };
     if (b.type === 'list') return { ...b, items: b.items.map((it) => ({ ...it, parts: hl(it.parts) })) };
+    if (b.type === 'table') return {
+      ...b,
+      headers: b.headers.map(hl),
+      rows: b.rows.map((row) => row.map(hl)),
+    };
     return b;
   });
 }
@@ -118,6 +129,34 @@ const blocks = computed<Block[]>(() =>
           />
         </li>
       </component>
+
+      <!-- Table (GFM pipe table) — horizontally scrollable when wide -->
+      <div v-else-if="block.type === 'table'" class="ft-table-wrap">
+        <table class="ft-table">
+          <thead>
+            <tr>
+              <th
+                v-for="(cell, ci) in block.headers"
+                :key="ci"
+                :style="alignStyle(block.align[ci])"
+              >
+                <FormattedInline :parts="cell" :npc-data="npcData" />
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, ri) in block.rows" :key="ri">
+              <td
+                v-for="(cell, ci) in row"
+                :key="ci"
+                :style="alignStyle(block.align[ci])"
+              >
+                <FormattedInline :parts="cell" :npc-data="npcData" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </template>
   </div>
 </template>
@@ -239,5 +278,52 @@ const blocks = computed<Block[]>(() =>
 /* Nested list tightening */
 .ft-li > .formatted-text {
   margin-top: 0.24em;
+}
+
+/* ── Table (GFM pipe table) ──────────────────────────────────────
+   Clean data surface: sage-tinted header, hairline row dividers, rounded
+   frame. Wraps in an overflow-x container so a wide table scrolls inside
+   itself instead of pushing the page. font-style reset to normal so a table
+   nested in a `>` blockquote (which is italic) still reads upright. ── */
+.ft-table-wrap {
+  margin: 0.9em 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in oklch, var(--color-text-umber) 4%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+}
+.ft-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 0.9em;
+  line-height: 1.5;
+  letter-spacing: normal;
+}
+.ft-table th,
+.ft-table td {
+  padding: 7px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ft-table thead th {
+  color: var(--color-sage-300);
+  font-weight: 600;
+  white-space: nowrap;
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+  border-bottom: 1px solid color-mix(in oklch, var(--color-sage-400) 28%, var(--color-border));
+}
+.ft-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.ft-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+/* Inline leaves inside cells shouldn't re-italicize from the quote context */
+.ft-table :deep(.formatted-inline) {
+  font-style: normal;
 }
 </style>
