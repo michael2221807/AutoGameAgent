@@ -1,19 +1,24 @@
 <script setup lang="ts">
 // App doc: docs/user-guide/pages/game-memory.md
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useConfig } from '@/ui/composables/useConfig';
 import { useLocale } from '@/ui/composables/useLocale';
+import { useRoundJump } from '@/ui/composables/useRoundJump';
 import { eventBus } from '@/engine/core/event-bus';
+import { DEFAULT_ENGINE_PATHS, type BookmarkedRound } from '@/engine/pipeline/types';
 import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import FormattedText from '@/ui/components/common/FormattedText.vue';
 
 const { t } = useI18n();
 const { locale } = useLocale();
+const router = useRouter();
+const { requestRoundJump } = useRoundJump();
 
-const { isLoaded, useValue } = useGameState();
+const { isLoaded, useValue, setValue } = useGameState();
 const { getConfig } = useConfig();
 
 interface MemoryPathConfig {
@@ -170,6 +175,47 @@ function toggleEntry(sectionKey: string, entryId: string): void {
 
 function isEntryExpanded(sectionKey: string, entryId: string): boolean {
   return expandedEntryId.value === `${sectionKey}:${entryId}`;
+}
+
+// ─── 收藏楼层 (Bookmarked rounds, 2026-07-18) ───
+// Second surface for the same 元数据.收藏楼层 state the game panel manages.
+// Provides read / select (→ inject next round) / rename / jump / remove.
+
+const bookmarksRaw = useValue<BookmarkedRound[]>(DEFAULT_ENGINE_PATHS.bookmarkedRounds);
+const bookmarks = computed<BookmarkedRound[]>(() =>
+  Array.isArray(bookmarksRaw.value) ? bookmarksRaw.value : [],
+);
+const editingBookmarkId = ref<string | null>(null);
+const bookmarksCollapsed = ref(false);
+const selectedBookmarkCount = computed(() => bookmarks.value.filter((b) => b.pending).length);
+
+function writeBookmarks(next: BookmarkedRound[]): void {
+  setValue(DEFAULT_ENGINE_PATHS.bookmarkedRounds, next);
+}
+function toggleBookmarkPending(id: string, checked: boolean): void {
+  writeBookmarks(bookmarks.value.map((b) => (b.id === id ? { ...b, pending: checked } : b)));
+}
+function removeBookmark(id: string): void {
+  writeBookmarks(bookmarks.value.filter((b) => b.id !== id));
+  if (editingBookmarkId.value === id) editingBookmarkId.value = null;
+}
+function startRenameBookmark(id: string): void {
+  editingBookmarkId.value = id;
+  nextTick(() => {
+    const el = document.querySelector<HTMLInputElement>(`[data-mem-bm-edit="${id}"]`);
+    if (el) { el.focus(); el.select(); }
+  });
+}
+function commitRenameBookmark(id: string, value: string): void {
+  const name = value.trim();
+  if (name) writeBookmarks(bookmarks.value.map((b) => (b.id === id ? { ...b, name } : b)));
+  editingBookmarkId.value = null;
+}
+/** Record a cross-panel jump target, then navigate to the main game panel, which
+ *  consumes it on activation (see useRoundJump — module-level, race-free). */
+function jumpToBookmark(round: number): void {
+  requestRoundJump(round);
+  router.push('/game').catch(() => { /* duplicate / guard — ignore */ });
 }
 
 // ─── Memory config (read from localStorage + defaults) ───
@@ -369,6 +415,79 @@ function exportNarrative(): void {
 
               <div v-else class="tier-empty">
                 <p class="tier-empty-text">{{ $t('memory.tier.emptyState') }}</p>
+              </div>
+            </div>
+          </Transition>
+        </section>
+
+        <!-- ═══ 收藏楼层 (Bookmarked rounds, 2026-07-18) — 5th section ═══ -->
+        <section class="memory-tier tier--bookmark" data-testid="memory-bookmark-section">
+          <button
+            class="tier-header"
+            :aria-expanded="!bookmarksCollapsed"
+            @click="bookmarksCollapsed = !bookmarksCollapsed"
+          >
+            <div class="tier-title-group">
+              <span class="tier-indicator tier-indicator--bookmark" />
+              <span class="tier-label">{{ $t('memory.bookmark.title') }}</span>
+              <span class="tier-count">{{ $t('memory.tier.countSuffix', { n: bookmarks.length }) }}</span>
+              <span v-if="selectedBookmarkCount > 0" class="bm-pending-flag">{{ $t('memory.bookmark.pendingFlag', { n: selectedBookmarkCount }) }}</span>
+            </div>
+            <svg
+              :class="['tier-chevron', { 'tier-chevron--open': !bookmarksCollapsed }]"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+
+          <Transition name="tier-expand">
+            <div v-if="!bookmarksCollapsed" class="tier-body">
+              <p class="tier-hint">{{ $t('memory.bookmark.hint') }}</p>
+
+              <template v-if="bookmarks.length">
+                <div v-for="bm in bookmarks" :key="bm.id" class="bm-entry" :class="{ 'bm-entry--pending': bm.pending }">
+                  <Tooltip :text="$t('memory.bookmark.selectHint')">
+                    <input
+                      type="checkbox"
+                      class="bm-check"
+                      :checked="bm.pending"
+                      :aria-label="$t('memory.bookmark.selectHint')"
+                      @change="toggleBookmarkPending(bm.id, ($event.target as HTMLInputElement).checked)"
+                    />
+                  </Tooltip>
+                  <div class="bm-main">
+                    <div class="bm-namerow">
+                      <span class="mem-round-badge">{{ $t('memory.bookmark.roundLabel', { n: bm.round }) }}</span>
+                      <input
+                        v-if="editingBookmarkId === bm.id"
+                        :data-mem-bm-edit="bm.id"
+                        class="bm-name-input"
+                        :value="bm.name"
+                        @blur="commitRenameBookmark(bm.id, ($event.target as HTMLInputElement).value)"
+                        @keydown.enter="($event.target as HTMLInputElement).blur()"
+                        @keydown.escape="editingBookmarkId = null"
+                      />
+                      <Tooltip v-else :text="$t('memory.bookmark.renameHint')">
+                        <button class="bm-name" @click="startRenameBookmark(bm.id)">{{ bm.name }}</button>
+                      </Tooltip>
+                    </div>
+                    <div class="bm-content"><FormattedText :text="bm.content" /></div>
+                    <div class="bm-actions">
+                      <Tooltip :text="$t('memory.bookmark.jump')">
+                        <button class="bm-action-btn" @click="jumpToBookmark(bm.round)">{{ $t('memory.bookmark.jump') }}</button>
+                      </Tooltip>
+                      <Tooltip :text="$t('memory.bookmark.delete')">
+                        <button class="bm-action-btn bm-action-btn--del" @click="removeBookmark(bm.id)">{{ $t('memory.bookmark.delete') }}</button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <div v-else class="tier-empty">
+                <p class="tier-empty-text">{{ $t('memory.bookmark.emptyState') }}</p>
               </div>
             </div>
           </Transition>
@@ -669,6 +788,7 @@ function exportNarrative(): void {
 .tier-indicator--implicit { background: var(--color-info); }
 .tier-indicator--mid      { background: var(--color-amber-400); }
 .tier-indicator--long     { background: var(--color-sage-400); }
+.tier-indicator--bookmark { background: var(--color-amber-300); }
 
 .tier-label {
   font-size: 0.82rem;
@@ -746,6 +866,96 @@ function exportNarrative(): void {
 .tier--implicit .mem-entry::before { background: var(--color-info); }
 .tier--mid .mem-entry::before      { background: var(--color-amber-400); }
 .tier--long .mem-entry::before     { background: var(--color-sage-400); }
+
+/* ── 收藏楼层 section rows (2026-07-18) ── */
+.bm-pending-flag {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--color-bg);
+  background: var(--color-amber-400);
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.02em;
+}
+.bm-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.bm-entry:hover { background: rgba(255, 255, 255, 0.045); }
+.bm-entry--pending { background: color-mix(in oklch, var(--color-amber-400) 8%, transparent); }
+.bm-check {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-amber-400);
+  cursor: pointer;
+}
+.bm-main { flex: 1; min-width: 0; }
+.bm-namerow { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.bm-name {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.82rem;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 1px 4px;
+  cursor: text;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.bm-name:hover {
+  background: rgba(255, 255, 255, 0.05);
+  outline: 1px dashed color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+}
+.bm-name-input {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.82rem;
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--color-sage-400);
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+.bm-content {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.bm-content :deep(.formatted-text) {
+  font-size: inherit;
+  line-height: inherit;
+}
+.bm-actions { display: flex; gap: 8px; margin-top: 8px; }
+.bm-action-btn {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+}
+.bm-action-btn:hover {
+  color: var(--color-sage-300);
+  border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
+}
+.bm-action-btn--del:hover {
+  color: var(--color-danger);
+  border-color: color-mix(in oklch, var(--color-danger) 30%, var(--color-border));
+}
 
 .mem-text {
   font-family: var(--font-serif-cjk);

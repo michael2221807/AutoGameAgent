@@ -32,6 +32,7 @@ const paths = {
   lastHeartbeatRound: '世界.状态.心跳.上次心跳回合序号',
   gameTime: '世界.时间',
   playerName: '角色.基础信息.姓名',
+  bookmarkedRounds: '元数据.收藏楼层',
 } as unknown as EnginePathConfig;
 
 function makeStateManager() {
@@ -237,6 +238,28 @@ describe('PostProcessStage — Phase 1 per-turn metadata', () => {
     const ctx = makeCtx();
     await stage.execute(ctx);
     expect(getAssistantEntry()?._rawResponseStep2).toBeUndefined();
+  });
+
+  it('收藏楼层: resets pending=true bookmarks to false after the round (one-shot)', async () => {
+    sm._tree['元数据.收藏楼层'] = [
+      { id: 'a', round: 1, createdAt: 1, name: 'A', content: 'ca', pending: true },
+      { id: 'b', round: 2, createdAt: 2, name: 'B', content: 'cb', pending: false },
+      { id: 'c', round: 3, createdAt: 3, name: 'C', content: 'cc', pending: true },
+    ];
+    await stage.execute(makeCtx());
+    const list = sm._tree['元数据.收藏楼层'] as Array<{ id: string; pending: boolean; name: string }>;
+    expect(list.map((b) => b.pending)).toEqual([false, false, false]);
+    // Names / content untouched.
+    expect(list[0].name).toBe('A');
+  });
+
+  it('收藏楼层: does not write when nothing is pending', async () => {
+    sm._tree['元数据.收藏楼层'] = [
+      { id: 'a', round: 1, createdAt: 1, name: 'A', content: 'ca', pending: false },
+    ];
+    await stage.execute(makeCtx());
+    const setCalls = (sm.set as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(setCalls.some((c) => c[0] === '元数据.收藏楼层')).toBe(false);
   });
 
   it('attaches _commands when parsedResponse has commands', async () => {

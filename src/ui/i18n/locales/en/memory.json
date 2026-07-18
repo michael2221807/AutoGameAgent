@@ -21,6 +21,16 @@
   "memory.tier.countSuffix": "{n} entries",
   "memory.tier.emptyState": "This journey has not yet left a trace at this tier",
 
+  "memory.bookmark.title": "Bookmarked Rounds",
+  "memory.bookmark.hint": "Rounds you manually bookmarked. Rename, jump, or remove them. When ticked, injected once next round for the AI to reference.",
+  "memory.bookmark.pendingFlag": "{n} selected",
+  "memory.bookmark.roundLabel": "Round {n}",
+  "memory.bookmark.selectHint": "When ticked, injected once next round for the AI to reference",
+  "memory.bookmark.renameHint": "Click to rename",
+  "memory.bookmark.jump": "Jump",
+  "memory.bookmark.delete": "Delete",
+  "memory.bookmark.emptyState": "No bookmarks yet. Tap ☆ on any round in the game panel to bookmark it.",
+
   "memory.narrative.rolePlayer": "Player",
   "memory.narrative.roleNarrator": "Narrator",
   "memory.narrative.emptyTitle": "Narrative history is still blank",

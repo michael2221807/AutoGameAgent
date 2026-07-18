@@ -21,6 +21,16 @@
   "memory.tier.countSuffix": "{n} 条",
   "memory.tier.emptyState": "这段旅程尚未在此层留下印记",
 
+  "memory.bookmark.title": "收藏楼层",
+  "memory.bookmark.hint": "你手动收藏的重要回合。可命名、跳转、移除。勾选后在下一回合注入一次给 AI 参考。",
+  "memory.bookmark.pendingFlag": "已选 {n}",
+  "memory.bookmark.roundLabel": "第 {n} 回合",
+  "memory.bookmark.selectHint": "勾选后在下一回合注入一次给 AI 参考",
+  "memory.bookmark.renameHint": "点击改名",
+  "memory.bookmark.jump": "跳转",
+  "memory.bookmark.delete": "删除",
+  "memory.bookmark.emptyState": "还没有收藏。在游戏面板任意回合点 ☆ 即可收藏。",
+
   "memory.narrative.rolePlayer": "玩家",
   "memory.narrative.roleNarrator": "叙事",
   "memory.narrative.emptyTitle": "叙事历史尚为空白",

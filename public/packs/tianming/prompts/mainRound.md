@@ -12,6 +12,8 @@
 
 {{MEMORY_BLOCK}}
 
+{{BOOKMARKED_ROUNDS_BLOCK}}
+
 ---
 
 按照上述规则的 JSON 格式输出本回合的叙事和状态变更。

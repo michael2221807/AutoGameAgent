@@ -25,6 +25,7 @@ import type {
   IEngramManager,
   HeartbeatConfig,
   EnginePathConfig,
+  BookmarkedRound,
 } from '../types';
 import type { StateManager } from '../../core/state-manager';
 import type { SaveManager } from '../../persistence/save-manager';
@@ -335,12 +336,34 @@ export class PostProcessStage implements PipelineStage {
 
     this.stateManager.push(this.paths.narrativeHistory, assistantEntry, 'system');
 
+    // ── 10b. 收藏楼层一次性消费 ──
+    // 本回合已把 pending=true 的收藏经 {{BOOKMARKED_ROUNDS_BLOCK}} 注入过 prompt，
+    // 现在统一复位 pending，保证"只注入一次"（PM 决策 2026-07-18）。
+    // 放在 autoSave 之前，使复位随本回合持久化落盘。此阶段每回合仅执行一次
+    // （split-gen 只影响 context-assembly / ai-call），故不会漏消费或重复消费。
+    this.consumePendingBookmarks();
+
     // ── 11. 自动存档 ──
     // 在所有状态变更完成后保存，确保存档包含完整的回合结果
     // 只在有活跃的档案和槽位时存档（创角流程中可能还未创建）
     await this.autoSave();
 
     return ctx;
+  }
+
+  /**
+   * 收藏楼层一次性消费 —— 把本回合注入过的收藏 `pending` 复位为 false。
+   *
+   * ContextAssemblyStage 已将 `pending=true` 的收藏注入本回合 prompt；此处复位保证
+   * "只注入一次"（PM 决策 2026-07-18，默认不注入 / 选中后只对下一回合注入一次）。
+   * 无 pending 时整体不写（避免无意义的状态变更事件）。
+   */
+  private consumePendingBookmarks(): void {
+    const list = this.stateManager.get<BookmarkedRound[]>(this.paths.bookmarkedRounds);
+    if (!Array.isArray(list) || list.length === 0) return;
+    if (!list.some((b) => b && b.pending === true)) return;
+    const next = list.map((b) => (b && b.pending === true ? { ...b, pending: false } : b));
+    this.stateManager.set(this.paths.bookmarkedRounds, next, 'system');
   }
 
   /**

@@ -16,6 +16,7 @@ import type {
   IEngramManager,
   IUnifiedRetriever,
   EnginePathConfig,
+  BookmarkedRound,
 } from '../types';
 import type { AIMessage } from '../../ai/types';
 import type { GamePack } from '../../types';
@@ -244,6 +245,19 @@ export class ContextAssemblyStage implements PipelineStage {
       environment: this.stateManager.get<unknown>(this.paths.environmentTags),
     });
 
+    // ── Bookmarked rounds (收藏楼层) — one-shot injection block ──
+    //
+    // Player-curated important rounds. Only entries flagged `pending=true`
+    // (selected by the player) are injected, ONCE, into this round's prompt.
+    // PostProcessStage clears `pending` at round end so the same selection
+    // does not leak into subsequent rounds (one-shot semantic, PM decision
+    // 2026-07-18). Empty when nothing is selected → placeholder disappears.
+    const bookmarkedRoundsBlock = buildBookmarkedRoundsBlock(
+      this.stateManager.get<BookmarkedRound[]>(this.paths.bookmarkedRounds) ?? [],
+      this.pack.engineFragments?.bookmarkedRoundsHeader,
+      this.pack.engineFragments?.bookmarkedRoundsEntryFormat,
+    );
+
     const variables: Record<string, string> = {
       PLAYER_NAME: this.stateManager.get<string>(this.paths.playerName) ?? '',
       CURRENT_LOCATION: this.stateManager.get<string>(this.paths.playerLocation) ?? '',
@@ -286,6 +300,9 @@ export class ContextAssemblyStage implements PipelineStage {
 
       // ── Environment tags plugin variable (P2 env-tags port 2026-04-19) ──
       ENVIRONMENT_BLOCK: environmentBlock,
+
+      // ── Bookmarked rounds one-shot injection (收藏楼层 2026-07-18) ──
+      BOOKMARKED_ROUNDS_BLOCK: bookmarkedRoundsBlock,
     };
 
     // ── 4.5 Plot Direction System variables (Sprint Plot-1 P2) ──
@@ -705,4 +722,52 @@ export class ContextAssemblyStage implements PipelineStage {
       return [];
     }
   }
+}
+
+/**
+ * 每条收藏正文的注入截断上限（字符）。收藏是玩家手选、数量少，但单条正文可能很长，
+ * 为防 token 失控做保守截断。超出加省略号。
+ */
+const BOOKMARK_CONTENT_INJECT_CAP = 600;
+
+/**
+ * 组装"收藏楼层"一次性注入块。
+ *
+ * 只纳入 `pending=true` 的收藏（玩家已勾选、要求本回合参考）。空 → 返回空字符串，
+ * 使 prompt 里的 `{{BOOKMARKED_ROUNDS_BLOCK}}` 占位符自然消失。
+ *
+ * 引擎/内容分离：**外层模板**与**每条格式**都可由 pack 覆写，引擎只提供中文默认
+ * 作为兜底（与 `shortTermMemoryHeader` 等既有 engineFragments 同一约定）：
+ * - `engineFragments.bookmarkedRoundsHeader` —— 外层，`{entries}` 占位符。
+ * - `engineFragments.bookmarkedRoundsEntryFormat` —— 单条，占位符 `{name}` `{round}` `{content}`。
+ *
+ * 纯函数 —— 供单元测试直接调用（无需 StateManager）。
+ */
+export function buildBookmarkedRoundsBlock(
+  bookmarks: readonly BookmarkedRound[],
+  headerTemplate?: string,
+  entryFormat?: string,
+): string {
+  if (!Array.isArray(bookmarks) || bookmarks.length === 0) return '';
+  const selected = bookmarks.filter((b) => b && b.pending === true);
+  if (selected.length === 0) return '';
+
+  const fmt = entryFormat ?? '〔收藏·第{round}回合·{name}〕{content}';
+  const entries = selected
+    .map((b) => {
+      const content = typeof b.content === 'string' ? b.content : '';
+      const clipped = content.length > BOOKMARK_CONTENT_INJECT_CAP
+        ? content.slice(0, BOOKMARK_CONTENT_INJECT_CAP) + '…'
+        : content;
+      const label = (b.name && b.name.trim()) ? b.name.trim() : String(b.round);
+      return fmt
+        .replace('{name}', label)
+        .replace('{round}', String(b.round))
+        .replace('{content}', clipped);
+    })
+    .join('\n');
+
+  const template = headerTemplate
+    ?? '## 玩家收藏的历史片段（仅供参考，非当前场景）\n以下是玩家从过往回合中手动收藏、希望你本回合创作时记住的关键片段。它们可能来自较早的剧情，仅作背景参考——切勿将其误当作刚刚发生的最新事件或当前所在场景；每条开头的「第N回合」标明它发生的时间点。\n{entries}';
+  return template.replace('{entries}', entries);
 }

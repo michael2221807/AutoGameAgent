@@ -121,6 +121,9 @@ const PROMPT_ALWAYS_STRIP_PATHS: readonly string[] = [
   '元数据.推理历史',
   '元数据.剧情规划',
   '元数据.剧情导向',
+  // 玩家收藏楼层：正文快照大数组，pending 项已通过 {{BOOKMARKED_ROUNDS_BLOCK}}
+  // 专用块注入，不应在 GAME_STATE_JSON 里重复(去重/瘦身)。
+  '元数据.收藏楼层',
   '记忆.短期',
   '记忆.中期',
   '记忆.长期',

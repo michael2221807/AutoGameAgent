@@ -28,6 +28,11 @@
         "当前行动选项": {
           "type": "array",
           "default": []
+        },
+        "收藏楼层": {
+          "type": "array",
+          "default": [],
+          "$comment": "玩家手动收藏的重要回合(书签)。每项为 BookmarkedRound: {id, round, createdAt, name, content, pending}。content 是叙事正文快照(自包含,抗回滚/裁剪);pending=true 者由 ContextAssemblyStage 组装为 {{BOOKMARKED_ROUNDS_BLOCK}} 注入下一回合,PostProcessStage 在回合收尾统一复位为 false(一次性)。随整棵状态树进存档/备份/云同步;已加入 PROMPT_ALWAYS_STRIP_PATHS 避免在 GAME_STATE_JSON 中重复。"
         }
       }
     },

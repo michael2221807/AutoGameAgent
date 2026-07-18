@@ -578,6 +578,17 @@ export interface EnginePathConfig {
    */
   plotDirection: string;
 
+  /**
+   * 收藏楼层路径（如 "元数据.收藏楼层"）— 玩家手动收藏的重要回合书签数组。
+   *
+   * 每项为 BookmarkedRound：{id, round, createdAt, name, userInput?, content, pending}。
+   * `content` 是叙事正文快照（自包含，抗回滚/裁剪）。`pending=true` 者由
+   * ContextAssemblyStage 组装为 `{{BOOKMARKED_ROUNDS_BLOCK}}` 注入下一回合，
+   * PostProcessStage 在回合收尾统一复位为 false（一次性注入）。
+   * 通过 `PROMPT_ALWAYS_STRIP_PATHS` 剥离，避免在 GAME_STATE_JSON 中重复。
+   */
+  bookmarkedRounds: string;
+
   /** Location field names (Story 4 — Engram batch solidify needs location name/description/connections) */
   locationFieldNames: EngineLocationFieldNames;
 
@@ -591,6 +602,28 @@ export interface EngineLocationFieldNames {
   description: string;
   connections: string;
   npcList: string[];
+}
+
+/**
+ * 收藏楼层条目 — 玩家手动收藏的一个回合书签。
+ *
+ * 存储在状态树 `bookmarkedRounds` 路径下的数组元素。字段名是通用英文 key
+ * （内容中立，符合引擎/内容分离），`content` 承载与游戏无关的叙事正文快照。
+ * 引擎（ContextAssembly / PostProcess）与 UI（MainGamePanel / MemoryPanel）共用此形状。
+ */
+export interface BookmarkedRound {
+  /** 稳定唯一 id，如 `bm_<round>_<createdAt>` */
+  id: string;
+  /** 收藏时的回合序号 */
+  round: number;
+  /** 收藏创建时间（epoch ms） */
+  createdAt: number;
+  /** 玩家命名（收藏时自动给默认名，可随时改） */
+  name: string;
+  /** AI 叙事正文快照（自包含，抗回滚/裁剪；捕获玩家当时屏幕上所见的版本） */
+  content: string;
+  /** 是否"待注入下一回合"。默认 false；选中即 true，注入消费后由 PostProcess 复位 false */
+  pending: boolean;
 }
 
 /**
@@ -796,6 +829,7 @@ export const DEFAULT_ENGINE_PATHS: EnginePathConfig = {
   reasoningHistory: '元数据.推理历史',
   storyPlan: '元数据.剧情规划',
   plotDirection: '元数据.剧情导向',
+  bookmarkedRounds: '元数据.收藏楼层',
   locationFieldNames: {
     name: '名称',
     description: '描述',

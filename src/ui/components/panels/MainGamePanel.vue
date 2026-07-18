@@ -56,8 +56,9 @@ import {
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
 import { useSessionMode } from '@/ui/composables/useSessionMode';
+import { useRoundJump } from '@/ui/composables/useRoundJump';
 import type { EventBus } from '@/engine/core/event-bus';
-import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
+import { DEFAULT_ENGINE_PATHS, type BookmarkedRound } from '@/engine/pipeline/types';
 import Modal from '@/ui/components/common/Modal.vue';
 import FormattedText from '@/ui/components/common/FormattedText.vue';
 import RoundDivider from '@/ui/components/panels/RoundDivider.vue';
@@ -125,7 +126,7 @@ interface ChatMessage {
 // ─── Dependencies ─────────────────────────────────────────────
 
 const { t } = useI18n();
-const { useValue } = useGameState();
+const { useValue, setValue } = useGameState();
 // Story 9 — in worldBuilding mode the player isn't advancing turns, so the
 // turn-advancement controls (composer, live streaming indicator) are hidden.
 const { isWorldBuilding } = useSessionMode();
@@ -488,11 +489,170 @@ function jumpToSearchResult(hit: SearchHit): void {
 
 function toggleSearch(): void {
   showSearch.value = !showSearch.value;
+  if (showSearch.value) showBookmarks.value = false; // only one dropdown open at a time
   if (!showSearch.value) {
     searchQuery.value = '';
     debouncedSearchQuery.value = '';
     if (windowMode.value === 'pinned') jumpToLatest();
   }
+}
+
+// ─── 收藏楼层 (Bookmarked rounds, 2026-07-18) ────────────────────
+//
+// Player-curated important rounds. Stored in the state tree at
+// DEFAULT_ENGINE_PATHS.bookmarkedRounds (元数据.收藏楼层) as a self-contained
+// content snapshot, so it rides along in save/backup/cloud-sync automatically
+// and survives rollback (snapshot is independent of narrativeHistory).
+//
+// Selection semantics (PM decision): default nothing selected → nothing injected.
+// Ticking a bookmark sets pending=true; the NEXT round injects the selected set
+// once (context-assembly), then PostProcessStage resets pending to false.
+
+const bookmarksRaw = useValue<BookmarkedRound[]>(DEFAULT_ENGINE_PATHS.bookmarkedRounds);
+const bookmarks = computed<BookmarkedRound[]>(() =>
+  Array.isArray(bookmarksRaw.value) ? bookmarksRaw.value : [],
+);
+
+const showBookmarks = ref(false);
+const editingBookmarkId = ref<string | null>(null);
+
+/** Set of round numbers currently bookmarked — drives the ★/☆ state per divider. */
+const bookmarkedRoundSet = computed<Set<number>>(
+  () => new Set(bookmarks.value.map((b) => b.round)),
+);
+function isRoundBookmarked(round: number): boolean {
+  return bookmarkedRoundSet.value.has(round);
+}
+
+const selectedBookmarkCount = computed(() => bookmarks.value.filter((b) => b.pending).length);
+const allBookmarksSelected = computed(
+  () => bookmarks.value.length > 0 && selectedBookmarkCount.value === bookmarks.value.length,
+);
+
+/** Persist a new bookmarks array to the state tree (single write point). */
+function writeBookmarks(next: BookmarkedRound[]): void {
+  setValue(DEFAULT_ENGINE_PATHS.bookmarkedRounds, next);
+}
+
+/** Default name for a fresh bookmark: first ~10 non-space chars of the narrative. */
+function defaultBookmarkName(content: string): string {
+  const stripped = content.replace(/\s+/g, '');
+  return stripped.length > 10 ? stripped.slice(0, 10) : (stripped || t('mainGame.bookmark.unnamed'));
+}
+
+/**
+ * Toggle bookmark for the assistant message at global index `globalIdx`.
+ * Captures a content snapshot + the preceding player input so the bookmark
+ * is self-contained (stable against rollback / history folding).
+ */
+function toggleBookmarkForMessage(msg: ChatMessage, globalIdx: number): void {
+  const round = roundForAssistantAt(globalIdx);
+  const existing = bookmarks.value.findIndex((b) => b.round === round);
+  if (existing >= 0) {
+    const next = bookmarks.value.slice();
+    next.splice(existing, 1);
+    writeBookmarks(next);
+    return;
+  }
+  // Snapshot exactly what the player is looking at (WYSIWYG): displayTextForAssistant
+  // honours the per-round 优化/原文 toggle, so a bookmark keeps the on-screen version.
+  const content = displayTextForAssistant(msg);
+  const bm: BookmarkedRound = {
+    id: `bm_${round}_${Date.now()}`,
+    round,
+    createdAt: Date.now(),
+    name: defaultBookmarkName(content),
+    content,
+    pending: false,
+  };
+  // Keep the list sorted by round descending (newest floors first).
+  const next = [...bookmarks.value, bm].sort((a, b) => b.round - a.round);
+  writeBookmarks(next);
+}
+
+function toggleBookmarksPanel(): void {
+  showBookmarks.value = !showBookmarks.value;
+  if (showBookmarks.value) showSearch.value = false; // only one dropdown open at a time
+  else editingBookmarkId.value = null;
+}
+
+function toggleBookmarkPending(id: string, checked: boolean): void {
+  writeBookmarks(bookmarks.value.map((b) => (b.id === id ? { ...b, pending: checked } : b)));
+}
+
+function selectAllBookmarks(checked: boolean): void {
+  writeBookmarks(bookmarks.value.map((b) => ({ ...b, pending: checked })));
+}
+
+function removeBookmark(id: string): void {
+  writeBookmarks(bookmarks.value.filter((b) => b.id !== id));
+  if (editingBookmarkId.value === id) editingBookmarkId.value = null;
+}
+
+function startRenameBookmark(id: string): void {
+  editingBookmarkId.value = id;
+  nextTick(() => {
+    const el = document.querySelector<HTMLInputElement>(`[data-bm-edit="${id}"]`);
+    if (el) { el.focus(); el.select(); }
+  });
+}
+
+function commitRenameBookmark(id: string, value: string): void {
+  const name = value.trim();
+  if (name) {
+    writeBookmarks(bookmarks.value.map((b) => (b.id === id ? { ...b, name } : b)));
+  }
+  editingBookmarkId.value = null;
+}
+
+/**
+ * Locate the assistant message for a round and pin the view to it.
+ * Shared by the in-panel bookmark list (jumpToBookmark) and cross-panel jumps
+ * from MemoryPanel (via the 'ui:jump-to-round' eventBus event).
+ */
+function jumpToRound(round: number): void {
+  const msgs = displayMessages.value;
+  let targetIdx = -1;
+  for (let i = 0; i < msgs.length; i++) {
+    if (msgs[i].role === 'assistant' && roundForMessageAt(msgs, i) === round) {
+      targetIdx = i;
+      break;
+    }
+  }
+  if (targetIdx === -1) return; // round no longer present (e.g. rolled back) — snapshot still viewable in list
+  windowMode.value = 'pinned';
+  pinnedTargetIdx.value = targetIdx;
+  nextTick(() => {
+    const container = messagesContainer.value;
+    if (!container) return;
+    const el = container.querySelector(`[data-global-idx="${targetIdx}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('search-highlight-flash');
+      setTimeout(() => el.classList.remove('search-highlight-flash'), 2000);
+    }
+  });
+}
+
+/** Bookmark-list jump (in-panel). Closes the dropdown for an unobstructed view. */
+function jumpToBookmark(round: number): void {
+  showBookmarks.value = false;
+  jumpToRound(round);
+}
+
+/**
+ * Pending cross-panel jump target lives in a module-level singleton (survives this
+ * view being unmounted / KeepAlive-evicted when the request is made from MemoryPanel).
+ * onActivated — which also resets fold state to 'tail' — consumes it LAST so the
+ * pin is not overridden. onActivated fires on first mount too, so this covers the
+ * deep-link-to-/game/memory case with no event-timing race.
+ */
+const { consumeRoundJump } = useRoundJump();
+
+/** Compact preview for a bookmark row snippet. */
+function bookmarkSnippet(content: string, n = 48): string {
+  const s = content.replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
 // ─── Round divider placement (Phase 2, 2026-04-19) ─────────────
@@ -711,6 +871,13 @@ onActivated(() => {
   if (_savedActionOptions.length > 0 && actionOptions.value.length === 0) {
     actionOptions.value = [..._savedActionOptions];
   }
+
+  // Process a pending cross-panel jump (收藏楼层 jump from MemoryPanel).
+  // Runs LAST so the tail-reset above doesn't override the pin.
+  const jumpRound = consumeRoundJump();
+  if (jumpRound != null) {
+    nextTick(() => jumpToRound(jumpRound));
+  }
 });
 
 onMounted(() => {
@@ -886,6 +1053,21 @@ watch(
             </svg>
           </button>
         </Tooltip>
+        <!-- 收藏楼层 展开按钮 — 紧邻搜索按钮 (2026-07-18) -->
+        <Tooltip :text="$t('mainGame.bookmark.toggleTitle')" interactive>
+          <button
+            class="search-toggle-btn bookmark-toggle-btn"
+            :class="{ 'bookmark-toggle-btn--active': showBookmarks }"
+            data-testid="bookmark-toggle"
+            :aria-label="$t('mainGame.bookmark.toggleTitle')"
+            @click="toggleBookmarksPanel"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" aria-hidden="true">
+              <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+            </svg>
+            <span v-if="bookmarks.length > 0" class="bookmark-count">{{ bookmarks.length }}</span>
+          </button>
+        </Tooltip>
         <FestivalChip :festival="festival" />
         <span v-if="isGenerating" class="status-generating">
           {{ $t('mainGame.status.aiThinking') }}
@@ -944,6 +1126,90 @@ watch(
         </div>
       </Transition>
 
+      <!-- Bookmark panel (收藏楼层) — slides down, mirrors the search panel.
+           Lists player-bookmarked rounds: select (→ inject next round once),
+           rename, jump, delete. (2026-07-18) -->
+      <Transition name="slide-down">
+        <div v-if="showBookmarks" class="bookmark-panel" data-testid="bookmark-panel">
+          <div class="bookmark-head">
+            <span class="bookmark-title">{{ $t('mainGame.bookmark.panelTitle') }}</span>
+            <Tooltip :text="$t('mainGame.bookmark.close')" interactive>
+              <button class="search-close-btn" :aria-label="$t('mainGame.bookmark.close')" @click="toggleBookmarksPanel">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+              </button>
+            </Tooltip>
+          </div>
+
+          <template v-if="bookmarks.length > 0">
+            <div class="bookmark-toolbar">
+              <label class="bookmark-selectall">
+                <input
+                  type="checkbox"
+                  :checked="allBookmarksSelected"
+                  @change="selectAllBookmarks(($event.target as HTMLInputElement).checked)"
+                />
+                {{ $t('mainGame.bookmark.selectAll') }}
+              </label>
+              <span class="bookmark-selcount">{{ $t('mainGame.bookmark.selectedHint', { n: selectedBookmarkCount }) }}</span>
+            </div>
+
+            <div class="bookmark-list">
+              <div
+                v-for="bm in bookmarks"
+                :key="bm.id"
+                class="bookmark-row"
+                :class="{ 'bookmark-row--pending': bm.pending }"
+                data-testid="bookmark-row"
+              >
+                <Tooltip :text="$t('mainGame.bookmark.selectHint')" interactive>
+                  <input
+                    type="checkbox"
+                    class="bookmark-check"
+                    :checked="bm.pending"
+                    :aria-label="$t('mainGame.bookmark.selectHint')"
+                    @change="toggleBookmarkPending(bm.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                </Tooltip>
+                <div class="bookmark-body">
+                  <div class="bookmark-namerow">
+                    <span class="bookmark-badge">{{ $t('mainGame.bookmark.roundLabel', { n: bm.round }) }}</span>
+                    <input
+                      v-if="editingBookmarkId === bm.id"
+                      :data-bm-edit="bm.id"
+                      class="bookmark-name-input"
+                      :value="bm.name"
+                      @blur="commitRenameBookmark(bm.id, ($event.target as HTMLInputElement).value)"
+                      @keydown.enter="($event.target as HTMLInputElement).blur()"
+                      @keydown.escape="editingBookmarkId = null"
+                    />
+                    <Tooltip v-else :text="$t('mainGame.bookmark.renameHint')" interactive>
+                      <button class="bookmark-name" @click="startRenameBookmark(bm.id)">{{ bm.name }}</button>
+                    </Tooltip>
+                  </div>
+                  <p class="bookmark-snippet" @click="jumpToBookmark(bm.round)">{{ bookmarkSnippet(bm.content) }}</p>
+                </div>
+                <div class="bookmark-actions">
+                  <Tooltip :text="$t('mainGame.bookmark.jump')" interactive>
+                    <button class="bookmark-tiny-btn" :aria-label="$t('mainGame.bookmark.jump')" @click="jumpToBookmark(bm.round)">
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                    </button>
+                  </Tooltip>
+                  <Tooltip :text="$t('mainGame.bookmark.delete')" interactive>
+                    <button class="bookmark-tiny-btn bookmark-tiny-btn--del" :aria-label="$t('mainGame.bookmark.delete')" @click="removeBookmark(bm.id)">
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div v-else class="bookmark-empty">
+            {{ $t('mainGame.bookmark.emptyHint') }}
+          </div>
+        </div>
+      </Transition>
+
       <!-- Scrollable message history -->
       <div
         ref="messagesContainer"
@@ -985,11 +1251,13 @@ watch(
           :has-engram="!!msg._engramWrite || !!msg._engramRead"
           :polish="msg._polish"
           :showing-original="isShowingOriginalForRound(msg._metrics?.roundNumber ?? 0)"
+          :is-bookmarked="isRoundBookmarked(roundForAssistantAt(visibleStartIndex + localIdx))"
           @view-thinking="openThinkingViewer(msg)"
           @view-commands="openCommandsViewer(msg, 'commands')"
           @view-raw="openRawViewer(msg)"
           @view-engram="openEngramViewer(msg)"
           @toggle-original="toggleOriginalForRound(msg)"
+          @toggle-bookmark="toggleBookmarkForMessage(msg, visibleStartIndex + localIdx)"
         />
       <div
         class="message"
@@ -1687,6 +1955,33 @@ watch(
   border-color: color-mix(in oklch, var(--color-sage-400) 25%, transparent);
 }
 
+/* ── Bookmark toggle button (收藏楼层, 2026-07-18) ──────────────── */
+/* Reuses .search-toggle-btn base; auto width to fit the count badge, amber
+   beacon on hover/active (amber = deliberately-kept, per sanctuary brief). */
+.bookmark-toggle-btn {
+  position: relative;
+  width: auto;
+  min-width: 28px;
+  gap: 3px;
+  padding: 0 6px;
+}
+.bookmark-toggle-btn:hover {
+  color: var(--color-amber-300);
+  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+}
+.bookmark-toggle-btn--active {
+  color: var(--color-amber-300);
+  background: color-mix(in oklch, var(--color-amber-400) 12%, transparent);
+  border-color: color-mix(in oklch, var(--color-amber-400) 25%, transparent);
+}
+.bookmark-count {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--color-amber-300);
+  line-height: 1;
+}
+
 /* ── Search panel ─────────────────────────────────────────────── */
 
 .search-panel {
@@ -1818,6 +2113,183 @@ watch(
   font-size: 0.78rem;
   color: var(--color-text-muted);
   text-align: center;
+}
+
+/* ── Bookmark panel (收藏楼层, 2026-07-18) ─────────────────────── */
+/* Mirrors the search-panel slide-down shell; warm-glass surface. */
+.bookmark-panel {
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px -4px color-mix(in oklch, var(--color-amber-400) 15%, transparent);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  padding: 0.5rem var(--sidebar-right-reserve, 40px) 0.6rem var(--sidebar-left-reserve, 40px);
+  transition: padding-left var(--duration-open) var(--ease-droplet),
+              padding-right var(--duration-open) var(--ease-droplet);
+}
+
+.bookmark-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.15rem 0.2rem 0.4rem;
+}
+.bookmark-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+
+.bookmark-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.2rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.bookmark-selectall {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.bookmark-selectall input,
+.bookmark-check {
+  accent-color: var(--color-amber-400);
+  cursor: pointer;
+}
+.bookmark-selcount {
+  font-size: 0.68rem;
+  color: var(--color-amber-300);
+}
+
+.bookmark-list {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bookmark-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.5rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.bookmark-row:hover {
+  background: color-mix(in oklch, var(--color-text) 4%, transparent);
+}
+.bookmark-row--pending {
+  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
+}
+.bookmark-check {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+.bookmark-body {
+  flex: 1;
+  min-width: 0;
+}
+.bookmark-namerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bookmark-badge {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--color-sage-300);
+  background: color-mix(in oklch, var(--color-sage-400) 10%, transparent);
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+}
+.bookmark-name {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.82rem;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 1px 4px;
+  cursor: text;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.bookmark-name:hover {
+  background: color-mix(in oklch, var(--color-text) 6%, transparent);
+  outline: 1px dashed color-mix(in oklch, var(--color-sage-400) 40%, transparent);
+}
+.bookmark-name-input {
+  font-family: var(--font-serif-cjk);
+  font-size: 0.82rem;
+  color: var(--color-text);
+  background: color-mix(in oklch, var(--color-surface-input) 80%, transparent);
+  border: 1px solid var(--color-sage-400);
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+.bookmark-snippet {
+  margin: 3px 0 0;
+  font-family: var(--font-serif-cjk);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--color-text-umber);
+  cursor: pointer;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.bookmark-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.bookmark-tiny-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+}
+.bookmark-tiny-btn:hover {
+  color: var(--color-sage-300);
+  border-color: color-mix(in oklch, var(--color-sage-400) 30%, var(--color-border));
+}
+.bookmark-tiny-btn--del:hover {
+  color: var(--color-danger);
+  border-color: color-mix(in oklch, var(--color-danger) 30%, var(--color-border));
+}
+.bookmark-empty {
+  padding: 0.9rem 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  font-style: italic;
 }
 
 .slide-down-enter-active,

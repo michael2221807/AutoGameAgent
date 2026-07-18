@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// App doc: docs/user-guide/pages/game-main.md §3.5 (卫星按钮，含 ★ 收藏)
 // Archived plan: docs/research/mrjh-migration/archive/06-round-divider-plan.md
 /**
  * RoundDivider — a visual break between rounds in the MainGamePanel message
@@ -61,6 +62,12 @@ interface Props {
   };
   /** True when parent is currently showing the pre-polish original text. */
   showingOriginal?: boolean;
+  /**
+   * Whether this round is bookmarked (收藏楼层, 2026-07-18).
+   * Filled ★ when true, outline ☆ when false. Shown for every round
+   * (current + past) so any floor can be collected in place.
+   */
+  isBookmarked?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -70,6 +77,7 @@ const props = withDefaults(defineProps<Props>(), {
   hasRaw: false,
   hasEngram: false,
   showingOriginal: false,
+  isBookmarked: false,
 });
 
 const emit = defineEmits<{
@@ -83,6 +91,8 @@ const emit = defineEmits<{
   'view-engram': [];
   /** Center badge click — request parent to flip the 优化/原文 view for this round. */
   'toggle-original': [];
+  /** Right cluster — ★: toggle bookmark (收藏楼层) for this round. */
+  'toggle-bookmark': [];
 }>();
 
 function onBadgeClick(): void {
@@ -188,6 +198,29 @@ function onBadgeClick(): void {
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+            </svg>
+          </button>
+        </Tooltip>
+        <!-- ★ Bookmark button — shown for every round (current + past) so any floor
+             can be collected in place (收藏楼层, 2026-07-18). -->
+        <Tooltip
+          :text="$t(props.isBookmarked ? 'mainGame.roundDivider.bookmarkRemoveTitle' : 'mainGame.roundDivider.bookmarkAddTitle')"
+          interactive
+        >
+          <button
+            type="button"
+            class="round-divider__icon-btn round-divider__icon-btn--bookmark"
+            :class="{ 'round-divider__icon-btn--bookmarked': props.isBookmarked }"
+            data-testid="round-bookmark-btn"
+            :aria-pressed="props.isBookmarked"
+            :aria-label="$t(props.isBookmarked ? 'mainGame.roundDivider.bookmarkRemoveAriaLabel' : 'mainGame.roundDivider.bookmarkAddAriaLabel')"
+            @click="$emit('toggle-bookmark')"
+          >
+            <svg v-if="props.isBookmarked" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
             </svg>
           </button>
         </Tooltip>
@@ -318,6 +351,26 @@ function onBadgeClick(): void {
   color: var(--color-amber-400);
   border-color: color-mix(in oklch, var(--color-amber-400) 35%, var(--color-border));
   background: color-mix(in oklch, var(--color-amber-400) 6%, transparent);
+}
+
+/*
+ * Bookmark button (★) — amber beacon, matching the "something the player
+ * chose to keep" warmth (sanctuary brief: amber = rare, deliberate). Resting
+ * state is a neutral outline ☆; hover previews amber; the bookmarked state
+ * fills the star and lights the amber wash so a collected floor reads at a glance.
+ */
+.round-divider__icon-btn--bookmark:hover {
+  color: var(--color-amber-400);
+  border-color: color-mix(in oklch, var(--color-amber-400) 35%, var(--color-border));
+  background: color-mix(in oklch, var(--color-amber-400) 6%, transparent);
+}
+.round-divider__icon-btn--bookmarked {
+  color: var(--color-amber-400);
+  border-color: color-mix(in oklch, var(--color-amber-400) 45%, var(--color-border));
+  background: color-mix(in oklch, var(--color-amber-400) 10%, transparent);
+}
+.round-divider__icon-btn--bookmarked:hover {
+  color: var(--color-amber-300);
 }
 
 /*
