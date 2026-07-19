@@ -175,7 +175,10 @@ export class AIService {
       : config;
 
     let effectiveOptions = options;
-    if (effectiveConfig.disablePrefill && options.messages.length > 0) {
+    if (effectiveConfig.strictMessageFormat && options.messages.length > 0) {
+      // 严格模式已保证 user 结尾，涵盖 disablePrefill 的诉求 → 二选一，strict 优先。
+      effectiveOptions = { ...options, messages: applyStrictMessageFormat(options.messages) };
+    } else if (effectiveConfig.disablePrefill && options.messages.length > 0) {
       effectiveOptions = { ...options, messages: this.convertPrefillToSystem(options.messages) };
     }
 
@@ -544,6 +547,51 @@ export function inferImageBackendFromUrl(url: string): string {
   if (url.includes(':8188')) return 'comfyui';
   if (url.includes(':7860')) return 'sd_webui';
   return '';
+}
+
+/**
+ * 严格消息格式兼容变换 — 消除会被严格模型/反代拒绝的两类结构：
+ *   1. 对话中途的 system 消息（转 Anthropic 后成为 `mid_conv_system` 块，
+ *      若非所在 turn 的末块会被 400 拒绝）。
+ *   2. 以 assistant 结尾（prefill）—— 部分模型（如 claude-opus-4-8）要求
+ *      对话必须以 user 消息结尾。
+ *
+ * 规则（仅改 role，不改内容、不改相对顺序）：
+ *   - 开头连续的 system 保留（转为顶层 system，天然合法）。
+ *   - 首个非 system 消息之后出现的任何 system → 转为 user。
+ *   - 末尾连续的 assistant → 转为 user，保证以 user 结尾。
+ * 相邻同角色消息由后端自动合并，无需在此处拼接。纯函数，供 doGenerate 与单测调用。
+ *
+ * 两条已由真实 gproxy→Claude Opus 往返（2026-07-19，返回 200，见 bugfix-changelog）
+ * 验证过的关键假设，改动前务必回看，勿"顺手修"导致回归：
+ *   1. **开头 system 块之后紧跟的 assistant 不强转 user**（首个非 system 若是 assistant，
+ *      保持 assistant）。此路径经 OpenAI provider → gproxy，"首条须为 user"由 gproxy 侧
+ *      兜底（不同于原生 ClaudeProvider.convertMessages 会 unshift 占位 user）。真实 payload
+ *      正是 assistant 开头，单测 strict-message-format.test.ts 第 1 例已固化。
+ *   2. **依赖后端合并相邻同角色**（中途 system→user 紧邻既有 user、末尾 assistant→user
+ *      落在 user 旁等），本函数不做拼接。合并行为由 gproxy 的 OpenAI→Anthropic 转换保证。
+ */
+export function applyStrictMessageFormat(messages: AIMessage[]): AIMessage[] {
+  const result = messages.map((m) => ({ ...m }));
+
+  const firstNonSystem = result.findIndex((m) => m.role !== 'system');
+  if (firstNonSystem === -1) return result; // 全是 system：无中途 system、无 assistant 结尾
+
+  // 中途 system → user（消除 mid_conv_system）
+  for (let i = firstNonSystem; i < result.length; i++) {
+    if (result[i].role === 'system') result[i] = { ...result[i], role: 'user' };
+  }
+
+  // 末尾 assistant（prefill）→ user，确保对话以 user 结尾
+  for (let i = result.length - 1; i >= 0; i--) {
+    if (result[i].role === 'assistant') {
+      result[i] = { ...result[i], role: 'user' };
+    } else {
+      break;
+    }
+  }
+
+  return result;
 }
 
 /** localStorage key holding AI-generation settings (shared by APIPanel + SettingsPanel). */

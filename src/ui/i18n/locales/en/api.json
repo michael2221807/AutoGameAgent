@@ -124,6 +124,8 @@
   "api.form.customRoutingPath": "Custom Path",
   "api.form.disablePrefill": "Disable Assistant Prefill",
   "api.form.disablePrefillHint": "Some reverse proxies don't support messages ending with assistant role (prefill). When enabled, prefill content is converted to a user instruction instead.",
+  "api.form.strictMessageFormat": "Strict Message Format",
+  "api.form.strictMessageFormatHint": "Some models/proxies (e.g. Claude Opus via gproxy) reject system messages in the middle of a conversation and require the conversation to end with a user message (otherwise a mid_conv_system / must-end-with-user error). When enabled, mid-conversation system messages become user messages and a trailing assistant prefill is converted to user. Turn this on if you hit those errors.",
   "api.form.validationNameRequired": "Please enter an API name",
   "api.form.validationUrlRequired": "Please enter an API URL",
 

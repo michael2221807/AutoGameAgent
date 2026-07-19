@@ -94,6 +94,13 @@ export interface APIConfig {
   customRoutingPath?: string;
   /** 禁用 assistant prefill — 部分反代理不支持消息列表以 assistant 结尾 */
   disablePrefill?: boolean;
+  /**
+   * 严格消息格式兼容 — 面向"不接受对话中途 system 消息"且"要求以 user 结尾"的
+   * 模型/反代（如经 gproxy 转发的 Claude Opus，会因 mid_conv_system 块位置报 400）。
+   * 开启后：首个非 system 消息之后的 system 全部转为 user，且末尾 assistant(prefill)
+   * 转为 user，确保对话以 user 结尾。优先级高于 disablePrefill（已涵盖其 user 结尾诉求）。
+   */
+  strictMessageFormat?: boolean;
 }
 
 // ─── Usage Type ───

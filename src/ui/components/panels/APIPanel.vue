@@ -299,6 +299,8 @@ interface APIFormData {
   customRoutingPath: string;
   /** 禁用 assistant prefill — 部分反代理不支持 */
   disablePrefill: boolean;
+  /** 严格消息格式兼容 — 中途 system 转 user + 强制 user 结尾（如经 gproxy 的 Opus） */
+  strictMessageFormat: boolean;
 }
 
 /**
@@ -373,6 +375,7 @@ const form = ref<APIFormData>({
   useCustomRouting: false,
   customRoutingPath: '',
   disablePrefill: false,
+  strictMessageFormat: false,
 });
 
 function openAddModal(): void {
@@ -394,6 +397,7 @@ function openAddModal(): void {
     useCustomRouting: false,
     customRoutingPath: '',
     disablePrefill: false,
+    strictMessageFormat: false,
   };
   imageBackend.value = 'civitai';
   showEditModal.value = true;
@@ -418,6 +422,7 @@ function openEditModal(api: APIConfig): void {
     useCustomRouting: api.useCustomRouting ?? false,
     customRoutingPath: api.customRoutingPath ?? '',
     disablePrefill: api.disablePrefill ?? false,
+    strictMessageFormat: api.strictMessageFormat ?? false,
   };
   if ((api.apiCategory ?? 'llm') === 'image') {
     imageBackend.value = inferImageBackend(api.url);
@@ -1107,6 +1112,14 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
           <AgaToggle v-model="form.disablePrefill" :label="$t('api.form.disablePrefill')" show-label />
           <span class="form-hint">
             {{ $t('api.form.disablePrefillHint') }}
+          </span>
+        </div>
+
+        <!-- Strict message format toggle (LLM only) — mid-conv system → user + user ending -->
+        <div v-if="form.apiCategory === 'llm'" class="form-group">
+          <AgaToggle v-model="form.strictMessageFormat" :label="$t('api.form.strictMessageFormat')" show-label />
+          <span class="form-hint">
+            {{ $t('api.form.strictMessageFormatHint') }}
           </span>
         </div>
 

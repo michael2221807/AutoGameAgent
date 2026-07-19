@@ -124,6 +124,8 @@
   "api.form.customRoutingPath": "自定义路径",
   "api.form.disablePrefill": "禁用 Assistant Prefill",
   "api.form.disablePrefillHint": "部分反代理不支持消息以 assistant 结尾（prefill）。开启后 prefill 内容会转为 user 指令发送。",
+  "api.form.strictMessageFormat": "严格消息格式兼容",
+  "api.form.strictMessageFormatHint": "部分模型/反代（如经 gproxy 的 Claude Opus）不接受对话中途的系统提示，且要求消息以 user 结尾，否则报 mid_conv_system / 需以 user 结尾 的错误。开启后：中途的系统提示会转为 user 消息，并把末尾的 assistant(prefill) 转为 user。遇到这类报错时开启。",
   "api.form.validationNameRequired": "请输入 API 名称",
   "api.form.validationUrlRequired": "请输入 API URL",
 
