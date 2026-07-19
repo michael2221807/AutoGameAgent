@@ -36,6 +36,28 @@ describe('applyPersistedAISettings', () => {
     expect(svc.maxRetries).toBe(4);
   });
 
+  it('applies persisted requestTimeoutMinutes (converted to ms) to the service', () => {
+    write({ requestTimeoutMinutes: 5 });
+    const svc = new AIService();
+    applyPersistedAISettings(svc);
+    expect(svc.requestTimeoutMs).toBe(5 * 60_000);
+  });
+
+  it('clamps an out-of-range requestTimeoutMinutes to the legal bound', () => {
+    write({ requestTimeoutMinutes: 999 });
+    const svc = new AIService();
+    applyPersistedAISettings(svc);
+    expect(svc.requestTimeoutMs).toBe(30 * 60_000); // MAX = 30 min
+  });
+
+  it('leaves the default timeout when requestTimeoutMinutes is absent', () => {
+    write({ maxRetries: 2 });
+    const svc = new AIService();
+    const defaultTimeout = svc.requestTimeoutMs;
+    applyPersistedAISettings(svc);
+    expect(svc.requestTimeoutMs).toBe(defaultTimeout);
+  });
+
   it('enables the rate limiter when lowLoadMode is true', () => {
     write({ lowLoadMode: true, lowLoadMaxRequests: 5 });
     const svc = new AIService();

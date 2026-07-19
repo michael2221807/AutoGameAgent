@@ -238,5 +238,26 @@ export interface AIResponse {
 
 // ─── API 请求超时 ───
 
-/** API 请求超时时间（10 分钟） */
+/** 主 generate 请求超时的默认值（10 分钟）—— 作为 AIService.requestTimeoutMs 的初始值 */
 export const API_TIMEOUT_MS = 600_000;
+
+/**
+ * 主 generate 请求超时的可配置边界（分钟）。
+ *
+ * 用户在 APIPanel「AI 设置」区以「分钟」为单位配置，值持久化到
+ * `aga_ai_settings.requestTimeoutMinutes`，冷启动 / 导入存档时经
+ * {@link requestTimeoutMinutesToMs} 钳制换算后写回 AIService.requestTimeoutMs。
+ *
+ * 仅作用于主 generate（AI 回合/生成）请求；连通测试(10s)、embedding(15s)、
+ * rerank(15s)、图像生成(180s) 等专用短超时语义不同，保持各自硬编码不变。
+ */
+export const REQUEST_TIMEOUT_MIN_MINUTES = 1;
+export const REQUEST_TIMEOUT_MAX_MINUTES = 30;
+export const REQUEST_TIMEOUT_DEFAULT_MINUTES = 10;
+
+/** 将分钟数钳制到 [MIN, MAX] 合法范围并转为毫秒。非法输入（NaN 等）退回默认值。 */
+export function requestTimeoutMinutesToMs(minutes: number): number {
+  const safe = Number.isFinite(minutes) ? Math.round(minutes) : REQUEST_TIMEOUT_DEFAULT_MINUTES;
+  const clamped = Math.min(REQUEST_TIMEOUT_MAX_MINUTES, Math.max(REQUEST_TIMEOUT_MIN_MINUTES, safe));
+  return clamped * 60_000;
+}

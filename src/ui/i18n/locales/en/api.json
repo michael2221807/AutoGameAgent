@@ -168,6 +168,8 @@
   "api.aiSettings.maxRetries.desc": "Maximum retry count after request failure (0-5)",
   "api.aiSettings.privacyRepairRetries.label": "Extended Field Repair Retries",
   "api.aiSettings.privacyRepairRetries.desc": "Auto-repair call count when extended fields (NPC intimate info / player avatar) are missing (0-3). The first call is always made; this value controls additional retries on failure/incompleteness. Recommend keeping at 1 to avoid infinite loops from stubborn AI.",
+  "api.aiSettings.requestTimeout.label": "Request timeout (min)",
+  "api.aiSettings.requestTimeout.desc": "Maximum wait for a single AI turn/generation request (1-30 minutes, default 10). Exceeding it aborts the request and hands off to the retry policy. Affects only the main generation request — not connection tests, embedding, or image generation, which keep their own timeouts. Raise it for slow models or long contexts.",
 
   "api.assign.title": "Feature Assignment",
   "api.assign.showAll": "Show all APIs (bypass category filter)",

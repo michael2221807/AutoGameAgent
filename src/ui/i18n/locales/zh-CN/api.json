@@ -168,6 +168,8 @@
   "api.aiSettings.maxRetries.desc": "请求失败后的最大重试次数（0–5）",
   "api.aiSettings.privacyRepairRetries.label": "扩展字段修复重试次数",
   "api.aiSettings.privacyRepairRetries.desc": "扩展字段（NPC 私密信息 / 玩家法身）缺失时的自动修复调用次数（0–3）。首次调用是必定的，此值控制失败/仍不完整时额外再调几次。建议保持 1 — 避免 AI 顽固不配合导致的无限循环。",
+  "api.aiSettings.requestTimeout.label": "请求超时（分钟）",
+  "api.aiSettings.requestTimeout.desc": "单次 AI 回合/生成请求的最长等待时间（1–30 分钟，默认 10）。超过则中断并按重试策略处理。仅影响主生成请求，不影响连通测试、向量化、图像生成等专用超时。慢模型或长上下文可适当调大。",
 
   "api.assign.title": "功能分配",
   "api.assign.showAll": "显示全部 API（绕过类别过滤）",

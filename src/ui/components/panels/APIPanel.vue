@@ -19,7 +19,7 @@ import AgaButton from '@/ui/components/shared/AgaButton.vue';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
-import { API_PROVIDER_PRESETS } from '@/engine/ai/types';
+import { API_PROVIDER_PRESETS, requestTimeoutMinutesToMs, REQUEST_TIMEOUT_MIN_MINUTES, REQUEST_TIMEOUT_MAX_MINUTES, REQUEST_TIMEOUT_DEFAULT_MINUTES } from '@/engine/ai/types';
 import { inferImageBackendFromUrl, AI_SETTINGS_STORAGE_KEY } from '@/engine/ai/ai-service';
 import type { AIService } from '@/engine/ai/ai-service';
 import type { APIConfig, APIProviderType, UsageType, APICategory } from '@/engine/ai/types';
@@ -148,6 +148,15 @@ const maxRetries = ref<number>(savedSettings.maxRetries ?? 1);
 const privacyRepairRetries = ref<number>(
   typeof savedSettings.privacyRepairRetries === 'number' ? savedSettings.privacyRepairRetries : 1,
 );
+/**
+ * 主 generate 请求超时（分钟，1–30，默认 10）。仅作用于 AI 回合/生成主请求，
+ * 不影响连通测试 / embedding / rerank / 图像生成的专用短超时。
+ */
+const requestTimeoutMinutes = ref<number>(
+  typeof savedSettings.requestTimeoutMinutes === 'number'
+    ? savedSettings.requestTimeoutMinutes
+    : REQUEST_TIMEOUT_DEFAULT_MINUTES,
+);
 
 function saveAISettings() {
   try {
@@ -155,6 +164,16 @@ function saveAISettings() {
     // lowLoadMaxRequests). A full-object overwrite here would silently drop those
     // keys on every toggle. Preserve any co-tenant keys and only write the 4 fields
     // this panel owns. (Mirrors SettingsPanel.saveLowLoadSettings's read-merge.)
+    // Clamp timeout to the legal range so localStorage / backups never hold an
+    // out-of-bounds value even if the number input is bypassed. Route through the
+    // engine's canonical clamp helper (single source of truth) instead of a hand-rolled
+    // copy — this keeps edge cases (0, NaN, out-of-range) identical to the restore path
+    // in applyPersistedAISettings. Reflect the clamped value back into the ref so the
+    // UI shows what was actually stored.
+    const clampedTimeoutMs = requestTimeoutMinutesToMs(Number(requestTimeoutMinutes.value));
+    const clampedTimeout = clampedTimeoutMs / 60_000;
+    requestTimeoutMinutes.value = clampedTimeout;
+
     const existing = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) ?? '{}') as Record<string, unknown>;
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify({
       ...existing,
@@ -162,10 +181,12 @@ function saveAISettings() {
       splitGen: splitGenEnabled.value,
       maxRetries: maxRetries.value,
       privacyRepairRetries: privacyRepairRetries.value,
+      requestTimeoutMinutes: clampedTimeout,
     }));
     // Sync to aiService if available
     if (aiService) {
       aiService.maxRetries = maxRetries.value;
+      aiService.requestTimeoutMs = clampedTimeoutMs;
     }
   } catch { /* ignore */ }
 }
@@ -936,6 +957,22 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
             type="number"
             min="0"
             max="3"
+            class="retry-input"
+            @change="saveAISettings()"
+          />
+        </div>
+
+        <!-- Request timeout (main generate) -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{{ $t('api.aiSettings.requestTimeout.label') }}</span>
+            <span class="setting-desc">{{ $t('api.aiSettings.requestTimeout.desc') }}</span>
+          </div>
+          <input
+            v-model.number="requestTimeoutMinutes"
+            type="number"
+            :min="REQUEST_TIMEOUT_MIN_MINUTES"
+            :max="REQUEST_TIMEOUT_MAX_MINUTES"
             class="retry-input"
             @change="saveAISettings()"
           />

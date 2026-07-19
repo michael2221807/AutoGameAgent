@@ -15,7 +15,7 @@
  * 对应 STEP-03B M2.3。
  */
 import type { APIConfig, GenerateOptions, UsageType, APIAssignment, APIProviderType, AIMessage } from './types';
-import { API_TIMEOUT_MS } from './types';
+import { API_TIMEOUT_MS, requestTimeoutMinutesToMs } from './types';
 import type { BaseProvider } from './providers/base-provider';
 import { OpenAIProvider } from './providers/openai-provider';
 import { ClaudeProvider } from './providers/claude-provider';
@@ -35,6 +35,12 @@ export class AIService {
   private isAborted = false;
   /** 最大重试次数（0 = 不重试） */
   maxRetries = 1;
+  /**
+   * 主 generate 请求整体超时（毫秒）。
+   * 默认 10 分钟；可由 `aga_ai_settings.requestTimeoutMinutes` 配置，
+   * 经 applyPersistedAISettings / APIPanel 同步覆盖。
+   */
+  requestTimeoutMs = API_TIMEOUT_MS;
   /** Low-load mode rate limiter — throttles LLM generate calls */
   private rateLimiter = new RateLimiter();
 
@@ -296,7 +302,7 @@ export class AIService {
    */
   private createTimeoutSignal(callerSignal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
 
     const onAbort = () => {
       clearTimeout(timeoutId);
@@ -545,7 +551,7 @@ export const AI_SETTINGS_STORAGE_KEY = 'aga_ai_settings';
 
 /**
  * Apply the persisted `aga_ai_settings` values that live in AIService memory
- * (maxRetries + low-load rate limiter) to a given AIService instance.
+ * (maxRetries + requestTimeoutMinutes + low-load rate limiter) to a given AIService instance.
  *
  * Shared by cold start (main.ts) and post full-backup import (ManagementView) so
  * the two paths can never drift. The rate limiter is configured unconditionally —
@@ -561,6 +567,9 @@ export function applyPersistedAISettings(service: AIService): void {
     const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_STORAGE_KEY) ?? '{}') as Record<string, unknown>;
     if (typeof saved.maxRetries === 'number') {
       service.maxRetries = saved.maxRetries;
+    }
+    if (typeof saved.requestTimeoutMinutes === 'number') {
+      service.requestTimeoutMs = requestTimeoutMinutesToMs(saved.requestTimeoutMinutes);
     }
     service.configureRateLimiter({
       enabled: saved.lowLoadMode === true,
