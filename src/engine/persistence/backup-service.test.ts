@@ -169,6 +169,15 @@ describe('collectLocalStorageSettings', () => {
     expect(collectLocalStorageSettings()).toEqual({});
   });
 
+  it('collects aga_tts_settings (配音偏好 travels with the backup)', () => {
+    // TTS global voice prefs (speaker/dialect/rate/auto-narrate) live in this key;
+    // they must ride the engineSettings snapshot so backup + cloud-sync carry them.
+    const tts = '{"enabled":true,"defaultSpeaker":"jok老师","defaultInstruct":"四川话"}';
+    localStorage.setItem('aga_tts_settings', tts);
+    const collected = collectLocalStorageSettings();
+    expect(collected['aga_tts_settings']).toBe(tts);
+  });
+
   it('EXCLUDES device-local cloud-sync keys (baseline + pending never travel)', () => {
     // Device-local sync bookkeeping: exporting it and restoring on another device
     // would corrupt that device's conflict detection / re-upload logic. Must not

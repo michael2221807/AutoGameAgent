@@ -43,6 +43,7 @@ export const SETTINGS_EXPORT_WHITELIST: readonly string[] = [
   'aga_autosave_settings',       // 自动保存配置 — :658
   'aga_heartbeat_settings',      // 世界心跳配置 — :663
   'aga_assistant_settings',      // 助手行为配置（无密钥） — :664
+  'aga_tts_settings',            // 配音偏好：音色/方言/语速/自动配音（无密钥；端点走 aga_api_management） — TtsSettingsSection.vue
 ] as const;
 
 /** Secret / API-bound keys that must NEVER appear in a card (asserted in tests). */

@@ -88,6 +88,7 @@ import type { FieldRepairPipeline } from '../pipeline/sub-pipelines/field-repair
 // proper pipeline stage. The sub-pipeline file has been removed.
 import type { NpcMemorySummarizer } from '../social/npc-memory-summarizer';
 import type { ImageService } from '../image/image-service';
+import type { TtsService } from '../tts/tts-service';
 import type { PrivacyIncompleteReport } from '../validators/privacy-profile-validator';
 import type { OpeningStages } from '../pipeline/sub-pipelines/enhanced-opening';
 
@@ -113,6 +114,8 @@ export interface SubPipelineBundle {
   npcMemorySummarizer?: NpcMemorySummarizer;
   /** Image service — for auto scene generation post-round */
   imageService?: ImageService;
+  /** TTS service — for auto narration (朗读回合正文) post-round */
+  ttsService?: TtsService;
   /** World book data — loaded from WorldBookStorage at init */
   worldBooks?: import('../prompt/world-book').WorldBook[];
   /** Built-in prompt overrides — loaded from WorldBookStorage at init */
@@ -778,6 +781,23 @@ export class GameOrchestrator {
         } catch (err) {
           console.debug('[Orchestrator] Auto portrait trigger error:', err);
         }
+      }
+    }
+
+    // ── Auto narration (post-round TTS) ──
+    // Global preference (aga_tts_settings, held on TtsService). Fire-and-forget:
+    // TtsService.speak() is self-contained (splits/strips markers, plays via
+    // audio queue, swallows errors → toast). Skip during enhanced opening.
+    if (this.subPipelines.ttsService && !ctx.meta?.isEnhancedOpening) {
+      try {
+        const ttsSettings = this.subPipelines.ttsService.getSettings();
+        if (ttsSettings.enabled && ttsSettings.autoNarrateOnRound && ctx.parsedResponse?.text) {
+          const roundNo = stateManager.get<number>(this.subPipelines.paths?.roundNumber ?? '元数据.回合序号') ?? 0;
+          // fire-and-forget — do NOT await (post-round pipeline must not block on TTS)
+          void this.subPipelines.ttsService.speak(ctx.parsedResponse.text, `round-${roundNo}`);
+        }
+      } catch (err) {
+        console.debug('[Orchestrator] Auto narration trigger error:', err);
       }
     }
 

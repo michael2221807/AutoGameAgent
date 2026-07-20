@@ -34,7 +34,7 @@ onMounted(() => {
 
 // ─── Usage type config ───
 
-type AssignCategory = 'narrative' | 'world_memory' | 'npc_social' | 'plot' | 'repair' | 'image' | 'rag' | 'utility';
+type AssignCategory = 'narrative' | 'world_memory' | 'npc_social' | 'plot' | 'repair' | 'image' | 'rag' | 'utility' | 'audio';
 
 interface UsageTypeMeta {
   label: string;
@@ -75,6 +75,7 @@ const USAGE_TYPE_CATEGORIES: Record<UsageType, AssignCategory> = {
   world_builder: 'utility',
   engram_batch_solidify: 'repair',
   card_edge_classify: 'repair',
+  ttsGen_cosyvoice: 'audio',
 };
 
 function getUsageTypeMeta(key: UsageType): UsageTypeMeta {
@@ -94,7 +95,7 @@ function getAssignCategoryMeta(cat: AssignCategory): { label: string; hint?: str
 }
 
 const CATEGORY_ORDER: AssignCategory[] = [
-  'narrative', 'world_memory', 'npc_social', 'plot', 'repair', 'image', 'rag', 'utility',
+  'narrative', 'world_memory', 'npc_social', 'plot', 'repair', 'image', 'rag', 'audio', 'utility',
 ];
 
 // ─── Feature toggles (preset snapshot only) ───
@@ -203,7 +204,11 @@ async function testConnection(api: APIConfig): Promise<void> {
     eventBus.emit('ui:toast', { type: 'warning', message: t('api.test.noService'), duration: 2000 });
     return;
   }
-  if (!api.url || !api.apiKey || !api.model) {
+  // TTS (CosyVoice) needs neither apiKey nor model — only a reachable URL.
+  const preflightOk = (api.apiCategory === 'tts')
+    ? !!api.url
+    : !!(api.url && api.apiKey && api.model);
+  if (!preflightOk) {
     eventBus.emit('ui:toast', { type: 'warning', message: t('api.test.preflight'), duration: 2000 });
     return;
   }
@@ -315,7 +320,7 @@ function getCategoryMeta(cat: APICategory): { label: string; desc: string } {
   };
 }
 
-const CATEGORY_OPTIONS: APICategory[] = ['llm', 'embedding', 'rerank', 'image'];
+const CATEGORY_OPTIONS: APICategory[] = ['llm', 'embedding', 'rerank', 'image', 'tts'];
 
 /** Provider picker options for the edit modal (AgaSelect). */
 const PROVIDER_VALUES: APIProviderType[] = ['openai', 'claude', 'gemini', 'deepseek', 'custom'];
@@ -503,6 +508,15 @@ const CATEGORY_DEFAULTS: Record<APICategory, CategorySlice> = {
     provider: 'custom',
     url: '',
     model: '',
+    temperature: 0,
+    maxTokens: 0,
+    useCustomRouting: false,
+    customRoutingPath: '',
+  },
+  tts: {
+    provider: 'custom',
+    url: 'http://localhost:9880',
+    model: 'cosyvoice',
     temperature: 0,
     maxTokens: 0,
     useCustomRouting: false,
@@ -760,6 +774,7 @@ function requiredCategoryFor(type: UsageType): APICategory {
   if (type === 'embedding') return 'embedding';
   if (type === 'rerank') return 'rerank';
   if (type === 'imageGeneration' || type.startsWith('imageGen_')) return 'image';
+  if (type.startsWith('ttsGen_')) return 'tts';
   return 'llm';
 }
 
@@ -1047,7 +1062,9 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
               ? 'https://api.siliconflow.cn'
               : form.apiCategory === 'image'
                 ? activeImagePreset.url || 'https://example.com'
-                : 'https://api.example.com'"
+                : form.apiCategory === 'tts'
+                  ? 'http://localhost:9880'
+                  : 'https://api.example.com'"
           />
           <span v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-hint">
             {{ $t('api.form.urlHintEmbedding') }}
@@ -1056,15 +1073,24 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
           <span v-else-if="form.apiCategory === 'image'" class="form-hint">
             {{ activeImagePreset.label }}{{ $t('api.form.urlHintImage') }}
           </span>
+          <span v-else-if="form.apiCategory === 'tts'" class="form-hint">
+            {{ $t('api.form.urlHintTts') }}
+          </span>
         </div>
 
         <div class="form-group">
           <label class="form-label">{{ $t('api.form.apiKey') }}</label>
-          <input v-model="form.apiKey" type="password" class="form-input" placeholder="sk-..." />
+          <input
+            v-model="form.apiKey"
+            type="password"
+            class="form-input"
+            :placeholder="form.apiCategory === 'tts' ? $t('api.form.apiKeyOptional') : 'sk-...'"
+          />
+          <span v-if="form.apiCategory === 'tts'" class="form-hint">{{ $t('api.form.apiKeyHintTts') }}</span>
         </div>
 
-        <!-- Model with fetch button (B.1.2) -->
-        <div class="form-group">
+        <!-- Model with fetch button (B.1.2) — hidden for TTS (CosyVoice needs no model) -->
+        <div v-if="form.apiCategory !== 'tts'" class="form-group">
           <label class="form-label">{{ $t('api.form.model') }}</label>
           <div class="model-input-row">
             <input
@@ -1136,13 +1162,13 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
           </span>
         </div>
 
-        <!-- §11.3: Advanced — custom routing path (only for embedding/rerank) -->
-        <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank'" class="form-advanced">
+        <!-- §11.3: Advanced — custom routing path (embedding/rerank/tts) -->
+        <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank' || form.apiCategory === 'tts'" class="form-advanced">
           <summary>{{ $t('api.form.advancedOptions') }}</summary>
           <div class="form-group">
             <AgaToggle v-model="form.useCustomRouting" :label="$t('api.form.useCustomRouting')" show-label />
             <span class="form-hint">
-              {{ $t('api.form.customRoutingHint') }}
+              {{ form.apiCategory === 'tts' ? $t('api.form.customRoutingHintTts') : $t('api.form.customRoutingHint') }}
             </span>
           </div>
           <div v-if="form.useCustomRouting" class="form-group">
@@ -1151,7 +1177,7 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
               v-model="form.customRoutingPath"
               type="text"
               class="form-input"
-              :placeholder="form.apiCategory === 'rerank' ? '/v1/rerank' : '/v1/embeddings'"
+              :placeholder="form.apiCategory === 'rerank' ? '/v1/rerank' : form.apiCategory === 'tts' ? '/' : '/v1/embeddings'"
             />
           </div>
         </details>
@@ -1394,6 +1420,10 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
 .api-category-badge--rerank {
   color: var(--color-amber-400);
   background: color-mix(in oklch, var(--color-amber-400) 15%, transparent);
+}
+.api-category-badge--tts {
+  color: var(--color-viz-purple);
+  background: color-mix(in oklch, var(--color-viz-purple) 15%, transparent);
 }
 
 .api-actions {

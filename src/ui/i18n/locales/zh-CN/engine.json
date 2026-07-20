@@ -23,7 +23,9 @@
       "storageQuotaExceeded": "浏览器存储已满，写入失败！存档与图片可能随时被自动清除，请立即进行云备份/导出",
       "imageAssetsMissingOnExport": "本次备份有 {missing}/{total} 张已引用图片在本地缓存中找不到（可能被浏览器清除），备份将缺图。请勿用它覆盖含图的云端/旧备份",
       "importPreservedImages": "导入的备份引用了图片却不含任何图片数据，已保留本地现有图片以防丢失",
-      "imageRestoreFailed": "存档已恢复，但图片写入本地失败（可能存储空间不足），部分图片可能缺失"
+      "imageRestoreFailed": "存档已恢复，但图片写入本地失败（可能存储空间不足），部分图片可能缺失",
+      "ttsNoConfig": "未配置可用的配音（TTS）API，请在「API 配置」中添加 TTS 类别的端点",
+      "ttsFailed": "配音生成失败（不影响本回合）"
     },
     "progress": {
       "stage": "[{name}]",

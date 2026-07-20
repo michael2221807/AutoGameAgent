@@ -43,6 +43,7 @@ import { adaptDemoSave } from '@/engine/persistence/demo-save-adapter';
 import type { ProfileMeta, SaveSlotMeta } from '@/engine/types/persistence';
 import type { GameStateTree } from '@/engine/types';
 import type { AIService } from '@/engine/ai/ai-service';
+import type { TtsService } from '@/engine/tts/tts-service';
 import { applyPersistedAISettings } from '@/engine/ai/ai-service';
 import { useEngineStateStore } from '@/engine/stores/engine-state';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
@@ -61,6 +62,7 @@ const saveManager = inject<SaveManager>('saveManager');
 const backupService = inject<BackupService>('backupService');
 const vectorStore = inject<VectorStore>('vectorStore');
 const aiService = inject<AIService | undefined>('aiService', undefined);
+const ttsService = inject<TtsService | undefined>('ttsService', undefined);
 
 // ─── Reactive state ───────────────────────────────────────────
 
@@ -412,6 +414,9 @@ function syncEngineAfterBackupImport(): void {
     // loadSlot (no reload) right after importing — running the whole session stale.
     applyPersistedAISettings(aiService);
   }
+  // Re-load imported aga_tts_settings into the live TtsService so orchestrator
+  // auto-narrate + main-panel play use the imported config without a page reload.
+  ttsService?.reloadSettings();
   useActionQueueStore().loadFromLocalStorage();
 }
 

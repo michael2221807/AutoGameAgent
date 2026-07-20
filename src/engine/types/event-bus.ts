@@ -31,6 +31,10 @@ export type EngineEventName =
   // their local view of the toggle consistent without cross-component reactive wiring.
   | 'ui:cloud-autosync-changed'
   | 'worldbook:updated'
+  // TTS playback state broadcast (TtsService → UI). Payload: TtsStateEvent.
+  // Lets the play button, status-bar chip, and segment highlight stay in sync
+  // without the UI holding a direct ref to the audio element.
+  | 'tts:state'
   | string; // allow custom events
 
 /** Payload for 'ui:toast' events */

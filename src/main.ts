@@ -83,6 +83,9 @@ import { OpenAIImageProvider } from './engine/image/providers/openai';
 import { SDWebUIImageProvider } from './engine/image/providers/sd-webui';
 import { ComfyUIImageProvider } from './engine/image/providers/comfyui';
 import { CivitaiImageProvider } from './engine/image/providers/civitai';
+import { TtsService } from './engine/tts/tts-service';
+import { TtsProviderRegistry } from './engine/tts/provider-registry';
+import { CosyVoiceProvider } from './engine/tts/providers/cosyvoice';
 import { migrateImageState } from './engine/image/save-migration';
 import { NpcChatPipeline } from './engine/pipeline/sub-pipelines/npc-chat';
 import { DEFAULT_ENGINE_PATHS } from './engine/pipeline/types';
@@ -657,6 +660,11 @@ async function bootstrap(): Promise<void> {
 
   migrateImageState(stateManager);
 
+  // ── TTS subsystem bootstrap (before orchestrator which references ttsService) ──
+  const ttsProviderRegistry = new TtsProviderRegistry();
+  ttsProviderRegistry.register('cosyvoice', (c) => new CosyVoiceProvider(c.endpoint, c.apiKey, c.routingPath));
+  const ttsService = new TtsService(aiService, ttsProviderRegistry);
+
   // ── #1: 创建 Orchestrator，接通 pipeline:user-input → PipelineRunner ──
   let orchestrator: GameOrchestrator | null = null;
   if (pack) {
@@ -684,6 +692,7 @@ async function bootstrap(): Promise<void> {
         fieldRepair: fieldRepairPipeline,
         npcMemorySummarizer: npcMemSummarizer,
         imageService,
+        ttsService,
         memoryManager,
         paths: DEFAULT_ENGINE_PATHS,
         plotEvaluation: plotEvaluationPipeline,
@@ -767,6 +776,7 @@ async function bootstrap(): Promise<void> {
   // immediately, instead of waiting for the next main round's evaluation pass.
   if (plotEvaluationPipeline) app.provide('plotEvaluation', plotEvaluationPipeline);
   app.provide('imageService', imageService);
+  app.provide('ttsService', ttsService);
   app.provide('vectorStore', vectorStore);
   app.provide('embedder', embedder);
   app.provide('backupService', backupService);

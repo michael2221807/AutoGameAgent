@@ -85,9 +85,11 @@ export class AIService {
 
     // 2. 确定此 usage 需要的 API 类别
     const isImageGen = usageType === 'imageGeneration' || usageType.startsWith('imageGen_');
+    const isTts = usageType.startsWith('ttsGen_');
     const requiredCategory = usageType === 'embedding' ? 'embedding'
       : usageType === 'rerank' ? 'rerank'
       : isImageGen ? 'image'
+      : isTts ? 'tts'
       : 'llm';
 
     // 3. 非 LLM 类：只在同类 API 中查找，不 fallback 到 LLM
@@ -118,6 +120,19 @@ export class AIService {
     const perBackendUsage = `imageGen_${backend}` as UsageType;
     return this.getConfigForUsage(perBackendUsage)
       ?? this.getConfigForUsage('imageGeneration');
+  }
+
+  // ─── TTS per-backend routing ───
+
+  /**
+   * Find the TTS API config for a specific backend (e.g. 'cosyvoice').
+   * Uses the per-backend usage type (ttsGen_cosyvoice). Mirrors
+   * {@link getImageConfigForBackend}. Non-LLM category → only matches
+   * `apiCategory === 'tts'` configs, never falls back to an LLM config.
+   */
+  getTtsConfigForBackend(backend: string): APIConfig | undefined {
+    const perBackendUsage = `ttsGen_${backend}` as UsageType;
+    return this.getConfigForUsage(perBackendUsage);
   }
 
   // ─── 主调用方法 ───
@@ -344,13 +359,49 @@ export class AIService {
     url: string;
     apiKey: string;
     model: string;
-    apiCategory?: 'llm' | 'embedding' | 'rerank' | 'image';
-    /** 可选：自定义路径覆盖（仅 embedding/rerank 生效） */
+    apiCategory?: 'llm' | 'embedding' | 'rerank' | 'image' | 'tts';
+    /** 可选：自定义路径覆盖（embedding/rerank 走 body 端点；tts 走查询路径） */
     customRoutingPath?: string;
+    /** 可选：tts 连测用的 speaker（默认空，服务端取首个音色） */
+    ttsSpeaker?: string;
   }): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
     const category = config.apiCategory ?? 'llm';
     const start = Date.now();
     const baseUrl = config.url.replace(/\/+$/, '');
+
+    // TTS: 响应是二进制音频（非 JSON），单独短路处理，不走下面的 res.json() 校验。
+    if (category === 'tts') {
+      const path = config.customRoutingPath?.trim() || '/';
+      // Neutral ASCII probe text — engine code must not hardcode locale content,
+      // and a Chinese payload can false-negative against an English-only voice.
+      const params = new URLSearchParams({
+        text: 'test',
+        speaker: config.ttsSpeaker ?? '',
+      });
+      const endpoint = `${baseUrl}${path.startsWith('/') ? path : '/' + path}?${params.toString()}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      try {
+        const res = await fetch(endpoint, { method: 'GET', signal: controller.signal });
+        clearTimeout(timeout);
+        const latencyMs = Date.now() - start;
+        if (!res.ok) {
+          const errText = await res.text().catch(() => `HTTP ${res.status}`);
+          return { ok: false, latencyMs, error: `${res.status}: ${errText.slice(0, 120)}` };
+        }
+        const ct = res.headers.get('content-type') ?? '';
+        const ok = ct.toLowerCase().includes('audio');
+        return { ok, latencyMs, error: ok ? undefined : `响应非音频（Content-Type: ${ct || '空'}）` };
+      } catch (err) {
+        clearTimeout(timeout);
+        const latencyMs = Date.now() - start;
+        const msg = (err as Error).message ?? String(err);
+        if (msg.includes('abort') || msg.includes('signal')) {
+          return { ok: false, latencyMs, error: '连接超时（10s）' };
+        }
+        return { ok: false, latencyMs, error: msg.slice(0, 100) };
+      }
+    }
 
     // 按类别确定端点、请求体、响应校验
     let endpoint: string;

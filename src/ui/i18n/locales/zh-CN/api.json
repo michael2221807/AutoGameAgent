@@ -33,6 +33,7 @@
   "api.usage.world_builder": "世界构建",
   "api.usage.engram_batch_solidify": "Engram 批量固化",
   "api.usage.card_edge_classify": "转卡边分类",
+  "api.usage.ttsGen_cosyvoice": "CosyVoice 配音",
 
   "api.usage.tip.main": "每回合叙事生成的核心调用，消耗最多 token，建议分配最强模型",
   "api.usage.tip.cot": "主回合前的独立推理步骤，提升剧情一致性和判定质量，需额外 API 调用",
@@ -63,6 +64,7 @@
   "api.usage.tip.world_builder": "批量世界构建（区域、NPC、物品），用于游戏卡创作",
   "api.usage.tip.engram_batch_solidify": "一键批量固化：扫描世界数据并为缺失的 NPC/地点补全知识边和描述",
   "api.usage.tip.card_edge_classify": "存档转卡时将关系记忆逐条分类为世界观设定或剧情事件，供作者逐条确认",
+  "api.usage.tip.ttsGen_cosyvoice": "分配用于 CosyVoice 语音合成的 TTS API 配置，为回合正文朗读配音",
 
   "api.category.narrative": "正文生成",
   "api.category.world_memory": "世界与记忆",
@@ -74,6 +76,7 @@
   "api.category.rag": "RAG 检索",
   "api.category.rag.hint": "下拉框只显示类别匹配的 API。如果没有选项，请先添加 Embedding 或 Rerank 类别的 API 配置。",
   "api.category.utility": "工具",
+  "api.category.audio": "语音配音",
 
   "api.apiCategory.llm": "LLM",
   "api.apiCategory.llm.desc": "对话 / 指令生成 / 叙事（主回合等）",
@@ -83,6 +86,8 @@
   "api.apiCategory.rerank.desc": "重排序 — Cohere / SiliconFlow / Jina 格式原生端点",
   "api.apiCategory.image": "图像生成",
   "api.apiCategory.image.desc": "图像生成 — NovelAI / DALL-E / SD-WebUI / ComfyUI / Civitai 等图像 API",
+  "api.apiCategory.tts": "配音",
+  "api.apiCategory.tts.desc": "语音合成 — CosyVoice 等 TTS 端点，为回合正文朗读配音",
 
   "api.imageBackend.civitai": "Civitai",
   "api.imageBackend.novelai": "NovelAI",
@@ -111,7 +116,11 @@
   "api.form.url": "API URL",
   "api.form.urlHintEmbedding": "只填 base URL，不含 /v1/...。系统会自动拼接",
   "api.form.urlHintImage": "的 base URL",
+  "api.form.urlHintTts": "CosyVoice 服务根地址，如 http://localhost:9880，不含查询参数",
   "api.form.apiKey": "API Key",
+  "api.form.apiKeyOptional": "（可选，本地 CosyVoice 无需填）",
+  "api.form.apiKeyHintTts": "CosyVoice 本地服务通常无需密钥，可留空",
+  "api.form.customRoutingHintTts": "覆盖默认合成路径 /。仅在你的 CosyVoice 封装使用非根路径（如 /tts）时才需要。",
   "api.form.model": "模型",
   "api.form.temperature": "温度",
   "api.form.maxTokens": "最大 Tokens",

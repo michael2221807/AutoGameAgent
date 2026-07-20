@@ -40,6 +40,7 @@ const ALL_USAGE_TYPES: UsageType[] = [
   'imageCharacterTokenizer', 'imageSceneTokenizer', 'imageSecretTokenizer',
   'bodyPolish', 'plot_decompose',
   'world_builder', 'engram_batch_solidify', 'card_edge_classify',
+  'ttsGen_cosyvoice',
 ];
 
 /** 默认 Rerank 路由路径 */

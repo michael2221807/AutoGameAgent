@@ -68,6 +68,13 @@ interface Props {
    * (current + past) so any floor can be collected in place.
    */
   isBookmarked?: boolean;
+  /**
+   * Whether TTS is ready (enabled + a TTS API configured). Controls whether the
+   * ▶ play button is shown at all. TTS 配音 (2026-07-20).
+   */
+  ttsReady?: boolean;
+  /** True when THIS round is currently being spoken (synthesizing or playing). */
+  ttsSpeaking?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -78,6 +85,8 @@ const props = withDefaults(defineProps<Props>(), {
   hasEngram: false,
   showingOriginal: false,
   isBookmarked: false,
+  ttsReady: false,
+  ttsSpeaking: false,
 });
 
 const emit = defineEmits<{
@@ -93,6 +102,8 @@ const emit = defineEmits<{
   'toggle-original': [];
   /** Right cluster — ★: toggle bookmark (收藏楼层) for this round. */
   'toggle-bookmark': [];
+  /** Right cluster — ▶: play/stop TTS narration for this round (配音). */
+  'play-tts': [];
 }>();
 
 function onBadgeClick(): void {
@@ -198,6 +209,31 @@ function onBadgeClick(): void {
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+            </svg>
+          </button>
+        </Tooltip>
+        <!-- ▶ Play button — TTS narration (配音, 2026-07-20). Shown for every round
+             when TTS is ready. Toggles play/stop for this round's narration. -->
+        <Tooltip
+          v-if="props.ttsReady"
+          :text="$t(props.ttsSpeaking ? 'mainGame.roundDivider.ttsStopTitle' : 'mainGame.roundDivider.ttsPlayTitle')"
+          interactive
+        >
+          <button
+            type="button"
+            class="round-divider__icon-btn round-divider__icon-btn--tts"
+            :class="{ 'round-divider__icon-btn--tts-active': props.ttsSpeaking }"
+            data-testid="round-tts-btn"
+            :aria-pressed="props.ttsSpeaking"
+            :aria-label="$t(props.ttsSpeaking ? 'mainGame.roundDivider.ttsStopAriaLabel' : 'mainGame.roundDivider.ttsPlayAriaLabel')"
+            @click="$emit('play-tts')"
+          >
+            <svg v-if="props.ttsSpeaking" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <rect x="6" y="5" width="4" height="14" rx="1" />
+              <rect x="14" y="5" width="4" height="14" rx="1" />
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <path d="M8 5.14v13.72c0 .78.85 1.26 1.52.86l10.94-6.86a1 1 0 0 0 0-1.72L9.52 4.28A1 1 0 0 0 8 5.14Z" />
             </svg>
           </button>
         </Tooltip>
@@ -371,6 +407,24 @@ function onBadgeClick(): void {
 }
 .round-divider__icon-btn--bookmarked:hover {
   color: var(--color-amber-300);
+}
+.round-divider__icon-btn--tts:hover {
+  color: var(--color-sage-400);
+  border-color: color-mix(in oklch, var(--color-sage-400) 35%, var(--color-border));
+  background: color-mix(in oklch, var(--color-sage-400) 6%, transparent);
+}
+.round-divider__icon-btn--tts-active {
+  color: var(--color-sage-300);
+  border-color: color-mix(in oklch, var(--color-sage-400) 45%, var(--color-border));
+  background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
+  animation: tts-pulse 2s ease-in-out infinite;
+}
+@keyframes tts-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-sage-400) 30%, transparent); }
+  50%      { box-shadow: 0 0 8px 1px color-mix(in oklch, var(--color-sage-400) 25%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .round-divider__icon-btn--tts-active { animation: none; }
 }
 
 /*

@@ -71,6 +71,9 @@ import WeatherBadge from '@/ui/components/panels/WeatherBadge.vue';
 import EnvironmentChips from '@/ui/components/panels/EnvironmentChips.vue';
 import FestivalChip from '@/ui/components/panels/FestivalChip.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
+import VoiceQuickSwitch from '@/ui/components/panels/VoiceQuickSwitch.vue';
+import type { TtsService } from '@/engine/tts/tts-service';
+import type { TtsStateEvent } from '@/engine/tts/types';
 import {
   findFirstAssistantIdx,
   findLatestAssistantIdx,
@@ -131,6 +134,24 @@ const { useValue, setValue } = useGameState();
 // turn-advancement controls (composer, live streaming indicator) are hidden.
 const { isWorldBuilding } = useSessionMode();
 const eventBus = inject<EventBus>('eventBus');
+const ttsService = inject<TtsService | undefined>('ttsService', undefined);
+
+// ─── TTS 配音 (2026-07-20) ────────────────────────────────────
+// Play button per round + status-bar quick switcher. Playback state is a
+// component ref driven by the engine's 'tts:state' broadcast; nothing persists.
+const ttsState = ref<TtsStateEvent>({ status: 'idle', roundKey: null, segmentIndex: -1, totalSegments: 0 });
+const ttsReady = ref(false);
+function refreshTtsReady(): void { ttsReady.value = ttsService?.isReady() ?? false; }
+function ttsRoundKey(round: number): string { return `round-${round}`; }
+function isRoundSpeaking(round: number): boolean {
+  return ttsState.value.status !== 'idle' && ttsState.value.roundKey === ttsRoundKey(round);
+}
+function playTtsForMessage(msg: ChatMessage, round: number): void {
+  if (!ttsService) return;
+  if (isRoundSpeaking(round)) { ttsService.stop(); return; }
+  // Read the WYSIWYG text (respects the 优化/原文 toggle); engine strips markers.
+  void ttsService.speak(displayTextForAssistant(msg), ttsRoundKey(round));
+}
 
 // ─── Reactive state ───────────────────────────────────────────
 
@@ -855,6 +876,7 @@ onActivated(() => {
   // Reset fold state — returning to this tab should show latest 5 rounds
   windowMode.value = 'tail';
   tailVisibleRounds.value = VISIBLE_ROUND_WINDOW;
+  refreshTtsReady(); // config may have changed in the Settings/API panel
 
   const el = messagesContainer.value;
   if (el) {
@@ -881,7 +903,16 @@ onActivated(() => {
 });
 
 onMounted(() => {
+  refreshTtsReady();
   if (!eventBus) return;
+
+  // TTS playback state broadcast (TtsService → play button + quick switcher).
+  unsubscribers.push(
+    eventBus.on<TtsStateEvent>('tts:state', (payload) => {
+      if (payload) ttsState.value = payload;
+      refreshTtsReady();
+    }),
+  );
 
   /*
    * Pipeline lifecycle events:
@@ -1011,6 +1042,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopTimer();
   if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  ttsService?.stop(); // don't let narration keep playing after leaving the game
   for (const unsub of unsubscribers) {
     unsub();
   }
@@ -1068,6 +1100,8 @@ watch(
             <span v-if="bookmarks.length > 0" class="bookmark-count">{{ bookmarks.length }}</span>
           </button>
         </Tooltip>
+        <!-- 配音快速切换 (2026-07-20) — chip → popover: 切音色/方言 + 自动配音开关 -->
+        <VoiceQuickSwitch v-if="ttsReady" :speaking="ttsState.status !== 'idle'" />
         <FestivalChip :festival="festival" />
         <span v-if="isGenerating" class="status-generating">
           {{ $t('mainGame.status.aiThinking') }}
@@ -1252,12 +1286,15 @@ watch(
           :polish="msg._polish"
           :showing-original="isShowingOriginalForRound(msg._metrics?.roundNumber ?? 0)"
           :is-bookmarked="isRoundBookmarked(roundForAssistantAt(visibleStartIndex + localIdx))"
+          :tts-ready="ttsReady"
+          :tts-speaking="isRoundSpeaking(roundForAssistantAt(visibleStartIndex + localIdx))"
           @view-thinking="openThinkingViewer(msg)"
           @view-commands="openCommandsViewer(msg, 'commands')"
           @view-raw="openRawViewer(msg)"
           @view-engram="openEngramViewer(msg)"
           @toggle-original="toggleOriginalForRound(msg)"
           @toggle-bookmark="toggleBookmarkForMessage(msg, visibleStartIndex + localIdx)"
+          @play-tts="playTtsForMessage(msg, roundForAssistantAt(visibleStartIndex + localIdx))"
         />
       <div
         class="message"
