@@ -37,8 +37,15 @@ export interface TtsSpeaker {
  */
 export interface TtsProvider {
   readonly backend: TtsBackendType;
-  /** 合成整段文本 → 音频 Blob(此 build 为 24kHz WAV,非流式) */
+  /** 合成整段文本 → 音频 Blob(整段非流式:此 build 为完整 WAV) */
   synthesize(text: string, options: TtsSynthesizeOptions): Promise<Blob>;
+  /**
+   * 真·传输级流式播放 URL —— 让 `<audio>` 直接渐进播放服务端的 chunked 输出。
+   * CosyVoice: `GET {url}?text=&speaker=&instruct=&streaming=1` → chunked audio/ogg，
+   * 浏览器原生边下边播（实测 canplay ~4.5s，无需 MSE）。
+   * 返回 `null` 表示该 backend 不支持传输级流式（调用方回落整段 synthesize）。
+   */
+  getStreamUrl(text: string, options: Omit<TtsSynthesizeOptions, 'signal'>): string | null;
   /** 拉取服务端可用音色列表;失败返回 [](UI 降级为自由输入) */
   listSpeakers(signal?: AbortSignal): Promise<TtsSpeaker[]>;
   // NOTE: no testConnection() here — the production "test connection" probe lives
@@ -72,8 +79,11 @@ export interface TtsSettings {
   enabled: boolean;
   /** 自动配音 — AI 出文后自动朗读正文(post-round fire-and-forget) */
   autoNarrateOnRound: boolean;
-  /** 'segment' = 分段流水线(逐句合成+队列播放,默认);'full' = 整段非流式 */
-  transmissionMode: 'segment' | 'full';
+  /**
+   * 'stream' = 真·传输级流式(streaming=1,服务端 chunked ogg,浏览器边下边播,默认);
+   * 'full'   = 整段非流式(完整 WAV 一次播放,更稳)
+   */
+  transmissionMode: 'stream' | 'full';
   /** 默认音色 → speaker */
   defaultSpeaker: string;
   /** 默认风格/方言 → instruct */
@@ -89,7 +99,7 @@ export interface TtsSettings {
 export const DEFAULT_TTS_SETTINGS: TtsSettings = {
   enabled: false,
   autoNarrateOnRound: false,
-  transmissionMode: 'segment',
+  transmissionMode: 'stream',
   defaultSpeaker: '',
   defaultInstruct: '',
   rate: 1,
@@ -104,13 +114,9 @@ export const TTS_RATE_MAX = 2;
 
 export type TtsStatus = 'idle' | 'synthesizing' | 'playing' | 'paused';
 
-/** 'tts:state' 事件负载 — 供 UI 播放键/高亮/状态栏 chip 同步 */
+/** 'tts:state' 事件负载 — 供 UI 播放键/状态栏 chip 同步 */
 export interface TtsStateEvent {
   status: TtsStatus;
   /** 当前朗读的回合标识(UI 用于定位是哪个回合在播),idle 时为 null */
   roundKey: string | null;
-  /** 分段模式下当前朗读的段索引(0-based),否则 -1 */
-  segmentIndex: number;
-  /** 总段数(分段模式),否则 0 */
-  totalSegments: number;
 }

@@ -1,16 +1,19 @@
 /**
- * Audio playback abstraction — injected into TtsService so the queue/pipeline
- * orchestration can be unit-tested with a fake player (HTMLAudioElement is a
- * browser-only API). The default impl wraps a single HTMLAudioElement.
+ * Audio playback abstraction — injected into TtsService so the orchestration can
+ * be unit-tested with a fake player (HTMLAudioElement is a browser-only API). The
+ * default impl wraps a single HTMLAudioElement.
+ *
+ * Two playback sources:
+ *   - play(blob):   整段非流式 — a fully-downloaded audio Blob (objectURL).
+ *   - playUrl(url): 真流式 — a streaming URL (e.g. CosyVoice streaming=1 → chunked
+ *                   ogg) that the <audio> element downloads + decodes progressively.
  */
 
 export interface TtsAudioPlayer {
-  /**
-   * Play an audio blob to completion.
-   * Resolves when playback ends; rejects if aborted or on a playback error.
-   * @param signal — abort to stop this playback early (rejects with AbortError).
-   */
+  /** Play a fully-downloaded audio blob to completion. */
   play(blob: Blob, opts: { rate: number; volume: number; signal: AbortSignal }): Promise<void>;
+  /** Play a streaming URL progressively (browser downloads + decodes as it arrives). */
+  playUrl(url: string, opts: { rate: number; volume: number; signal: AbortSignal }): Promise<void>;
   /** Stop any current playback immediately. */
   stop(): void;
   /** Pause current playback (resumable). */
@@ -27,16 +30,45 @@ export class HtmlAudioPlayer implements TtsAudioPlayer {
   private abortCurrent: (() => void) | null = null;
 
   play(blob: Blob, opts: { rate: number; volume: number; signal: AbortSignal }): Promise<void> {
+    const url = URL.createObjectURL(blob);
+    // revokeOwned=true → this is an objectURL we created and must revoke on cleanup.
+    return this.run(url, true, opts);
+  }
+
+  async playUrl(url: string, opts: { rate: number; volume: number; signal: AbortSignal }): Promise<void> {
+    // Fetch the streaming endpoint (CosyVoice streaming=1 → chunked audio/ogg) and
+    // play the collected blob via a same-origin objectURL.
+    //
+    // Why fetch→blob and NOT `<audio src=streamUrl>` (which would be truly
+    // progressive): a cross-origin `<audio>` makes an internal Range request whose
+    // CORS/ORB handling of the server's chunked response is unreliable in Chromium
+    // (ORB blocks the no-cors variant; the CORS variant's Range sub-request trips
+    // the ACAC:true + specific-origin rule). `fetch()` reads the same CORS stream
+    // cleanly. The server still streams as it generates; the client collects then
+    // plays — first sound after the stream completes (Chrome can't MSE-decode ogg
+    // for true progressive playback anyway).
+    const res = await fetch(url, { signal: opts.signal });
+    if (!res.ok) throw new Error(`[TTS] stream fetch failed ${res.status}`);
+    const blob = await res.blob();
+    if (opts.signal.aborted) throw new DOMException('aborted', 'AbortError');
+    await this.run(URL.createObjectURL(blob), true, opts);
+  }
+
+  private run(
+    src: string,
+    revokeOwned: boolean,
+    opts: { rate: number; volume: number; signal: AbortSignal },
+  ): Promise<void> {
     this.stop();
     return new Promise<void>((resolve, reject) => {
       if (opts.signal.aborted) {
+        if (revokeOwned) URL.revokeObjectURL(src);
         reject(new DOMException('aborted', 'AbortError'));
         return;
       }
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
+      const audio = new Audio(src);
       this.audio = audio;
-      this.currentUrl = url;
+      this.currentUrl = revokeOwned ? src : null;
       audio.playbackRate = opts.rate;
       audio.volume = opts.volume;
 
@@ -45,10 +77,10 @@ export class HtmlAudioPlayer implements TtsAudioPlayer {
         audio.onended = null;
         audio.onerror = null;
         if (this.abortCurrent === onAbort) this.abortCurrent = null;
-        if (this.currentUrl === url) {
-          URL.revokeObjectURL(url);
-          this.currentUrl = null;
+        if (revokeOwned && this.currentUrl === src) {
+          URL.revokeObjectURL(src);
         }
+        this.currentUrl = null;
         if (this.audio === audio) this.audio = null;
       };
       const onAbort = () => {
@@ -69,7 +101,7 @@ export class HtmlAudioPlayer implements TtsAudioPlayer {
   }
 
   stop(): void {
-    // Settle any in-flight play() promise (rejects with AbortError) before tearing
+    // Settle any in-flight play promise (rejects with AbortError) before tearing
     // down, so a direct stop() never leaves the awaiting coroutine hung.
     const abort = this.abortCurrent;
     this.abortCurrent = null;

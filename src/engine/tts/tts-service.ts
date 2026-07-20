@@ -4,9 +4,12 @@
  * 职责:
  *   - 从 AIService 取 tts 类 APIConfig(getTtsConfigForBackend),经 registry
  *     解析出 CosyVoiceProvider。
- *   - speak():按 transmissionMode 走「分段流水线」或「整段非流式」;分段模式
- *     逐句合成 + 队列播放,合成第 N 段时预取第 N+1 段(首句秒出声)。
- *   - 播放态经 eventBus 'tts:state' 广播给 UI(播放键/高亮/状态栏 chip)。
+ *   - speak():按 transmissionMode 走「真流式」或「整段非流式」。
+ *       · stream(默认): provider.getStreamUrl()(CosyVoice streaming=1)→ 服务端
+ *         chunked ogg,`<audio>` 原生边下边播,首字节即出声。
+ *       · full:        provider.synthesize() 整段 WAV → 一次播放,更稳。
+ *     stream 若不受支持(getStreamUrl 返回 null)自动回落 full。
+ *   - 播放态经 eventBus 'tts:state' 广播给 UI(播放键/状态栏 chip)。
  *   - 失败逐级回落,永远有声音或明确 toast;不抛给调用方(fire-and-forget 安全)。
  *
  * 镜像 ImageService,但音频瞬时播放不落盘(设计文档 §5)。
@@ -18,7 +21,7 @@ import type { TtsProviderRegistry } from './provider-registry';
 import type { TtsProvider, TtsSettings, TtsStatus, TtsStateEvent, TtsBackendType, TtsSpeaker } from './types';
 import { DEFAULT_TTS_SETTINGS } from './types';
 import { loadTtsSettings } from './tts-settings';
-import { splitSentences, stripMarkersForSpeech } from './sentence-splitter';
+import { stripMarkersForSpeech } from './sentence-splitter';
 import { HtmlAudioPlayer, type TtsAudioPlayer } from './audio-player';
 
 const DEFAULT_BACKEND: TtsBackendType = 'cosyvoice';
@@ -30,8 +33,6 @@ export class TtsService {
   // 播放态
   private status: TtsStatus = 'idle';
   private currentRoundKey: string | null = null;
-  private segmentIndex = -1;
-  private totalSegments = 0;
   private playAbort: AbortController | null = null;
 
   constructor(
@@ -103,21 +104,13 @@ export class TtsService {
 
   private emitState(status: TtsStatus): void {
     this.status = status;
-    const payload: TtsStateEvent = {
-      status,
-      roundKey: status === 'idle' ? null : this.currentRoundKey,
-      segmentIndex: this.segmentIndex,
-      totalSegments: this.totalSegments,
-    };
-    eventBus.emit('tts:state', payload);
+    eventBus.emit('tts:state', this.getState());
   }
 
   getState(): TtsStateEvent {
     return {
       status: this.status,
       roundKey: this.status === 'idle' ? null : this.currentRoundKey,
-      segmentIndex: this.segmentIndex,
-      totalSegments: this.totalSegments,
     };
   }
 
@@ -128,8 +121,6 @@ export class TtsService {
     this.playAbort?.abort();
     this.playAbort = null;
     this.player.stop();
-    this.segmentIndex = -1;
-    this.totalSegments = 0;
     this.currentRoundKey = null;
     this.emitState('idle');
   }
@@ -166,6 +157,9 @@ export class TtsService {
       return;
     }
 
+    const text = stripMarkersForSpeech(rawText);
+    if (!text) return;
+
     // 新一次朗读打断上一次
     this.stop();
     const abort = new AbortController();
@@ -175,11 +169,28 @@ export class TtsService {
     const speaker = this.settings.defaultSpeaker;
     const instruct = this.settings.defaultInstruct || undefined;
 
+    const playOpts = { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal };
     try {
-      if (this.settings.transmissionMode === 'full') {
-        await this.speakFull(provider, rawText, speaker, instruct, abort.signal);
-      } else {
-        await this.speakSegmented(provider, rawText, speaker, instruct, abort.signal);
+      // stream 模式优先走真·传输级流式;失败(非取消)自动回落 full,保证有声音。
+      const streamUrl = this.settings.transmissionMode === 'stream'
+        ? provider.getStreamUrl(text, { speaker, instruct })
+        : null;
+      let streamFailed = false;
+      if (streamUrl) {
+        try {
+          this.emitState('playing');
+          await this.player.playUrl(streamUrl, playOpts);
+        } catch (streamErr) {
+          if (isAbort(streamErr)) throw streamErr; // 真取消 → 上抛,不回落
+          streamFailed = true; // 流式路径失败(CORS/服务端 5xx/编码)→ 回落整段
+        }
+      }
+      if ((!streamUrl || streamFailed) && !abort.signal.aborted) {
+        this.emitState('synthesizing');
+        const blob = await provider.synthesize(text, { speaker, instruct, signal: abort.signal });
+        if (abort.signal.aborted) return;
+        this.emitState('playing');
+        await this.player.play(blob, playOpts);
       }
     } catch (err) {
       if (!isAbort(err)) {
@@ -194,64 +205,11 @@ export class TtsService {
       // Only reset if THIS call still owns the abort controller. If stop()/a new
       // speak() ran during the await, it reassigned this.playAbort (and already
       // emitted idle/playing), so we must not clobber the newer call's state.
-      // When we still own it, abort.signal is necessarily not aborted (stop()
-      // reassigns playAbort in the same synchronous call that aborts) → reset.
       if (this.playAbort === abort) {
         this.playAbort = null;
-        this.segmentIndex = -1;
-        this.totalSegments = 0;
         this.currentRoundKey = null;
         this.emitState('idle');
       }
-    }
-  }
-
-  private async speakFull(
-    provider: TtsProvider, rawText: string, speaker: string,
-    instruct: string | undefined, signal: AbortSignal,
-  ): Promise<void> {
-    const text = stripMarkersForSpeech(rawText);
-    if (!text) return;
-    this.segmentIndex = -1;
-    this.totalSegments = 0;
-    this.emitState('synthesizing');
-    const blob = await provider.synthesize(text, { speaker, instruct, signal });
-    if (signal.aborted) return;
-    this.emitState('playing');
-    await this.player.play(blob, { rate: this.settings.rate, volume: this.settings.volume, signal });
-  }
-
-  private async speakSegmented(
-    provider: TtsProvider, rawText: string, speaker: string,
-    instruct: string | undefined, signal: AbortSignal,
-  ): Promise<void> {
-    const segments = splitSentences(rawText);
-    if (segments.length === 0) return;
-    this.totalSegments = segments.length;
-
-    // synth() NEVER rejects — swallows every error (abort included) to null.
-    // This is deliberate: a prefetched segment (nextBlob) may be discarded when
-    // the loop returns early on abort; if synth() rethrew, that discarded promise
-    // would surface as an unhandled AbortError rejection. Returning null instead
-    // keeps termination driven purely by the signal.aborted checks below.
-    const synth = (seg: string): Promise<Blob | null> =>
-      provider.synthesize(seg, { speaker, instruct, signal }).catch(() => null);
-
-    // 预取第 1 段
-    this.segmentIndex = 0;
-    this.emitState('synthesizing');
-    let nextBlob: Promise<Blob | null> | null = synth(segments[0]);
-
-    for (let i = 0; i < segments.length; i++) {
-      if (signal.aborted) return;
-      const blob = await nextBlob;
-      // 播第 i 段前,先启动第 i+1 段的合成(流水线:合成与播放重叠)
-      nextBlob = i + 1 < segments.length ? synth(segments[i + 1]) : null;
-      if (!blob) continue; // 该段合成失败,跳过
-      if (signal.aborted) return;
-      this.segmentIndex = i;
-      this.emitState('playing');
-      await this.player.play(blob, { rate: this.settings.rate, volume: this.settings.volume, signal });
     }
   }
 }

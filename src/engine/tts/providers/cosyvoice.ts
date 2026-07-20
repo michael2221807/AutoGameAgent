@@ -19,12 +19,20 @@ export class CosyVoiceProvider extends BaseTtsProvider {
   readonly backend: TtsBackendType = 'cosyvoice';
 
   /** 构造合成 URL(纯函数式,便于测试断言) */
-  buildSynthUrl(text: string, speaker: string, instruct?: string): string {
+  buildSynthUrl(text: string, speaker: string, instruct?: string, streaming = false): string {
     const path = this.routingPath?.trim() || '/';
     const normalized = path.startsWith('/') ? path : `/${path}`;
     const params = new URLSearchParams({ text, speaker });
     if (instruct && instruct.trim()) params.set('instruct', instruct.trim());
+    // streaming=1 → server returns chunked audio/ogg (Transfer-Encoding: chunked),
+    // which <audio> plays progressively. Verified live against CosyVoice3 @ 9880.
+    if (streaming) params.set('streaming', '1');
     return `${this.baseUrl}${normalized}?${params.toString()}`;
+  }
+
+  /** 真流式播放 URL —— 给 `<audio>` 直接渐进播放服务端 chunked ogg。 */
+  getStreamUrl(text: string, options: { speaker: string; instruct?: string }): string | null {
+    return this.buildSynthUrl(text, options.speaker, options.instruct, true);
   }
 
   async synthesize(text: string, options: TtsSynthesizeOptions): Promise<Blob> {

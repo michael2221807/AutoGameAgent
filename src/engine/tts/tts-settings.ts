@@ -42,7 +42,8 @@ export function normalizeTtsSettings(raw: unknown): TtsSettings {
     enabled: typeof o.enabled === 'boolean' ? o.enabled : DEFAULT_TTS_SETTINGS.enabled,
     autoNarrateOnRound: typeof o.autoNarrateOnRound === 'boolean'
       ? o.autoNarrateOnRound : DEFAULT_TTS_SETTINGS.autoNarrateOnRound,
-    transmissionMode: o.transmissionMode === 'full' ? 'full' : 'segment',
+    // 'full' 保留;其它(含旧值 'segment')迁移到真流式 'stream'
+    transmissionMode: o.transmissionMode === 'full' ? 'full' : 'stream',
     defaultSpeaker: typeof o.defaultSpeaker === 'string' ? o.defaultSpeaker : DEFAULT_TTS_SETTINGS.defaultSpeaker,
     defaultInstruct: typeof o.defaultInstruct === 'string' ? o.defaultInstruct : DEFAULT_TTS_SETTINGS.defaultInstruct,
     rate: clampRate(o.rate),

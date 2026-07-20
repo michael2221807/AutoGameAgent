@@ -1,21 +1,10 @@
 /**
  * TTS 文本预处理 — 纯函数,无副作用,便于单测。
  *
- * 两个职责:
- *   1. stripMarkersForSpeech — 去掉 AGA 正文的 markdown/inline marker 记号,
- *      避免把 `【环境】` / 反引号 / 引号 / 表格竖线 等读出来。
- *   2. splitSentences — 把清洗后的文本切成句段,供 TtsService 的分段流水线
- *      (逐句合成 + 队列播放)使用。
- *
- * MVP 不区分角色 —— 所有段共用同一 speaker(设计文档 §3.5)。P2 才接
- * formatted-text-parser 的 InlineKind → speaker 映射。
+ * stripMarkersForSpeech — 去掉 AGA 正文的 markdown/inline marker 记号,避免把
+ * `【环境】` / 反引号 / 引号 / 表格竖线 等读出来。整段文本(清洗后)直接交给
+ * 服务端做真流式合成(streaming=1),不再客户端分句。
  */
-
-/** 句末标点(中/英/省略号/分号/换行作为切点) */
-const SENTENCE_BOUNDARY = /([。！？…；\n]+|[.!?]+(?=\s|$))/;
-
-/** 过短片段合并阈值(字符数)—— 低于此值的片段并入下一段,避免碎块频繁调 API。 */
-const MIN_SEGMENT_LEN = 6;
 
 /**
  * 去掉朗读不需要的记号,保留纯可读文本。
@@ -57,43 +46,4 @@ export function stripMarkersForSpeech(raw: string): string {
   // 折叠多余空白
   t = t.replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
   return t;
-}
-
-/**
- * 把文本切成句段。已内部调用 stripMarkersForSpeech,调用方传原始正文即可。
- * 返回去空后的句段数组(每段含其句末标点)。
- */
-export function splitSentences(raw: string): string[] {
-  const clean = stripMarkersForSpeech(raw);
-  if (!clean) return [];
-
-  // 按边界切,保留标点(SENTENCE_BOUNDARY 用捕获组 → split 结果里标点独立成项)
-  const parts = clean.split(SENTENCE_BOUNDARY);
-  const merged: string[] = [];
-  let buf = '';
-  for (const part of parts) {
-    if (!part) continue;
-    buf += part;
-    // 遇到边界标点(整段都是标点/换行)→ 结算当前 buf
-    if (/^[。！？…；\n.!?]+$/.test(part)) {
-      const seg = buf.trim();
-      if (seg) merged.push(seg);
-      buf = '';
-    }
-  }
-  const tail = buf.trim();
-  if (tail) merged.push(tail);
-
-  // 合并过短片段(并入下一段;末尾过短并入上一段)
-  const out: string[] = [];
-  for (const seg of merged) {
-    if (out.length > 0 && seg.replace(/[。！？…；.!?\s]/g, '').length < MIN_SEGMENT_LEN) {
-      out[out.length - 1] += seg;
-    } else if (out.length > 0 && out[out.length - 1].replace(/[。！？…；.!?\s]/g, '').length < MIN_SEGMENT_LEN) {
-      out[out.length - 1] += seg;
-    } else {
-      out.push(seg);
-    }
-  }
-  return out.filter((s) => s.replace(/[\s，。！？…；.!?、]/g, '').length > 0);
 }

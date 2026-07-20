@@ -46,6 +46,19 @@ describe('CosyVoiceProvider.buildSynthUrl', () => {
   });
 });
 
+describe('CosyVoiceProvider.getStreamUrl', () => {
+  it('appends streaming=1 for true transport-level streaming', () => {
+    const p = new CosyVoiceProvider('http://localhost:9880', '', '/');
+    const url = p.getStreamUrl('你好', { speaker: 'coolkey', instruct: '四川话' });
+    expect(url).not.toBeNull();
+    const q = new URL(url!).searchParams;
+    expect(q.get('streaming')).toBe('1');
+    expect(q.get('text')).toBe('你好');
+    expect(q.get('speaker')).toBe('coolkey');
+    expect(q.get('instruct')).toBe('四川话');
+  });
+});
+
 describe('CosyVoiceProvider.synthesize', () => {
   it('returns the audio blob on a 200 audio/wav response', async () => {
     fetchMock.mockResolvedValue(audioResponse());

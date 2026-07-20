@@ -63,7 +63,7 @@ function commit(): void {
 
 function setEnabled(v: boolean): void { settings.value.enabled = v; commit(); }
 function setAutoNarrate(v: boolean): void { settings.value.autoNarrateOnRound = v; commit(); }
-function setMode(mode: 'segment' | 'full'): void { settings.value.transmissionMode = mode; commit(); }
+function setMode(mode: 'stream' | 'full'): void { settings.value.transmissionMode = mode; commit(); }
 function setRate(v: number): void { settings.value.rate = v; commit(); }
 function setVolume(v: number): void { settings.value.volume = v; commit(); }
 function setDefaultSpeaker(v: string): void { settings.value.defaultSpeaker = v; rebuildSpeakerOptions(); commit(); }
@@ -152,10 +152,10 @@ function favoriteLabel(f: TtsVoiceFavorite): string {
           <button
             type="button"
             class="tts-segment__btn"
-            :class="{ 'tts-segment__btn--active': settings.transmissionMode === 'segment' }"
-            :aria-pressed="settings.transmissionMode === 'segment'"
-            @click="setMode('segment')"
-          >{{ $t('settings.audio.mode.segment') }}</button>
+            :class="{ 'tts-segment__btn--active': settings.transmissionMode === 'stream' }"
+            :aria-pressed="settings.transmissionMode === 'stream'"
+            @click="setMode('stream')"
+          >{{ $t('settings.audio.mode.stream') }}</button>
           <button
             type="button"
             class="tts-segment__btn"

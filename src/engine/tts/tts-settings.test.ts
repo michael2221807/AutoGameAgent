@@ -29,9 +29,12 @@ describe('normalizeTtsSettings', () => {
     expect(normalizeTtsSettings({ volume: -1 }).volume).toBe(0);
   });
 
-  it('coerces transmissionMode to segment unless exactly "full"', () => {
+  it('coerces transmissionMode to stream unless exactly "full" (migrates legacy "segment")', () => {
     expect(normalizeTtsSettings({ transmissionMode: 'full' }).transmissionMode).toBe('full');
-    expect(normalizeTtsSettings({ transmissionMode: 'weird' as unknown as 'full' }).transmissionMode).toBe('segment');
+    expect(normalizeTtsSettings({ transmissionMode: 'stream' }).transmissionMode).toBe('stream');
+    // legacy value from the pre-streaming implementation → migrated to 'stream'
+    expect(normalizeTtsSettings({ transmissionMode: 'segment' as unknown as 'full' }).transmissionMode).toBe('stream');
+    expect(normalizeTtsSettings({ transmissionMode: 'weird' as unknown as 'full' }).transmissionMode).toBe('stream');
   });
 
   it('sanitizes favorites, dropping entries with no speaker', () => {

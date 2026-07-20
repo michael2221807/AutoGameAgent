@@ -139,7 +139,7 @@ const ttsService = inject<TtsService | undefined>('ttsService', undefined);
 // ─── TTS 配音 (2026-07-20) ────────────────────────────────────
 // Play button per round + status-bar quick switcher. Playback state is a
 // component ref driven by the engine's 'tts:state' broadcast; nothing persists.
-const ttsState = ref<TtsStateEvent>({ status: 'idle', roundKey: null, segmentIndex: -1, totalSegments: 0 });
+const ttsState = ref<TtsStateEvent>({ status: 'idle', roundKey: null });
 const ttsReady = ref(false);
 function refreshTtsReady(): void { ttsReady.value = ttsService?.isReady() ?? false; }
 function ttsRoundKey(round: number): string { return `round-${round}`; }
