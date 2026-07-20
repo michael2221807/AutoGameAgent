@@ -301,6 +301,8 @@ interface APIFormData {
   disablePrefill: boolean;
   /** 严格消息格式兼容 — 中途 system 转 user + 强制 user 结尾（如经 gproxy 的 Opus） */
   strictMessageFormat: boolean;
+  /** gproxy 缓存 — 主回合把静态规则块提到最前 + 埋魔法串触发 prompt 缓存 */
+  gproxyPromptCache: boolean;
 }
 
 /**
@@ -376,6 +378,7 @@ const form = ref<APIFormData>({
   customRoutingPath: '',
   disablePrefill: false,
   strictMessageFormat: false,
+  gproxyPromptCache: false,
 });
 
 function openAddModal(): void {
@@ -398,6 +401,7 @@ function openAddModal(): void {
     customRoutingPath: '',
     disablePrefill: false,
     strictMessageFormat: false,
+    gproxyPromptCache: false,
   };
   imageBackend.value = 'civitai';
   showEditModal.value = true;
@@ -423,6 +427,7 @@ function openEditModal(api: APIConfig): void {
     customRoutingPath: api.customRoutingPath ?? '',
     disablePrefill: api.disablePrefill ?? false,
     strictMessageFormat: api.strictMessageFormat ?? false,
+    gproxyPromptCache: api.gproxyPromptCache ?? false,
   };
   if ((api.apiCategory ?? 'llm') === 'image') {
     imageBackend.value = inferImageBackend(api.url);
@@ -1120,6 +1125,14 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
           <AgaToggle v-model="form.strictMessageFormat" :label="$t('api.form.strictMessageFormat')" show-label />
           <span class="form-hint">
             {{ $t('api.form.strictMessageFormatHint') }}
+          </span>
+        </div>
+
+        <!-- gproxy prompt cache toggle (LLM only) — hoist static prefix + magic-cache trigger -->
+        <div v-if="form.apiCategory === 'llm'" class="form-group">
+          <AgaToggle v-model="form.gproxyPromptCache" :label="$t('api.form.gproxyPromptCache')" show-label />
+          <span class="form-hint">
+            {{ $t('api.form.gproxyPromptCacheHint') }}
           </span>
         </div>
 

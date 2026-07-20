@@ -29,6 +29,46 @@ import {
   type WorldBookInjectionResult,
 } from './world-book-selector';
 
+/**
+ * gproxy magic-cache trigger string (1-hour TTL variant). Embedded at the end of
+ * the static prefix; gproxy detects it, STRIPS it, and stamps an Anthropic
+ * `cache_control` breakpoint on that block (so it never reaches the model).
+ * Requires the gproxy provider to have `enable_magic_cache` on. Verified live
+ * (write→read on identical prefix, 2026-07-19). Not game content — a proxy
+ * protocol constant, engine-legal.
+ */
+export const GPROXY_CACHE_MAGIC_STRING =
+  'GPROXY_MAGIC_STRING_TRIGGER_CACHING_CREATE_1FAS5GV9R5H29T5Y2J9584K6O95M2NBVW52C95CX984FRJY';
+
+/**
+ * Piece IDs that are byte-stable across rounds within a session — pure pack
+ * slots + session-level settings (perspective / word count / story style), never
+ * derived from per-round game state. ONLY these are hoisted into the cached
+ * prefix. Deliberately EXCLUDES `world_prompt` (carries per-round keyword-matched
+ * world-book lore), all `world_map` / `npc_*` / `memory_*` / `state_*` / `wb_*`
+ * (state-derived), and `extra_prompt` (user role). Order here is irrelevant —
+ * reorder preserves each piece's original insertion order.
+ */
+export const GPROXY_CACHE_STATIC_PIECE_IDS: ReadonlySet<string> = new Set([
+  'ai_role',
+  'write_style',
+  'write_emotion_guard',
+  'write_no_control',
+  'perspective_prompt',
+  'length_prompt',
+  'narrative_constraints',
+  'format_prompt',
+  'cot_core',
+  'cot_judge',
+]);
+
+/** Trailing conversation pieces that MUST stay last (the user/assistant turn). */
+const GPROXY_CACHE_TAIL_PIECE_IDS: ReadonlySet<string> = new Set([
+  'player_input',
+  'start_task',
+  'cot_masquerade',
+]);
+
 /** Parameters for building the system prompt */
 export interface SystemPromptBuildParams {
   stateManager: StateManager;
@@ -51,6 +91,14 @@ export interface SystemPromptBuildParams {
   splitGen: boolean;
   /** CoT masquerade pseudo-history prompt */
   cotPseudoEnabled: boolean;
+  /**
+   * gproxy prompt cache — when true, reorder the guaranteed-static system pieces
+   * (pack-slot rules + world base) to the FRONT as one contiguous prefix, then
+   * append a gproxy magic-cache trigger string to the last of them so gproxy
+   * stamps an Anthropic `cache_control` breakpoint there. Off (default) = no
+   * reorder, no marker (identical to legacy output). See [[GPROXY_CACHE_STATIC_PIECE_IDS]].
+   */
+  gproxyCache?: boolean;
   /** Pre-built engram/unified retrieval block (if hybrid mode active) */
   engramRetrievalBlock?: string;
   /** Implicit mid-term memory entries (from MemoryRetriever) */
@@ -199,6 +247,7 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
     cotEnabled,
     cotJudgeEnabled,
     cotPseudoEnabled,
+    gproxyCache = false,
   } = params;
 
   const templateVars: Record<string, string> = {
@@ -534,9 +583,47 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
 
   return {
     contextPieces,
-    messageEntries: entries,
+    // gproxy cache: hoist static prefix to front + append magic string. Off = unchanged.
+    messageEntries: gproxyCache ? applyGproxyCacheReorder(entries) : entries,
     shortMemoryContext,
     runtimePromptStates,
     worldBookHits,
   };
+}
+
+/**
+ * Reorder message entries for gproxy prompt caching: move the guaranteed-static
+ * system pieces ([[GPROXY_CACHE_STATIC_PIECE_IDS]]) to the FRONT as one contiguous
+ * cacheable prefix, keep every other piece (dynamic system + user-role extras) in
+ * original relative order, and keep the trailing conversation turn last. The
+ * [[GPROXY_CACHE_MAGIC_STRING]] is appended to the LAST static piece so gproxy
+ * stamps the cache breakpoint covering the whole static block.
+ *
+ * Relative order WITHIN each group is preserved (stable partition). Returns new
+ * entry objects (the marked one gets a fresh `content`); input array untouched.
+ * No-op (returns a shallow copy) when there are no static pieces to hoist.
+ *
+ * Pure function — exported for unit testing.
+ */
+export function applyGproxyCacheReorder(entries: MessageEntry[]): MessageEntry[] {
+  const staticEntries: MessageEntry[] = [];
+  const dynamicEntries: MessageEntry[] = [];
+  const tailEntries: MessageEntry[] = [];
+
+  for (const e of entries) {
+    if (GPROXY_CACHE_STATIC_PIECE_IDS.has(e.id)) staticEntries.push(e);
+    else if (GPROXY_CACHE_TAIL_PIECE_IDS.has(e.id)) tailEntries.push(e);
+    else dynamicEntries.push(e);
+  }
+
+  if (staticEntries.length === 0) return [...entries]; // nothing to hoist/cache
+
+  // Append the magic string to the LAST static piece → breakpoint covers the block.
+  const lastIdx = staticEntries.length - 1;
+  staticEntries[lastIdx] = {
+    ...staticEntries[lastIdx],
+    content: `${staticEntries[lastIdx].content}\n${GPROXY_CACHE_MAGIC_STRING}`,
+  };
+
+  return [...staticEntries, ...dynamicEntries, ...tailEntries];
 }

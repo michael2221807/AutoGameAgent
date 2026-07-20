@@ -101,6 +101,15 @@ export interface APIConfig {
    * 转为 user，确保对话以 user 结尾。优先级高于 disablePrefill（已涵盖其 user 结尾诉求）。
    */
   strictMessageFormat?: boolean;
+  /**
+   * gproxy prompt cache — when true, the main-round prompt builder hoists the
+   * guaranteed-static system pieces to the front and appends a gproxy magic-cache
+   * trigger string so gproxy stamps an Anthropic `cache_control` breakpoint there,
+   * caching the stable rules block across rounds (~90% input savings on it).
+   * Requires the gproxy provider to have `enable_magic_cache` on. Off (default) =
+   * no reorder, no marker. Only meaningful for gproxy-backed LLM configs.
+   */
+  gproxyPromptCache?: boolean;
 }
 
 // ─── Usage Type ───

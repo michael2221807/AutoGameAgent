@@ -227,6 +227,8 @@ export class GameOrchestrator {
         () => subPipelines.worldBooks ?? [],    // World book getter (supports live updates)
         () => subPipelines.builtinOverrides ?? [], // Built-in overrides getter
         true, // useNewBuilder — enable context-piece prompt assembly
+        // gproxy cache flag — read live from the resolved main LLM config each round
+        () => aiService.getConfigForUsage('main')?.gproxyPromptCache === true,
       ),
     );
     this.runner.addStage(new AICallStage(aiService, responseParser));

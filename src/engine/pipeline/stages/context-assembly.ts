@@ -59,6 +59,13 @@ export class ContextAssemblyStage implements PipelineStage {
     private getBuiltinOverrides?: () => BuiltinPromptEntry[],
     /** Whether to use the new context-piece builder (default: false for backward compat) */
     private useNewBuilder?: boolean,
+    /**
+     * gproxy prompt cache flag getter — reads the resolved main LLM config's
+     * `gproxyPromptCache` at build time (live, so toggling it takes effect next
+     * round). When true, buildSystemPrompt hoists the static prefix + embeds the
+     * cache trigger. Absent/false = legacy output.
+     */
+    private getGproxyCacheEnabled?: () => boolean,
   ) {}
 
   async execute(ctx: PipelineContext): Promise<PipelineContext> {
@@ -433,6 +440,7 @@ export class ContextAssemblyStage implements PipelineStage {
         engramRetrievalBlock: memoryBlock,
         implicitMidTermBlock: implicitMidBlock,
         narrativeHistoryForCorpus: rawHistoryForCorpus,
+        gproxyCache: this.getGproxyCacheEnabled?.() ?? false,
       });
 
       // Convert MessageEntry[] → AIMessage[]
