@@ -277,6 +277,83 @@ function favoriteLabel(f: TtsVoiceFavorite): string {
 </template>
 
 <style scoped>
+/* ── Shared settings-section layout (scoped styles don't cascade from
+   SettingsPanel to this child component, so re-declare them here to match the
+   other sections — same pattern as EngramSettingsSection). ── */
+.settings-section {
+  flex-shrink: 0;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  position: relative;
+}
+.section-title {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  gap: 14px;
+}
+.setting-row + .setting-row {
+  border-top: 1px solid color-mix(in oklch, var(--color-text-umber) 5%, transparent);
+}
+.setting-row--indent { padding-left: 20px; }
+.setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.setting-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.setting-desc {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  line-height: 1.3;
+}
+.setting-subsection-header {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-top: var(--space-sm);
+  margin-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-subtle);
+}
+.form-input {
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  color: var(--color-text);
+  font-size: 0.84rem;
+  font-family: inherit;
+  outline: none;
+}
+.form-input:focus {
+  border-color: var(--color-sage-400);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
+}
+.form-input--sm { width: 180px; flex-shrink: 0; }
+.form-range {
+  width: 140px;
+  accent-color: var(--color-sage-400);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .tts-segment {
   display: inline-flex;
   background: var(--color-surface-input);
