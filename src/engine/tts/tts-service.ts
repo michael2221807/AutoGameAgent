@@ -1,14 +1,17 @@
+// App doc: docs/user-guide/pages/game-main.md §3.13 (配音 · CosyVoice)
 /**
  * TtsService — 配音编排核心。
  *
  * 职责:
  *   - 从 AIService 取 tts 类 APIConfig(getTtsConfigForBackend),经 registry
  *     解析出 CosyVoiceProvider。
- *   - speak():按 transmissionMode 走「真流式」或「整段非流式」。
- *       · stream(默认): provider.getStreamUrl()(CosyVoice streaming=1)→ 服务端
- *         chunked ogg,`<audio>` 原生边下边播,首字节即出声。
- *       · full:        provider.synthesize() 整段 WAV → 一次播放,更稳。
- *     stream 若不受支持(getStreamUrl 返回 null)自动回落 full。
+ *   - speak():按 transmissionMode 走「分句流式」或「整段非流式」。
+ *       · stream(默认): splitSentences 把正文切句 → 逐句 provider.getStreamUrl()
+ *         (CosyVoice streaming=1)→ 服务端 chunked ogg,`<audio crossOrigin>` 原生
+ *         边下边播;当前句播放时 preload 下一句 → 首句快出声、句间近无缝。每句独立
+ *         回落:某句流式失败 → 该句改整段 synthesize,不牵连后续句(可靠可控)。
+ *       · full:        provider.synthesize() 整段 WAV → 一次播放,最稳。
+ *     stream 若不受支持(getStreamUrl 首句返回 null)整体回落 full。
  *   - 播放态经 eventBus 'tts:state' 广播给 UI(播放键/状态栏 chip)。
  *   - 失败逐级回落,永远有声音或明确 toast;不抛给调用方(fire-and-forget 安全)。
  *
@@ -21,7 +24,7 @@ import type { TtsProviderRegistry } from './provider-registry';
 import type { TtsProvider, TtsSettings, TtsStatus, TtsStateEvent, TtsBackendType, TtsSpeaker } from './types';
 import { DEFAULT_TTS_SETTINGS } from './types';
 import { loadTtsSettings } from './tts-settings';
-import { stripMarkersForSpeech } from './sentence-splitter';
+import { stripMarkersForSpeech, splitSentences } from './sentence-splitter';
 import { HtmlAudioPlayer, type TtsAudioPlayer } from './audio-player';
 
 const DEFAULT_BACKEND: TtsBackendType = 'cosyvoice';
@@ -169,28 +172,11 @@ export class TtsService {
     const speaker = this.settings.defaultSpeaker;
     const instruct = this.settings.defaultInstruct || undefined;
 
-    const playOpts = { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal };
     try {
-      // stream 模式优先走真·传输级流式;失败(非取消)自动回落 full,保证有声音。
-      const streamUrl = this.settings.transmissionMode === 'stream'
-        ? provider.getStreamUrl(text, { speaker, instruct })
-        : null;
-      let streamFailed = false;
-      if (streamUrl) {
-        try {
-          this.emitState('playing');
-          await this.player.playUrl(streamUrl, playOpts);
-        } catch (streamErr) {
-          if (isAbort(streamErr)) throw streamErr; // 真取消 → 上抛,不回落
-          streamFailed = true; // 流式路径失败(CORS/服务端 5xx/编码)→ 回落整段
-        }
-      }
-      if ((!streamUrl || streamFailed) && !abort.signal.aborted) {
-        this.emitState('synthesizing');
-        const blob = await provider.synthesize(text, { speaker, instruct, signal: abort.signal });
-        if (abort.signal.aborted) return;
-        this.emitState('playing');
-        await this.player.play(blob, playOpts);
+      if (this.settings.transmissionMode === 'full') {
+        await this.playFull(provider, text, speaker, instruct, abort);
+      } else {
+        await this.playSentenceStream(provider, text, speaker, instruct, abort);
       }
     } catch (err) {
       if (!isAbort(err)) {
@@ -211,6 +197,79 @@ export class TtsService {
         this.emitState('idle');
       }
     }
+  }
+
+  /**
+   * 分句流式:切句 → 逐句 streaming=1 播放,当前句播放时 preload 下一句(近无缝)。
+   * 每句独立回落:该句流式失败 → 改整段 synthesize,不牵连后续句。
+   * 首句 getStreamUrl 返回 null(provider 不支持流式)→ 整体回落整段 full。
+   */
+  private async playSentenceStream(
+    provider: TtsProvider,
+    text: string,
+    speaker: string,
+    instruct: string | undefined,
+    abort: AbortController,
+  ): Promise<void> {
+    const segments = splitSentences(text);
+    if (segments.length === 0) return;
+
+    // 一次性算出每句的流式 URL(纯函数,便于测试断言调用次数 == 句数)。
+    const urls = segments.map((seg) => provider.getStreamUrl(seg, { speaker, instruct }));
+    if (urls[0] === null) {
+      // provider 不支持传输级流式 → 整体回落整段合成,避免逐句都失败。
+      await this.playFull(provider, text, speaker, instruct, abort);
+      return;
+    }
+
+    this.emitState('playing');
+    for (let i = 0; i < segments.length; i++) {
+      if (abort.signal.aborted) return;
+      // 预取下一句:当前句播放期间浏览器已在后台缓冲下一句 → 句间近无缝。
+      const nextUrl = urls[i + 1];
+      if (nextUrl) this.player.preload?.(nextUrl);
+      await this.playSegment(provider, segments[i], urls[i], speaker, instruct, abort);
+    }
+  }
+
+  /** 播放单句:优先流式 URL;非取消失败 → 该句回落整段 synthesize。 */
+  private async playSegment(
+    provider: TtsProvider,
+    seg: string,
+    streamUrl: string | null,
+    speaker: string,
+    instruct: string | undefined,
+    abort: AbortController,
+  ): Promise<void> {
+    const playOpts = { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal };
+    if (streamUrl) {
+      try {
+        await this.player.playUrl(streamUrl, playOpts);
+        return;
+      } catch (streamErr) {
+        if (isAbort(streamErr)) throw streamErr; // 真取消 → 上抛,不回落
+        // 该句流式失败(CORS/5xx/编码)→ 落该句整段 synthesize。
+      }
+    }
+    if (abort.signal.aborted) return;
+    const blob = await provider.synthesize(seg, { speaker, instruct, signal: abort.signal });
+    if (abort.signal.aborted) return;
+    await this.player.play(blob, playOpts);
+  }
+
+  /** 整段非流式:一次 synthesize 整段 → 一次播放。最稳,无句间处理。 */
+  private async playFull(
+    provider: TtsProvider,
+    text: string,
+    speaker: string,
+    instruct: string | undefined,
+    abort: AbortController,
+  ): Promise<void> {
+    this.emitState('synthesizing');
+    const blob = await provider.synthesize(text, { speaker, instruct, signal: abort.signal });
+    if (abort.signal.aborted) return;
+    this.emitState('playing');
+    await this.player.play(blob, { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal });
   }
 }
 

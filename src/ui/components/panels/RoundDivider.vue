@@ -152,6 +152,31 @@ function onBadgeClick(): void {
             </svg>
           </button>
         </Tooltip>
+        <!-- ▶ Play button — TTS narration (配音, 2026-07-20). Left cluster for
+             visual balance (3 left / 3 right). Toggles play/stop for this round. -->
+        <Tooltip
+          v-if="props.ttsReady"
+          :text="$t(props.ttsSpeaking ? 'mainGame.roundDivider.ttsStopTitle' : 'mainGame.roundDivider.ttsPlayTitle')"
+          interactive
+        >
+          <button
+            type="button"
+            class="round-divider__icon-btn round-divider__icon-btn--tts"
+            :class="{ 'round-divider__icon-btn--tts-active': props.ttsSpeaking }"
+            data-testid="round-tts-btn"
+            :aria-pressed="props.ttsSpeaking"
+            :aria-label="$t(props.ttsSpeaking ? 'mainGame.roundDivider.ttsStopAriaLabel' : 'mainGame.roundDivider.ttsPlayAriaLabel')"
+            @click="$emit('play-tts')"
+          >
+            <svg v-if="props.ttsSpeaking" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <rect x="6" y="5" width="4" height="14" rx="1" />
+              <rect x="14" y="5" width="4" height="14" rx="1" />
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <path d="M8 5.14v13.72c0 .78.85 1.26 1.52.86l10.94-6.86a1 1 0 0 0 0-1.72L9.52 4.28A1 1 0 0 0 8 5.14Z" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
 
       <Tooltip
@@ -209,31 +234,6 @@ function onBadgeClick(): void {
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
-            </svg>
-          </button>
-        </Tooltip>
-        <!-- ▶ Play button — TTS narration (配音, 2026-07-20). Shown for every round
-             when TTS is ready. Toggles play/stop for this round's narration. -->
-        <Tooltip
-          v-if="props.ttsReady"
-          :text="$t(props.ttsSpeaking ? 'mainGame.roundDivider.ttsStopTitle' : 'mainGame.roundDivider.ttsPlayTitle')"
-          interactive
-        >
-          <button
-            type="button"
-            class="round-divider__icon-btn round-divider__icon-btn--tts"
-            :class="{ 'round-divider__icon-btn--tts-active': props.ttsSpeaking }"
-            data-testid="round-tts-btn"
-            :aria-pressed="props.ttsSpeaking"
-            :aria-label="$t(props.ttsSpeaking ? 'mainGame.roundDivider.ttsStopAriaLabel' : 'mainGame.roundDivider.ttsPlayAriaLabel')"
-            @click="$emit('play-tts')"
-          >
-            <svg v-if="props.ttsSpeaking" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
-              <rect x="6" y="5" width="4" height="14" rx="1" />
-              <rect x="14" y="5" width="4" height="14" rx="1" />
-            </svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
-              <path d="M8 5.14v13.72c0 .78.85 1.26 1.52.86l10.94-6.86a1 1 0 0 0 0-1.72L9.52 4.28A1 1 0 0 0 8 5.14Z" />
             </svg>
           </button>
         </Tooltip>

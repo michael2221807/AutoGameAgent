@@ -40,10 +40,11 @@ export interface TtsProvider {
   /** 合成整段文本 → 音频 Blob(整段非流式:此 build 为完整 WAV) */
   synthesize(text: string, options: TtsSynthesizeOptions): Promise<Blob>;
   /**
-   * 真·传输级流式播放 URL —— 让 `<audio>` 直接渐进播放服务端的 chunked 输出。
+   * 真·传输级流式播放 URL —— 让 `<audio crossOrigin='anonymous'>` 直接渐进播放
+   * 服务端 chunked 输出(边下边播)。分句流水线里对「每一句」各取一个 URL。
    * CosyVoice: `GET {url}?text=&speaker=&instruct=&streaming=1` → chunked audio/ogg，
-   * 浏览器原生边下边播（实测 canplay ~4.5s，无需 MSE）。
-   * 返回 `null` 表示该 backend 不支持传输级流式（调用方回落整段 synthesize）。
+   * 浏览器原生渐进解码 ogg(MSE 不支持 ogg ≠ `<audio>` 不支持;媒体元素自有渐进管线)。
+   * 返回 `null` 表示该 backend 不支持传输级流式(调用方整体回落整段 synthesize)。
    */
   getStreamUrl(text: string, options: Omit<TtsSynthesizeOptions, 'signal'>): string | null;
   /** 拉取服务端可用音色列表;失败返回 [](UI 降级为自由输入) */
@@ -80,8 +81,9 @@ export interface TtsSettings {
   /** 自动配音 — AI 出文后自动朗读正文(post-round fire-and-forget) */
   autoNarrateOnRound: boolean;
   /**
-   * 'stream' = 真·传输级流式(streaming=1,服务端 chunked ogg,浏览器边下边播,默认);
-   * 'full'   = 整段非流式(完整 WAV 一次播放,更稳)
+   * 'stream' = 分句流式(客户端切句 + 每句 streaming=1,服务端 chunked ogg,
+   *            `<audio crossOrigin>` 边下边播,句间预取近无缝,首句快出声,默认);
+   * 'full'   = 整段非流式(整段一次合成完整 WAV 后播放,最稳)
    */
   transmissionMode: 'stream' | 'full';
   /** 默认音色 → speaker */

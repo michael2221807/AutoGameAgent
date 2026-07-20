@@ -31,12 +31,17 @@ function makeFakeProvider(overrides?: Partial<TtsProvider>): FakeProvider {
   return provider as FakeProvider;
 }
 
-type FakePlayer = TtsAudioPlayer & { played: Array<{ kind: 'blob' | 'url'; value: string }> };
+type FakePlayer = TtsAudioPlayer & {
+  played: Array<{ kind: 'blob' | 'url'; value: string }>;
+  preloaded: string[];
+};
 
 function makeFakePlayer(): FakePlayer {
   const played: Array<{ kind: 'blob' | 'url'; value: string }> = [];
+  const preloaded: string[] = [];
   const player: FakePlayer = {
     played,
+    preloaded,
     async play(blob, opts) {
       const t = await blob.text();
       if (opts.signal.aborted) throw new DOMException('aborted', 'AbortError');
@@ -46,6 +51,7 @@ function makeFakePlayer(): FakePlayer {
       if (opts.signal.aborted) throw new DOMException('aborted', 'AbortError');
       played.push({ kind: 'url', value: url });
     },
+    preload(url) { preloaded.push(url); },
     stop() {},
     pause() {},
     resume() {},
@@ -111,17 +117,28 @@ describe('TtsService guards', () => {
   });
 });
 
-describe('TtsService stream mode (default)', () => {
-  it('uses getStreamUrl + player.playUrl, never synthesize', async () => {
+describe('TtsService stream mode (分句流式, default)', () => {
+  it('splits into sentences and streams each via playUrl, never synthesize', async () => {
     const provider = makeFakeProvider();
     const player = makeFakePlayer();
     const svc = makeService(provider, { transmissionMode: 'stream', defaultSpeaker: 'coolkey' }, { player });
     await svc.speak('第一句话内容。第二句话内容。', 'r1');
-    expect(provider.streamUrlCalls.length).toBe(1);
+    // Two sentences → one getStreamUrl + one playUrl each.
+    expect(provider.streamUrlCalls.length).toBe(2);
     expect(provider.synthCalls).toEqual([]);
-    expect(player.played.length).toBe(1);
-    expect(player.played[0].kind).toBe('url');
+    expect(player.played.length).toBe(2);
+    expect(player.played.every((p) => p.kind === 'url')).toBe(true);
     expect(player.played[0].value).toContain('streaming=1');
+  });
+
+  it('preloads the NEXT sentence while the current one plays', async () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    const svc = makeService(provider, { transmissionMode: 'stream' }, { player });
+    await svc.speak('第一句内容啊。第二句内容啊。第三句内容啊。', 'r1');
+    // 3 sentences → sentences 2 and 3 get prefetched (last has no successor).
+    expect(player.preloaded.length).toBe(2);
+    expect(player.played.length).toBe(3);
   });
 
   it('strips markers before building the stream URL', async () => {
@@ -141,17 +158,37 @@ describe('TtsService stream mode (default)', () => {
     expect(player.played[0].kind).toBe('blob');
   });
 
-  it('falls back to full (synthesize) when the stream fetch fails (non-abort)', async () => {
+  it('falls back to full for a SINGLE sentence when its stream fetch fails (non-abort)', async () => {
     const provider = makeFakeProvider();
     const player = makeFakePlayer();
     player.playUrl = async () => { throw new Error('[TTS] stream fetch failed 500'); };
     const svc = makeService(provider, { transmissionMode: 'stream' }, { player });
     await svc.speak('一段正文内容。', 'r1');
     expect(provider.streamUrlCalls.length).toBe(1); // stream attempted
-    expect(provider.synthCalls.length).toBe(1);     // then fell back to full
+    expect(provider.synthCalls.length).toBe(1);     // then that sentence fell back to full
     expect(player.played.length).toBe(1);
     expect(player.played[0].kind).toBe('blob');
     expect(svc.getState().status).toBe('idle');
+  });
+
+  it('per-sentence fallback: a failed sentence synthesizes, siblings keep streaming', async () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    let calls = 0;
+    // Fail only the FIRST sentence's stream; later sentences stream fine.
+    player.playUrl = async (url, opts) => {
+      calls += 1;
+      if (calls === 1) throw new Error('[TTS] stream fetch failed 500');
+      if (opts.signal.aborted) throw new DOMException('aborted', 'AbortError');
+      player.played.push({ kind: 'url', value: url });
+    };
+    const svc = makeService(provider, { transmissionMode: 'stream' }, { player });
+    await svc.speak('第一句内容啊。第二句内容啊。', 'r1');
+    expect(provider.synthCalls.length).toBe(1);          // sentence 1 fell back
+    const blobPlays = player.played.filter((p) => p.kind === 'blob');
+    const urlPlays = player.played.filter((p) => p.kind === 'url');
+    expect(blobPlays.length).toBe(1);                    // sentence 1 played as blob
+    expect(urlPlays.length).toBe(1);                     // sentence 2 still streamed
   });
 
   it('ends in idle state after completing', async () => {
