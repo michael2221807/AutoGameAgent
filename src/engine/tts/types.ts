@@ -86,6 +86,16 @@ export interface TtsSettings {
    * 'full'   = 整段非流式(整段一次合成完整 WAV 后播放,最稳)
    */
   transmissionMode: 'stream' | 'full';
+  /**
+   * 分句流式的「每段目标字数」(主控) — splitSentences 细分后按此拼段,平衡断点、
+   * 允许略超。越大段落越长越连贯、卡顿越少;越小越碎但停止/跳过更细。仅 stream 模式生效。
+   */
+  segmentTargetChars: number;
+  /**
+   * 分句流式的「每段最多句数」(硬上限) — 兜底延迟与停止粒度,即使短尾合并也不突破。
+   * 仅 stream 模式生效。
+   */
+  segmentMaxSentences: number;
   /** 默认音色 → speaker */
   defaultSpeaker: string;
   /** 默认风格/方言 → instruct */
@@ -102,6 +112,8 @@ export const DEFAULT_TTS_SETTINGS: TtsSettings = {
   enabled: false,
   autoNarrateOnRound: false,
   transmissionMode: 'stream',
+  segmentTargetChars: 120,
+  segmentMaxSentences: 6,
   defaultSpeaker: '',
   defaultInstruct: '',
   rate: 1,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripMarkersForSpeech, splitSentences } from '@/engine/tts/sentence-splitter';
+import { stripMarkersForSpeech, splitSentences, groupSentencesBySize } from '@/engine/tts/sentence-splitter';
 
 describe('stripMarkersForSpeech', () => {
   it('returns empty for empty input', () => {
@@ -78,5 +78,72 @@ describe('splitSentences', () => {
 
   it('keeps a single short sentence as one segment', () => {
     expect(splitSentences('你好世界。')).toEqual(['你好世界。']);
+  });
+});
+
+describe('groupSentencesBySize', () => {
+  // 用固定长度的假句子直观验证算法(不依赖真实分句)。
+  const sent = (len: number, tag = '甲') => tag.repeat(len);
+
+  it('returns [] for empty input', () => {
+    expect(groupSentencesBySize([], 120, 6)).toEqual([]);
+  });
+
+  it('用户例A：短句不足字数 → 继续攒句直到达标', () => {
+    // 5 句各 40 字,目标 200 字 / 最多 6 句 → 攒到 200(5 句)成一段。
+    const s = [sent(40, '甲'), sent(40, '乙'), sent(40, '丙'), sent(40, '丁'), sent(40, '戊')];
+    const out = groupSentencesBySize(s, 200, 6);
+    expect(out.length).toBe(1);
+    expect(out[0].length).toBe(200);
+  });
+
+  it('用户例B：两长句就超字数 → 就断在两句(平衡断点保留)', () => {
+    // 两句各 125 字,目标 200:250 比 125 更接近 200 → 保留 2 句成段。
+    const s = [sent(125, '甲'), sent(125, '乙')];
+    const out = groupSentencesBySize(s, 200, 6);
+    expect(out.length).toBe(1);
+    expect(out[0].length).toBe(250);
+  });
+
+  it('平衡断点：跨界句过长时,在其之前断,避免暴冲', () => {
+    // 已攒 190(接近 200),下一句 150 → 含它=340 超 140,不含=190 差 10 → 断在之前。
+    const s = [sent(100, '甲'), sent(90, '乙'), sent(150, '丙')];
+    const out = groupSentencesBySize(s, 200, 6);
+    // 第一段 = 甲+乙 = 190;丙 单独成段(150,自身不足一半? 150 >= 100 → 自成段)。
+    expect(out[0].length).toBe(190);
+    expect(out[1].length).toBe(150);
+  });
+
+  it('最多句数为硬上限：句数到顶即断,即使字数没到', () => {
+    // 6 句各 10 字,目标 200 / 最多 3 句 → 每 3 句一段(30 字),共 2 段。
+    const s = Array.from({ length: 6 }, (_, i) => sent(10, String(i)));
+    const out = groupSentencesBySize(s, 200, 3);
+    expect(out.length).toBe(2);
+    expect(out.every((g) => g.length === 30)).toBe(true);
+  });
+
+  it('短尾合并：末尾残段过短 → 并进上一段', () => {
+    // 目标 100:甲100 成段;乙5(残尾,<50)→ 并入上一段。
+    const s = [sent(100, '甲'), sent(5, '乙')];
+    const out = groupSentencesBySize(s, 100, 6);
+    expect(out.length).toBe(1);
+    expect(out[0].length).toBe(105);
+  });
+
+  it('短尾合并受最多句数约束：并入会超上限则残段自成一段', () => {
+    // 目标 100 / 最多 2 句:甲60+乙60=120 成段(2 句到顶);丙5 残尾,
+    // 但上一段已 2 句(=上限),并入会超 → 丙 自成一段。
+    const s = [sent(60, '甲'), sent(60, '乙'), sent(5, '丙')];
+    const out = groupSentencesBySize(s, 100, 2);
+    expect(out.length).toBe(2);
+    expect(out[1].length).toBe(5);
+  });
+
+  it('clamps out-of-range params defensively', () => {
+    // maxSentences 0 → 夹到 1;targetChars 巨大 → 夹到上限但输入短 → 一段。
+    const s = [sent(10, '甲'), sent(10, '乙')];
+    const out = groupSentencesBySize(s, 5, 0);
+    // maxSentences=1 → 每句一段。
+    expect(out.length).toBe(2);
   });
 });

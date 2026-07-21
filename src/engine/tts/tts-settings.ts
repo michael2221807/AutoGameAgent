@@ -9,6 +9,10 @@
  */
 import { DEFAULT_TTS_SETTINGS, TTS_RATE_MIN, TTS_RATE_MAX } from './types';
 import type { TtsSettings, TtsVoiceFavorite } from './types';
+import {
+  SEGMENT_TARGET_CHARS_MIN, SEGMENT_TARGET_CHARS_MAX,
+  SEGMENT_MAX_SENTENCES_MIN, SEGMENT_MAX_SENTENCES_MAX,
+} from './sentence-splitter';
 
 export const TTS_SETTINGS_STORAGE_KEY = 'aga_tts_settings';
 
@@ -20,6 +24,11 @@ function clampRate(v: unknown): number {
 function clampVolume(v: unknown): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : DEFAULT_TTS_SETTINGS.volume;
   return Math.min(1, Math.max(0, n));
+}
+
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : fallback;
+  return Math.min(max, Math.max(min, n));
 }
 
 function sanitizeFavorites(v: unknown): TtsVoiceFavorite[] {
@@ -44,6 +53,11 @@ export function normalizeTtsSettings(raw: unknown): TtsSettings {
       ? o.autoNarrateOnRound : DEFAULT_TTS_SETTINGS.autoNarrateOnRound,
     // 'full' 保留;其它(含旧值 'segment')迁移到真流式 'stream'
     transmissionMode: o.transmissionMode === 'full' ? 'full' : 'stream',
+    // 旧存档无这两键 → clampInt 回落默认(120/6),前向兼容。
+    segmentTargetChars: clampInt(
+      o.segmentTargetChars, SEGMENT_TARGET_CHARS_MIN, SEGMENT_TARGET_CHARS_MAX, DEFAULT_TTS_SETTINGS.segmentTargetChars),
+    segmentMaxSentences: clampInt(
+      o.segmentMaxSentences, SEGMENT_MAX_SENTENCES_MIN, SEGMENT_MAX_SENTENCES_MAX, DEFAULT_TTS_SETTINGS.segmentMaxSentences),
     defaultSpeaker: typeof o.defaultSpeaker === 'string' ? o.defaultSpeaker : DEFAULT_TTS_SETTINGS.defaultSpeaker,
     defaultInstruct: typeof o.defaultInstruct === 'string' ? o.defaultInstruct : DEFAULT_TTS_SETTINGS.defaultInstruct,
     rate: clampRate(o.rate),

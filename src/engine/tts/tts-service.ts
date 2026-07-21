@@ -6,10 +6,11 @@
  *   - 从 AIService 取 tts 类 APIConfig(getTtsConfigForBackend),经 registry
  *     解析出 CosyVoiceProvider。
  *   - speak():按 transmissionMode 走「分句流式」或「整段非流式」。
- *       · stream(默认): splitSentences 把正文切句 → 逐句 provider.getStreamUrl()
+ *       · stream(默认): splitSentences 细分句 → groupSentencesBySize 按「目标字数+
+ *         最多句数」智能拼段(平衡断点+短尾合并)→ 逐段 provider.getStreamUrl()
  *         (CosyVoice streaming=1)→ 服务端 chunked ogg,`<audio crossOrigin>` 原生
- *         边下边播;当前句播放时 preload 下一句 → 首句快出声、句间近无缝。每句独立
- *         回落:某句流式失败 → 该句改整段 synthesize,不牵连后续句(可靠可控)。
+ *         边下边播;当前段播放时 preload 下一段 → 首段快出声、段间近无缝。每段独立
+ *         回落:某段流式失败 → 该段改整段 synthesize,不牵连后续段(可靠可控)。
  *       · full:        provider.synthesize() 整段 WAV → 一次播放,最稳。
  *     stream 若不受支持(getStreamUrl 首句返回 null)整体回落 full。
  *   - 播放态经 eventBus 'tts:state' 广播给 UI(播放键/状态栏 chip)。
@@ -24,7 +25,7 @@ import type { TtsProviderRegistry } from './provider-registry';
 import type { TtsProvider, TtsSettings, TtsStatus, TtsStateEvent, TtsBackendType, TtsSpeaker } from './types';
 import { DEFAULT_TTS_SETTINGS } from './types';
 import { loadTtsSettings } from './tts-settings';
-import { stripMarkersForSpeech, splitSentences } from './sentence-splitter';
+import { stripMarkersForSpeech, splitSentences, groupSentencesBySize } from './sentence-splitter';
 import { HtmlAudioPlayer, type TtsAudioPlayer } from './audio-player';
 
 const DEFAULT_BACKEND: TtsBackendType = 'cosyvoice';
@@ -211,7 +212,12 @@ export class TtsService {
     instruct: string | undefined,
     abort: AbortController,
   ): Promise<void> {
-    const segments = splitSentences(text);
+    // 先细分句(tokenizer),再按「目标字数 + 最多句数」智能拼段(平衡断点+短尾合并)。
+    const segments = groupSentencesBySize(
+      splitSentences(text),
+      this.settings.segmentTargetChars,
+      this.settings.segmentMaxSentences,
+    );
     if (segments.length === 0) return;
 
     // 一次性算出每句的流式 URL(纯函数,便于测试断言调用次数 == 句数)。

@@ -5,9 +5,17 @@
  * 两步:
  *   1. stripMarkersForSpeech — 去掉 AGA 正文的 markdown/inline marker 记号,避免把
  *      `【环境】` / 反引号 / 引号 / 表格竖线 等读出来。
- *   2. splitSentences — 把清洗后的整段切成"句"级片段。配音走「分句 + 每句
- *      streaming=1」流水线:逐句请求服务端流式合成,当前句播放时预取下一句,
- *      首句快出声、句间近无缝。分句让每次请求更小、可被独立 stop/回落,可靠可控。
+ *   2. splitSentences — 把清洗后的整段切成"句"级细片段(tokenizer)。
+ *   3. groupSentencesBySize — 把细片段按「目标字数 + 最多句数」智能拼回"段",
+ *      供分句流式流水线逐段合成:逐段请求 streaming=1,当前段播放时预取下一段,
+ *      首段快出声、段间近无缝。拼段让每次请求大小可控、避免单短句造成的卡顿。
+ *
+ * 分段策略(用户选定「字数为主,句数浮动」+ 两条智能改进):
+ *   - 平衡断点:跨过目标字数时,比较"含跨界句"vs"不含"谁更接近目标,就近断,
+ *     避免长句把段落冲到远超目标。
+ *   - 短尾合并:结尾残段过短(< 目标字数一半)且并入不超最多句数时并进上一段,
+ *     消灭"孤零零短段"造成的最明显卡顿。
+ *   - 最多句数为硬上限(兜底延迟/停止粒度),即使短尾合并也不突破。
  */
 
 /**
@@ -130,4 +138,73 @@ export function splitSentences(text: string): string[] {
     }
   }
   return result;
+}
+
+/** 分段设置的安全边界(与 tts-settings normalize 保持一致) */
+export const SEGMENT_TARGET_CHARS_MIN = 20;
+export const SEGMENT_TARGET_CHARS_MAX = 1000;
+export const SEGMENT_MAX_SENTENCES_MIN = 1;
+export const SEGMENT_MAX_SENTENCES_MAX = 30;
+
+/**
+ * 把 splitSentences 产出的细句片段,按「目标字数 targetChars + 每段最多句数
+ * maxSentences」智能拼成"段"。用户选定「字数为主,句数浮动」。
+ *
+ * 规则(逐句左到右贪心 + 两条智能改进):
+ *   - 主控:段字数攒到 >= targetChars 即断(允许略超,保留完整句)。
+ *   - 平衡断点:当加入某句会跨过 targetChars 时,比较"不含该句"(差 undershoot)
+ *     与"含该句"(超 overshoot)谁更接近目标 —— undershoot <= overshoot 则在该句
+ *     之前断(该句留给下一段),否则含该句后断。避免长句把段落冲到远超目标。
+ *   - 硬上限:任一段句数不超过 maxSentences(到顶即断,兜底延迟/停止粒度)。
+ *   - 短尾合并:末尾残段若过短(< targetChars/2)且并入后不超 maxSentences,
+ *     并进上一段;否则自成一段。消灭孤零短段。
+ *
+ * 保证:除被硬上限截断的情形外,正常段字数 >= targetChars(平衡后接近目标);
+ * 不切碎完整句子。空输入 → []。
+ */
+export function groupSentencesBySize(
+  sentences: string[],
+  targetChars: number,
+  maxSentences: number,
+): string[] {
+  if (sentences.length === 0) return [];
+  // 防御:参数落到安全区间(UI/持久化已 normalize,这里再兜一层)。
+  const C = Math.min(Math.max(Math.round(targetChars) || SEGMENT_TARGET_CHARS_MIN, SEGMENT_TARGET_CHARS_MIN), SEGMENT_TARGET_CHARS_MAX);
+  const S = Math.min(Math.max(Math.round(maxSentences) || SEGMENT_MAX_SENTENCES_MIN, SEGMENT_MAX_SENTENCES_MIN), SEGMENT_MAX_SENTENCES_MAX);
+
+  const groups: string[][] = [];
+  let cur: string[] = [];
+  let curLen = 0;
+  const flush = (): void => {
+    if (cur.length > 0) {
+      groups.push(cur);
+      cur = [];
+      curLen = 0;
+    }
+  };
+
+  for (const s of sentences) {
+    // 平衡断点:cur 非空且加入 s 会跨过目标时,若当前段已更接近目标,则先断在 s 之前。
+    if (cur.length > 0 && curLen + s.length >= C) {
+      const undershoot = C - curLen;          // 不含 s:离目标还差多少(>=0,因 curLen<C)
+      const overshoot = curLen + s.length - C; // 含 s:超出目标多少
+      if (undershoot <= overshoot) flush();
+    }
+    cur.push(s);
+    curLen += s.length;
+    // 达目标字数,或到句数硬上限 → 断段。
+    if (curLen >= C || cur.length >= S) flush();
+  }
+
+  // 末尾残段:过短且并入不超上限 → 并进上一段;否则自成一段。
+  if (cur.length > 0) {
+    const prev = groups[groups.length - 1];
+    if (prev && curLen < C / 2 && prev.length + cur.length <= S) {
+      prev.push(...cur);
+    } else {
+      groups.push(cur);
+    }
+  }
+
+  return groups.map((g) => g.join(''));
 }

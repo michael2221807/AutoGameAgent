@@ -118,12 +118,15 @@ describe('TtsService guards', () => {
 });
 
 describe('TtsService stream mode (分句流式, default)', () => {
-  it('splits into sentences and streams each via playUrl, never synthesize', async () => {
+  // segmentMaxSentences:1 forces one segment per sentence so we can exercise the
+  // multi-segment pipeline mechanics deterministically (default grouping would
+  // merge these short test sentences into a single segment — see the merge test).
+  it('streams each segment via playUrl, never synthesize', async () => {
     const provider = makeFakeProvider();
     const player = makeFakePlayer();
-    const svc = makeService(provider, { transmissionMode: 'stream', defaultSpeaker: 'coolkey' }, { player });
+    const svc = makeService(provider, { transmissionMode: 'stream', segmentMaxSentences: 1, defaultSpeaker: 'coolkey' }, { player });
     await svc.speak('第一句话内容。第二句话内容。', 'r1');
-    // Two sentences → one getStreamUrl + one playUrl each.
+    // Two segments → one getStreamUrl + one playUrl each.
     expect(provider.streamUrlCalls.length).toBe(2);
     expect(provider.synthCalls).toEqual([]);
     expect(player.played.length).toBe(2);
@@ -131,12 +134,22 @@ describe('TtsService stream mode (分句流式, default)', () => {
     expect(player.played[0].value).toContain('streaming=1');
   });
 
-  it('preloads the NEXT sentence while the current one plays', async () => {
+  it('groups short sentences into fewer segments by default (segmentTargetChars)', async () => {
     const provider = makeFakeProvider();
     const player = makeFakePlayer();
+    // Default 120 chars / 6 sentences → three short sentences collapse to ONE segment.
     const svc = makeService(provider, { transmissionMode: 'stream' }, { player });
+    await svc.speak('第一句。第二句。第三句。', 'r1');
+    expect(player.played.length).toBe(1);
+    expect(provider.streamUrlCalls.length).toBe(1);
+  });
+
+  it('preloads the NEXT segment while the current one plays', async () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    const svc = makeService(provider, { transmissionMode: 'stream', segmentMaxSentences: 1 }, { player });
     await svc.speak('第一句内容啊。第二句内容啊。第三句内容啊。', 'r1');
-    // 3 sentences → sentences 2 and 3 get prefetched (last has no successor).
+    // 3 segments → segments 2 and 3 get prefetched (last has no successor).
     expect(player.preloaded.length).toBe(2);
     expect(player.played.length).toBe(3);
   });
@@ -171,24 +184,25 @@ describe('TtsService stream mode (分句流式, default)', () => {
     expect(svc.getState().status).toBe('idle');
   });
 
-  it('per-sentence fallback: a failed sentence synthesizes, siblings keep streaming', async () => {
+  it('per-segment fallback: a failed segment synthesizes, siblings keep streaming', async () => {
     const provider = makeFakeProvider();
     const player = makeFakePlayer();
     let calls = 0;
-    // Fail only the FIRST sentence's stream; later sentences stream fine.
+    // Fail only the FIRST segment's stream; later segments stream fine.
     player.playUrl = async (url, opts) => {
       calls += 1;
       if (calls === 1) throw new Error('[TTS] stream fetch failed 500');
       if (opts.signal.aborted) throw new DOMException('aborted', 'AbortError');
       player.played.push({ kind: 'url', value: url });
     };
-    const svc = makeService(provider, { transmissionMode: 'stream' }, { player });
+    // Force one segment per sentence so we have two independent segments.
+    const svc = makeService(provider, { transmissionMode: 'stream', segmentMaxSentences: 1 }, { player });
     await svc.speak('第一句内容啊。第二句内容啊。', 'r1');
-    expect(provider.synthCalls.length).toBe(1);          // sentence 1 fell back
+    expect(provider.synthCalls.length).toBe(1);          // segment 1 fell back
     const blobPlays = player.played.filter((p) => p.kind === 'blob');
     const urlPlays = player.played.filter((p) => p.kind === 'url');
-    expect(blobPlays.length).toBe(1);                    // sentence 1 played as blob
-    expect(urlPlays.length).toBe(1);                     // sentence 2 still streamed
+    expect(blobPlays.length).toBe(1);                    // segment 1 played as blob
+    expect(urlPlays.length).toBe(1);                     // segment 2 still streamed
   });
 
   it('ends in idle state after completing', async () => {

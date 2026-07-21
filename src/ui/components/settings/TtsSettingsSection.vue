@@ -24,6 +24,12 @@ import type { TtsService } from '@/engine/tts/tts-service';
 const { t } = useI18n();
 const ttsService = inject<TtsService | undefined>('ttsService', undefined);
 
+// 分段控件的滑杆区间(实用范围;normalize 另有 [20,1000]/[1,30] 硬夹持兜底）
+const SEG_CHARS_UI_MIN = 40;
+const SEG_CHARS_UI_MAX = 400;
+const SEG_SENT_UI_MIN = 1;
+const SEG_SENT_UI_MAX = 12;
+
 const settings = ref<TtsSettings>(loadTtsSettings());
 
 /** 服务端音色列表（/speakers 拉取；空 = 未拉取或不可用，退回自由输入） */
@@ -64,6 +70,8 @@ function commit(): void {
 function setEnabled(v: boolean): void { settings.value.enabled = v; commit(); }
 function setAutoNarrate(v: boolean): void { settings.value.autoNarrateOnRound = v; commit(); }
 function setMode(mode: 'stream' | 'full'): void { settings.value.transmissionMode = mode; commit(); }
+function setSegmentTargetChars(v: number): void { settings.value.segmentTargetChars = v; commit(); }
+function setSegmentMaxSentences(v: number): void { settings.value.segmentMaxSentences = v; commit(); }
 function setRate(v: number): void { settings.value.rate = v; commit(); }
 function setVolume(v: number): void { settings.value.volume = v; commit(); }
 function setDefaultSpeaker(v: string): void { settings.value.defaultSpeaker = v; rebuildSpeakerOptions(); commit(); }
@@ -165,6 +173,34 @@ function favoriteLabel(f: TtsVoiceFavorite): string {
           >{{ $t('settings.audio.mode.full') }}</button>
         </div>
       </div>
+
+      <!-- 分段长度（仅分句流式生效）：每段目标字数 + 每段最多句数 -->
+      <template v-if="settings.transmissionMode === 'stream'">
+        <div class="setting-row setting-row--indent">
+          <div class="setting-info">
+            <span class="setting-label">{{ $t('settings.audio.segChars.label') }} ({{ settings.segmentTargetChars }} {{ $t('settings.audio.segChars.unit') }})</span>
+            <span class="setting-desc">{{ $t('settings.audio.segChars.desc') }}</span>
+          </div>
+          <input
+            type="range" class="form-range" :min="SEG_CHARS_UI_MIN" :max="SEG_CHARS_UI_MAX" step="10"
+            :value="settings.segmentTargetChars"
+            :aria-label="$t('settings.audio.segChars.label')"
+            @input="setSegmentTargetChars(Number(($event.target as HTMLInputElement).value))"
+          />
+        </div>
+        <div class="setting-row setting-row--indent">
+          <div class="setting-info">
+            <span class="setting-label">{{ $t('settings.audio.segSentences.label') }} ({{ settings.segmentMaxSentences }} {{ $t('settings.audio.segSentences.unit') }})</span>
+            <span class="setting-desc">{{ $t('settings.audio.segSentences.desc') }}</span>
+          </div>
+          <input
+            type="range" class="form-range" :min="SEG_SENT_UI_MIN" :max="SEG_SENT_UI_MAX" step="1"
+            :value="settings.segmentMaxSentences"
+            :aria-label="$t('settings.audio.segSentences.label')"
+            @input="setSegmentMaxSentences(Number(($event.target as HTMLInputElement).value))"
+          />
+        </div>
+      </template>
 
       <!-- 语速 -->
       <div class="setting-row">
