@@ -110,6 +110,25 @@ export interface APIConfig {
    * no reorder, no marker. Only meaningful for gproxy-backed LLM configs.
    */
   gproxyPromptCache?: boolean;
+  /**
+   * Force streaming transport for EVERY request routed to this config, including
+   * background / non-narrative calls (memory summary, world generation, tokenizers,
+   * JSON repair, etc.) that never pass an `onStreamChunk`.
+   *
+   * Why: some providers/proxies expose ONLY a streaming endpoint — a non-streaming
+   * request 404s or hangs. Streaming is already a transport concern here: the provider
+   * accumulates SSE chunks and returns the SAME complete `Promise<string>` whether or
+   * not anyone consumes the chunks (see `BaseProvider.processSSEStream`). So turning
+   * this on makes those background calls send `stream: true` and simply discard the
+   * incremental chunks (no `onStreamChunk` → nothing renders), while the caller still
+   * receives the full assembled text.
+   *
+   * When on, {@link AIService.doGenerate} overrides `stream` to `true` regardless of
+   * the caller's flag, and the providers MUST NOT auto-downgrade a failed stream to a
+   * non-streaming retry (that endpoint can't do non-streaming) — they re-throw instead.
+   * Off (default) = unchanged behavior (stream decided per-call by `onStreamChunk`).
+   */
+  forceStreaming?: boolean;
 }
 
 // ─── Usage Type ───

@@ -197,6 +197,14 @@ export class AIService {
       effectiveOptions = { ...options, messages: this.convertPrefillToSystem(options.messages) };
     }
 
+    // forceStreaming: some providers/proxies expose ONLY a streaming endpoint.
+    // Override `stream` to true for every call routed here — even background/non-narrative
+    // ones that never pass `onStreamChunk`. The provider still returns the full assembled
+    // text (chunks are simply not rendered). See APIConfig.forceStreaming.
+    if (effectiveConfig.forceStreaming) {
+      effectiveOptions = { ...effectiveOptions, stream: true };
+    }
+
     const provider = this.createProvider(effectiveConfig);
     const { signal, cleanup } = this.createTimeoutSignal(options.signal);
 

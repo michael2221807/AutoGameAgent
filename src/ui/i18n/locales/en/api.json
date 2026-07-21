@@ -137,6 +137,8 @@
   "api.form.strictMessageFormatHint": "Some models/proxies (e.g. Claude Opus via gproxy) reject system messages in the middle of a conversation and require the conversation to end with a user message (otherwise a mid_conv_system / must-end-with-user error). When enabled, mid-conversation system messages become user messages and a trailing assistant prefill is converted to user. Turn this on if you hit those errors.",
   "api.form.gproxyPromptCache": "gproxy Prompt Cache",
   "api.form.gproxyPromptCacheHint": "Only for gproxy backends with magic cache enabled. When on, the main round hoists the never-changing rules block (writing style / format / CoT, etc.) to the front of the prompt and triggers gproxy's prompt cache — on a hit that block is billed at 1/10, saving cost every round. It changes the prompt's internal ordering and may slightly affect generation style; off keeps everything exactly as before.",
+  "api.form.forceStreaming": "Force Streaming",
+  "api.form.forceStreamingHint": "Turn on when the provider only exposes a streaming endpoint (a non-streaming request errors or hangs). When on, every request routed to this API — including background / non-narrative calls (memory summary, world generation, visual tokenizers, JSON repair, etc.) — uses streaming transport; those chunks are not shown in the UI, but the caller still receives the full result as usual. A failed stream is NOT downgraded to non-streaming (that endpoint doesn't support it). Off (default) keeps the original behavior: streaming is decided per call.",
   "api.form.validationNameRequired": "Please enter an API name",
   "api.form.validationUrlRequired": "Please enter an API URL",
 

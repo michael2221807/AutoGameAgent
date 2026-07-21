@@ -159,6 +159,10 @@ export class ClaudeProvider extends BaseProvider {
       const msg = err instanceof Error ? err.message : String(err);
       if (!this.isStreamUnsupportedError(msg)) throw err;
 
+      // forceStreaming: streaming-only endpoint — re-throw instead of downgrading.
+      // See APIConfig.forceStreaming.
+      if (this.config.forceStreaming) throw err;
+
       console.warn('[ClaudeProvider] 流式不支持，降级为非流式');
       return this.generateNonStreaming(baseUrl, apiKey, model, systemPrompt, messages, temperature, maxTokens, options.signal);
     }

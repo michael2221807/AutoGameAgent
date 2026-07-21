@@ -137,6 +137,8 @@
   "api.form.strictMessageFormatHint": "部分模型/反代（如经 gproxy 的 Claude Opus）不接受对话中途的系统提示，且要求消息以 user 结尾，否则报 mid_conv_system / 需以 user 结尾 的错误。开启后：中途的系统提示会转为 user 消息，并把末尾的 assistant(prefill) 转为 user。遇到这类报错时开启。",
   "api.form.gproxyPromptCache": "gproxy 缓存",
   "api.form.gproxyPromptCacheHint": "仅当后端是 gproxy 且已开启 magic cache 时使用。开启后：主回合把「永不变的规则块」（文风/格式/CoT 等）提到 prompt 最前面并触发 gproxy prompt 缓存，命中后这部分按 1/10 计费、每回合省钱。会改变 prompt 内部顺序，可能轻微影响生成风格；关闭则完全保持原样。",
+  "api.form.forceStreaming": "强制流式",
+  "api.form.forceStreamingHint": "当供应商只提供流式接口（非流式请求会报错或卡住）时开启。开启后：路由到此 API 的所有请求——包括后台/非正文请求（记忆总结、世界生成、视觉标注、JSON 修复等）——都走流式传输，界面不显示这些片段，但仍照常拿到完整结果。开启后若流式失败也不会退回非流式（因为该接口本就不支持）。关闭（默认）保持原样：是否流式按每次调用决定。",
   "api.form.validationNameRequired": "请输入 API 名称",
   "api.form.validationUrlRequired": "请输入 API URL",
 

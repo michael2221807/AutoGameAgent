@@ -308,6 +308,8 @@ interface APIFormData {
   strictMessageFormat: boolean;
   /** gproxy 缓存 — 主回合把静态规则块提到最前 + 埋魔法串触发 prompt 缓存 */
   gproxyPromptCache: boolean;
+  /** 强制流式 — 所有请求（含后台/非正文）走流式传输，适配只支持流式的供应商 */
+  forceStreaming: boolean;
 }
 
 /**
@@ -384,6 +386,7 @@ const form = ref<APIFormData>({
   disablePrefill: false,
   strictMessageFormat: false,
   gproxyPromptCache: false,
+  forceStreaming: false,
 });
 
 function openAddModal(): void {
@@ -407,6 +410,7 @@ function openAddModal(): void {
     disablePrefill: false,
     strictMessageFormat: false,
     gproxyPromptCache: false,
+    forceStreaming: false,
   };
   imageBackend.value = 'civitai';
   showEditModal.value = true;
@@ -433,6 +437,7 @@ function openEditModal(api: APIConfig): void {
     disablePrefill: api.disablePrefill ?? false,
     strictMessageFormat: api.strictMessageFormat ?? false,
     gproxyPromptCache: api.gproxyPromptCache ?? false,
+    forceStreaming: api.forceStreaming ?? false,
   };
   if ((api.apiCategory ?? 'llm') === 'image') {
     imageBackend.value = inferImageBackend(api.url);
@@ -1159,6 +1164,14 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
           <AgaToggle v-model="form.gproxyPromptCache" :label="$t('api.form.gproxyPromptCache')" show-label />
           <span class="form-hint">
             {{ $t('api.form.gproxyPromptCacheHint') }}
+          </span>
+        </div>
+
+        <!-- Force streaming toggle (LLM only) — every request uses SSE transport; for streaming-only providers -->
+        <div v-if="form.apiCategory === 'llm'" class="form-group">
+          <AgaToggle v-model="form.forceStreaming" :label="$t('api.form.forceStreaming')" show-label />
+          <span class="form-hint">
+            {{ $t('api.form.forceStreamingHint') }}
           </span>
         </div>
 
