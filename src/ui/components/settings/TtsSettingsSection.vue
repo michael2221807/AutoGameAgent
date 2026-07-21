@@ -29,6 +29,9 @@ const SEG_CHARS_UI_MIN = 40;
 const SEG_CHARS_UI_MAX = 400;
 const SEG_SENT_UI_MIN = 1;
 const SEG_SENT_UI_MAX = 12;
+// 预热缓冲滑杆的实用区间(normalize 另有 [0,30] 硬夹持兜底）
+const PREWARM_UI_MIN = 0;
+const PREWARM_UI_MAX = 10;
 
 const settings = ref<TtsSettings>(loadTtsSettings());
 
@@ -69,9 +72,10 @@ function commit(): void {
 
 function setEnabled(v: boolean): void { settings.value.enabled = v; commit(); }
 function setAutoNarrate(v: boolean): void { settings.value.autoNarrateOnRound = v; commit(); }
-function setMode(mode: 'stream' | 'full'): void { settings.value.transmissionMode = mode; commit(); }
+function setMode(mode: 'stream' | 'pseudo' | 'full'): void { settings.value.transmissionMode = mode; commit(); }
 function setSegmentTargetChars(v: number): void { settings.value.segmentTargetChars = v; commit(); }
 function setSegmentMaxSentences(v: number): void { settings.value.segmentMaxSentences = v; commit(); }
+function setPrewarmSeconds(v: number): void { settings.value.prewarmSeconds = v; commit(); }
 function setRate(v: number): void { settings.value.rate = v; commit(); }
 function setVolume(v: number): void { settings.value.volume = v; commit(); }
 function setDefaultSpeaker(v: string): void { settings.value.defaultSpeaker = v; rebuildSpeakerOptions(); commit(); }
@@ -167,6 +171,13 @@ function favoriteLabel(f: TtsVoiceFavorite): string {
           <button
             type="button"
             class="tts-segment__btn"
+            :class="{ 'tts-segment__btn--active': settings.transmissionMode === 'pseudo' }"
+            :aria-pressed="settings.transmissionMode === 'pseudo'"
+            @click="setMode('pseudo')"
+          >{{ $t('settings.audio.mode.pseudo') }}</button>
+          <button
+            type="button"
+            class="tts-segment__btn"
             :class="{ 'tts-segment__btn--active': settings.transmissionMode === 'full' }"
             :aria-pressed="settings.transmissionMode === 'full'"
             @click="setMode('full')"
@@ -174,8 +185,8 @@ function favoriteLabel(f: TtsVoiceFavorite): string {
         </div>
       </div>
 
-      <!-- 分段长度（仅分句流式生效）：每段目标字数 + 每段最多句数 -->
-      <template v-if="settings.transmissionMode === 'stream'">
+      <!-- 分段长度（分句流式 + 假流式都按段处理，故两种模式都显示）：目标字数 + 最多句数 -->
+      <template v-if="settings.transmissionMode !== 'full'">
         <div class="setting-row setting-row--indent">
           <div class="setting-info">
             <span class="setting-label">{{ $t('settings.audio.segChars.label') }} ({{ settings.segmentTargetChars }} {{ $t('settings.audio.segChars.unit') }})</span>
@@ -201,6 +212,20 @@ function favoriteLabel(f: TtsVoiceFavorite): string {
           />
         </div>
       </template>
+
+      <!-- 预热缓冲（仅假流式生效）：攒够 N 秒语音再开播 -->
+      <div v-if="settings.transmissionMode === 'pseudo'" class="setting-row setting-row--indent">
+        <div class="setting-info">
+          <span class="setting-label">{{ $t('settings.audio.prewarm.label') }} ({{ settings.prewarmSeconds }} {{ $t('settings.audio.prewarm.unit') }})</span>
+          <span class="setting-desc">{{ $t('settings.audio.prewarm.desc') }}</span>
+        </div>
+        <input
+          type="range" class="form-range" :min="PREWARM_UI_MIN" :max="PREWARM_UI_MAX" step="0.5"
+          :value="settings.prewarmSeconds"
+          :aria-label="$t('settings.audio.prewarm.label')"
+          @input="setPrewarmSeconds(Number(($event.target as HTMLInputElement).value))"
+        />
+      </div>
 
       <!-- 语速 -->
       <div class="setting-row">

@@ -81,11 +81,19 @@ export interface TtsSettings {
   /** 自动配音 — AI 出文后自动朗读正文(post-round fire-and-forget) */
   autoNarrateOnRound: boolean;
   /**
-   * 'stream' = 分句流式(客户端切句 + 每句 streaming=1,服务端 chunked ogg,
-   *            `<audio crossOrigin>` 边下边播,句间预取近无缝,首句快出声,默认);
+   * 'stream' = 真·分句流式(客户端切句拼段 + 每段 streaming=1,服务端 chunked ogg,
+   *            `<audio crossOrigin>` 边下边播,段间预取近无缝,首段快出声,默认);
+   * 'pseudo' = 假流式(客户端切句拼段,但**不用 streaming=1**,每段普通非流式
+   *            synthesize 整段 blob;自建缓冲:预热攒够 prewarmSeconds 秒再开播,
+   *            边播当前段边合成下一段。对不支持/CORS 不便 streaming 的部署更稳);
    * 'full'   = 整段非流式(整段一次合成完整 WAV 后播放,最稳)
    */
-  transmissionMode: 'stream' | 'full';
+  transmissionMode: 'stream' | 'pseudo' | 'full';
+  /**
+   * 假流式(pseudo)的「预热缓冲秒数」— 开播前先合成若干段直到累计音频时长 >= 此值
+   * (或全部合成完)再开始播放。提前量吸收合成抖动,让后续播放不断流。仅 pseudo 生效。
+   */
+  prewarmSeconds: number;
   /**
    * 分句流式的「每段目标字数」(主控) — splitSentences 细分后按此拼段,平衡断点、
    * 允许略超。越大段落越长越连贯、卡顿越少;越小越碎但停止/跳过更细。仅 stream 模式生效。
@@ -114,6 +122,7 @@ export const DEFAULT_TTS_SETTINGS: TtsSettings = {
   transmissionMode: 'stream',
   segmentTargetChars: 120,
   segmentMaxSentences: 6,
+  prewarmSeconds: 3,
   defaultSpeaker: '',
   defaultInstruct: '',
   rate: 1,
@@ -124,6 +133,10 @@ export const DEFAULT_TTS_SETTINGS: TtsSettings = {
 export const TTS_RATE_MIN = 0.5;
 export const TTS_RATE_MAX = 2;
 
+/** 预热缓冲秒数的硬边界(normalize 夹持;UI 滑杆用更小的实用区间) */
+export const PREWARM_SECONDS_MIN = 0;
+export const PREWARM_SECONDS_MAX = 30;
+
 // ─── 播放态事件(eventBus 'tts:state') ───
 
 export type TtsStatus = 'idle' | 'synthesizing' | 'playing' | 'paused';
@@ -132,5 +145,16 @@ export type TtsStatus = 'idle' | 'synthesizing' | 'playing' | 'paused';
 export interface TtsStateEvent {
   status: TtsStatus;
   /** 当前朗读的回合标识(UI 用于定位是哪个回合在播),idle 时为 null */
+  roundKey: string | null;
+}
+
+/**
+ * 'tts:cache' 事件负载 — 供 UI(配音快切 popover 下载按钮)反应式显隐。
+ * 仅假流式/整段模式会缓存字节;真流式不缓存 → available 恒 false。
+ */
+export interface TtsCacheEvent {
+  /** 最新一回合全配音是否已缓存、可下载 */
+  available: boolean;
+  /** 已缓存的回合标识,无缓存时 null */
   roundKey: string | null;
 }

@@ -790,6 +790,9 @@ export class GameOrchestrator {
     // audio queue, swallows errors → toast). Skip during enhanced opening.
     if (this.subPipelines.ttsService && !ctx.meta?.isEnhancedOpening) {
       try {
+        // 下回合生成完毕 → 删除上一回合的全配音缓存(内存卫生 + 用户要求)。
+        // 若随后自动配音,speak() 会重新捕获本回合;否则缓存归零、下载入口隐藏。
+        this.subPipelines.ttsService.clearRoundAudio();
         const ttsSettings = this.subPipelines.ttsService.getSettings();
         if (ttsSettings.enabled && ttsSettings.autoNarrateOnRound && ctx.parsedResponse?.text) {
           const roundNo = stateManager.get<number>(this.subPipelines.paths?.roundNumber ?? '元数据.回合序号') ?? 0;

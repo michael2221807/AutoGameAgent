@@ -7,7 +7,10 @@
  *
  * 引擎侧只读写此 key;UI 侧(设置区)save 后调 ttsService.setSettings()。
  */
-import { DEFAULT_TTS_SETTINGS, TTS_RATE_MIN, TTS_RATE_MAX } from './types';
+import {
+  DEFAULT_TTS_SETTINGS, TTS_RATE_MIN, TTS_RATE_MAX,
+  PREWARM_SECONDS_MIN, PREWARM_SECONDS_MAX,
+} from './types';
 import type { TtsSettings, TtsVoiceFavorite } from './types';
 import {
   SEGMENT_TARGET_CHARS_MIN, SEGMENT_TARGET_CHARS_MAX,
@@ -31,6 +34,11 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   return Math.min(max, Math.max(min, n));
 }
 
+function clampNum(v: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 function sanitizeFavorites(v: unknown): TtsVoiceFavorite[] {
   if (!Array.isArray(v)) return [];
   return v
@@ -51,8 +59,11 @@ export function normalizeTtsSettings(raw: unknown): TtsSettings {
     enabled: typeof o.enabled === 'boolean' ? o.enabled : DEFAULT_TTS_SETTINGS.enabled,
     autoNarrateOnRound: typeof o.autoNarrateOnRound === 'boolean'
       ? o.autoNarrateOnRound : DEFAULT_TTS_SETTINGS.autoNarrateOnRound,
-    // 'full' 保留;其它(含旧值 'segment')迁移到真流式 'stream'
-    transmissionMode: o.transmissionMode === 'full' ? 'full' : 'stream',
+    // 'full'/'pseudo' 保留;其它(含旧值 'segment')迁移到真流式 'stream'
+    transmissionMode: o.transmissionMode === 'full' ? 'full'
+      : o.transmissionMode === 'pseudo' ? 'pseudo' : 'stream',
+    prewarmSeconds: clampNum(
+      o.prewarmSeconds, PREWARM_SECONDS_MIN, PREWARM_SECONDS_MAX, DEFAULT_TTS_SETTINGS.prewarmSeconds),
     // 旧存档无这两键 → clampInt 回落默认(120/6),前向兼容。
     segmentTargetChars: clampInt(
       o.segmentTargetChars, SEGMENT_TARGET_CHARS_MIN, SEGMENT_TARGET_CHARS_MAX, DEFAULT_TTS_SETTINGS.segmentTargetChars),

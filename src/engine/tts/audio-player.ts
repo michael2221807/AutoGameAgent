@@ -29,6 +29,12 @@ export interface TtsAudioPlayer {
    * instantly (best-effort; a no-op impl is a valid degradation, e.g. in tests).
    */
   preload?(url: string): void;
+  /**
+   * Measure a fully-downloaded audio blob's duration in seconds (for the pseudo-
+   * stream prewarm buffer — "hold N seconds before playing"). Returns 0 if the
+   * duration can't be determined. Optional; a service degrades gracefully without it.
+   */
+  measureDurationSec?(blob: Blob): Promise<number>;
   /** Stop any current playback immediately (and drop any preloaded segment). */
   stop(): void;
   /** Pause current playback (resumable). */
@@ -174,6 +180,27 @@ export class HtmlAudioPlayer implements TtsAudioPlayer {
       URL.revokeObjectURL(this.currentObjectUrl);
       this.currentObjectUrl = null;
     }
+  }
+
+  /**
+   * Read a blob's duration via a throwaway <audio> element's metadata. Used by the
+   * pseudo-stream prewarm buffer to sum "seconds of audio ready" before playback.
+   */
+  measureDurationSec(blob: Blob): Promise<number> {
+    return new Promise<number>((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const probe = new Audio();
+      const done = (sec: number): void => {
+        probe.onloadedmetadata = null;
+        probe.onerror = null;
+        URL.revokeObjectURL(url);
+        resolve(Number.isFinite(sec) && sec > 0 ? sec : 0);
+      };
+      probe.preload = 'metadata';
+      probe.onloadedmetadata = () => done(probe.duration);
+      probe.onerror = () => done(0);
+      probe.src = url;
+    });
   }
 
   pause(): void { this.audio?.pause(); }

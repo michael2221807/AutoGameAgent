@@ -35,6 +35,10 @@ export type EngineEventName =
   // Lets the play button, status-bar chip, and segment highlight stay in sync
   // without the UI holding a direct ref to the audio element.
   | 'tts:state'
+  // TTS round-audio cache availability (TtsService → UI). Payload: TtsCacheEvent.
+  // Tells the quick-switch download button whether the latest round's full
+  // narration audio is cached and downloadable.
+  | 'tts:cache'
   | string; // allow custom events
 
 /** Payload for 'ui:toast' events */

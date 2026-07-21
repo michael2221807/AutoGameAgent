@@ -52,6 +52,8 @@ function makeFakePlayer(): FakePlayer {
       played.push({ kind: 'url', value: url });
     },
     preload(url) { preloaded.push(url); },
+    // Fake duration: 0.1s per character of the segment text (deterministic prewarm math).
+    async measureDurationSec(blob) { return (await blob.text()).length / 10; },
     stop() {},
     pause() {},
     resume() {},
@@ -224,6 +226,136 @@ describe('TtsService full mode', () => {
     expect(provider.streamUrlCalls).toEqual([]);
     expect(player.played.length).toBe(1);
     expect(player.played[0].kind).toBe('blob');
+  });
+});
+
+describe('TtsService pseudo mode (假流式)', () => {
+  it('segments client-side, synthesizes each whole (no streaming URL), plays blobs', async () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    // prewarm 0 + one segment per sentence → 2 segments, each synthesized whole.
+    const svc = makeService(provider, { transmissionMode: 'pseudo', prewarmSeconds: 0, segmentMaxSentences: 1 }, { player });
+    await svc.speak('第一句话内容。第二句话内容。', 'r1');
+    expect(provider.streamUrlCalls).toEqual([]);           // never uses streaming=1
+    expect(provider.synthCalls.length).toBe(2);            // each segment synthesized whole
+    expect(player.played.length).toBe(2);
+    expect(player.played.every((p) => p.kind === 'blob')).toBe(true);
+    expect(svc.getState().status).toBe('idle');
+  });
+
+  it('prewarm buffers enough seconds BEFORE the first playback', async () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    // Each sentence is 11 chars → 1.1s fake audio. prewarm 2.5s → needs 3 segments
+    // synthesized before the first play. Force one segment per sentence.
+    const timeline: string[] = [];
+    const origSynth = provider.synthesize.bind(provider);
+    provider.synthesize = async (txt, o) => { timeline.push('syn'); return origSynth(txt, o); };
+    const origPlay = player.play.bind(player);
+    player.play = async (b, o) => { timeline.push('play'); return origPlay(b, o); };
+
+    const svc = makeService(provider, { transmissionMode: 'pseudo', prewarmSeconds: 2.5, segmentMaxSentences: 1 }, { player });
+    await svc.speak('一二三四五六七八九十。一二三四五六七八九十。一二三四五六七八九十。一二三四五六七八九十。', 'r1');
+    // First 'play' must be preceded by ≥3 'syn' (3 × 1.1s = 3.3s ≥ 2.5s prewarm).
+    const firstPlay = timeline.indexOf('play');
+    const synBeforeFirstPlay = timeline.slice(0, firstPlay).filter((e) => e === 'syn').length;
+    expect(synBeforeFirstPlay).toBeGreaterThanOrEqual(3);
+  });
+
+  it('prewarm=0 plays as soon as the first segment is ready (synth ahead while playing)', async () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    const timeline: string[] = [];
+    const origSynth = provider.synthesize.bind(provider);
+    provider.synthesize = async (txt, o) => { timeline.push('syn'); return origSynth(txt, o); };
+    const origPlay = player.play.bind(player);
+    player.play = async (b, o) => { timeline.push('play'); return origPlay(b, o); };
+
+    const svc = makeService(provider, { transmissionMode: 'pseudo', prewarmSeconds: 0, segmentMaxSentences: 1 }, { player });
+    await svc.speak('第一段啊。第二段啊。第三段啊。', 'r1');
+    // prewarm=0 → playback starts without buffering everything. First play is
+    // preceded by at most the current segment + the one-ahead synth (< all 3).
+    const firstPlay = timeline.indexOf('play');
+    const synBeforeFirstPlay = timeline.slice(0, firstPlay).filter((e) => e === 'syn').length;
+    expect(synBeforeFirstPlay).toBeLessThan(3);
+    expect(player.played.length).toBe(3);
+  });
+
+  it('skips a segment whose synthesis fails; siblings still play', async () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    let n = 0;
+    provider.synthesize = async (txt: string) => {
+      n += 1;
+      if (n === 1) throw new Error('[CosyVoice] synthesize failed 500');
+      return new Blob([txt], { type: 'audio/wav' });
+    };
+    const svc = makeService(provider, { transmissionMode: 'pseudo', prewarmSeconds: 0, segmentMaxSentences: 1 }, { player });
+    await svc.speak('第一段啊。第二段啊。', 'r1');
+    // segment 1 failed → skipped; segment 2 played.
+    expect(player.played.length).toBe(1);
+    expect(player.played[0].kind).toBe('blob');
+    expect(svc.getState().status).toBe('idle');
+  });
+
+  it('emits ttsFailed toast when every segment fails to synthesize', async () => {
+    const provider = makeFakeProvider();
+    provider.synthesize = async () => { throw new Error('[CosyVoice] synthesize failed 500'); };
+    const svc = makeService(provider, { transmissionMode: 'pseudo', prewarmSeconds: 0, segmentMaxSentences: 1 });
+    await svc.speak('第一段啊。第二段啊。', 'r1');
+    expect(toasts.some((t) => (t as { i18nKey?: string }).i18nKey === 'engine.toast.ttsFailed')).toBe(true);
+  });
+});
+
+describe('TtsService round-audio cache (下载)', () => {
+  it('pseudo mode captures blobs → hasRoundAudio + downloadable', async () => {
+    const provider = makeFakeProvider();
+    const svc = makeService(provider, { transmissionMode: 'pseudo', prewarmSeconds: 0, segmentMaxSentences: 1 });
+    await svc.speak('第一段啊。第二段啊。', 'round-7');
+    expect(svc.hasRoundAudio()).toBe(true);
+    expect(svc.getCacheState()).toEqual({ available: true, roundKey: 'round-7' });
+    const dl = await svc.buildRoundAudioDownload();
+    expect(dl).not.toBeNull();
+    expect(dl?.filename).toContain('round-7');
+  });
+
+  it('full mode caches the single whole-round blob', async () => {
+    const provider = makeFakeProvider();
+    const svc = makeService(provider, { transmissionMode: 'full' });
+    await svc.speak('整段正文内容。', 'round-9');
+    expect(svc.hasRoundAudio()).toBe(true);
+    expect(svc.getCacheState().roundKey).toBe('round-9');
+  });
+
+  it('stream mode does NOT cache (no retained bytes) → no download', async () => {
+    const provider = makeFakeProvider();
+    const svc = makeService(provider, { transmissionMode: 'stream' });
+    await svc.speak('第一段啊。第二段啊。', 'round-3');
+    expect(svc.hasRoundAudio()).toBe(false);
+    expect(svc.getCacheState().available).toBe(false);
+    expect(await svc.buildRoundAudioDownload()).toBeNull();
+  });
+
+  it('clearRoundAudio() drops the cache and broadcasts tts:cache', async () => {
+    const provider = makeFakeProvider();
+    const svc = makeService(provider, { transmissionMode: 'full' });
+    await svc.speak('整段正文内容。', 'round-9');
+    expect(svc.hasRoundAudio()).toBe(true);
+    const cacheEvents: unknown[] = [];
+    const off = eventBus.on('tts:cache', (p) => { cacheEvents.push(p); });
+    svc.clearRoundAudio();
+    off();
+    expect(svc.hasRoundAudio()).toBe(false);
+    expect(cacheEvents.some((e) => (e as { available?: boolean }).available === false)).toBe(true);
+  });
+
+  it('a new round speak evicts the previous round cache', async () => {
+    const provider = makeFakeProvider();
+    const svc = makeService(provider, { transmissionMode: 'full' });
+    await svc.speak('第一回合正文。', 'round-1');
+    expect(svc.getCacheState().roundKey).toBe('round-1');
+    await svc.speak('第二回合正文。', 'round-2');
+    expect(svc.getCacheState().roundKey).toBe('round-2');
   });
 });
 

@@ -11,8 +11,11 @@
  *         (CosyVoice streaming=1)→ 服务端 chunked ogg,`<audio crossOrigin>` 原生
  *         边下边播;当前段播放时 preload 下一段 → 首段快出声、段间近无缝。每段独立
  *         回落:某段流式失败 → 该段改整段 synthesize,不牵连后续段(可靠可控)。
+ *       · pseudo(假流式): 同样分段,但每段普通非流式 synthesize 整段 blob;自建缓冲
+ *         (预热攒够 prewarmSeconds 秒再开播,边播边生成下一段)。不用 streaming=1,
+ *         对不支持/CORS 不便传输级流式的部署更稳。
  *       · full:        provider.synthesize() 整段 WAV → 一次播放,最稳。
- *     stream 若不受支持(getStreamUrl 首句返回 null)整体回落 full。
+ *     stream 若不受支持(getStreamUrl 首段返回 null)整体回落 full。
  *   - 播放态经 eventBus 'tts:state' 广播给 UI(播放键/状态栏 chip)。
  *   - 失败逐级回落,永远有声音或明确 toast;不抛给调用方(fire-and-forget 安全)。
  *
@@ -22,11 +25,12 @@
 import { eventBus } from '../core/event-bus';
 import type { AIService } from '../ai/ai-service';
 import type { TtsProviderRegistry } from './provider-registry';
-import type { TtsProvider, TtsSettings, TtsStatus, TtsStateEvent, TtsBackendType, TtsSpeaker } from './types';
+import type { TtsProvider, TtsSettings, TtsStatus, TtsStateEvent, TtsCacheEvent, TtsBackendType, TtsSpeaker } from './types';
 import { DEFAULT_TTS_SETTINGS } from './types';
 import { loadTtsSettings } from './tts-settings';
 import { stripMarkersForSpeech, splitSentences, groupSentencesBySize } from './sentence-splitter';
 import { HtmlAudioPlayer, type TtsAudioPlayer } from './audio-player';
+import { concatWavBlobs } from './audio-concat';
 
 const DEFAULT_BACKEND: TtsBackendType = 'cosyvoice';
 
@@ -38,6 +42,10 @@ export class TtsService {
   private status: TtsStatus = 'idle';
   private currentRoundKey: string | null = null;
   private playAbort: AbortController | null = null;
+
+  // 当前(最新)回合的全配音缓存 — 供下载。仅假流式/整段模式填充(手里有字节);
+  // 真流式不缓存。只留最新一回合;新回合 speak 开始或编排器 clearRoundAudio 时清。
+  private roundAudio: { roundKey: string; blobs: Blob[]; mime: string } | null = null;
 
   constructor(
     private aiService: Pick<AIService, 'getTtsConfigForBackend'>,
@@ -118,6 +126,57 @@ export class TtsService {
     };
   }
 
+  // ─── 回合全配音缓存(下载) ───
+
+  /** 最新回合全配音是否已缓存、可下载(仅假流式/整段模式会缓存)。 */
+  hasRoundAudio(): boolean {
+    return !!this.roundAudio && this.roundAudio.blobs.length > 0;
+  }
+
+  getCacheState(): TtsCacheEvent {
+    return { available: this.hasRoundAudio(), roundKey: this.roundAudio?.roundKey ?? null };
+  }
+
+  private emitCache(): void {
+    eventBus.emit('tts:cache', this.getCacheState());
+  }
+
+  /** 播放中把每段音频 blob 收进当前回合缓存(仅当前 speak 仍持有 abort 时)。 */
+  private captureBlob(blob: Blob, abort: AbortController): void {
+    if (this.playAbort !== abort) return; // 已被新 speak 取代 → 不写旧缓存
+    const roundKey = this.currentRoundKey ?? '';
+    if (!this.roundAudio || this.roundAudio.roundKey !== roundKey) {
+      this.roundAudio = { roundKey, blobs: [], mime: blob.type || 'audio/wav' };
+    }
+    this.roundAudio.blobs.push(blob);
+    this.emitCache();
+  }
+
+  /** 清空回合全配音缓存(编排器"下回合生成完毕"时调用,或新回合 speak 开始)。 */
+  clearRoundAudio(): void {
+    if (this.roundAudio) {
+      this.roundAudio = null;
+      this.emitCache();
+    }
+  }
+
+  /**
+   * 构造当前回合全配音的可下载文件(多段 WAV 合并为一)。无缓存返回 null。
+   * 合并失败(非 WAV/解析异常)回落只给第一段,保证仍可下载。
+   */
+  async buildRoundAudioDownload(): Promise<{ blob: Blob; filename: string } | null> {
+    const ra = this.roundAudio;
+    if (!ra || ra.blobs.length === 0) return null;
+    let blob: Blob;
+    try {
+      blob = await concatWavBlobs(ra.blobs);
+    } catch {
+      blob = ra.blobs[0];
+    }
+    const safe = ra.roundKey.replace(/[^\w.-]+/g, '_') || 'round';
+    return { blob, filename: `配音-${safe}.wav` };
+  }
+
   // ─── 控制 ───
 
   /** 打断当前朗读并复位到 idle。 */
@@ -164,8 +223,9 @@ export class TtsService {
     const text = stripMarkersForSpeech(rawText);
     if (!text) return;
 
-    // 新一次朗读打断上一次
+    // 新一次朗读打断上一次;并清掉上一回合的全配音缓存(将由本次重新捕获)。
     this.stop();
+    this.clearRoundAudio();
     const abort = new AbortController();
     this.playAbort = abort;
     this.currentRoundKey = roundKey;
@@ -174,8 +234,11 @@ export class TtsService {
     const instruct = this.settings.defaultInstruct || undefined;
 
     try {
-      if (this.settings.transmissionMode === 'full') {
+      const mode = this.settings.transmissionMode;
+      if (mode === 'full') {
         await this.playFull(provider, text, speaker, instruct, abort);
+      } else if (mode === 'pseudo') {
+        await this.playPseudoStream(provider, text, speaker, instruct, abort);
       } else {
         await this.playSentenceStream(provider, text, speaker, instruct, abort);
       }
@@ -274,8 +337,97 @@ export class TtsService {
     this.emitState('synthesizing');
     const blob = await provider.synthesize(text, { speaker, instruct, signal: abort.signal });
     if (abort.signal.aborted) return;
+    this.captureBlob(blob, abort); // 缓存整段全配音,供下载
     this.emitState('playing');
     await this.player.play(blob, { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal });
+  }
+
+  /**
+   * 假流式:客户端分段,但**不用 streaming=1**,每段普通非流式 synthesize 整段 blob;
+   * 自建缓冲——预热攒够 prewarmSeconds 秒(或全部合成完)再开播,之后边播当前段边
+   * 合成下一段(生产者-消费者)。每段独立跳过(某段合成失败不牵连后续)。
+   * 对不支持/CORS 不便传输级流式的部署更稳,靠"提前量"吸收合成抖动。
+   */
+  private async playPseudoStream(
+    provider: TtsProvider,
+    text: string,
+    speaker: string,
+    instruct: string | undefined,
+    abort: AbortController,
+  ): Promise<void> {
+    const segments = groupSentencesBySize(
+      splitSentences(text),
+      this.settings.segmentTargetChars,
+      this.settings.segmentMaxSentences,
+    );
+    if (segments.length === 0) return;
+
+    const prewarmSec = this.settings.prewarmSeconds;
+    const playOpts = { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal };
+
+    // 已合成、待播的整段 blob 缓冲(FIFO,按段序)。
+    const clips: Blob[] = [];
+    let produced = 0;    // 已"尝试合成"的段数(含失败被跳过的)
+    let bufferedSec = 0; // 缓冲里累计的音频时长(仅预热判定用)
+
+    // 生产:合成下一个尚未尝试的段并入缓冲。合成失败(非取消)→ 跳过该段,不入缓冲。
+    const produceOne = async (): Promise<void> => {
+      if (produced >= segments.length) return;
+      const seg = segments[produced++];
+      try {
+        const blob = await provider.synthesize(seg, { speaker, instruct, signal: abort.signal });
+        if (abort.signal.aborted) return;
+        clips.push(blob);
+        this.captureBlob(blob, abort); // 逐段收进当前回合缓存,供下载
+        bufferedSec += await this.measureDuration(blob);
+      } catch (err) {
+        if (isAbort(err)) throw err; // 真取消 → 上抛
+        // 非取消失败 → 跳过该段,继续后续段(可靠可控)。
+      }
+    };
+
+    // 预热:攒够 prewarmSec 秒(或全部合成完)再开播。
+    this.emitState('synthesizing');
+    while (produced < segments.length && bufferedSec < prewarmSec && !abort.signal.aborted) {
+      await produceOne();
+    }
+    if (abort.signal.aborted) return;
+
+    // 消费:顺序播放缓冲;同时提前合成下一段(边播边生成)。
+    this.emitState('playing');
+    let playIdx = 0;
+    while (!abort.signal.aborted) {
+      // 确保 clips[playIdx] 就绪(前面若有段被跳过,继续生产直到有货或耗尽)。
+      while (clips.length <= playIdx && produced < segments.length && !abort.signal.aborted) {
+        await produceOne();
+      }
+      if (clips.length <= playIdx) break; // 全部耗尽
+      const blob = clips[playIdx];
+      // 边播边生成下一段(并发:合成在播放的 await 期间进行)。
+      const ahead = produced < segments.length ? produceOne().catch(() => { /* abort 由循环顶判定 */ }) : null;
+      await this.player.play(blob, playOpts);
+      if (ahead) await ahead;
+      playIdx++;
+    }
+
+    // 一段都没播出(全部段合成失败)→ 明确 toast,不静默。
+    if (!abort.signal.aborted && playIdx === 0) {
+      eventBus.emit('ui:toast', {
+        type: 'error',
+        i18nKey: 'engine.toast.ttsFailed',
+        message: '配音生成失败',
+        id: 'tts-failed',
+      });
+    }
+  }
+
+  /** 量一个 blob 的音频秒数(预热缓冲用);player 无此能力或失败时回落 0。 */
+  private async measureDuration(blob: Blob): Promise<number> {
+    try {
+      return (await this.player.measureDurationSec?.(blob)) ?? 0;
+    } catch {
+      return 0;
+    }
   }
 }
 

@@ -75,6 +75,9 @@
   "mainGame.voice.rate": "语速",
   "mainGame.voice.preview": "试听",
   "mainGame.voice.previewText": "你好，这是配音试听。",
+  "mainGame.voice.download": "下载本回合配音",
+  "mainGame.voice.downloading": "打包中…",
+  "mainGame.voice.downloadErr": "配音下载失败",
 
   "mainGame.thinkingViewer.title": "AI 思考 · 第 {n} 回合",
   "mainGame.thinkingViewer.titleGeneric": "AI 思考",

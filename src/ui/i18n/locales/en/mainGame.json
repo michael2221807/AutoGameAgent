@@ -75,6 +75,9 @@
   "mainGame.voice.rate": "Speed",
   "mainGame.voice.preview": "Preview",
   "mainGame.voice.previewText": "Hello, this is a voice preview.",
+  "mainGame.voice.download": "Download this round's audio",
+  "mainGame.voice.downloading": "Packaging…",
+  "mainGame.voice.downloadErr": "Audio download failed",
 
   "mainGame.thinkingViewer.title": "AI Thinking · Round {n}",
   "mainGame.thinkingViewer.titleGeneric": "AI Thinking",
