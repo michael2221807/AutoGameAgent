@@ -10,7 +10,7 @@
  * Evaluation logs are in-memory only (non-persisted).
  */
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, onScopeDispose } from 'vue';
 import type {
   PlotArc,
   PlotNode,
@@ -19,6 +19,7 @@ import type {
   PlotDirectionState,
 } from './types';
 import { generatePlotId, DEFAULT_GAUGE_MAX_DELTA } from './types';
+import { eventBus } from '../core/event-bus';
 
 const EVAL_LOG_MAX = 30;
 
@@ -50,6 +51,7 @@ export const usePlotStore = defineStore('plot-direction', () => {
     if (!state) {
       arcs.value = [];
       activeArcIndex.value = null;
+      pendingConfirmation.value = null;
       return;
     }
     arcs.value = state.arcs ?? [];
@@ -393,11 +395,38 @@ export const usePlotStore = defineStore('plot-direction', () => {
     if (!v) flushPendingOps();
   }
 
+  // ─── Save-load boundary cleanup ───
+
+  /**
+   * The evaluation log is in-memory (this Pinia singleton outlives save
+   * switches) and is deliberately NOT cleared by loadFromState — that runs on
+   * every persist() round-trip and must not wipe logs mid-game. Without a
+   * dedicated boundary hook, logs from save A stayed visible after loading
+   * save B whose state tree has no `_evalLog` (PlotPanel's sync watcher skips
+   * undefined). StateManager.loadTree emits `engine:state-changed {type:'load'}`
+   * on every real save load (load game / import / new game), which is exactly
+   * the boundary where cross-save state must die. Queued mutex ops are dropped,
+   * not flushed — they reference the previous save's arcs.
+   */
+  const unsubscribeLoadListener = eventBus.on<{ type?: string }>('engine:state-changed', (payload) => {
+    if (payload?.type !== 'load') return;
+    evaluationLog.value = [];
+    // Also cleared defensively here: loadFromState fully reassigns it too, but
+    // that only runs while PlotPanel is mounted (its watcher owns the call).
+    pendingConfirmation.value = null;
+    _evaluating = false;
+    _pendingOps = [];
+  });
+  // Pinia runs this setup inside the store's effectScope — tie the listener's
+  // lifetime to it so $dispose() (fresh-pinia-per-test setups) unsubscribes.
+  onScopeDispose(unsubscribeLoadListener);
+
   // ─── Reset ───
 
   function $reset(): void {
     arcs.value = [];
     activeArcIndex.value = null;
+    pendingConfirmation.value = null;
     evaluationLog.value = [];
     _evaluating = false;
     _pendingOps = [];
