@@ -186,10 +186,15 @@ describe('collectLocalStorageSettings', () => {
     localStorage.setItem('aga_github_sync_token', 'ghp_secret');   // token DOES travel (own repo)
     localStorage.setItem('aga_github_sync_baseline', '2026-07-12T00:00:00.000Z');
     localStorage.setItem('aga_github_sync_pending', '1');
+    // 存档插槽 epic（2026-07-23）：per-slot map 版键同样绝不入备份
+    localStorage.setItem('aga_github_sync_baselines', '{"p1":"2026-07-23T00:00:00Z"}');
+    localStorage.setItem('aga_github_sync_pending_map', '{"p1":true}');
 
     const collected = collectLocalStorageSettings();
     expect(collected).not.toHaveProperty('aga_github_sync_baseline');
     expect(collected).not.toHaveProperty('aga_github_sync_pending');
+    expect(collected).not.toHaveProperty('aga_github_sync_baselines');
+    expect(collected).not.toHaveProperty('aga_github_sync_pending_map');
     expect(collected).toHaveProperty('aga_user_settings');
     expect(collected).toHaveProperty('aga_github_sync_token');
   });
@@ -262,12 +267,16 @@ describe('wipeLocalStorageSettings', () => {
     localStorage.setItem('aga_api_management', 'X');
     localStorage.setItem('aga_github_sync_baseline', '2026-07-12T00:00:00.000Z');
     localStorage.setItem('aga_github_sync_pending', '1');
+    localStorage.setItem('aga_github_sync_baselines', '{"p1":"t"}');
+    localStorage.setItem('aga_github_sync_pending_map', '{"p1":true}');
 
     wipeLocalStorageSettings();
 
     expect(localStorage.getItem('aga_api_management')).toBeNull();
     expect(localStorage.getItem('aga_github_sync_baseline')).toBe('2026-07-12T00:00:00.000Z');
     expect(localStorage.getItem('aga_github_sync_pending')).toBe('1');
+    expect(localStorage.getItem('aga_github_sync_baselines')).toBe('{"p1":"t"}');
+    expect(localStorage.getItem('aga_github_sync_pending_map')).toBe('{"p1":true}');
   });
 });
 

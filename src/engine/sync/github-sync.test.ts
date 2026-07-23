@@ -152,6 +152,13 @@ describe('upload — v2 chunked pipeline', () => {
       { path: 'v2/state.gz', sha: 'existing_sha_123' },
       { path: 'v2/img-0.gz', sha: 'sha_img0_old' },
     ]);
+    // 2026-07-23 fix: the manifest PUT's sha precondition is now FETCHED FRESH via a
+    // single-file GET right before the PUT (directory listings can serve stale shas
+    // after a recent commit → spurious 409 on back-to-back uploads). Stub that GET.
+    fetchResponses.set(
+      'GET https://api.github.com/repos/testuser/aga-cloud-save/contents/v2/manifest.json',
+      { status: 200, body: { sha: 'sha_manifest_old' } },
+    );
 
     const backup = createMockBackup();
     const sync = new GitHubSyncService(backup as never);

@@ -35,7 +35,8 @@ import SettingsPanel from '@/ui/components/panels/SettingsPanel.vue';
 import CardImportFlow from '@/ui/components/panels/CardImportFlow.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
-import type { GitHubSyncService, SyncStatus } from '@/engine/sync/github-sync';
+import type { GitHubSyncService, SyncStatus, CloudFormat } from '@/engine/sync/github-sync';
+import CloudSlotsSection from '@/ui/components/cloud/CloudSlotsSection.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { useLocale } from '@/ui/composables/useLocale';
 import { useCloudAutoSyncToggle } from '@/ui/composables/useCloudAutoSyncToggle';
@@ -288,6 +289,10 @@ function ghCopyToken(): void {
 
 const ghEditingRepo = ref(false);
 const ghBusy = () => ['checking', 'uploading', 'downloading'].includes(ghStatus.value.stage);
+
+// 云端格式（CloudSlotsSection 探测上报）：v3/empty → 插槽列表接管下载动作
+const ghCloudFormat = ref<CloudFormat | 'unknown'>('unknown');
+const ghClassicVisible = computed(() => ghCloudFormat.value === 'v2' || ghCloudFormat.value === 'unknown');
 
 async function ghSwitchRepo(): Promise<void> {
   if (!githubSync || ghBusy()) return;
@@ -636,7 +641,10 @@ onMounted(async () => {
             <p class="sync-autosync-hint">{{ $t('save.autoSyncCloud.toggleHint') }}</p>
           </div>
 
-          <div class="sync-actions">
+          <!-- v3 存档插槽区（插槽列表 / v2 迁移入口），格式上报驱动经典下载按钮显隐 -->
+          <CloudSlotsSection @format="(f) => { ghCloudFormat = f; }" />
+
+          <div v-if="ghClassicVisible" class="sync-actions">
             <button class="sync-action sync-action--download" :disabled="ghBusy() || !ghCloudInfo?.exists" @click="ghDownloadToLocal">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14zM7.25 1.75a.75.75 0 0 1 1.5 0v6.69l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 10.78a.75.75 0 0 1-1.06 0L3.72 7.03a.75.75 0 0 1 1.06-1.06l2.47 2.47z"/></svg>
               {{ ghStatus.stage === 'downloading' ? $t('home.cloudSync.downloading') : $t('home.cloudSync.downloadToLocal') }}

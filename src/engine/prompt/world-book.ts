@@ -134,6 +134,12 @@ export interface BuiltinPromptExportData {
   version: number;
   exportedAt: string;
   entries: BuiltinPromptEntry[];
+  /**
+   * 覆盖所属的 pack（2026-07-23 补类型）：备份/云同步一直在写这个字段，
+   * 此前靠 `as ... & { packId: string }` 野转型携带，现收编进正式类型。
+   * Optional —— 旧导出文件可能没有。
+   */
+  packId?: string;
 }
 
 export interface PresetGroupExportData {

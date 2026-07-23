@@ -11,7 +11,7 @@
  * - 自动存档设置：时间点存档间隔
  * - 完整备份导出 / 恢复（BackupService）
  */
-import { ref, watch, onUnmounted, inject } from 'vue';
+import { ref, computed, watch, onUnmounted, inject } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useGameState } from '@/ui/composables/useGameState';
@@ -720,10 +720,16 @@ async function executeImport(): Promise<void> {
 
 // ─── GitHub Cloud Sync ───────────────────────────────────────
 
-import type { GitHubSyncService, SyncStatus, DegradedUploadDetail } from '@/engine/sync/github-sync';
+import type { GitHubSyncService, SyncStatus, DegradedUploadDetail, CloudFormat } from '@/engine/sync/github-sync';
 import { DegradedUploadError } from '@/engine/sync/github-sync';
+import CloudSlotsSection from '@/ui/components/cloud/CloudSlotsSection.vue';
 
 const githubSync = inject<GitHubSyncService>('githubSync');
+
+// 云端格式（由 CloudSlotsSection 探测上报）：v3/empty → 插槽列表接管，
+// 经典整包上传/下载行隐藏；v2/unknown → 维持现状 UI（+ v2 时插槽区渲染迁移入口）
+const ghCloudFormat = ref<CloudFormat | 'unknown'>('unknown');
+const ghClassicVisible = computed(() => ghCloudFormat.value === 'v2' || ghCloudFormat.value === 'unknown');
 const ghToken = ref(githubSync?.getToken() ?? '');
 const ghOwner = ref(githubSync?.getOwner() ?? '');
 const ghRepoName = ref(githubSync?.getRepoName() ?? 'aga-cloud-save');
@@ -968,7 +974,7 @@ const showSettings = ref(false);
 
         <!-- Connected: sync actions -->
         <template v-else>
-          <div class="gh-cloud-row">
+          <div v-if="ghClassicVisible" class="gh-cloud-row">
             <div class="gh-cloud-meta">
               <span v-if="ghCloudInfo?.exists" class="gh-cloud-info">
                 {{ $t('save.github.cloudInfo', { time: ghCloudInfo.updatedAt ? formatDateTime(ghCloudInfo.updatedAt) : $t('common.fallback.unknown'), size: ghCloudInfo.sizeKB ?? 0 }) }}
@@ -996,6 +1002,9 @@ const showSettings = ref(false);
               </Tooltip>
             </div>
           </div>
+
+          <!-- v3 存档插槽区（插槽列表 / v2 迁移入口 / 全部弹窗），格式上报驱动经典行显隐 -->
+          <CloudSlotsSection @format="(f) => { ghCloudFormat = f; }" />
 
           <!-- Auto cloud-sync toggle — engine runs app-wide in CloudSyncManager.vue -->
           <div class="gh-autosync-row">

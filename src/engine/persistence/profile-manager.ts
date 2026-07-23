@@ -60,6 +60,15 @@ export class ProfileManager {
     await this.persist();
   }
 
+  /**
+   * 清空活跃档案指针 — 供档案级导入在"来包档案零槽位"时消除悬空引用
+   * （backup-service.importProfileReplace 第 5 步）。
+   */
+  async clearActiveProfile(): Promise<void> {
+    this.getRoot().activeProfile = null;
+    await this.persist();
+  }
+
   /** 设置当前活跃角色及存档槽 — 校验 profile 必须存在 */
   async setActiveProfile(profileId: string, slotId: string): Promise<void> {
     const root = this.getRoot();

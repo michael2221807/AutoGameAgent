@@ -63,9 +63,15 @@ const ENGINE_VERSION = '0.1.0';
  *
  * @param source the bundle JSON as a string (legacy/test callers) or a Blob
  *   (preferred for large bundles — keeps the decoded string out of the caller).
+ * @param dir remote directory prefix for chunk paths (default 'v2' — the legacy
+ *   whole-bundle layout). The save-slot pipeline passes 'slots/<profileId>' or
+ *   'global' so each slot's chunks live in their own directory
+ *   (docs/design/github-save-slots-design.md §4). Pure path prefix — the pack
+ *   algorithm, checksums, and roundtrip identity are unaffected.
  */
 export async function* packChunks(
   source: string | Blob,
+  dir = 'v2',
 ): AsyncGenerator<{ path: string; blob: Blob }, ChunkManifest, void> {
   let json: string;
   if (typeof source === 'string') {
@@ -115,7 +121,7 @@ export async function* packChunks(
   // the whole 50MB+ at once (that monolithic alloc is what threw "Failed to
   // fetch"). chunkError attributes a failure to the exact piece + its size.
   if (stateJson.length <= STATE_SLICE_CHARS) {
-    const e = await compressChunk('state', 'v2/state.gz', stateJson).catch(
+    const e = await compressChunk('state', `${dir}/state.gz`, stateJson).catch(
       (err: unknown) => { throw chunkError('state', stateJson.length, imageAssets.length, err); },
     );
     entries.push(e.entry);
@@ -131,7 +137,7 @@ export async function* packChunks(
         if (c >= 0xDC00 && c <= 0xDFFF) end++;
       }
       const piece = stateJson.slice(pos, end);
-      const e = await compressChunk(`state-${si}`, `v2/state-${si}.gz`, piece).catch(
+      const e = await compressChunk(`state-${si}`, `${dir}/state-${si}.gz`, piece).catch(
         (err: unknown) => { throw chunkError(`state-${si}`, piece.length, imageAssets.length, err); },
       );
       entries.push(e.entry);
@@ -154,7 +160,7 @@ export async function* packChunks(
       const batchJson = JSON.stringify(currentBatch);
       const count = currentBatch.length;
       const imgEntry = await compressChunk(
-        `img-${chunkIndex}`, `v2/img-${chunkIndex}.gz`, batchJson,
+        `img-${chunkIndex}`, `${dir}/img-${chunkIndex}.gz`, batchJson,
       ).catch((err: unknown) => { throw chunkError(`img-${chunkIndex}`, batchJson.length, count, err); });
       entries.push(imgEntry.entry);
       chunkIndex++;
@@ -198,9 +204,9 @@ export async function* packChunks(
  * want the whole set at once. For large bundles prefer streaming via
  * `packChunks` so chunks are not all held in memory simultaneously.
  */
-export async function pack(json: string): Promise<PackResult> {
+export async function pack(json: string, dir = 'v2'): Promise<PackResult> {
   const chunks = new Map<string, Blob>();
-  const gen = packChunks(json);
+  const gen = packChunks(json, dir);
   let res = await gen.next();
   while (!res.done) {
     chunks.set(res.value.path, res.value.blob);

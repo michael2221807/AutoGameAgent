@@ -71,6 +71,11 @@ const LS_KEY_PREFIXES = ['aga_', 'aga-'] as const;
 const LS_DEVICE_LOCAL_KEYS: ReadonlySet<string> = new Set([
   'aga_github_sync_baseline',
   'aga_github_sync_pending',
+  // 存档插槽 epic（2026-07-23）：插槽化后基线/待传标志变为 per-slot JSON map，
+  // 语义仍是"本设备的同步记账"，同样绝不随备份/云同步迁移。旧两个标量键保留在
+  // 排除集——升级期间旧客户端仍在写它们。
+  'aga_github_sync_baselines',
+  'aga_github_sync_pending_map',
 ]);
 
 // ─── 类型 ───
@@ -93,9 +98,12 @@ export interface BackupBundle {
    * 备份类型标记（v1.1 新增，optional）
    * - 'full' — 完整备份：所有 profiles + configs + prompts + engineSettings
    * - 'profile' — 单角色备份：仅该 profile 的数据，不含全局设置
+   * - 'global' — 全局设置包（2026-07-23 存档插槽 epic 新增）：仅 configs/prompts/
+   *   engineSettings/customPresets/builtinPromptOverrides，profiles/saves/vectors 为空。
+   *   云端 `global/` 设置插槽的载荷（docs/design/github-save-slots-design.md §5.1）。
    * 旧 v1 备份无此字段，由 isFullBackup() 通过其他字段推断
    */
-  bundleType?: 'full' | 'profile';
+  bundleType?: 'full' | 'profile' | 'global';
   /**
    * StorageRoot.activeProfile 根指针（v1.1 新增，optional）
    * 完整备份时包含，单角色备份时为 null
@@ -154,6 +162,19 @@ export interface ExportImageIntegrity {
 }
 
 /**
+ * 档案展示元信息 — 随 exportProfileForSync 返回，供云端插槽 manifest 携带
+ * （插槽列表 UI 无需下载整包即可显示档案名/槽数等）。
+ */
+export interface ProfileDisplayMeta {
+  profileId: string;
+  profileName: string;
+  packId: string;
+  slotCount: number;
+  /** 各槽 lastSavedAt 的最大值（ISO），全部未保存过则为 null */
+  lastPlayedAt: string | null;
+}
+
+/**
  * 导入结果报告 — 逐模块记录恢复状态（仅单角色合并流程使用）
  *
  * 布尔字段标记对应模块是否导入成功，
@@ -190,6 +211,28 @@ interface PreImportSnapshot {
    */
   customPresets: Record<string, Record<string, CustomPresetEntry[]>> | null;
   worldBooksSnapshot: import('../prompt/world-book').WorldBookExportData | null;
+}
+
+/**
+ * 档案级快照 — importProfileReplace 失败回滚用（仅该档案的数据，不做全库快照）。
+ * saves/vectors 按 slotId 索引（不含 profileId 前缀——档案已定）。
+ */
+interface ProfileSnapshot {
+  /** null = 导入前该档案不存在（回滚 = 删除新建的一切） */
+  profileMeta: ProfileMeta | null;
+  saves: Record<string, unknown>;
+  vectors: Record<string, unknown>;
+  worldBooks: import('../prompt/world-book').WorldBook[];
+  activeProfile: { profileId: string; slotId: string } | null;
+}
+
+/** 全局区快照 — importGlobal 失败回滚用（不含任何档案数据）。 */
+interface GlobalSnapshot {
+  configOverlays: unknown;
+  promptEntries: unknown;
+  ls: Record<string, string | null>;
+  customPresets: Record<string, Record<string, CustomPresetEntry[]>>;
+  builtinOverrides: Record<string, import('../prompt/world-book').BuiltinPromptEntry[]>;
 }
 
 /**
@@ -341,7 +384,7 @@ export class BackupService {
       if (packIds.length > 0) {
         const overrides = await this.worldBookStorage.loadAllBuiltinOverrides(packIds[0]);
         if (overrides.length > 0) {
-          builtinOverridesExport = { version: 1, exportedAt: new Date().toISOString(), entries: overrides, packId: packIds[0] } as import('../prompt/world-book').BuiltinPromptExportData & { packId: string };
+          builtinOverridesExport = { version: 1, exportedAt: new Date().toISOString(), entries: overrides, packId: packIds[0] };
         }
       }
     }
@@ -420,7 +463,12 @@ export class BackupService {
     }
 
     /* ── 判断备份类型 ── */
-    // bundleType 显式标记优先，否则根据 configs/prompts/engineSettings 是否为空推断
+    // bundleType 显式标记优先，否则根据 configs/prompts/engineSettings 是否为空推断。
+    // 'global' 包（云端设置插槽）只替换全局区；'full'/'profile' 路径行为不变。
+    if (bundle.bundleType === 'global') {
+      await this.importGlobal(bundle);
+      return;
+    }
     const isFull =
       bundle.bundleType === 'full' ||
       (bundle.bundleType === undefined && this.hasGlobalData(bundle));
@@ -569,6 +617,398 @@ export class BackupService {
         `单角色导入完成但有 ${report.errors.length} 个错误：\n` +
           report.errors.map((e) => `  - ${e}`).join('\n'),
       );
+    }
+  }
+
+  // ─── 存档插槽 epic：档案级替换 / 全局区替换（docs/design/github-save-slots-design.md §5.1）───
+
+  /**
+   * 档案级替换导入 — 云端存档插槽下载的落地路径。
+   *
+   * 与 {@link importProfileMerge}（只增不删、无回滚）的三点差异：
+   * 1. **真替换**：本地该档案有、来包没有的存档槽会被删除（含其向量）；
+   * 2. **世界书**：按 profileId 整组替换；
+   * 3. **图片受保护剪枝**：merge 后仅删除"旧版该档案独占引用、新版与其他任何
+   *    本地存档均不引用"的图（全库引用计数），绝不触碰其他档案的图。
+   *
+   * 只影响这一个档案 —— 其他档案、全局设置（configs/prompts/engineSettings/
+   * customPresets）完全不动。失败时从**档案级快照**回滚（仅该档案的数据）。
+   */
+  async importProfileReplace(blob: Blob): Promise<void> {
+    const text = await blob.text();
+    const raw: unknown = JSON.parse(text);
+    if (!isValidBundleShape(raw)) {
+      throw new Error('备份文件格式无效：缺少必需字段或结构不正确');
+    }
+    const bundle = raw as BackupBundle;
+    if (bundle.version > BACKUP_FORMAT_VERSION) {
+      throw new Error(
+        `备份版本 ${bundle.version} 高于当前支持的版本 ${BACKUP_FORMAT_VERSION}，请先升级引擎再导入`,
+      );
+    }
+
+    // 与 importGlobal 对称的类型闸：档案级替换只吃显式 'profile' 包。
+    // 'full' 包哪怕恰好只含一个档案也拒绝——它的语义是全替换，不是插槽下载。
+    if (bundle.bundleType !== 'profile') {
+      throw new Error(
+        `档案级导入只接受 bundleType='profile' 的包，实际 '${bundle.bundleType ?? '(无标记)'}'`,
+      );
+    }
+    const profileIds = Object.keys(bundle.profiles ?? {});
+    if (profileIds.length !== 1) {
+      throw new Error(
+        `档案级导入要求包内恰好一个档案，实际 ${profileIds.length} 个`,
+      );
+    }
+    const profileId = profileIds[0];
+
+    // 退化包检测（与全替换同一指纹）：来包引用图片却一张不带 ⇒ 本地图片缓存被清后
+    // 做的备份。此时跳过一切图片删除（宁留孤图），并提示。
+    const imagesLookDropped = bundleImagesLookDropped(bundle);
+
+    /* ── 1. 档案级快照（仅该档案） ── */
+    const snapshot = await this.captureProfileState(profileId);
+
+    try {
+      /* ── 2. 删除"本地有、来包无"的存档槽（真替换语义） ── */
+      const incomingMeta = bundle.profiles[profileId] as ProfileMeta | undefined;
+      const incomingSlotIds = new Set(Object.keys(incomingMeta?.slots ?? {}));
+      const localProfile = this.profileManager.getProfile(profileId);
+      if (localProfile) {
+        for (const slotId of Object.keys(localProfile.slots)) {
+          if (!incomingSlotIds.has(slotId)) {
+            await this.saveManager.deleteGame(profileId, slotId);
+            await this.vectorStore.deleteForSlot(profileId, slotId);
+          }
+        }
+      }
+
+      /* ── 3. 档案元数据 + 存档 + 向量 ──
+         saves/vectors 先按 profileId 过滤：档案包内出现其他档案的复合 key 属于
+         损坏/恶意数据，绝不能写进别的档案。 */
+      await this.restoreProfiles({ [profileId]: bundle.profiles[profileId] });
+      const saves = filterCompositeByProfile(bundle.saves, profileId);
+      const vectors = filterCompositeByProfile(bundle.vectors, profileId);
+      await this.restoreSaves(saves);
+      // 来包未携带向量的槽，本地旧向量已过时（对应旧存档内容）→ 先清后写
+      for (const slotId of incomingSlotIds) {
+        if (!(compositeSlotKey(profileId, slotId) in vectors)) {
+          await this.vectorStore.deleteForSlot(profileId, slotId);
+        }
+      }
+      await this.restoreVectors(vectors);
+
+      /* ── 4. 世界书整组替换（档案级） ── */
+      if (this.worldBookStorage) {
+        const existingBooks = await this.worldBookStorage.loadWorldBooks(profileId);
+        for (const b of existingBooks) {
+          await this.worldBookStorage.deleteWorldBook(profileId, b.id);
+        }
+        for (const book of bundle.worldBooks?.books ?? []) {
+          await this.worldBookStorage.saveWorldBook(profileId, book);
+        }
+      }
+
+      /* ── 5. activeProfile 指针自愈：指向本档案已被删除的槽 → 指到来包首个槽；
+         来包一个槽都没有（零存档新档案）→ 清空指针，绝不留悬空引用 ── */
+      const active = this.profileManager.getRoot().activeProfile;
+      if (active?.profileId === profileId && !incomingSlotIds.has(active.slotId)) {
+        const firstSlot = [...incomingSlotIds][0];
+        if (firstSlot) {
+          await this.profileManager.setActiveProfile(profileId, firstSlot);
+        } else {
+          await this.profileManager.clearActiveProfile();
+        }
+      }
+    } catch (err) {
+      try {
+        await this.rollbackProfileState(profileId, snapshot);
+      } catch (rollbackErr) {
+        throw new Error(
+          `档案导入失败且回滚失败：${extractErrorMessage(err)} | ` +
+            `回滚错误：${extractErrorMessage(rollbackErr)}`,
+        );
+      }
+      throw new Error(`档案导入失败，该档案已回滚：${extractErrorMessage(err)}`);
+    }
+
+    /* ── 6. 图片：merge-then-protected-prune（放最后，与全替换同策略：任何前序
+       失败都不会动图；本步失败仅提示，不触发回滚） ── */
+    await this.mergeAndPruneProfileImages(bundle, snapshot, imagesLookDropped);
+  }
+
+  /**
+   * 全局区替换导入 — 云端 `global/` 设置插槽下载的落地路径。
+   *
+   * 只替换跨档案共享的全局区（configs / prompts / engineSettings / customPresets /
+   * builtinPromptOverrides），**不触碰**任何档案数据（profiles/saves/vectors/
+   * worldBooks/图片/activeProfile）。失败时从全局区快照回滚。
+   */
+  async importGlobal(bundle: BackupBundle): Promise<void> {
+    if (bundle.bundleType !== 'global') {
+      throw new Error(`importGlobal 只接受 bundleType='global' 的包，实际 '${bundle.bundleType}'`);
+    }
+
+    const snapshot = await this.captureGlobalState();
+
+    try {
+      /* ── 擦除全局区（保持设备本地键；绝不碰档案数据） ── */
+      await this.configStore.clear();
+      await this.promptStorage.clear();
+      wipeLocalStorageSettings();
+
+      /* ── 恢复 ── */
+      await this.restoreConfigs(bundle.configs);
+      await this.restorePrompts(bundle.prompts);
+      restoreLocalStorageSettings(bundle.engineSettings);
+
+      // 自定义预设：来包各 pack 整组替换；本地有、来包没有的 pack 清空（真替换）。
+      // 本地 pack 清单必须在清理**之前**捕获——清理后 listPackIds 不再返回被清的
+      // pack，下方 overrides 清理会漏掉它们。
+      const localPackIds = this.customPresetStore
+        ? await this.customPresetStore.listPackIds()
+        : [];
+      if (this.customPresetStore) {
+        const bundlePacks = new Set(Object.keys(bundle.customPresets ?? {}));
+        for (const pid of localPackIds) {
+          if (!bundlePacks.has(pid)) await this.customPresetStore.clear(pid);
+        }
+        await this.restoreCustomPresets(bundle.customPresets);
+      }
+
+      // 内置提示词覆盖：来包 pack 整组替换。来包不带时，按已知 pack 清空。
+      // （pack 枚举以 customPresetStore.listPackIds 为近似 —— overrides 存储无
+      //   pack 枚举接口；本应用单 pack，实践上完全覆盖。）
+      // targetPack 的兜底链与 restoreWorldBooks 一致，末位 'default' 保证
+      // "无 packId 且无 customPresets" 的畸形/旧包也不会被静默丢弃。
+      if (this.worldBookStorage) {
+        const data = bundle.builtinPromptOverrides;
+        const targetPack = data
+          ? (data.packId ?? Object.keys(bundle.customPresets ?? {})[0] ?? 'default')
+          : undefined;
+        const knownPacks = new Set([
+          ...localPackIds,
+          ...Object.keys(bundle.customPresets ?? {}),
+        ]);
+        if (targetPack) knownPacks.add(targetPack);
+        for (const pid of knownPacks) {
+          if (data && pid === targetPack) {
+            await this.worldBookStorage.replaceBuiltinOverrides(pid, data);
+          } else {
+            await this.worldBookStorage.clearBuiltinOverrides(pid);
+          }
+        }
+      }
+    } catch (err) {
+      try {
+        await this.rollbackGlobalState(snapshot);
+      } catch (rollbackErr) {
+        throw new Error(
+          `设置导入失败且回滚失败：${extractErrorMessage(err)} | ` +
+            `回滚错误：${extractErrorMessage(rollbackErr)}`,
+        );
+      }
+      throw new Error(`设置导入失败，全局设置已回滚：${extractErrorMessage(err)}`);
+    }
+  }
+
+  /** 档案级快照 — 仅该档案的元数据/存档/向量/世界书 + activeProfile 指针。 */
+  private async captureProfileState(profileId: string): Promise<ProfileSnapshot> {
+    const root = this.profileManager.getRoot();
+    const meta = root.profiles[profileId];
+    const saves: Record<string, unknown> = {};
+    const vectors: Record<string, unknown> = {};
+    if (meta) {
+      for (const slotId of Object.keys(meta.slots)) {
+        // 原始 IDB 读：快照要的是"当前落盘的字节"，且不得触发 loadGame 的
+        // 惰性迁移回写（快照本身不能改变被快照的数据）。
+        const saveData = await idbAdapter.get(`save_${profileId}_${slotId}`);
+        if (saveData !== undefined) saves[slotId] = structuredClone(saveData);
+        const vectorData = await this.vectorStore.load(profileId, slotId);
+        if (hasVectorContent(vectorData)) vectors[slotId] = structuredClone(vectorData);
+      }
+    }
+    let worldBooks: import('../prompt/world-book').WorldBook[] = [];
+    if (this.worldBookStorage) {
+      try {
+        worldBooks = await this.worldBookStorage.loadWorldBooks(profileId);
+      } catch { /* best effort */ }
+    }
+    return {
+      profileMeta: meta ? structuredClone(meta) : null,
+      saves,
+      vectors,
+      worldBooks,
+      activeProfile: root.activeProfile ? { ...root.activeProfile } : null,
+    };
+  }
+
+  /** 从档案级快照回滚该档案（快照为 null 档案 = 导入前不存在 → 删除新建的一切）。 */
+  private async rollbackProfileState(profileId: string, snapshot: ProfileSnapshot): Promise<void> {
+    // 1. 清掉当前（可能半写入的）该档案数据
+    const current = this.profileManager.getProfile(profileId);
+    if (current) {
+      for (const slotId of Object.keys(current.slots)) {
+        await this.saveManager.deleteGame(profileId, slotId);
+        await this.vectorStore.deleteForSlot(profileId, slotId);
+      }
+    }
+    if (this.worldBookStorage) {
+      try {
+        for (const b of await this.worldBookStorage.loadWorldBooks(profileId)) {
+          await this.worldBookStorage.deleteWorldBook(profileId, b.id);
+        }
+      } catch { /* best effort */ }
+    }
+
+    if (!snapshot.profileMeta) {
+      // 导入前档案不存在 → 恢复为不存在
+      await this.profileManager.deleteProfile(profileId);
+      return;
+    }
+
+    // 2. 回写快照
+    await this.profileManager.createProfile(snapshot.profileMeta);
+    for (const [slotId, data] of Object.entries(snapshot.saves)) {
+      await idbAdapter.set(`save_${profileId}_${slotId}`, structuredClone(data));
+    }
+    for (const [slotId, data] of Object.entries(snapshot.vectors)) {
+      await this.vectorStore.save(profileId, slotId, structuredClone(data) as VectorSaveData);
+    }
+    if (this.worldBookStorage) {
+      try {
+        for (const book of snapshot.worldBooks) {
+          await this.worldBookStorage.saveWorldBook(profileId, book);
+        }
+      } catch { /* best effort */ }
+    }
+    if (snapshot.activeProfile?.profileId === profileId) {
+      await this.profileManager.setActiveProfile(profileId, snapshot.activeProfile.slotId);
+    }
+  }
+
+  /**
+   * 图片 merge + 受保护剪枝（importProfileReplace 第 6 步）。
+   *
+   * keep 集合 = 来包携带的图 ∪ **全部本地存档树**（所有档案所有槽，导入后状态）
+   * 引用的图。删除候选 = 旧版该档案引用的图 − keep —— 即只删"旧版独占、新版与
+   * 其他档案都不再引用"的图。退化包（引用了图却一张不带）完全跳过删除。
+   */
+  private async mergeAndPruneProfileImages(
+    bundle: BackupBundle,
+    snapshot: ProfileSnapshot,
+    imagesLookDropped: boolean,
+  ): Promise<void> {
+    if (!this.imageAssetCache) return;
+
+    try {
+      if (bundle.imageAssets && bundle.imageAssets.length > 0) {
+        await this.imageAssetCache.importEntries(bundle.imageAssets);
+      }
+      if (imagesLookDropped) {
+        eventBus.emit('ui:toast', {
+          type: 'warning',
+          i18nKey: 'engine.toast.importPreservedImages',
+          message: '导入的备份引用了图片却不含任何图片数据，已保留本地现有图片以防丢失。',
+          id: 'import-preserved-images',
+          duration: 9000,
+        });
+        return; // 退化包：只 merge（本次为空），绝不删图
+      }
+
+      // 旧版该档案引用的图（快照存档树，保护面取最大：含参考素材）
+      const oldRefs = new Set<string>();
+      for (const save of Object.values(snapshot.saves)) {
+        if (save && typeof save === 'object') {
+          collectAssetIdsFromTree(save as Record<string, unknown>, oldRefs, true);
+        }
+      }
+      if (oldRefs.size === 0) return; // 旧版无引用 → 无候选，纯 merge 结束
+
+      // keep：携带的图 + 导入后全库（所有档案所有槽）引用的图。
+      // 读**原始 IDB**而非 saveManager.loadGame —— loadGame 会对版本落后的存档
+      // 惰性迁移并回写，纯计数扫描绝不能对其他档案产生写副作用
+      // （档案级导入的"只影响这一个档案"承诺）。
+      const keep = new Set<string>();
+      for (const entry of bundle.imageAssets ?? []) {
+        keep.add(entry.metadata?.id ?? entry.id);
+      }
+      const root = this.profileManager.getRoot();
+      for (const profile of Object.values(root.profiles)) {
+        for (const slotId of Object.keys(profile.slots)) {
+          const saveData = await idbAdapter.get(`save_${profile.profileId}_${slotId}`);
+          if (saveData && typeof saveData === 'object') {
+            collectAssetIdsFromTree(saveData as Record<string, unknown>, keep, true);
+          }
+        }
+      }
+
+      for (const id of oldRefs) {
+        if (!keep.has(id)) {
+          try { await this.imageAssetCache.delete(id); } catch { /* best effort */ }
+        }
+      }
+    } catch (err) {
+      this.warnImageRestoreFailed(err);
+    }
+  }
+
+  /** 全局区快照 — configs/prompts/localStorage/customPresets/builtinOverrides。 */
+  private async captureGlobalState(): Promise<GlobalSnapshot> {
+    let configOverlays: unknown = null;
+    let promptEntries: unknown = null;
+    try { configOverlays = await this.configStore.exportAll(); } catch { /* best effort */ }
+    try { promptEntries = await this.promptStorage.exportAll(); } catch { /* best effort */ }
+    const ls = collectLocalStorageSettings();
+    const customPresets = await this.collectCustomPresets();
+
+    const builtinOverrides: Record<string, import('../prompt/world-book').BuiltinPromptEntry[]> = {};
+    if (this.worldBookStorage && this.customPresetStore) {
+      try {
+        for (const pid of await this.customPresetStore.listPackIds()) {
+          const entries = await this.worldBookStorage.loadAllBuiltinOverrides(pid);
+          if (entries.length > 0) builtinOverrides[pid] = entries;
+        }
+      } catch { /* best effort */ }
+    }
+    return { configOverlays, promptEntries, ls, customPresets, builtinOverrides };
+  }
+
+  /** 从全局区快照回滚（不触碰任何档案数据）。 */
+  private async rollbackGlobalState(snapshot: GlobalSnapshot): Promise<void> {
+    try { await this.configStore.clear(); } catch { /* ignore */ }
+    try { await this.promptStorage.clear(); } catch { /* ignore */ }
+    wipeLocalStorageSettings();
+
+    if (Array.isArray(snapshot.configOverlays)) {
+      try { await this.configStore.importAll(snapshot.configOverlays as ConfigImportData); } catch { /* best effort */ }
+    }
+    if (Array.isArray(snapshot.promptEntries)) {
+      try { await this.promptStorage.importAll(snapshot.promptEntries as PromptImportData); } catch { /* best effort */ }
+    }
+    for (const [key, value] of Object.entries(snapshot.ls)) {
+      if (!LS_KEY_PREFIXES.some((p) => key.startsWith(p))) continue;
+      if (LS_DEVICE_LOCAL_KEYS.has(key)) continue;
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    if (this.customPresetStore) {
+      const snapPacks = new Set(Object.keys(snapshot.customPresets));
+      for (const pid of await this.customPresetStore.listPackIds()) {
+        if (!snapPacks.has(pid)) await this.customPresetStore.clear(pid);
+      }
+      await this.restoreCustomPresets(snapshot.customPresets);
+    }
+    if (this.worldBookStorage) {
+      for (const [pid, entries] of Object.entries(snapshot.builtinOverrides)) {
+        try {
+          await this.worldBookStorage.replaceBuiltinOverrides(pid, {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            entries,
+          });
+        } catch { /* best effort */ }
+      }
     }
   }
 
@@ -754,7 +1194,7 @@ export class BackupService {
     }
     if (bundle.builtinPromptOverrides?.entries && Array.isArray(bundle.builtinPromptOverrides.entries)) {
       try {
-        const packId = (bundle.builtinPromptOverrides as unknown as Record<string, unknown>)['packId'] as string
+        const packId = bundle.builtinPromptOverrides.packId
           ?? Object.keys(bundle.customPresets ?? {})[0] ?? 'default';
         for (const entry of bundle.builtinPromptOverrides.entries) {
           await this.worldBookStorage.saveBuiltinOverride(packId, entry);
@@ -965,6 +1405,46 @@ export class BackupService {
    * @throws 角色不存在时抛出
    */
   async exportProfile(profileId: string, options?: { includeReferenceAssets?: boolean }): Promise<Blob> {
+    return (await this.buildProfileBundle(profileId, options)).blob;
+  }
+
+  /**
+   * 档案级 sync 导出 — 供云端存档插槽上传使用（docs/design/github-save-slots-design.md §5.1）。
+   *
+   * 与 {@link exportProfile} 同源，但**原子地**返回图片完整性：插槽上传必须像全量
+   * 上传一样过退化拦截闸（referencedAssets > exportedAssets ⇒ DegradedUploadError），
+   * 否则缺图存档会在插槽粒度覆盖云端好备份（2026-07-10 事故类别）。
+   */
+  async exportProfileForSync(
+    profileId: string,
+    options?: { includeReferenceAssets?: boolean },
+  ): Promise<{ blob: Blob; imageIntegrity: ExportImageIntegrity; displayMeta: ProfileDisplayMeta }> {
+    const { blob, imageIntegrity } = await this.buildProfileBundle(profileId, options);
+    const meta = this.profileManager.getRoot().profiles[profileId];
+    const slotIds = Object.keys(meta.slots);
+    let lastPlayedAt: string | null = null;
+    for (const s of slotIds) {
+      const t = meta.slots[s].lastSavedAt;
+      if (t && (!lastPlayedAt || t > lastPlayedAt)) lastPlayedAt = t;
+    }
+    return {
+      blob,
+      imageIntegrity,
+      displayMeta: {
+        profileId,
+        profileName: meta.characterName,
+        packId: meta.packId,
+        slotCount: slotIds.length,
+        lastPlayedAt,
+      },
+    };
+  }
+
+  /** 组装单档案备份包（含该档案的世界书），返回 Blob 及图片完整性。 */
+  private async buildProfileBundle(
+    profileId: string,
+    options?: { includeReferenceAssets?: boolean },
+  ): Promise<{ blob: Blob; imageIntegrity: ExportImageIntegrity }> {
     const profile = this.profileManager.getRoot().profiles[profileId];
     if (!profile) {
       throw new Error(`Profile "${profileId}" does not exist`);
@@ -991,7 +1471,25 @@ export class BackupService {
       }
     }
 
-    const { assets: imageAssets } = await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
+    const { assets: imageAssets, integrity: imageIntegrity } =
+      await this.collectSelectedImageAssets(saves, options?.includeReferenceAssets === true);
+
+    // 世界书是档案级数据，必须随档案包走（插槽下载后该档案的检索增强才完整）。
+    // _exportProfileId 标记与全量导出一致，restore 侧按其归位。
+    let worldBooksExport: BackupBundle['worldBooks'];
+    if (this.worldBookStorage) {
+      try {
+        const books = await this.worldBookStorage.loadWorldBooks(profileId);
+        for (const b of books) {
+          (b as unknown as Record<string, unknown>)['_exportProfileId'] = profileId;
+        }
+        if (books.length > 0) {
+          worldBooksExport = { version: 1, exportedAt: new Date().toISOString(), books };
+        }
+      } catch (err) {
+        console.warn('[BackupService] buildProfileBundle worldBooks failed:', err);
+      }
+    }
 
     const bundle: BackupBundle = {
       version: BACKUP_FORMAT_VERSION,
@@ -1006,11 +1504,71 @@ export class BackupService {
       prompts: {},
       engineSettings: {},
       imageAssets,
+      worldBooks: worldBooksExport,
     };
 
-    return new Blob([JSON.stringify(bundle, null, 2)], {
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: 'application/json',
     });
+    return { blob, imageIntegrity };
+  }
+
+  /** 本地全部档案 ID（供云端插槽迁移/自动同步枚举，避免上层直接依赖 ProfileManager）。 */
+  listProfileIds(): string[] {
+    return Object.keys(this.profileManager.getRoot().profiles);
+  }
+
+  /**
+   * 全局设置包导出 — 云端 `global/` 设置插槽的载荷。
+   *
+   * 仅含跨档案共享的全局区：configs / prompts / engineSettings / customPresets /
+   * builtinPromptOverrides。profiles/saves/vectors 为空对象（保持
+   * isValidBundleShape 兼容），不含 imageAssets / worldBooks / activeProfile
+   * （activeProfile 指向的档案在目标设备未必存在，指针绝不随包走）。
+   */
+  async exportGlobalForSync(): Promise<{ blob: Blob }> {
+    const configExport = await this.configStore.exportAll();
+    const configs: Record<string, unknown> = { overlays: structuredClone(configExport) };
+
+    const promptExport = await this.promptStorage.exportAll();
+    const prompts: Record<string, unknown> = { entries: structuredClone(promptExport) };
+
+    const engineSettings = collectLocalStorageSettings();
+    const customPresets = await this.collectCustomPresets();
+
+    // Builtin prompt overrides — 沿用全量导出的单 pack 现状（BuiltinPromptExportData
+    // 结构只承载一个 packId；本应用当前单 pack）。多 pack 支持需先改导出数据格式。
+    let builtinOverridesExport: BackupBundle['builtinPromptOverrides'];
+    if (this.worldBookStorage) {
+      const packIds = Object.keys(customPresets);
+      if (packIds.length > 0) {
+        const overrides = await this.worldBookStorage.loadAllBuiltinOverrides(packIds[0]);
+        if (overrides.length > 0) {
+          builtinOverridesExport = { version: 1, exportedAt: new Date().toISOString(), entries: overrides, packId: packIds[0] };
+        }
+      }
+    }
+
+    const bundle: BackupBundle = {
+      version: BACKUP_FORMAT_VERSION,
+      exportedAt: new Date().toISOString(),
+      engineVersion: ENGINE_VERSION,
+      bundleType: 'global',
+      activeProfile: null,
+      profiles: {},
+      saves: {},
+      vectors: {},
+      configs,
+      prompts,
+      engineSettings,
+      customPresets,
+      builtinPromptOverrides: builtinOverridesExport,
+    };
+
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], {
+      type: 'application/json',
+    });
+    return { blob };
   }
 
   // ─── 内部恢复方法 ───
@@ -1110,6 +1668,25 @@ export class BackupService {
  */
 function compositeSlotKey(profileId: string, slotId: string): string {
   return `${profileId}/${slotId}`;
+}
+
+/**
+ * 从复合 key 索引的 saves/vectors 中过滤出指定档案的条目。
+ *
+ * 档案级导入的防线：档案包内出现**其他**档案的复合 key（损坏或恶意数据）时
+ * 静默丢弃，绝不写进别的档案。格式非法的 key 同样丢弃。
+ */
+function filterCompositeByProfile(
+  data: Record<string, unknown>,
+  profileId: string,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data ?? {})) {
+    try {
+      if (parseCompositeKey(key).profileId === profileId) result[key] = value;
+    } catch { /* malformed key — drop */ }
+  }
+  return result;
 }
 
 /**

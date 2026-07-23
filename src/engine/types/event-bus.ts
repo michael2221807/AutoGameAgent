@@ -30,6 +30,10 @@ export type EngineEventName =
   // Payload: { enabled: boolean }. Lets every sync surface + CloudSyncManager keep
   // their local view of the toggle consistent without cross-component reactive wiring.
   | 'ui:cloud-autosync-changed'
+  // Cloud repo format changed (v2→v3 after an explicit migration in CloudSlotsSection).
+  // Payload: { format: 'v3' | 'v2' | 'empty' }. CloudSyncManager invalidates its
+  // cached format so the auto-sync path switches pipelines without a reload.
+  | 'ui:cloud-format-changed'
   | 'worldbook:updated'
   // TTS playback state broadcast (TtsService → UI). Payload: TtsStateEvent.
   // Lets the play button, status-bar chip, and segment highlight stay in sync
