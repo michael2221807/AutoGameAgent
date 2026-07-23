@@ -17,7 +17,7 @@ import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { loadTtsSettings, saveTtsSettings } from '@/engine/tts/tts-settings';
 import { TTS_RATE_MIN, TTS_RATE_MAX } from '@/engine/tts/types';
-import type { TtsSettings, TtsVoiceFavorite, TtsCacheEvent } from '@/engine/tts/types';
+import type { TtsSettings, TtsVoiceFavorite } from '@/engine/tts/types';
 import type { TtsService } from '@/engine/tts/tts-service';
 
 defineProps<{ speaking?: boolean }>();
@@ -28,31 +28,6 @@ const ttsService = inject<TtsService | undefined>('ttsService', undefined);
 const settings = ref<TtsSettings>(ttsService?.getSettings() ?? loadTtsSettings());
 const open = ref(false);
 const rootRef = ref<HTMLElement | null>(null);
-
-// 本回合全配音是否已缓存、可下载(仅假流式/整段模式;经 'tts:cache' 反应式同步)。
-const cacheAvailable = ref<boolean>(ttsService?.hasRoundAudio() ?? false);
-const downloading = ref(false);
-
-async function downloadRoundAudio(): Promise<void> {
-  if (!ttsService || downloading.value) return;
-  downloading.value = true;
-  try {
-    const dl = await ttsService.buildRoundAudioDownload();
-    if (!dl) return;
-    const url = URL.createObjectURL(dl.blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = dl.filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch {
-    eventBus.emit('ui:toast', { type: 'error', message: t('mainGame.voice.downloadErr'), duration: 3000 });
-  } finally {
-    downloading.value = false;
-  }
-}
 
 const chipLabel = computed(() => {
   const s = settings.value;
@@ -108,19 +83,13 @@ watch(open, (isOpen) => {
 
 // Re-sync when settings change anywhere (settings panel, another quick switch).
 let unsub: (() => void) | null = null;
-let unsubCache: (() => void) | null = null;
 onMounted(() => {
   unsub = eventBus.on('tts:state', () => {
     settings.value = ttsService?.getSettings() ?? loadTtsSettings();
   });
-  // Round-audio cache availability → show/hide the download button reactively.
-  unsubCache = eventBus.on('tts:cache', (p) => {
-    cacheAvailable.value = (p as TtsCacheEvent | undefined)?.available ?? false;
-  });
 });
 onBeforeUnmount(() => {
   unsub?.();
-  unsubCache?.();
   // Clear a pending deferred-register so it can't add a listener post-unmount.
   if (deferHandle) { clearTimeout(deferHandle); deferHandle = null; }
   document.removeEventListener('click', onDocClick);
@@ -215,18 +184,6 @@ onBeforeUnmount(() => {
 
         <button type="button" class="voice-preview-btn" :disabled="!settings.defaultSpeaker" @click="preview">
           {{ $t('mainGame.voice.preview') }}
-        </button>
-
-        <!-- 下载本回合全配音 — 仅当本回合音频已缓存(假流式/整段模式)时显示 -->
-        <button
-          v-if="cacheAvailable"
-          type="button"
-          class="voice-download-btn"
-          data-testid="voice-download-btn"
-          :disabled="downloading"
-          @click="downloadRoundAudio"
-        >
-          {{ downloading ? $t('mainGame.voice.downloading') : $t('mainGame.voice.download') }}
         </button>
       </div>
     </Transition>
@@ -361,26 +318,6 @@ onBeforeUnmount(() => {
 }
 .voice-preview-btn:hover:not(:disabled) { background: var(--color-sage-300); }
 .voice-preview-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* 下载按钮 — 次要动作(轮廓/柔和),不与主试听按钮抢视觉重量 */
-.voice-download-btn {
-  width: 100%;
-  margin-top: var(--space-xs);
-  border: 1px solid color-mix(in oklch, var(--color-amber-400) 40%, var(--color-border));
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-amber-400) 8%, transparent);
-  color: var(--color-amber-300);
-  padding: 7px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--duration-fast), color var(--duration-fast);
-}
-.voice-download-btn:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--color-amber-400) 16%, transparent);
-  color: var(--color-amber-200);
-}
-.voice-download-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .voice-pop-enter-active, .voice-pop-leave-active { transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
 .voice-pop-enter-from, .voice-pop-leave-to { opacity: 0; transform: translateY(-6px); }

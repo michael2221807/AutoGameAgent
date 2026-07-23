@@ -73,7 +73,7 @@ import FestivalChip from '@/ui/components/panels/FestivalChip.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import VoiceQuickSwitch from '@/ui/components/panels/VoiceQuickSwitch.vue';
 import type { TtsService } from '@/engine/tts/tts-service';
-import type { TtsStateEvent } from '@/engine/tts/types';
+import type { TtsStateEvent, TtsCacheEvent } from '@/engine/tts/types';
 import {
   findFirstAssistantIdx,
   findLatestAssistantIdx,
@@ -141,16 +141,46 @@ const ttsService = inject<TtsService | undefined>('ttsService', undefined);
 // component ref driven by the engine's 'tts:state' broadcast; nothing persists.
 const ttsState = ref<TtsStateEvent>({ status: 'idle', roundKey: null });
 const ttsReady = ref(false);
+// Which round's full narration is currently cached & downloadable (latest played
+// round only; driven by the engine's 'tts:cache' broadcast). null = none.
+const ttsCacheRoundKey = ref<string | null>(null);
+const ttsDownloading = ref(false);
 function refreshTtsReady(): void { ttsReady.value = ttsService?.isReady() ?? false; }
 function ttsRoundKey(round: number): string { return `round-${round}`; }
 function isRoundSpeaking(round: number): boolean {
   return ttsState.value.status !== 'idle' && ttsState.value.roundKey === ttsRoundKey(round);
 }
+/** Whether this round's audio is downloadable (it's the currently-cached round). */
+function isRoundDownloadable(round: number): boolean {
+  return ttsReady.value && ttsCacheRoundKey.value === ttsRoundKey(round);
+}
+/** ▶ 重播 / ❙❙ 停止 this round's narration (toggle, per-round). */
 function playTtsForMessage(msg: ChatMessage, round: number): void {
   if (!ttsService) return;
   if (isRoundSpeaking(round)) { ttsService.stop(); return; }
   // Read the WYSIWYG text (respects the 优化/原文 toggle); engine strips markers.
   void ttsService.speak(displayTextForAssistant(msg), ttsRoundKey(round));
+}
+/** ↓ Download this round's full narration as one WAV (only when it's the cached round). */
+async function downloadTtsForMessage(round: number): Promise<void> {
+  if (!ttsService || ttsDownloading.value || !isRoundDownloadable(round)) return;
+  ttsDownloading.value = true;
+  try {
+    const dl = await ttsService.buildRoundAudioDownload();
+    if (!dl) { eventBus?.emit('ui:toast', { type: 'error', message: t('mainGame.voice.downloadErr'), duration: 3000 }); return; }
+    const url = URL.createObjectURL(dl.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = dl.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    eventBus?.emit('ui:toast', { type: 'error', message: t('mainGame.voice.downloadErr'), duration: 3000 });
+  } finally {
+    ttsDownloading.value = false;
+  }
 }
 
 // ─── Reactive state ───────────────────────────────────────────
@@ -913,6 +943,12 @@ onMounted(() => {
       refreshTtsReady();
     }),
   );
+  // TTS round-audio cache availability (TtsService → per-round download button).
+  unsubscribers.push(
+    eventBus.on<TtsCacheEvent>('tts:cache', (payload) => {
+      ttsCacheRoundKey.value = payload?.available ? payload.roundKey : null;
+    }),
+  );
 
   /*
    * Pipeline lifecycle events:
@@ -1286,15 +1322,12 @@ watch(
           :polish="msg._polish"
           :showing-original="isShowingOriginalForRound(msg._metrics?.roundNumber ?? 0)"
           :is-bookmarked="isRoundBookmarked(roundForAssistantAt(visibleStartIndex + localIdx))"
-          :tts-ready="ttsReady"
-          :tts-speaking="isRoundSpeaking(roundForAssistantAt(visibleStartIndex + localIdx))"
           @view-thinking="openThinkingViewer(msg)"
           @view-commands="openCommandsViewer(msg, 'commands')"
           @view-raw="openRawViewer(msg)"
           @view-engram="openEngramViewer(msg)"
           @toggle-original="toggleOriginalForRound(msg)"
           @toggle-bookmark="toggleBookmarkForMessage(msg, visibleStartIndex + localIdx)"
-          @play-tts="playTtsForMessage(msg, roundForAssistantAt(visibleStartIndex + localIdx))"
         />
       <div
         class="message"
@@ -1323,10 +1356,11 @@ watch(
           </Tooltip>
         </div>
         <div
-          v-if="msg.role === 'assistant' && (countCjkChars(msg.content) > 0 || msg._shortTermPreview)"
+          v-if="msg.role === 'assistant' && (ttsReady || countCjkChars(msg.content) > 0 || msg._shortTermPreview)"
           class="message-meta-bottom"
+          :class="{ 'message-meta-bottom--tts-on': isRoundSpeaking(roundForAssistantAt(visibleStartIndex + localIdx)) }"
         >
-          <span class="message-meta-bottom__chars">{{ $t('mainGame.meta.charCount', { n: countCjkChars(msg.content) }) }}</span>
+          <span v-if="countCjkChars(msg.content) > 0" class="message-meta-bottom__chars">{{ $t('mainGame.meta.charCount', { n: countCjkChars(msg.content) }) }}</span>
           <Tooltip
             v-if="msg._shortTermPreview"
             :text="msg._shortTermPreview"
@@ -1336,6 +1370,38 @@ watch(
               class="message-meta-bottom__preview"
             >{{ $t('mainGame.meta.memoryPreview', { text: truncate(msg._shortTermPreview, 40) }) }}</span>
           </Tooltip>
+          <!-- 配音 per-round 控件 (2026-07-23): 重播 + 下载, 放在底部 meta 行 -->
+          <span v-if="ttsReady" class="message-meta-bottom__tts">
+            <button
+              type="button"
+              class="meta-tts-btn"
+              :class="{ 'meta-tts-btn--active': isRoundSpeaking(roundForAssistantAt(visibleStartIndex + localIdx)) }"
+              data-testid="round-replay-btn"
+              :aria-pressed="isRoundSpeaking(roundForAssistantAt(visibleStartIndex + localIdx))"
+              @click="playTtsForMessage(msg, roundForAssistantAt(visibleStartIndex + localIdx))"
+            >
+              <svg v-if="isRoundSpeaking(roundForAssistantAt(visibleStartIndex + localIdx))" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="12" height="12" aria-hidden="true">
+                <rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="12" height="12" aria-hidden="true">
+                <path d="M8 5.14v13.72c0 .78.85 1.26 1.52.86l10.94-6.86a1 1 0 0 0 0-1.72L9.52 4.28A1 1 0 0 0 8 5.14Z" />
+              </svg>
+              <span>{{ isRoundSpeaking(roundForAssistantAt(visibleStartIndex + localIdx)) ? $t('mainGame.voice.replayStop') : $t('mainGame.voice.replay') }}</span>
+            </button>
+            <button
+              v-if="isRoundDownloadable(roundForAssistantAt(visibleStartIndex + localIdx))"
+              type="button"
+              class="meta-tts-btn"
+              data-testid="round-download-btn"
+              :disabled="ttsDownloading"
+              @click="downloadTtsForMessage(roundForAssistantAt(visibleStartIndex + localIdx))"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16" />
+              </svg>
+              <span>{{ ttsDownloading ? $t('mainGame.voice.downloading') : $t('mainGame.voice.download') }}</span>
+            </button>
+          </span>
         </div>
       </div>
       </template>
@@ -1803,7 +1869,8 @@ watch(
   pointer-events: none;
 }
 
-.message--assistant:hover .message-meta-bottom {
+.message--assistant:hover .message-meta-bottom,
+.message-meta-bottom--tts-on {
   opacity: 0.85;
   pointer-events: auto;
 }
@@ -1822,6 +1889,48 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
   font-style: italic;
+}
+
+/* 配音 per-round 控件 (重播 / 下载) — 底部 meta 行右侧,低调 chip 级 */
+.message-meta-bottom__tts {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: auto;
+}
+.meta-tts-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-umber);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out),
+    background var(--duration-normal) var(--ease-out);
+}
+.meta-tts-btn:hover:not(:disabled) {
+  color: var(--color-sage-300);
+  border-color: color-mix(in oklch, var(--color-sage-400) 35%, var(--color-border));
+  background: color-mix(in oklch, var(--color-sage-400) 8%, transparent);
+}
+.meta-tts-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-sage-400) 25%, transparent);
+}
+.meta-tts-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.meta-tts-btn--active {
+  color: var(--color-sage-300);
+  border-color: color-mix(in oklch, var(--color-sage-400) 45%, var(--color-border));
+  background: color-mix(in oklch, var(--color-sage-400) 12%, transparent);
 }
 
 .message-text {

@@ -43,9 +43,16 @@ export class TtsService {
   private currentRoundKey: string | null = null;
   private playAbort: AbortController | null = null;
 
-  // 当前(最新)回合的全配音缓存 — 供下载。仅假流式/整段模式填充(手里有字节);
-  // 真流式不缓存。只留最新一回合;新回合 speak 开始或编排器 clearRoundAudio 时清。
-  private roundAudio: { roundKey: string; blobs: Blob[]; mime: string } | null = null;
+  // 当前(最新)回合的全配音缓存 — 供下载。
+  //  - blobs: 假流式/整段播放时逐段捕获的整段 WAV(真流式无字节 → 空)。
+  //  - text/speaker/instruct: 该回合朗读参数,供"缓存缺失/损坏"或真流式模式下**即时
+  //    重合成整段**兜底(保证下载永远拿到一个干净可播 WAV)。
+  // 只留最新一回合;新回合 speak 开始或编排器 clearRoundAudio 时清。
+  private roundAudio:
+    | { roundKey: string; blobs: Blob[]; mime: string; text: string; speaker: string; instruct?: string }
+    | null = null;
+  /** 缓存 blob 的最小合法字节数(≤ 此值视为空/仅 WAV 头,不入缓存/不用于下载)。 */
+  private static readonly MIN_AUDIO_BYTES = 128;
 
   constructor(
     private aiService: Pick<AIService, 'getTtsConfigForBackend'>,
@@ -64,6 +71,8 @@ export class TtsService {
 
   setSettings(next: TtsSettings): void {
     this.settings = next;
+    // 音量/语速实时生效:立即把新值推给正在播放的音频元素(否则要等下一段才变)。
+    this.player.setLiveParams?.(next.rate, next.volume);
     // Re-broadcast current state so UI subscribers (play-button visibility,
     // quick-switch chip) refresh their derived readiness when settings change.
     eventBus.emit('tts:state', this.getState());
@@ -128,9 +137,9 @@ export class TtsService {
 
   // ─── 回合全配音缓存(下载) ───
 
-  /** 最新回合全配音是否已缓存、可下载(仅假流式/整段模式会缓存)。 */
+  /** 最新回合是否可下载配音。有捕获字节 OR 有可即时重合成的文本即可(全模式)。 */
   hasRoundAudio(): boolean {
-    return !!this.roundAudio && this.roundAudio.blobs.length > 0;
+    return !!this.roundAudio && (this.roundAudio.blobs.length > 0 || !!this.roundAudio.text);
   }
 
   getCacheState(): TtsCacheEvent {
@@ -141,13 +150,20 @@ export class TtsService {
     eventBus.emit('tts:cache', this.getCacheState());
   }
 
-  /** 播放中把每段音频 blob 收进当前回合缓存(仅当前 speak 仍持有 abort 时)。 */
+  /**
+   * 开一个回合的全配音缓存槽:记下朗读参数(text/speaker/instruct),使下载在**任意
+   * 模式**(含真流式)都能兜底即时重合成。blobs 由 captureBlob 在播放时追加(假流式/整段)。
+   */
+  private beginRoundAudio(roundKey: string, text: string, speaker: string, instruct?: string): void {
+    this.roundAudio = { roundKey, blobs: [], mime: 'audio/wav', text, speaker, instruct };
+    this.emitCache();
+  }
+
+  /** 播放中把每段音频 blob 收进当前回合缓存(仅当前 speak 仍持有 abort;跳过空/仅头的 blob)。 */
   private captureBlob(blob: Blob, abort: AbortController): void {
-    if (this.playAbort !== abort) return; // 已被新 speak 取代 → 不写旧缓存
-    const roundKey = this.currentRoundKey ?? '';
-    if (!this.roundAudio || this.roundAudio.roundKey !== roundKey) {
-      this.roundAudio = { roundKey, blobs: [], mime: blob.type || 'audio/wav' };
-    }
+    if (this.playAbort !== abort) return;           // 已被新 speak 取代 → 不写旧缓存
+    if (blob.size < TtsService.MIN_AUDIO_BYTES) return; // 空/仅 WAV 头 → 不缓存(避免几字节损坏文件)
+    if (!this.roundAudio || this.roundAudio.roundKey !== (this.currentRoundKey ?? '')) return;
     this.roundAudio.blobs.push(blob);
     this.emitCache();
   }
@@ -161,18 +177,35 @@ export class TtsService {
   }
 
   /**
-   * 构造当前回合全配音的可下载文件(多段 WAV 合并为一)。无缓存返回 null。
-   * 合并失败(非 WAV/解析异常)回落只给第一段,保证仍可下载。
+   * 构造当前回合全配音的可下载文件(一个干净可播 WAV)。无缓存返回 null。
+   * 策略:优先合并播放时捕获的整段 blob(假流式/整段,秒出);若无字节(真流式)或
+   * 合并结果异常小(损坏),**即时用存下的整段文本重合成一个整段 WAV**兜底,保证永远可播。
    */
   async buildRoundAudioDownload(): Promise<{ blob: Blob; filename: string } | null> {
     const ra = this.roundAudio;
-    if (!ra || ra.blobs.length === 0) return null;
-    let blob: Blob;
-    try {
-      blob = await concatWavBlobs(ra.blobs);
-    } catch {
-      blob = ra.blobs[0];
+    if (!ra) return null;
+
+    let blob: Blob | null = null;
+    if (ra.blobs.length > 0) {
+      try {
+        blob = await concatWavBlobs(ra.blobs);
+      } catch {
+        blob = ra.blobs.find((b) => b.size >= TtsService.MIN_AUDIO_BYTES) ?? null;
+      }
     }
+    // 缓存缺失 / 结果小到只有 WAV 头(无音频)→ 即时重合成整段文本。
+    if ((!blob || blob.size < TtsService.MIN_AUDIO_BYTES) && ra.text) {
+      const provider = this.resolveProvider();
+      if (provider) {
+        try {
+          blob = await provider.synthesize(ra.text, { speaker: ra.speaker, instruct: ra.instruct });
+        } catch {
+          blob = null;
+        }
+      }
+    }
+    if (!blob || blob.size < TtsService.MIN_AUDIO_BYTES) return null;
+
     const safe = ra.roundKey.replace(/[^\w.-]+/g, '_') || 'round';
     return { blob, filename: `配音-${safe}.wav` };
   }
@@ -232,6 +265,9 @@ export class TtsService {
 
     const speaker = this.settings.defaultSpeaker;
     const instruct = this.settings.defaultInstruct || undefined;
+
+    // 开缓存槽:记下本回合朗读参数,使下载在任意模式(含真流式)都能兜底重合成。
+    this.beginRoundAudio(roundKey, text, speaker, instruct);
 
     try {
       const mode = this.settings.transmissionMode;
@@ -363,7 +399,6 @@ export class TtsService {
     if (segments.length === 0) return;
 
     const prewarmSec = this.settings.prewarmSeconds;
-    const playOpts = { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal };
 
     // 已合成、待播的整段 blob 缓冲(FIFO,按段序)。
     const clips: Blob[] = [];
@@ -405,7 +440,8 @@ export class TtsService {
       const blob = clips[playIdx];
       // 边播边生成下一段(并发:合成在播放的 await 期间进行)。
       const ahead = produced < segments.length ? produceOne().catch(() => { /* abort 由循环顶判定 */ }) : null;
-      await this.player.play(blob, playOpts);
+      // 每段现取 rate/volume,使播放中改设置从下一段起也生效(当前段由 setLiveParams 实时改)。
+      await this.player.play(blob, { rate: this.settings.rate, volume: this.settings.volume, signal: abort.signal });
       if (ahead) await ahead;
       playIdx++;
     }

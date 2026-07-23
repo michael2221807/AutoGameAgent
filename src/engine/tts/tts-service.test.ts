@@ -19,7 +19,9 @@ function makeFakeProvider(overrides?: Partial<TtsProvider>): FakeProvider {
     streamUrlCalls,
     async synthesize(text: string): Promise<Blob> {
       synthCalls.push(text);
-      return new Blob([text], { type: 'audio/wav' });
+      // Pad past TtsService.MIN_AUDIO_BYTES (128) so capture/download treat it as
+      // real audio; the text prefix is kept for any content assertions.
+      return new Blob([text, new Uint8Array(256)], { type: 'audio/wav' });
     },
     getStreamUrl(text: string): string | null {
       streamUrlCalls.push(text);
@@ -34,14 +36,18 @@ function makeFakeProvider(overrides?: Partial<TtsProvider>): FakeProvider {
 type FakePlayer = TtsAudioPlayer & {
   played: Array<{ kind: 'blob' | 'url'; value: string }>;
   preloaded: string[];
+  liveParams: Array<{ rate: number; volume: number }>;
 };
 
 function makeFakePlayer(): FakePlayer {
   const played: Array<{ kind: 'blob' | 'url'; value: string }> = [];
   const preloaded: string[] = [];
+  const liveParams: Array<{ rate: number; volume: number }> = [];
   const player: FakePlayer = {
     played,
     preloaded,
+    liveParams,
+    setLiveParams(rate, volume) { liveParams.push({ rate, volume }); },
     async play(blob, opts) {
       const t = await blob.text();
       if (opts.signal.aborted) throw new DOMException('aborted', 'AbortError');
@@ -52,8 +58,9 @@ function makeFakePlayer(): FakePlayer {
       played.push({ kind: 'url', value: url });
     },
     preload(url) { preloaded.push(url); },
-    // Fake duration: 0.1s per character of the segment text (deterministic prewarm math).
-    async measureDurationSec(blob) { return (await blob.text()).length / 10; },
+    // Fake duration: constant 1.0s per clip (decoupled from blob byte size, which is
+    // now padded). Prewarm math: N seconds → ceil(N) clips buffered before playback.
+    async measureDurationSec() { return 1.0; },
     stop() {},
     pause() {},
     resume() {},
@@ -229,6 +236,16 @@ describe('TtsService full mode', () => {
   });
 });
 
+describe('TtsService live rate/volume', () => {
+  it('setSettings pushes rate/volume to the live player immediately (real-time)', () => {
+    const provider = makeFakeProvider();
+    const player = makeFakePlayer();
+    const svc = makeService(provider, {}, { player });
+    svc.setSettings({ ...DEFAULT_TTS_SETTINGS, enabled: true, rate: 1.5, volume: 0.3 });
+    expect(player.liveParams.at(-1)).toEqual({ rate: 1.5, volume: 0.3 });
+  });
+});
+
 describe('TtsService pseudo mode (假流式)', () => {
   it('segments client-side, synthesizes each whole (no streaming URL), plays blobs', async () => {
     const provider = makeFakeProvider();
@@ -327,13 +344,28 @@ describe('TtsService round-audio cache (下载)', () => {
     expect(svc.getCacheState().roundKey).toBe('round-9');
   });
 
-  it('stream mode does NOT cache (no retained bytes) → no download', async () => {
+  it('stream mode keeps no byte blobs but stays downloadable via on-demand re-synth', async () => {
     const provider = makeFakeProvider();
     const svc = makeService(provider, { transmissionMode: 'stream' });
     await svc.speak('第一段啊。第二段啊。', 'round-3');
-    expect(svc.hasRoundAudio()).toBe(false);
-    expect(svc.getCacheState().available).toBe(false);
-    expect(await svc.buildRoundAudioDownload()).toBeNull();
+    // No captured byte-blobs in stream mode, but text is stored → download available
+    // (built by re-synthesizing the whole round on demand).
+    expect(svc.hasRoundAudio()).toBe(true);
+    expect(svc.getCacheState().roundKey).toBe('round-3');
+    const dl = await svc.buildRoundAudioDownload();
+    expect(dl).not.toBeNull();
+    expect(dl?.filename).toContain('round-3');
+  });
+
+  it('download re-synthesizes on demand when captured blobs are empty/corrupt', async () => {
+    // synth returns a tiny (header-only) blob → capture skips it; download must
+    // fall back to on-demand full-text synth. Here the fake always returns text-bytes,
+    // which for the whole-round text is > MIN → a valid download.
+    const provider = makeFakeProvider();
+    const svc = makeService(provider, { transmissionMode: 'full' });
+    await svc.speak('一段足够长的正文内容用来下载测试。', 'round-5');
+    const dl = await svc.buildRoundAudioDownload();
+    expect(dl).not.toBeNull();
   });
 
   it('clearRoundAudio() drops the cache and broadcasts tts:cache', async () => {

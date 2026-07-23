@@ -35,6 +35,12 @@ export interface TtsAudioPlayer {
    * duration can't be determined. Optional; a service degrades gracefully without it.
    */
   measureDurationSec?(blob: Blob): Promise<number>;
+  /**
+   * Live-update the currently-playing clip's rate/volume (so a settings change
+   * mid-playback takes effect immediately instead of only on the next segment).
+   * No-op when nothing is playing.
+   */
+  setLiveParams?(rate: number, volume: number): void;
   /** Stop any current playback immediately (and drop any preloaded segment). */
   stop(): void;
   /** Pause current playback (resumable). */
@@ -201,6 +207,13 @@ export class HtmlAudioPlayer implements TtsAudioPlayer {
       probe.onerror = () => done(0);
       probe.src = url;
     });
+  }
+
+  setLiveParams(rate: number, volume: number): void {
+    if (this.audio) {
+      this.audio.playbackRate = rate;
+      this.audio.volume = volume;
+    }
   }
 
   pause(): void { this.audio?.pause(); }
