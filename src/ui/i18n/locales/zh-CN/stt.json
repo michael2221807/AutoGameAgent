@@ -17,9 +17,41 @@
       "backend": "语音识别失败——请检查 STT 服务是否在线",
       "stream": "实时听写连接失败——可改用录音转写"
     },
+    "lexicon": {
+      "addTooltip": "加入专有名词词典（本存档）",
+      "addPlaceholder": "人名 / 地名…",
+      "addConfirm": "加入",
+      "added": "已加入词典：{word}",
+      "invalid": "需 2–10 个汉字，未加入",
+      "duplicate": "该词已在词典中",
+      "full": "词典已满（上限 {max} 词）"
+    },
     "settings": {
       "sectionTitle": "语音输入（STT）",
       "desc": "对着麦克风说话，转成文字填进输入框，由你核对后再发送。",
+      "hotword": {
+        "sectionTitle": "专有名词偏置",
+        "enabled": {
+          "label": "启用专有名词偏置",
+          "desc": "把人名/地名/自定义词交给识别做纠正，减少同音字错听"
+        },
+        "strength": {
+          "label": "偏置强度",
+          "desc": "弱=只纠拼音完全一致（最稳）；中/强=容模糊音，纠更多但可能误改",
+          "weak": "弱",
+          "medium": "中",
+          "strong": "强"
+        },
+        "dict": {
+          "label": "专有名词词典（本存档）",
+          "desc": "人名/地名会自动收录；这里补录识别易错的专有名词。仅对当前存档生效。",
+          "placeholder": "输入专有名词（2–10 字）",
+          "add": "加入",
+          "remove": "移除",
+          "empty": "还没有自定义词条——识别错的名字可在此补录。",
+          "noSave": "载入存档后可编辑本存档的专有名词词典。"
+        }
+      },
       "enabled": {
         "label": "启用语音输入",
         "desc": "在主输入与 NPC 私聊显示麦克风键"

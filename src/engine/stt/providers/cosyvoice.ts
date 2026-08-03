@@ -33,6 +33,8 @@ export class CosyVoiceSttProvider extends BaseSttProvider {
     form.append('file', blob, 'voice.webm');
     form.append('language', options?.language?.trim() || 'auto');
     form.append('response_format', 'json');
+    // 专有名词热词(FunASR hotwords JSON 字符串);空则不传 = 后端关闭。
+    if (options?.hotwords && options.hotwords.trim()) form.append('hotwords', options.hotwords);
 
     const { signal, cleanup } = this.withTimeout(options?.signal, STT_TRANSCRIBE_TIMEOUT_MS);
     try {

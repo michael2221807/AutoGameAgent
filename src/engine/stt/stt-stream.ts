@@ -35,9 +35,9 @@ export function deriveStreamUrl(baseUrl: string, path: string = DEFAULT_STT_STRE
   return `${wsBase}${p}`;
 }
 
-/** 构造握手 JSON payload。 */
-export function buildHandshake(latency: SttLatencyProfile = 'balanced', itn = true): Record<string, unknown> {
-  return {
+/** 构造握手 JSON payload。hotwords 非空时作为同级字段加入(FunASR 契约)。 */
+export function buildHandshake(latency: SttLatencyProfile = 'balanced', itn = true, hotwords?: string): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
     mode: '2pass',
     wav_name: 'aga-mic',
     wav_format: 'pcm',
@@ -46,6 +46,8 @@ export function buildHandshake(latency: SttLatencyProfile = 'balanced', itn = tr
     itn,
     is_speaking: true,
   };
+  if (hotwords && hotwords.trim()) payload.hotwords = hotwords;
+  return payload;
 }
 
 /** 解析服务端一条消息 → 归一化事件;非识别消息返回 null。 */
@@ -201,7 +203,7 @@ class SttStreamController implements SttStreamHandle {
     }
     this.phase = 'open';
     try {
-      this.ws!.send(JSON.stringify(buildHandshake(this.config.latency ?? 'balanced', this.config.itn ?? true)));
+      this.ws!.send(JSON.stringify(buildHandshake(this.config.latency ?? 'balanced', this.config.itn ?? true, this.config.hotwords)));
     } catch (err) {
       return this.fail(err instanceof Error ? err : new Error('STREAM_HANDSHAKE_FAILED'));
     }

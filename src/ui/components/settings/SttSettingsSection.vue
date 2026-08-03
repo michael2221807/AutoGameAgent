@@ -13,11 +13,14 @@
 import { ref, inject } from 'vue';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import { loadSttSettings, saveSttSettings } from '@/engine/stt/stt-settings';
-import type { SttSettings, SttInputMode, SttLatencyProfile } from '@/engine/stt/types';
+import { useSttLexicon } from '@/ui/composables/useSttLexicon';
+import type { SttSettings, SttInputMode, SttLatencyProfile, SttHotwordStrength } from '@/engine/stt/types';
 import type { SttService } from '@/engine/stt/stt-service';
 
 const stt = inject<SttService | undefined>('sttService', undefined);
 const settings = ref<SttSettings>(loadSttSettings());
+const lexicon = useSttLexicon();
+const newTerm = ref('');
 
 /** 单点持久化 + 通知在场麦克风组件刷新显隐。 */
 function commit(): void {
@@ -29,6 +32,15 @@ function setEnabled(v: boolean): void { settings.value.enabled = v; commit(); }
 function setMode(mode: SttInputMode): void { settings.value.mode = mode; commit(); }
 function setLatency(lat: SttLatencyProfile): void { settings.value.latency = lat; commit(); }
 function setFirstUseHint(v: boolean): void { settings.value.firstUseHint = v; commit(); }
+function setHotwordEnabled(v: boolean): void { settings.value.hotwordEnabled = v; commit(); }
+function setHotwordStrength(s: SttHotwordStrength): void { settings.value.hotwordStrength = s; commit(); }
+
+function addTerm(): void {
+  const w = newTerm.value.trim();
+  if (!w) return;
+  lexicon.addTerm(w);
+  newTerm.value = '';
+}
 
 /** 流式服务是否探到（用于「实时听写」不可用时的提示）。 */
 const streamReady = ref<boolean>(!!stt?.isStreamReady());
@@ -133,6 +145,71 @@ const mediaSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevi
         <AgaToggle :model-value="settings.firstUseHint" @update:model-value="setFirstUseHint" />
       </div>
 
+      <!-- 专有名词偏置(热词) -->
+      <div class="setting-subsection-header">{{ $t('stt.settings.hotword.sectionTitle') }}</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{{ $t('stt.settings.hotword.enabled.label') }}</span>
+          <span class="setting-desc">{{ $t('stt.settings.hotword.enabled.desc') }}</span>
+        </div>
+        <AgaToggle :model-value="settings.hotwordEnabled" @update:model-value="setHotwordEnabled" />
+      </div>
+
+      <div v-if="settings.hotwordEnabled" class="setting-row setting-row--indent">
+        <div class="setting-info">
+          <span class="setting-label">{{ $t('stt.settings.hotword.strength.label') }}</span>
+          <span class="setting-desc">{{ $t('stt.settings.hotword.strength.desc') }}</span>
+        </div>
+        <div class="stt-segment" role="group" :aria-label="$t('stt.settings.hotword.strength.label')">
+          <button
+            type="button" class="stt-segment__btn"
+            :class="{ 'stt-segment__btn--active': settings.hotwordStrength === 'weak' }"
+            :aria-pressed="settings.hotwordStrength === 'weak'"
+            @click="setHotwordStrength('weak')"
+          >{{ $t('stt.settings.hotword.strength.weak') }}</button>
+          <button
+            type="button" class="stt-segment__btn"
+            :class="{ 'stt-segment__btn--active': settings.hotwordStrength === 'medium' }"
+            :aria-pressed="settings.hotwordStrength === 'medium'"
+            @click="setHotwordStrength('medium')"
+          >{{ $t('stt.settings.hotword.strength.medium') }}</button>
+          <button
+            type="button" class="stt-segment__btn"
+            :class="{ 'stt-segment__btn--active': settings.hotwordStrength === 'strong' }"
+            :aria-pressed="settings.hotwordStrength === 'strong'"
+            @click="setHotwordStrength('strong')"
+          >{{ $t('stt.settings.hotword.strength.strong') }}</button>
+        </div>
+      </div>
+
+      <!-- 专有名词词典(自定义,按存档) -->
+      <template v-if="settings.hotwordEnabled">
+        <div class="setting-subsection-header">{{ $t('stt.settings.hotword.dict.label') }}</div>
+        <p class="setting-desc" style="padding: 4px 0 6px">{{ $t('stt.settings.hotword.dict.desc') }}</p>
+
+        <template v-if="lexicon.hasSave.value">
+          <div class="lex-add">
+            <input
+              v-model="newTerm"
+              type="text"
+              class="lex-add__input"
+              maxlength="10"
+              :placeholder="$t('stt.settings.hotword.dict.placeholder')"
+              @keydown.enter.prevent="addTerm"
+            />
+            <button class="lex-add__btn" :disabled="!newTerm.trim()" @click="addTerm">{{ $t('stt.settings.hotword.dict.add') }}</button>
+          </div>
+          <div v-if="lexicon.customTerms.value.length > 0" class="lex-chips">
+            <span v-for="term in lexicon.customTerms.value" :key="term" class="lex-chip">
+              {{ term }}
+              <button class="lex-chip__x" :aria-label="$t('stt.settings.hotword.dict.remove')" @click="lexicon.removeTerm(term)">×</button>
+            </span>
+          </div>
+          <p v-else class="setting-desc" style="opacity: 0.6; padding-left: 4px">{{ $t('stt.settings.hotword.dict.empty') }}</p>
+        </template>
+        <p v-else class="setting-desc" style="color: var(--color-amber-400); padding-left: 4px">{{ $t('stt.settings.hotword.dict.noSave') }}</p>
+      </template>
+
       <div class="setting-subsection-header">{{ $t('stt.settings.language.label') }}</div>
       <div class="setting-row">
         <div class="setting-info">
@@ -222,4 +299,35 @@ const mediaSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevi
   color: oklch(0.16 0.01 95);
   font-weight: 600;
 }
+
+/* 专有名词词典编辑 */
+.lex-add { display: flex; gap: 8px; align-items: center; padding: 4px 0 10px; }
+.lex-add__input {
+  flex: 1; min-width: 0; padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--color-border);
+  border-radius: 7px; color: var(--color-text); font-size: 0.84rem;
+  font-family: var(--font-serif-cjk); outline: none;
+}
+.lex-add__input:focus { border-color: var(--color-sage-400); box-shadow: 0 0 0 3px var(--color-primary-muted); }
+.lex-add__btn {
+  flex-shrink: 0; padding: 7px 14px;
+  background: var(--color-sage-400); border: none; border-radius: 7px;
+  color: oklch(0.16 0.01 95); font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  transition: filter var(--duration-fast) var(--ease-out);
+}
+.lex-add__btn:hover:not(:disabled) { filter: brightness(1.08); }
+.lex-add__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.lex-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 8px; }
+.lex-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 6px 4px 11px; border-radius: var(--radius-full);
+  background: var(--color-surface-elevated); color: var(--color-text-secondary);
+  font-size: 0.82rem; font-family: var(--font-serif-cjk);
+}
+.lex-chip__x {
+  border: none; background: transparent; color: var(--color-text-muted);
+  padding: 0 5px; font-size: 1rem; line-height: 1; cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+.lex-chip__x:hover { color: var(--color-danger); }
 </style>

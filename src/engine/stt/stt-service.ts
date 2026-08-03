@@ -51,10 +51,10 @@ export class SttService {
    * 录音 Blob → 文字(去情绪 emoji 的清洗文本;静音/无语音可能返回空串)。
    * 失败抛 Error —— 调用方(麦克风组件)catch 后 toast 并复位到 idle。
    */
-  async transcribe(blob: Blob, options?: { signal?: AbortSignal }): Promise<string> {
+  async transcribe(blob: Blob, options?: { signal?: AbortSignal; hotwords?: string }): Promise<string> {
     const provider = this.resolveProvider();
     if (!provider) throw new Error('[STT] 未配置可用的语音转文字(STT)API');
-    const result = await provider.transcribe(blob, { language: 'auto', signal: options?.signal });
+    const result = await provider.transcribe(blob, { language: 'auto', signal: options?.signal, hotwords: options?.hotwords });
     return result.text;
   }
 
@@ -79,9 +79,15 @@ export class SttService {
    * 打开一段实时听写会话。立即返回句柄(stop/cancel);连接与麦克风异步进行,
    * 失败经 callbacks.onError/onClose 上报。无配置返回 null(调用方回落录音转写)。
    */
-  startStream(callbacks: SttStreamCallbacks, options?: { latency?: SttLatencyProfile; stream?: MediaStream }): SttStreamHandle | null {
+  startStream(
+    callbacks: SttStreamCallbacks,
+    options?: { latency?: SttLatencyProfile; stream?: MediaStream; hotwords?: string },
+  ): SttStreamHandle | null {
     const url = this.getStreamUrl();
     if (!url) return null;
-    return openSttStream({ url, latency: options?.latency, itn: true, stream: options?.stream }, callbacks);
+    return openSttStream(
+      { url, latency: options?.latency, itn: true, stream: options?.stream, hotwords: options?.hotwords },
+      callbacks,
+    );
   }
 }

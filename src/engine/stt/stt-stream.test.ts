@@ -54,6 +54,12 @@ describe('buildHandshake', () => {
   it('honors itn=false', () => {
     expect(buildHandshake('balanced', false).itn).toBe(false);
   });
+  it('omits hotwords field when empty/undefined, includes when present', () => {
+    expect('hotwords' in buildHandshake('balanced', true)).toBe(false);
+    expect('hotwords' in buildHandshake('balanced', true, '')).toBe(false);
+    expect('hotwords' in buildHandshake('balanced', true, '   ')).toBe(false);
+    expect(buildHandshake('balanced', true, '{"韩素琴":20}').hotwords).toBe('{"韩素琴":20}');
+  });
 });
 
 describe('parseStreamMessage', () => {

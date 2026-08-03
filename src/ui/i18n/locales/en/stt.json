@@ -17,9 +17,41 @@
       "backend": "Speech recognition failed — check whether the STT service is online",
       "stream": "Live dictation connection failed — you can switch to record-and-transcribe"
     },
+    "lexicon": {
+      "addTooltip": "Add to proper-noun dictionary (this save)",
+      "addPlaceholder": "Name / place…",
+      "addConfirm": "Add",
+      "added": "Added to dictionary: {word}",
+      "invalid": "Needs 2–10 Chinese characters; not added",
+      "duplicate": "Already in the dictionary",
+      "full": "Dictionary is full (max {max})"
+    },
     "settings": {
       "sectionTitle": "Voice input (STT)",
       "desc": "Speak into the microphone to fill the input box with text; you review it before sending.",
+      "hotword": {
+        "sectionTitle": "Proper-noun biasing",
+        "enabled": {
+          "label": "Enable proper-noun biasing",
+          "desc": "Feed names/places/custom words to the recognizer to fix homophone errors"
+        },
+        "strength": {
+          "label": "Biasing strength",
+          "desc": "Weak = only exact-pinyin matches (safest); Medium/Strong = allow fuzzy sounds, fixes more but may over-correct",
+          "weak": "Weak",
+          "medium": "Medium",
+          "strong": "Strong"
+        },
+        "dict": {
+          "label": "Proper-noun dictionary (this save)",
+          "desc": "Names/places are auto-collected; add error-prone proper nouns here. Applies to the current save only.",
+          "placeholder": "Enter a proper noun (2–10 chars)",
+          "add": "Add",
+          "remove": "Remove",
+          "empty": "No custom terms yet — add mis-recognized names here.",
+          "noSave": "Load a save to edit its proper-noun dictionary."
+        }
+      },
       "enabled": {
         "label": "Enable voice input",
         "desc": "Show the microphone button in the main input and NPC private chat"

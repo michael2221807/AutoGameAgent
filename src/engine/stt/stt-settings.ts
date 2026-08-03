@@ -12,12 +12,13 @@
  * 设计文档:docs/design/stt-streaming-handoff.md §5
  */
 import { DEFAULT_STT_SETTINGS } from './types';
-import type { SttSettings, SttInputMode, SttLatencyProfile } from './types';
+import type { SttSettings, SttInputMode, SttLatencyProfile, SttHotwordStrength } from './types';
 
 export const STT_SETTINGS_STORAGE_KEY = 'aga_stt_settings';
 
 const MODES: readonly SttInputMode[] = ['auto', 'stream', 'record'];
 const LATENCIES: readonly SttLatencyProfile[] = ['fast', 'balanced', 'stable'];
+const STRENGTHS: readonly SttHotwordStrength[] = ['weak', 'medium', 'strong'];
 
 /** 把任意来源对象归一化为完整、合法的 SttSettings(缺字段回落默认)。 */
 export function normalizeSttSettings(raw: unknown): SttSettings {
@@ -29,6 +30,10 @@ export function normalizeSttSettings(raw: unknown): SttSettings {
       ? (o.latency as SttLatencyProfile)
       : DEFAULT_STT_SETTINGS.latency,
     firstUseHint: typeof o.firstUseHint === 'boolean' ? o.firstUseHint : DEFAULT_STT_SETTINGS.firstUseHint,
+    hotwordEnabled: typeof o.hotwordEnabled === 'boolean' ? o.hotwordEnabled : DEFAULT_STT_SETTINGS.hotwordEnabled,
+    hotwordStrength: STRENGTHS.includes(o.hotwordStrength as SttHotwordStrength)
+      ? (o.hotwordStrength as SttHotwordStrength)
+      : DEFAULT_STT_SETTINGS.hotwordStrength,
   };
 }
 

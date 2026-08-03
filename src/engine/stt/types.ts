@@ -23,6 +23,12 @@ export interface SttTranscribeOptions {
   language?: string;
   /** 取消信号 */
   signal?: AbortSignal;
+  /**
+   * 专有名词热词(FunASR `hotwords`,JSON 字符串 `{"词":权重}`)。后端做拼音相似度
+   * 确定性校正(POSTPROCESS_HOTWORDS)。空/缺省 = 关闭。由 UI 层组装传入(词表来自
+   * 游戏状态 + 自定义词典,引擎不碰游戏字段)。见 docs/design/stt-hotword-handoff.md。
+   */
+  hotwords?: string;
 }
 
 /** 转写结果 */
@@ -116,6 +122,8 @@ export interface SttStreamConfig {
   itn?: boolean;
   /** 复用外部已取得的麦克风流(避免二次授权);不传则内部 getUserMedia。 */
   stream?: MediaStream;
+  /** 专有名词热词(FunASR `hotwords` JSON 字符串)。空/缺省 = 关闭。见 SttTranscribeOptions.hotwords。 */
+  hotwords?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -124,6 +132,25 @@ export interface SttStreamConfig {
 
 /** 输入模式:auto=可用则实时、否则回落录音;stream=只实时;record=只录音转写。 */
 export type SttInputMode = 'auto' | 'stream' | 'record';
+
+/**
+ * 专有名词偏置强度 → FunASR 权重(后端回告):
+ *   weak=10   仅无调拼音完全一致才替换(零误伤,最保守)
+ *   medium=20 +模糊音等价(z/zh、n/l、in/ing…);后端推荐默认
+ *   strong=40 +词长≥3 允许 1 个音节不同
+ * 已正确词不会被同音变体反纠。默认取 weak(用户要求"保守")。
+ */
+export type SttHotwordStrength = 'weak' | 'medium' | 'strong';
+export const HOTWORD_WEIGHT: Record<SttHotwordStrength, number> = {
+  weak: 10,
+  medium: 20,
+  strong: 40,
+};
+
+/** 热词表硬上限(后端:200 词 / 每词 2-10 汉字 / JSON≤8KB)。AGA 侧先行裁剪。 */
+export const MAX_LEXICON_TERMS = 200;
+export const LEXICON_TERM_MIN_CHARS = 2;
+export const LEXICON_TERM_MAX_CHARS = 10;
 
 export interface SttSettings {
   /** 总开关:关则主输入/私聊不显示麦克风键。 */
@@ -134,6 +161,10 @@ export interface SttSettings {
   latency: SttLatencyProfile;
   /** 首次转写懒加载较慢时是否给「首次稍慢」提示。 */
   firstUseHint: boolean;
+  /** 专有名词偏置开关(热词)。关 = 不传 hotwords(等价后端关闭)。 */
+  hotwordEnabled: boolean;
+  /** 偏置强度 → 权重。默认 weak(保守)。 */
+  hotwordStrength: SttHotwordStrength;
 }
 
 export const DEFAULT_STT_SETTINGS: SttSettings = {
@@ -141,4 +172,6 @@ export const DEFAULT_STT_SETTINGS: SttSettings = {
   mode: 'auto',
   latency: 'balanced',
   firstUseHint: true,
+  hotwordEnabled: true,
+  hotwordStrength: 'weak',
 };

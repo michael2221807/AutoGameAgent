@@ -20,6 +20,7 @@ import Tooltip from '@/ui/components/shared/Tooltip.vue';
 import { eventBus } from '@/engine/core/event-bus';
 import { loadSttSettings } from '@/engine/stt/stt-settings';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
+import { useSttLexicon } from '@/ui/composables/useSttLexicon';
 import type { SttService } from '@/engine/stt/stt-service';
 import type { SttStreamHandle, SttLatencyProfile } from '@/engine/stt/types';
 
@@ -38,6 +39,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const stt = inject<SttService | undefined>('sttService', undefined);
+const lexicon = useSttLexicon();
+// 本次录音的热词快照(开录时组装,流式握手 + 录音转写共用)。
+let sessionHotwords = '';
 
 // ── 可见性(gated,响应设置 + API 配置变化) ──
 // enabled 响应设置开关(经 aga:stt-settings-changed 刷新);sttConfigured 直接读
@@ -145,6 +149,7 @@ async function start(): Promise<void> {
   // 同步离开 idle → 立刻挡住重入(reviewer #4:record 路径在 getUserMedia 前也不会被二次点击)。
   state.value = 'listening';
   const s = loadSttSettings();
+  sessionHotwords = lexicon.getHotwords(); // 专有名词热词快照(偏置关或无词 → '')
   captureAnchor();
   emit('recording-change', true);
   const useStream = s.mode === 'stream' || (s.mode === 'auto' && stt.isStreamReady());
@@ -169,7 +174,7 @@ function startStream(latency: SttLatencyProfile, session: number): void {
     onLevel: (l) => { if (isCurrent(session)) pushLevel(l); },
     onError: (err) => { if (isCurrent(session)) showStreamErrorToast(err); }, // 只弹提示;清理归 onClose(reviewer #5)
     onClose: () => finalizeStream(session),
-  }, { latency });
+  }, { latency, hotwords: sessionHotwords });
   if (!handle) {
     // 无可用流式配置 → 回落录音转写
     stopTimer();
@@ -239,7 +244,7 @@ async function onRecordStop(session: number): Promise<void> {
   const type = (recChunks[0] as Blob | undefined)?.type || 'audio/webm';
   const blob = new Blob(recChunks, { type });
   try {
-    const text = await stt!.transcribe(blob, { signal: recAbort?.signal }); // 可被 cancel 中止(reviewer #1)
+    const text = await stt!.transcribe(blob, { signal: recAbort?.signal, hotwords: sessionHotwords }); // 可被 cancel 中止(reviewer #1)
     if (!isCurrent(session)) return; // 转写期间被取消 → 不回填,避免覆盖用户已输入
     committed = text || '';
     applyText(committed, true);
