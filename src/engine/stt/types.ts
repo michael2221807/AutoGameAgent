@@ -1,0 +1,144 @@
+// App doc: docs/user-guide/pages/game-main.md §3.14 (语音输入 · STT)
+/**
+ * STT (speech-to-text) 层类型定义 — 语音输入子系统。
+ *
+ * 架构镜像 TTS 子系统(src/engine/tts/types.ts):provider 接口 + backend 类型 +
+ * registry 工厂 + 独立 fetch(非 LLM 类别,apiCategory='stt')。但**更瘦**:单一
+ * 方法 transcribe、无流式、无播放态、无自动触发——玩家录音 → 一次性转写 → 回填输入框。
+ *
+ * 引擎铁律:本文件不 import vue-i18n、不含游戏特定内容。端点/参数由用户配置传入。
+ *
+ * 设计文档:docs/design/stt-voice-input-handoff.md
+ */
+
+/** STT 后端类型 — 决定请求格式与端点。首个:CosyVoice(SenseVoiceSmall)。 */
+export type SttBackendType = 'cosyvoice';
+
+/** 单次转写选项 */
+export interface SttTranscribeOptions {
+  /**
+   * 识别语言 → 查询/表单参数 language。SenseVoice 支持 zh/en/ja/ko/yue;
+   * 默认 'auto'(服务端自动识别)。MVP 固定 auto,不暴露 UI。
+   */
+  language?: string;
+  /** 取消信号 */
+  signal?: AbortSignal;
+}
+
+/** 转写结果 */
+export interface SttResult {
+  /** 已清洗文本(剔除 SenseVoice 情绪/事件 emoji)—— AGA 一律用这个。 */
+  text: string;
+  /** 原始富文本(含情绪标记),仅调试用。 */
+  rawText?: string;
+}
+
+/**
+ * STT Provider 抽象接口 — 每个 backend 实现一份。镜像 TtsProvider(tts/types.ts)。
+ */
+export interface SttProvider {
+  readonly backend: SttBackendType;
+  /**
+   * 把一段录音 Blob 转写成文字。
+   * CosyVoice: `POST {endpoint}{routingPath}` multipart(file=blob),返回 `{text, raw_text}`。
+   */
+  transcribe(blob: Blob, options?: SttTranscribeOptions): Promise<SttResult>;
+}
+
+/** Provider 工厂签名 — 由 registry 注册 */
+export type SttProviderFactory = (config: {
+  endpoint: string;
+  apiKey: string;
+  model?: string;
+  /** 自定义转写路径(默认 '/v1/audio/transcriptions') */
+  routingPath?: string;
+}) => SttProvider;
+
+/** CosyVoice STT 默认转写路径(OpenAI Whisper 兼容) */
+export const DEFAULT_STT_ROUTING_PATH = '/v1/audio/transcriptions';
+
+// ─────────────────────────────────────────────────────────────────────────
+// 实时流式听写(streaming) — FunASR 2pass WebSocket 协议
+// 契约见 docs/design/stt-streaming-handoff.md 头部「后端已确认的最终契约」:
+//   ws://{host}:{port}/v1/audio/stream — JSON 握手 → 裸 PCM(16k/mono/int16 LE)
+//   帧 → {is_speaking:false} 收尾;服务端回 2pass-online(partial,覆盖式)/
+//   2pass-offline(final,带标点、已清洗)。
+// ─────────────────────────────────────────────────────────────────────────
+
+/** CosyVoice 流式听写默认 WS 路径(后端固定) */
+export const DEFAULT_STT_STREAM_PATH = '/v1/audio/stream';
+
+/**
+ * 延迟档 → FunASR chunk_size `[look-back, chunk, look-ahead]`(每格 ≈60ms)。
+ * balanced 为后端实测默认值,partial 滞后语音 ~0.6-0.9s。
+ */
+export type SttLatencyProfile = 'fast' | 'balanced' | 'stable';
+export const STT_CHUNK_SIZE: Record<SttLatencyProfile, [number, number, number]> = {
+  fast: [4, 8, 4], // ~480ms 更跟手
+  balanced: [5, 10, 5], // ~600ms 后端默认
+  stable: [8, 12, 8], // ~720ms 更稳更准
+};
+
+/** 采集帧长(ms):worklet 攒够这么多 16k 单声道样本再发一帧 */
+export const STT_STREAM_FRAME_MS = 60;
+
+/** 流式识别回调 —— 由 UI 组件消费,驱动实时上屏。 */
+export interface SttStreamCallbacks {
+  /** 连接建立、握手已发,可以开始说话。 */
+  onOpen?(): void;
+  /** partial:当前句的累积文本(覆盖式刷新,替换未定句)。无标点。 */
+  onPartial?(text: string): void;
+  /** final:一句定稿(带标点、已清洗)。VAD 断句时可多次触发。 */
+  onFinal?(text: string): void;
+  /** 采集电平 0..1 —— 驱动波形(可选)。 */
+  onLevel?(level: number): void;
+  /** 协议/连接/权限错误。触发后会走 onClose。 */
+  onError?(error: Error): void;
+  /** 会话结束(正常收尾或取消/出错)。error 非空表示异常收场。 */
+  onClose?(error?: Error): void;
+}
+
+/** 流式会话句柄 —— UI 用它停止/取消一段听写。 */
+export interface SttStreamHandle {
+  /** 停止说话:发 is_speaking:false,等末尾 final 到达(或超时)后关闭。 */
+  stop(): void;
+  /** 取消:立即丢弃并关闭,不等 final、不再回调 onFinal。 */
+  cancel(): void;
+}
+
+/** 打开流式会话的配置 */
+export interface SttStreamConfig {
+  /** ws(s)://host:port/path */
+  url: string;
+  /** 延迟档 → chunk_size,默认 'balanced'。 */
+  latency?: SttLatencyProfile;
+  /** ITN(逆文本规整,数字/单位归一),默认 true。 */
+  itn?: boolean;
+  /** 复用外部已取得的麦克风流(避免二次授权);不传则内部 getUserMedia。 */
+  stream?: MediaStream;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 语音输入设置(aga_stt_settings) — 与 aga_tts_settings 对称,进备份/云同步。
+// ─────────────────────────────────────────────────────────────────────────
+
+/** 输入模式:auto=可用则实时、否则回落录音;stream=只实时;record=只录音转写。 */
+export type SttInputMode = 'auto' | 'stream' | 'record';
+
+export interface SttSettings {
+  /** 总开关:关则主输入/私聊不显示麦克风键。 */
+  enabled: boolean;
+  /** 输入模式。 */
+  mode: SttInputMode;
+  /** 实时听写延迟档(仅 stream/auto 生效)。 */
+  latency: SttLatencyProfile;
+  /** 首次转写懒加载较慢时是否给「首次稍慢」提示。 */
+  firstUseHint: boolean;
+}
+
+export const DEFAULT_STT_SETTINGS: SttSettings = {
+  enabled: true,
+  mode: 'auto',
+  latency: 'balanced',
+  firstUseHint: true,
+};

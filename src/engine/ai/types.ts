@@ -26,7 +26,7 @@ export type APIProviderType = 'openai' | 'claude' | 'gemini' | 'deepseek' | 'cus
  * 功能分配（APIAssignment）会按此字段过滤：embedding usage 只能选 'embedding' 类 API，
  * rerank 只能选 'rerank' 类，其他 usage 只能选 'llm' 类。
  */
-export type APICategory = 'llm' | 'embedding' | 'rerank' | 'image' | 'tts';
+export type APICategory = 'llm' | 'embedding' | 'rerank' | 'image' | 'tts' | 'stt';
 
 /**
  * API 提供商预设信息
@@ -167,7 +167,8 @@ export type UsageType =
   | 'world_builder'            // Story 3: 世界构建批量生成（WorldBuilderService）— 可单独配 API
   | 'engram_batch_solidify'    // Story 4: Engram 批量固化（EngramBatchSolidifyPipeline）— 可单独配 API
   | 'card_edge_classify'       // Story 7: 存档转卡知识边分类（CardEdgeClassifyPipeline）— 可单独配 API
-  | 'ttsGen_cosyvoice';        // TTS: CosyVoice 语音合成（apiCategory='tts'）— 可单独配 API
+  | 'ttsGen_cosyvoice'         // TTS: CosyVoice 语音合成（apiCategory='tts'）— 可单独配 API
+  | 'sttGen_cosyvoice';        // STT: CosyVoice/SenseVoice 语音转文字（apiCategory='stt'）— 可单独配 API
 
 /** API 分配 — 指定某个功能使用哪个 API 配置 */
 export interface APIAssignment {

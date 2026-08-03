@@ -1,0 +1,54 @@
+{
+  "stt": {
+    "mic": {
+      "start": "Voice input",
+      "stopStream": "Stop dictation",
+      "stopRecord": "Stop & transcribe",
+      "cancel": "Cancel",
+      "listening": "Listening",
+      "dictating": "Dictating",
+      "transcribing": "Transcribing…",
+      "finalizing": "Finalizing…"
+    },
+    "error": {
+      "permission": "Microphone permission denied — please allow it in the browser and retry",
+      "noMic": "No microphone device detected",
+      "notSupported": "This browser does not support voice input",
+      "backend": "Speech recognition failed — check whether the STT service is online",
+      "stream": "Live dictation connection failed — you can switch to record-and-transcribe"
+    },
+    "settings": {
+      "sectionTitle": "Voice input (STT)",
+      "desc": "Speak into the microphone to fill the input box with text; you review it before sending.",
+      "enabled": {
+        "label": "Enable voice input",
+        "desc": "Show the microphone button in the main input and NPC private chat"
+      },
+      "mode": {
+        "label": "Input mode",
+        "desc": "Live dictation needs backend streaming; Auto = live when available, otherwise falls back to record",
+        "auto": "Auto",
+        "stream": "Live dictation",
+        "record": "Record & transcribe"
+      },
+      "latency": {
+        "label": "Live dictation latency",
+        "desc": "Faster feels more responsive; steadier is more accurate",
+        "fast": "Fast",
+        "balanced": "Balanced",
+        "stable": "Steady"
+      },
+      "firstUseHint": {
+        "label": "First-use hint",
+        "desc": "The model loads lazily (~10+s the first time); when on, shows a \"first time is slower\" hint"
+      },
+      "language": {
+        "label": "Recognition language",
+        "auto": "Auto-detect",
+        "desc": "Chinese / English / Japanese / Korean / Cantonese auto-detected"
+      },
+      "streamUnavailable": "No live dictation service detected; will fall back to record & transcribe",
+      "insecureContext": "⚠ The browser has disabled the microphone: this page is served over an insecure address (LAN IP + http). Open it via localhost or https for the mic button to appear."
+    }
+  }
+}

@@ -86,10 +86,12 @@ export class AIService {
     // 2. 确定此 usage 需要的 API 类别
     const isImageGen = usageType === 'imageGeneration' || usageType.startsWith('imageGen_');
     const isTts = usageType.startsWith('ttsGen_');
+    const isStt = usageType.startsWith('sttGen_');
     const requiredCategory = usageType === 'embedding' ? 'embedding'
       : usageType === 'rerank' ? 'rerank'
       : isImageGen ? 'image'
       : isTts ? 'tts'
+      : isStt ? 'stt'
       : 'llm';
 
     // 3. 非 LLM 类：只在同类 API 中查找，不 fallback 到 LLM
@@ -132,6 +134,19 @@ export class AIService {
    */
   getTtsConfigForBackend(backend: string): APIConfig | undefined {
     const perBackendUsage = `ttsGen_${backend}` as UsageType;
+    return this.getConfigForUsage(perBackendUsage);
+  }
+
+  // ─── STT per-backend routing ───
+
+  /**
+   * Find the STT (speech-to-text) API config for a specific backend (e.g.
+   * 'cosyvoice'). Uses the per-backend usage type (sttGen_cosyvoice). Mirrors
+   * {@link getTtsConfigForBackend}. Non-LLM category → only matches
+   * `apiCategory === 'stt'` configs, never falls back to an LLM config.
+   */
+  getSttConfigForBackend(backend: string): APIConfig | undefined {
+    const perBackendUsage = `sttGen_${backend}` as UsageType;
     return this.getConfigForUsage(perBackendUsage);
   }
 
@@ -367,7 +382,7 @@ export class AIService {
     url: string;
     apiKey: string;
     model: string;
-    apiCategory?: 'llm' | 'embedding' | 'rerank' | 'image' | 'tts';
+    apiCategory?: 'llm' | 'embedding' | 'rerank' | 'image' | 'tts' | 'stt';
     /** 可选：自定义路径覆盖（embedding/rerank 走 body 端点；tts 走查询路径） */
     customRoutingPath?: string;
     /** 可选：tts 连测用的 speaker（默认空，服务端取首个音色） */
@@ -400,6 +415,34 @@ export class AIService {
         const ct = res.headers.get('content-type') ?? '';
         const ok = ct.toLowerCase().includes('audio');
         return { ok, latencyMs, error: ok ? undefined : `响应非音频（Content-Type: ${ct || '空'}）` };
+      } catch (err) {
+        clearTimeout(timeout);
+        const latencyMs = Date.now() - start;
+        const msg = (err as Error).message ?? String(err);
+        if (msg.includes('abort') || msg.includes('signal')) {
+          return { ok: false, latencyMs, error: '连接超时（10s）' };
+        }
+        return { ok: false, latencyMs, error: msg.slice(0, 100) };
+      }
+    }
+
+    // STT: 转写端点是 POST multipart（需真实音频），连测改探健康端点 GET / → JSON status:'ok'。
+    // 与 TTS 共用同一 CosyVoice 服务；健康端点判活即可，避免连测时空录音。
+    if (category === 'stt') {
+      const endpoint = `${baseUrl}/`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      try {
+        const res = await fetch(endpoint, { method: 'GET', signal: controller.signal });
+        clearTimeout(timeout);
+        const latencyMs = Date.now() - start;
+        if (!res.ok) {
+          const errText = await res.text().catch(() => `HTTP ${res.status}`);
+          return { ok: false, latencyMs, error: `${res.status}: ${errText.slice(0, 120)}` };
+        }
+        const data = (await res.json().catch(() => null)) as { status?: string } | null;
+        const ok = data?.status === 'ok';
+        return { ok, latencyMs, error: ok ? undefined : '健康探测未返回 status:ok' };
       } catch (err) {
         clearTimeout(timeout);
         const latencyMs = Date.now() - start;

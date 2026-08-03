@@ -13,6 +13,7 @@ import { AI_SETTINGS_STORAGE_KEY } from '@/engine/ai/ai-service';
 import Modal from '@/ui/components/common/Modal.vue';
 import EngramSettingsSection from '../settings/EngramSettingsSection.vue';
 import TtsSettingsSection from '../settings/TtsSettingsSection.vue';
+import SttSettingsSection from '../settings/SttSettingsSection.vue';
 import { useGameState } from '@/ui/composables/useGameState';
 import type { ProfileManager } from '@/engine/persistence/profile-manager';
 import type { SaveManager } from '@/engine/persistence/save-manager';
@@ -1053,6 +1054,7 @@ const navCategories = computed<NavCategory[]>(() => [
   { id: 'settings-nsfw', label: t('settings.nav.nsfw') },
   { id: 'settings-ai-features', label: t('settings.nav.aiFeatures') },
   { id: 'settings-audio', label: t('settings.nav.audio') },
+  { id: 'settings-voice-input', label: t('settings.nav.voiceInput') },
   { id: 'settings-ui', label: t('settings.nav.ui') },
   { id: 'settings-game', label: t('settings.nav.game') },
   { id: 'settings-action', label: t('settings.nav.action') },
@@ -1409,6 +1411,9 @@ onBeforeUnmount(() => {
 
     <!-- ─── 配音 / TTS ─── -->
     <TtsSettingsSection v-show="visibleCategoryIds.has('settings-audio')" />
+
+    <!-- ─── 语音输入 / STT ─── -->
+    <SttSettingsSection v-show="visibleCategoryIds.has('settings-voice-input')" />
 
     <!-- ─── UI preferences ─── -->
     <section id="settings-ui" v-show="visibleCategoryIds.has('settings-ui')" class="settings-section">

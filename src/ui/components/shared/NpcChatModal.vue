@@ -27,6 +27,7 @@ import { DEFAULT_ENGINE_PATHS } from '@/engine/pipeline/types';
 import { eventBus } from '@/engine/core/event-bus';
 import FormattedText from '@/ui/components/common/FormattedText.vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
+import MicInputButton from '@/ui/components/shared/MicInputButton.vue';
 import type { NpcChatPipeline, NpcChatMessage } from '@/engine/pipeline/sub-pipelines/npc-chat';
 
 interface NpcForChat {
@@ -107,6 +108,9 @@ const isSending = ref(false);
 const errorMsg = ref<string | null>(null);
 const canRollback = ref(false);
 const messagesContainer = ref<HTMLDivElement | null>(null);
+const chatTextareaRef = ref<HTMLTextAreaElement | null>(null);
+// 语音录音/听写期间置为 readonly，防并发键入被识别文本覆盖（见 GameComposer 同注）。
+const micRecording = ref(false);
 
 /**
  * CR-R14 (2026-04-11)：流式逐字显示状态
@@ -351,14 +355,22 @@ function affinityColor(value: number | undefined): string {
           <!-- ─── Input area ─── -->
           <footer class="chat-input-area">
             <textarea
+              ref="chatTextareaRef"
               v-model="userInput"
               class="chat-textarea"
               :placeholder="$t('modal.npcChat.placeholder', { name: npc.名称 })"
               rows="2"
               :disabled="isSending"
+              :readonly="micRecording"
               @keydown="onKeydown"
             />
             <div class="chat-actions">
+              <MicInputButton
+                v-model="userInput"
+                :textarea="chatTextareaRef"
+                :disabled="isSending"
+                @recording-change="micRecording = $event"
+              />
               <button
                 v-if="canRollback"
                 class="btn-rollback"

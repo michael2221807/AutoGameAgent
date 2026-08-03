@@ -2,6 +2,7 @@
 // App doc: docs/user-guide/pages/game-main.md
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import Tooltip from '@/ui/components/shared/Tooltip.vue';
+import MicInputButton from '@/ui/components/shared/MicInputButton.vue';
 
 const ACTION_OPTIONS_COLLAPSED_KEY = 'aga_action_options_collapsed';
 
@@ -22,6 +23,9 @@ const emit = defineEmits<{
 
 const userInput = ref('');
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+// 语音录音/听写期间置 textarea 为 readonly，防止并发键入被识别文本覆盖（MicInputButton
+// 的插入锚点在录音开始时快照）；readonly 不改变外观、保留焦点，程序化 v-model 更新照常。
+const micRecording = ref(false);
 const actionOptionsCollapsed = ref<boolean>(
   localStorage.getItem(ACTION_OPTIONS_COLLAPSED_KEY) === '1',
 );
@@ -183,8 +187,16 @@ defineExpose({
         :placeholder="$t('mainGame.composer.inputPlaceholder')"
         rows="1"
         :disabled="props.isGenerating"
+        :readonly="micRecording"
         @keydown="onKeydown"
         @input="autoResizeTextarea"
+      />
+      <MicInputButton
+        v-model="userInput"
+        :textarea="textareaRef"
+        :disabled="props.isGenerating"
+        @recording-change="micRecording = $event"
+        @update:model-value="nextTick(autoResizeTextarea)"
       />
       <Tooltip :text="$t('mainGame.composer.sendAriaLabel')" interactive>
         <button

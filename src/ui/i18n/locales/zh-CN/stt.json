@@ -1,0 +1,54 @@
+{
+  "stt": {
+    "mic": {
+      "start": "语音输入",
+      "stopStream": "停止听写",
+      "stopRecord": "停止并转写",
+      "cancel": "取消",
+      "listening": "聆听中",
+      "dictating": "听写中",
+      "transcribing": "转写中…",
+      "finalizing": "定稿中…"
+    },
+    "error": {
+      "permission": "麦克风权限被拒绝——请在浏览器允许后重试",
+      "noMic": "未检测到麦克风设备",
+      "notSupported": "当前浏览器不支持语音输入",
+      "backend": "语音识别失败——请检查 STT 服务是否在线",
+      "stream": "实时听写连接失败——可改用录音转写"
+    },
+    "settings": {
+      "sectionTitle": "语音输入（STT）",
+      "desc": "对着麦克风说话，转成文字填进输入框，由你核对后再发送。",
+      "enabled": {
+        "label": "启用语音输入",
+        "desc": "在主输入与 NPC 私聊显示麦克风键"
+      },
+      "mode": {
+        "label": "输入模式",
+        "desc": "实时听写需后端流式；自动 = 可用则实时、否则回落录音转写",
+        "auto": "自动",
+        "stream": "实时听写",
+        "record": "录音转写"
+      },
+      "latency": {
+        "label": "实时听写延迟档",
+        "desc": "越快越跟手，越稳越准",
+        "fast": "快",
+        "balanced": "均衡",
+        "stable": "稳"
+      },
+      "firstUseHint": {
+        "label": "首次转写提示",
+        "desc": "模型懒加载，首次约十几秒；开启则给「首次稍慢」提示"
+      },
+      "language": {
+        "label": "识别语言",
+        "auto": "自动识别",
+        "desc": "中 / 英 / 日 / 韩 / 粤 自动判定"
+      },
+      "streamUnavailable": "未探测到实时听写服务，将回落为录音转写",
+      "insecureContext": "⚠ 浏览器已禁用麦克风：当前通过不安全地址访问（局域网 IP + http）。请改用 localhost 或 https 打开——麦克风键才会出现。"
+    }
+  }
+}

@@ -76,6 +76,7 @@ const USAGE_TYPE_CATEGORIES: Record<UsageType, AssignCategory> = {
   engram_batch_solidify: 'repair',
   card_edge_classify: 'repair',
   ttsGen_cosyvoice: 'audio',
+  sttGen_cosyvoice: 'audio',
 };
 
 function getUsageTypeMeta(key: UsageType): UsageTypeMeta {
@@ -204,8 +205,8 @@ async function testConnection(api: APIConfig): Promise<void> {
     eventBus.emit('ui:toast', { type: 'warning', message: t('api.test.noService'), duration: 2000 });
     return;
   }
-  // TTS (CosyVoice) needs neither apiKey nor model — only a reachable URL.
-  const preflightOk = (api.apiCategory === 'tts')
+  // TTS / STT (CosyVoice) need neither apiKey nor model — only a reachable URL.
+  const preflightOk = (api.apiCategory === 'tts' || api.apiCategory === 'stt')
     ? !!api.url
     : !!(api.url && api.apiKey && api.model);
   if (!preflightOk) {
@@ -322,7 +323,7 @@ function getCategoryMeta(cat: APICategory): { label: string; desc: string } {
   };
 }
 
-const CATEGORY_OPTIONS: APICategory[] = ['llm', 'embedding', 'rerank', 'image', 'tts'];
+const CATEGORY_OPTIONS: APICategory[] = ['llm', 'embedding', 'rerank', 'image', 'tts', 'stt'];
 
 /** Provider picker options for the edit modal (AgaSelect). */
 const PROVIDER_VALUES: APIProviderType[] = ['openai', 'claude', 'gemini', 'deepseek', 'custom'];
@@ -522,6 +523,15 @@ const CATEGORY_DEFAULTS: Record<APICategory, CategorySlice> = {
     provider: 'custom',
     url: 'http://localhost:9880',
     model: 'cosyvoice',
+    temperature: 0,
+    maxTokens: 0,
+    useCustomRouting: false,
+    customRoutingPath: '',
+  },
+  stt: {
+    provider: 'custom',
+    url: 'http://localhost:9880',
+    model: 'sensevoice',
     temperature: 0,
     maxTokens: 0,
     useCustomRouting: false,
@@ -780,6 +790,7 @@ function requiredCategoryFor(type: UsageType): APICategory {
   if (type === 'rerank') return 'rerank';
   if (type === 'imageGeneration' || type.startsWith('imageGen_')) return 'image';
   if (type.startsWith('ttsGen_')) return 'tts';
+  if (type.startsWith('sttGen_')) return 'stt';
   return 'llm';
 }
 
@@ -1067,7 +1078,7 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
               ? 'https://api.siliconflow.cn'
               : form.apiCategory === 'image'
                 ? activeImagePreset.url || 'https://example.com'
-                : form.apiCategory === 'tts'
+                : (form.apiCategory === 'tts' || form.apiCategory === 'stt')
                   ? 'http://localhost:9880'
                   : 'https://api.example.com'"
           />
@@ -1081,6 +1092,9 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
           <span v-else-if="form.apiCategory === 'tts'" class="form-hint">
             {{ $t('api.form.urlHintTts') }}
           </span>
+          <span v-else-if="form.apiCategory === 'stt'" class="form-hint">
+            {{ $t('api.form.urlHintStt') }}
+          </span>
         </div>
 
         <div class="form-group">
@@ -1089,13 +1103,14 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
             v-model="form.apiKey"
             type="password"
             class="form-input"
-            :placeholder="form.apiCategory === 'tts' ? $t('api.form.apiKeyOptional') : 'sk-...'"
+            :placeholder="(form.apiCategory === 'tts' || form.apiCategory === 'stt') ? $t('api.form.apiKeyOptional') : 'sk-...'"
           />
           <span v-if="form.apiCategory === 'tts'" class="form-hint">{{ $t('api.form.apiKeyHintTts') }}</span>
+          <span v-else-if="form.apiCategory === 'stt'" class="form-hint">{{ $t('api.form.apiKeyHintStt') }}</span>
         </div>
 
-        <!-- Model with fetch button (B.1.2) — hidden for TTS (CosyVoice needs no model) -->
-        <div v-if="form.apiCategory !== 'tts'" class="form-group">
+        <!-- Model with fetch button (B.1.2) — hidden for TTS/STT (CosyVoice needs no model) -->
+        <div v-if="form.apiCategory !== 'tts' && form.apiCategory !== 'stt'" class="form-group">
           <label class="form-label">{{ $t('api.form.model') }}</label>
           <div class="model-input-row">
             <input
@@ -1175,13 +1190,15 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
           </span>
         </div>
 
-        <!-- §11.3: Advanced — custom routing path (embedding/rerank/tts) -->
-        <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank' || form.apiCategory === 'tts'" class="form-advanced">
+        <!-- §11.3: Advanced — custom routing path (embedding/rerank/tts/stt) -->
+        <details v-if="form.apiCategory === 'embedding' || form.apiCategory === 'rerank' || form.apiCategory === 'tts' || form.apiCategory === 'stt'" class="form-advanced">
           <summary>{{ $t('api.form.advancedOptions') }}</summary>
           <div class="form-group">
             <AgaToggle v-model="form.useCustomRouting" :label="$t('api.form.useCustomRouting')" show-label />
             <span class="form-hint">
-              {{ form.apiCategory === 'tts' ? $t('api.form.customRoutingHintTts') : $t('api.form.customRoutingHint') }}
+              {{ form.apiCategory === 'tts' ? $t('api.form.customRoutingHintTts')
+                : form.apiCategory === 'stt' ? $t('api.form.customRoutingHintStt')
+                : $t('api.form.customRoutingHint') }}
             </span>
           </div>
           <div v-if="form.useCustomRouting" class="form-group">
@@ -1190,7 +1207,7 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
               v-model="form.customRoutingPath"
               type="text"
               class="form-input"
-              :placeholder="form.apiCategory === 'rerank' ? '/v1/rerank' : form.apiCategory === 'tts' ? '/' : '/v1/embeddings'"
+              :placeholder="form.apiCategory === 'rerank' ? '/v1/rerank' : form.apiCategory === 'tts' ? '/' : form.apiCategory === 'stt' ? '/v1/audio/transcriptions' : '/v1/embeddings'"
             />
           </div>
         </details>
@@ -1437,6 +1454,10 @@ function getAssignableAPIOptions(type: UsageType): SelectOption[] {
 .api-category-badge--tts {
   color: var(--color-viz-purple);
   background: color-mix(in oklch, var(--color-viz-purple) 15%, transparent);
+}
+.api-category-badge--stt {
+  color: var(--color-viz-blue, #5b9bd5);
+  background: color-mix(in oklch, var(--color-viz-blue, #5b9bd5) 15%, transparent);
 }
 
 .api-actions {

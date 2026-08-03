@@ -86,6 +86,9 @@ import { CivitaiImageProvider } from './engine/image/providers/civitai';
 import { TtsService } from './engine/tts/tts-service';
 import { TtsProviderRegistry } from './engine/tts/provider-registry';
 import { CosyVoiceProvider } from './engine/tts/providers/cosyvoice';
+import { SttService } from './engine/stt/stt-service';
+import { SttProviderRegistry } from './engine/stt/provider-registry';
+import { CosyVoiceSttProvider } from './engine/stt/providers/cosyvoice';
 import { migrateImageState } from './engine/image/save-migration';
 import { NpcChatPipeline } from './engine/pipeline/sub-pipelines/npc-chat';
 import { DEFAULT_ENGINE_PATHS } from './engine/pipeline/types';
@@ -665,6 +668,11 @@ async function bootstrap(): Promise<void> {
   ttsProviderRegistry.register('cosyvoice', (c) => new CosyVoiceProvider(c.endpoint, c.apiKey, c.routingPath));
   const ttsService = new TtsService(aiService, ttsProviderRegistry);
 
+  // ── STT subsystem bootstrap (语音输入;用户触发,不进 orchestrator subPipelines) ──
+  const sttProviderRegistry = new SttProviderRegistry();
+  sttProviderRegistry.register('cosyvoice', (c) => new CosyVoiceSttProvider(c.endpoint, c.apiKey, c.routingPath));
+  const sttService = new SttService(aiService, sttProviderRegistry);
+
   // ── #1: 创建 Orchestrator，接通 pipeline:user-input → PipelineRunner ──
   let orchestrator: GameOrchestrator | null = null;
   if (pack) {
@@ -777,6 +785,7 @@ async function bootstrap(): Promise<void> {
   if (plotEvaluationPipeline) app.provide('plotEvaluation', plotEvaluationPipeline);
   app.provide('imageService', imageService);
   app.provide('ttsService', ttsService);
+  app.provide('sttService', sttService);
   app.provide('vectorStore', vectorStore);
   app.provide('embedder', embedder);
   app.provide('backupService', backupService);

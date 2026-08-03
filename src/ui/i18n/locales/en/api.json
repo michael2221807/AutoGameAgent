@@ -34,6 +34,7 @@
   "api.usage.engram_batch_solidify": "Engram Batch Solidify",
   "api.usage.card_edge_classify": "Card Edge Classify",
   "api.usage.ttsGen_cosyvoice": "CosyVoice Voice",
+  "api.usage.sttGen_cosyvoice": "CosyVoice Voice Input",
 
   "api.usage.tip.main": "Core call for each turn's narrative generation, consuming the most tokens — assign your strongest model",
   "api.usage.tip.cot": "Independent reasoning step before the main turn, improving plot consistency and check quality — requires extra API call",
@@ -65,6 +66,7 @@
   "api.usage.tip.engram_batch_solidify": "One-click batch solidify: scan world data and fill missing knowledge edges and descriptions for NPCs/locations",
   "api.usage.tip.card_edge_classify": "During save-to-card conversion, classifies each relationship memory as worldview setting or plot event for the author to confirm one by one",
   "api.usage.tip.ttsGen_cosyvoice": "Assign the TTS API config used for CosyVoice speech synthesis, to voice round narration",
+  "api.usage.tip.sttGen_cosyvoice": "Assign the STT API config used for CosyVoice / SenseVoice speech-to-text, so players can dictate with the mic instead of typing",
 
   "api.category.narrative": "Narrative Generation",
   "api.category.world_memory": "World & Memory",
@@ -88,6 +90,8 @@
   "api.apiCategory.image.desc": "Image Generation — NovelAI / DALL-E / SD-WebUI / ComfyUI / Civitai image APIs",
   "api.apiCategory.tts": "Voice",
   "api.apiCategory.tts.desc": "Speech synthesis — CosyVoice and other TTS endpoints, to voice round narration",
+  "api.apiCategory.stt": "Voice Input",
+  "api.apiCategory.stt.desc": "Speech-to-text — CosyVoice / SenseVoice and other STT endpoints; dictate with the mic to fill the input box",
 
   "api.imageBackend.civitai": "Civitai",
   "api.imageBackend.novelai": "NovelAI",
@@ -117,10 +121,13 @@
   "api.form.urlHintEmbedding": "Enter base URL only, without /v1/... — the system will append automatically",
   "api.form.urlHintImage": "'s base URL",
   "api.form.urlHintTts": "CosyVoice service root URL, e.g. http://localhost:9880, without query params",
+  "api.form.urlHintStt": "CosyVoice / SenseVoice service root URL, e.g. http://localhost:9880 (same service as Voice), no path",
   "api.form.apiKey": "API Key",
   "api.form.apiKeyOptional": "(optional — local CosyVoice needs none)",
   "api.form.apiKeyHintTts": "A local CosyVoice service usually needs no key; leave blank",
+  "api.form.apiKeyHintStt": "A local CosyVoice service usually needs no key; leave blank",
   "api.form.customRoutingHintTts": "Override the default synth path /. Only needed if your CosyVoice wrapper uses a non-root path (e.g. /tts).",
+  "api.form.customRoutingHintStt": "Override the default transcribe path /v1/audio/transcriptions. Only needed if your wrapper uses a non-default path.",
   "api.form.model": "Model",
   "api.form.temperature": "Temperature",
   "api.form.maxTokens": "Max Tokens",
