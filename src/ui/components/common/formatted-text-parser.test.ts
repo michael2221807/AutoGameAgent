@@ -323,4 +323,39 @@ describe('highlightNpcNames', () => {
     const hl = highlightNpcNames(parts, ['林月']);
     expect(hl.every((p) => p.kind !== 'npc-name')).toBe(true);
   });
+
+  // 2026-08-03 fix: names inside 【环境】 narration were never highlighted
+  // because only `normal` parts were split (user report: 沈鹤龄 in full-para
+  // 【】 blocks had no highlight/hover card).
+  it('highlights names inside environment 【】 parts', () => {
+    const parts = parseInline('【林月站在檐下，望着雨幕。】');
+    const hl = highlightNpcNames(parts, ['林月']);
+    const npc = hl.find((p) => p.kind === 'npc-name');
+    expect(npc?.text).toBe('林月');
+    // surrounding pieces stay environment-kind (keep umber italic style)
+    expect(hl.filter((p) => p.kind === 'environment').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('environment-sourced npc-name inherits italic to match narration rhythm', () => {
+    const parts = parseInline('【林月来了】');
+    const hl = highlightNpcNames(parts, ['林月']);
+    const npc = hl.find((p) => p.kind === 'npc-name');
+    expect(npc?.italic).toBe(true);
+  });
+
+  it('name filling the entire 【】 interior splits into bracket/npc/bracket with no empty parts', () => {
+    const parts = parseInline('【林月】');
+    const hl = highlightNpcNames(parts, ['林月']);
+    expect(hl.map((p) => [p.kind, p.text])).toEqual([
+      ['environment', '【'],
+      ['npc-name', '林月'],
+      ['environment', '】'],
+    ]);
+  });
+
+  it('splits multiple name occurrences across normal and environment parts', () => {
+    const parts = parseInline('林月说：【林月的影子被灯拉长。】');
+    const hl = highlightNpcNames(parts, ['林月']);
+    expect(hl.filter((p) => p.kind === 'npc-name').length).toBe(2);
+  });
 });

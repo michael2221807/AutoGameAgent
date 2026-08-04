@@ -329,9 +329,16 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** 可注入 NPC 名高亮的片段种类。对话 " " / 内心 ` ` 刻意排除：名字在
+ *  引语内属于"被说出的话"，保持语义整色不打断（2026-08-03 决策，随
+ *  environment 高亮修复一并编码进测试）。 */
+const NPC_HIGHLIGHTABLE_KINDS: ReadonlySet<InlineKind> = new Set(['normal', 'environment']);
+
 /**
- * 在已解析的行内片段上注入 NPC 名高亮。只切分 `normal` 片段，保留其
- * bold/italic 标志位。依赖运行时 names，故独立于 parseInline 由展示层调用。
+ * 在已解析的行内片段上注入 NPC 名高亮。切分 `normal` 与 `environment`（【】
+ * 旁白）片段，保留其 bold/italic 标志位；environment 内命中的名字额外继承
+ * italic，使其贴合环境文本的斜体节奏。依赖运行时 names，故独立于
+ * parseInline 由展示层调用。
  */
 export function highlightNpcNames(parts: InlinePart[], names: string[]): InlinePart[] {
   const sorted = [...new Set(names.filter(Boolean))].sort((a, b) => b.length - a.length);
@@ -340,7 +347,7 @@ export function highlightNpcNames(parts: InlinePart[], names: string[]): InlineP
 
   const result: InlinePart[] = [];
   for (const part of parts) {
-    if (part.kind !== 'normal' || !part.text) {
+    if (!NPC_HIGHLIGHTABLE_KINDS.has(part.kind) || !part.text) {
       result.push(part);
       continue;
     }
@@ -353,7 +360,7 @@ export function highlightNpcNames(parts: InlinePart[], names: string[]): InlineP
       }
       const npc: InlinePart = { kind: 'npc-name', text: match[0] };
       if (part.bold) npc.bold = true;
-      if (part.italic) npc.italic = true;
+      if (part.italic || part.kind === 'environment') npc.italic = true;
       result.push(npc);
       lastIdx = match.index + match[0].length;
     }
