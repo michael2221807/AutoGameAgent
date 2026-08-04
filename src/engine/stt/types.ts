@@ -88,6 +88,19 @@ export const STT_CHUNK_SIZE: Record<SttLatencyProfile, [number, number, number]>
 /** 采集帧长(ms):worklet 攒够这么多 16k 单声道样本再发一帧 */
 export const STT_STREAM_FRAME_MS = 60;
 
+/**
+ * 停顿容忍(VAD 最长结束静音,ms)→ 后端握手字段 `vad_max_silence_ms`。
+ * 后端默认 800、clamp 200-10000。停顿超过此值才断句(切一句 final 并补句号)。
+ * 调大 = 边说边想的停顿不会被切;代价 = 句中自动断句的 final 更晚出(停多久才出),
+ * 但点「停止」(is_speaking:false)立即收尾、末句不受影响。仅流式生效(非流式无 VAD)。
+ */
+export type SttPauseTolerance = 'short' | 'medium' | 'long';
+export const VAD_MAX_SILENCE_MS: Record<SttPauseTolerance, number> = {
+  short: 800, // = 后端默认,一句说完就停、反应快
+  medium: 1500, // 容忍一般思考停顿
+  long: 3000, // 边说边想,停很久也不切
+};
+
 /** 流式识别回调 —— 由 UI 组件消费,驱动实时上屏。 */
 export interface SttStreamCallbacks {
   /** 连接建立、握手已发,可以开始说话。 */
@@ -124,6 +137,8 @@ export interface SttStreamConfig {
   stream?: MediaStream;
   /** 专有名词热词(FunASR `hotwords` JSON 字符串)。空/缺省 = 关闭。见 SttTranscribeOptions.hotwords。 */
   hotwords?: string;
+  /** 停顿容忍 → 握手 `vad_max_silence_ms`(ms)。>0 才传;缺省 = 后端默认。见 VAD_MAX_SILENCE_MS。 */
+  vadMaxSilenceMs?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -165,6 +180,8 @@ export interface SttSettings {
   hotwordEnabled: boolean;
   /** 偏置强度 → 权重。默认 weak(保守)。 */
   hotwordStrength: SttHotwordStrength;
+  /** 停顿容忍(仅实时听写生效)。默认 medium(比后端默认 800 更宽,治边说边想)。 */
+  pauseTolerance: SttPauseTolerance;
 }
 
 export const DEFAULT_STT_SETTINGS: SttSettings = {
@@ -174,4 +191,5 @@ export const DEFAULT_STT_SETTINGS: SttSettings = {
   firstUseHint: true,
   hotwordEnabled: true,
   hotwordStrength: 'weak',
+  pauseTolerance: 'medium',
 };

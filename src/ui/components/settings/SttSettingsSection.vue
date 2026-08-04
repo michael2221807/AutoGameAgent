@@ -14,7 +14,7 @@ import { ref, inject } from 'vue';
 import AgaToggle from '@/ui/components/shared/AgaToggle.vue';
 import { loadSttSettings, saveSttSettings } from '@/engine/stt/stt-settings';
 import { useSttLexicon } from '@/ui/composables/useSttLexicon';
-import type { SttSettings, SttInputMode, SttLatencyProfile, SttHotwordStrength } from '@/engine/stt/types';
+import type { SttSettings, SttInputMode, SttLatencyProfile, SttHotwordStrength, SttPauseTolerance } from '@/engine/stt/types';
 import type { SttService } from '@/engine/stt/stt-service';
 
 const stt = inject<SttService | undefined>('sttService', undefined);
@@ -32,6 +32,7 @@ function setEnabled(v: boolean): void { settings.value.enabled = v; commit(); }
 function setMode(mode: SttInputMode): void { settings.value.mode = mode; commit(); }
 function setLatency(lat: SttLatencyProfile): void { settings.value.latency = lat; commit(); }
 function setFirstUseHint(v: boolean): void { settings.value.firstUseHint = v; commit(); }
+function setPauseTolerance(p: SttPauseTolerance): void { settings.value.pauseTolerance = p; commit(); }
 function setHotwordEnabled(v: boolean): void { settings.value.hotwordEnabled = v; commit(); }
 function setHotwordStrength(s: SttHotwordStrength): void { settings.value.hotwordStrength = s; commit(); }
 
@@ -133,6 +134,34 @@ const mediaSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevi
             :aria-pressed="settings.latency === 'stable'"
             @click="setLatency('stable')"
           >{{ $t('stt.settings.latency.stable') }}</button>
+        </div>
+      </div>
+
+      <!-- 停顿容忍(仅实时听写):停顿多久才断句、补句号 -->
+      <div v-if="settings.mode !== 'record'" class="setting-row setting-row--indent">
+        <div class="setting-info">
+          <span class="setting-label">{{ $t('stt.settings.pause.label') }}</span>
+          <span class="setting-desc">{{ $t('stt.settings.pause.desc') }}</span>
+        </div>
+        <div class="stt-segment" role="group" :aria-label="$t('stt.settings.pause.label')">
+          <button
+            type="button" class="stt-segment__btn"
+            :class="{ 'stt-segment__btn--active': settings.pauseTolerance === 'short' }"
+            :aria-pressed="settings.pauseTolerance === 'short'"
+            @click="setPauseTolerance('short')"
+          >{{ $t('stt.settings.pause.short') }}</button>
+          <button
+            type="button" class="stt-segment__btn"
+            :class="{ 'stt-segment__btn--active': settings.pauseTolerance === 'medium' }"
+            :aria-pressed="settings.pauseTolerance === 'medium'"
+            @click="setPauseTolerance('medium')"
+          >{{ $t('stt.settings.pause.medium') }}</button>
+          <button
+            type="button" class="stt-segment__btn"
+            :class="{ 'stt-segment__btn--active': settings.pauseTolerance === 'long' }"
+            :aria-pressed="settings.pauseTolerance === 'long'"
+            @click="setPauseTolerance('long')"
+          >{{ $t('stt.settings.pause.long') }}</button>
         </div>
       </div>
 

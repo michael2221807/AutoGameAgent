@@ -60,6 +60,14 @@ describe('buildHandshake', () => {
     expect('hotwords' in buildHandshake('balanced', true, '   ')).toBe(false);
     expect(buildHandshake('balanced', true, '{"韩素琴":20}').hotwords).toBe('{"韩素琴":20}');
   });
+  it('omits vad_max_silence_ms when unset/non-positive, includes (rounded) when > 0', () => {
+    expect('vad_max_silence_ms' in buildHandshake('balanced', true)).toBe(false);
+    expect('vad_max_silence_ms' in buildHandshake('balanced', true, '', 0)).toBe(false);
+    expect('vad_max_silence_ms' in buildHandshake('balanced', true, '', -5)).toBe(false);
+    expect('vad_max_silence_ms' in buildHandshake('balanced', true, '', NaN)).toBe(false);
+    expect(buildHandshake('balanced', true, '', 3000).vad_max_silence_ms).toBe(3000);
+    expect(buildHandshake('balanced', true, '', 1500.7).vad_max_silence_ms).toBe(1501);
+  });
 });
 
 describe('parseStreamMessage', () => {

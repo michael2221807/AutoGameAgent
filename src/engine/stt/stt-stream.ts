@@ -35,8 +35,13 @@ export function deriveStreamUrl(baseUrl: string, path: string = DEFAULT_STT_STRE
   return `${wsBase}${p}`;
 }
 
-/** 构造握手 JSON payload。hotwords 非空时作为同级字段加入(FunASR 契约)。 */
-export function buildHandshake(latency: SttLatencyProfile = 'balanced', itn = true, hotwords?: string): Record<string, unknown> {
+/** 构造握手 JSON payload。hotwords/vad_max_silence_ms 有效时作为同级字段加入(FunASR 契约)。 */
+export function buildHandshake(
+  latency: SttLatencyProfile = 'balanced',
+  itn = true,
+  hotwords?: string,
+  vadMaxSilenceMs?: number,
+): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     mode: '2pass',
     wav_name: 'aga-mic',
@@ -47,6 +52,10 @@ export function buildHandshake(latency: SttLatencyProfile = 'balanced', itn = tr
     is_speaking: true,
   };
   if (hotwords && hotwords.trim()) payload.hotwords = hotwords;
+  // >0 才传;缺省/非正 = 后端用默认。后端另有 clamp 200-10000 兜底。
+  if (typeof vadMaxSilenceMs === 'number' && Number.isFinite(vadMaxSilenceMs) && vadMaxSilenceMs > 0) {
+    payload.vad_max_silence_ms = Math.round(vadMaxSilenceMs);
+  }
   return payload;
 }
 
@@ -203,7 +212,9 @@ class SttStreamController implements SttStreamHandle {
     }
     this.phase = 'open';
     try {
-      this.ws!.send(JSON.stringify(buildHandshake(this.config.latency ?? 'balanced', this.config.itn ?? true, this.config.hotwords)));
+      this.ws!.send(JSON.stringify(buildHandshake(
+        this.config.latency ?? 'balanced', this.config.itn ?? true, this.config.hotwords, this.config.vadMaxSilenceMs,
+      )));
     } catch (err) {
       return this.fail(err instanceof Error ? err : new Error('STREAM_HANDSHAKE_FAILED'));
     }

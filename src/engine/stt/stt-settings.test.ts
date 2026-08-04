@@ -12,14 +12,15 @@ describe('normalizeSttSettings', () => {
     expect(normalizeSttSettings({})).toEqual(DEFAULT_STT_SETTINGS);
   });
   it('keeps valid fields', () => {
-    const s = normalizeSttSettings({ enabled: false, mode: 'stream', latency: 'fast', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'strong' });
-    expect(s).toEqual({ enabled: false, mode: 'stream', latency: 'fast', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'strong' });
+    const s = normalizeSttSettings({ enabled: false, mode: 'stream', latency: 'fast', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'strong', pauseTolerance: 'long' });
+    expect(s).toEqual({ enabled: false, mode: 'stream', latency: 'fast', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'strong', pauseTolerance: 'long' });
   });
   it('rejects invalid enum values → fall back to default', () => {
-    const s = normalizeSttSettings({ mode: 'bogus', latency: 'turbo', hotwordStrength: 'nuclear' });
+    const s = normalizeSttSettings({ mode: 'bogus', latency: 'turbo', hotwordStrength: 'nuclear', pauseTolerance: 'forever' });
     expect(s.mode).toBe(DEFAULT_STT_SETTINGS.mode);
     expect(s.latency).toBe(DEFAULT_STT_SETTINGS.latency);
     expect(s.hotwordStrength).toBe(DEFAULT_STT_SETTINGS.hotwordStrength);
+    expect(s.pauseTolerance).toBe(DEFAULT_STT_SETTINGS.pauseTolerance);
   });
   it('non-boolean toggles → default', () => {
     const s = normalizeSttSettings({ enabled: 'yes', firstUseHint: 1 });
@@ -37,8 +38,8 @@ describe('load/save roundtrip', () => {
     expect(loadSttSettings()).toEqual(DEFAULT_STT_SETTINGS);
   });
   it('save then load roundtrips', () => {
-    saveSttSettings({ enabled: false, mode: 'record', latency: 'stable', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'medium' });
-    expect(loadSttSettings()).toEqual({ enabled: false, mode: 'record', latency: 'stable', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'medium' });
+    saveSttSettings({ enabled: false, mode: 'record', latency: 'stable', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'medium', pauseTolerance: 'short' });
+    expect(loadSttSettings()).toEqual({ enabled: false, mode: 'record', latency: 'stable', firstUseHint: false, hotwordEnabled: false, hotwordStrength: 'medium', pauseTolerance: 'short' });
   });
   it('save preserves unknown forward-compat keys (read-merge)', () => {
     localStorage.setItem(STT_SETTINGS_STORAGE_KEY, JSON.stringify({ futureFlag: 7 }));

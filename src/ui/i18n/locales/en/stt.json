@@ -70,6 +70,13 @@
         "balanced": "Balanced",
         "stable": "Steady"
       },
+      "pause": {
+        "label": "Pause tolerance",
+        "desc": "How long a pause before a sentence is cut & punctuated. Long = think-pauses won't split (sentence lands a bit later; Stop flushes immediately)",
+        "short": "Short",
+        "medium": "Medium",
+        "long": "Long"
+      },
       "firstUseHint": {
         "label": "First-use hint",
         "desc": "The model loads lazily (~10+s the first time); when on, shows a \"first time is slower\" hint"

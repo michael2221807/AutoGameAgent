@@ -12,13 +12,14 @@
  * 设计文档:docs/design/stt-streaming-handoff.md §5
  */
 import { DEFAULT_STT_SETTINGS } from './types';
-import type { SttSettings, SttInputMode, SttLatencyProfile, SttHotwordStrength } from './types';
+import type { SttSettings, SttInputMode, SttLatencyProfile, SttHotwordStrength, SttPauseTolerance } from './types';
 
 export const STT_SETTINGS_STORAGE_KEY = 'aga_stt_settings';
 
 const MODES: readonly SttInputMode[] = ['auto', 'stream', 'record'];
 const LATENCIES: readonly SttLatencyProfile[] = ['fast', 'balanced', 'stable'];
 const STRENGTHS: readonly SttHotwordStrength[] = ['weak', 'medium', 'strong'];
+const PAUSE_TOLERANCES: readonly SttPauseTolerance[] = ['short', 'medium', 'long'];
 
 /** 把任意来源对象归一化为完整、合法的 SttSettings(缺字段回落默认)。 */
 export function normalizeSttSettings(raw: unknown): SttSettings {
@@ -34,6 +35,9 @@ export function normalizeSttSettings(raw: unknown): SttSettings {
     hotwordStrength: STRENGTHS.includes(o.hotwordStrength as SttHotwordStrength)
       ? (o.hotwordStrength as SttHotwordStrength)
       : DEFAULT_STT_SETTINGS.hotwordStrength,
+    pauseTolerance: PAUSE_TOLERANCES.includes(o.pauseTolerance as SttPauseTolerance)
+      ? (o.pauseTolerance as SttPauseTolerance)
+      : DEFAULT_STT_SETTINGS.pauseTolerance,
   };
 }
 

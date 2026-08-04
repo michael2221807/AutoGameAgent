@@ -22,6 +22,7 @@ import { loadSttSettings } from '@/engine/stt/stt-settings';
 import { useAPIManagementStore } from '@/engine/stores/engine-api';
 import { useSttLexicon } from '@/ui/composables/useSttLexicon';
 import type { SttService } from '@/engine/stt/stt-service';
+import { VAD_MAX_SILENCE_MS } from '@/engine/stt/types';
 import type { SttStreamHandle, SttLatencyProfile } from '@/engine/stt/types';
 
 const props = withDefaults(defineProps<{
@@ -40,8 +41,9 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const stt = inject<SttService | undefined>('sttService', undefined);
 const lexicon = useSttLexicon();
-// 本次录音的热词快照(开录时组装,流式握手 + 录音转写共用)。
+// 本次录音的快照(开录时定;流式握手用)。热词:偏置关或无词 → ''。停顿容忍:映射自设置。
 let sessionHotwords = '';
+let sessionVadMs = 0;
 
 // ── 可见性(gated,响应设置 + API 配置变化) ──
 // enabled 响应设置开关(经 aga:stt-settings-changed 刷新);sttConfigured 直接读
@@ -150,6 +152,7 @@ async function start(): Promise<void> {
   state.value = 'listening';
   const s = loadSttSettings();
   sessionHotwords = lexicon.getHotwords(); // 专有名词热词快照(偏置关或无词 → '')
+  sessionVadMs = VAD_MAX_SILENCE_MS[s.pauseTolerance]; // 停顿容忍 → vad_max_silence_ms(仅流式用)
   captureAnchor();
   emit('recording-change', true);
   const useStream = s.mode === 'stream' || (s.mode === 'auto' && stt.isStreamReady());
@@ -174,7 +177,7 @@ function startStream(latency: SttLatencyProfile, session: number): void {
     onLevel: (l) => { if (isCurrent(session)) pushLevel(l); },
     onError: (err) => { if (isCurrent(session)) showStreamErrorToast(err); }, // 只弹提示;清理归 onClose(reviewer #5)
     onClose: () => finalizeStream(session),
-  }, { latency, hotwords: sessionHotwords });
+  }, { latency, hotwords: sessionHotwords, vadMaxSilenceMs: sessionVadMs });
   if (!handle) {
     // 无可用流式配置 → 回落录音转写
     stopTimer();

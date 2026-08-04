@@ -81,12 +81,15 @@ export class SttService {
    */
   startStream(
     callbacks: SttStreamCallbacks,
-    options?: { latency?: SttLatencyProfile; stream?: MediaStream; hotwords?: string },
+    options?: { latency?: SttLatencyProfile; stream?: MediaStream; hotwords?: string; vadMaxSilenceMs?: number },
   ): SttStreamHandle | null {
     const url = this.getStreamUrl();
     if (!url) return null;
     return openSttStream(
-      { url, latency: options?.latency, itn: true, stream: options?.stream, hotwords: options?.hotwords },
+      {
+        url, latency: options?.latency, itn: true, stream: options?.stream,
+        hotwords: options?.hotwords, vadMaxSilenceMs: options?.vadMaxSilenceMs,
+      },
       callbacks,
     );
   }
