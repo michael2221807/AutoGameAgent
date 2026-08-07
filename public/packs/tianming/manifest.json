@@ -40,7 +40,7 @@
     "cot-preamble", "cot-masquerade", "cot-judge", "cot-opening", "cot-no-thinking-guard",
     "bodyPolish", "npcMemorySummary", "presencePartition",
     "perspectiveFirst", "perspectiveSecond", "perspectiveThird",
-    "writeStyle", "emotionGuard", "noControl", "narrativeConstraints", "wordCountReq",
+    "writeStyle", "antiCliche", "emotionGuard", "noControl", "narrativeConstraints", "wordCountReq",
     "storyStyleGeneral", "storyStyleHarem", "storyStylePureLove",
     "storyStyleCultivation", "storyStyleShura", "storyStyleNtlHarem",
     "imageCharacterTokenizer", "imageSceneTokenizer", "imageSceneJudge",

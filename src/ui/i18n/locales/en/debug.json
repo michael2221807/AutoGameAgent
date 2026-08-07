@@ -238,6 +238,7 @@
   "promptAssembly.builder.npcAway": "Absent Characters",
   "promptAssembly.builder.otherPrompts": "Narrative Rules",
   "promptAssembly.builder.writeStyle": "Writing Style",
+  "promptAssembly.builder.writeAntiCliche": "Anti-Slop",
   "promptAssembly.builder.writeEmotionGuard": "Emotion Guard",
   "promptAssembly.builder.writeNoControl": "NoControl",
   "promptAssembly.builder.perspectivePrompt": "Narrative Perspective",

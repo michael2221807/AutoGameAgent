@@ -87,6 +87,13 @@ export const BUILTIN_SLOTS: Record<string, BuiltinSlotDefinition> = {
     description: '叙事文风指导（画面感、节奏、措辞风格）',
     defaultPromptId: 'writeStyle',
   },
+  write_anti_cliche: {
+    id: 'write_anti_cliche',
+    title: '反八股文',
+    category: '主剧情',
+    description: '禁止 AI 腔陈词滥调（句式套路、空洞排比、段尾升华、意象通胀）',
+    defaultPromptId: 'antiCliche',
+  },
   write_emotion_guard: {
     id: 'write_emotion_guard',
     title: '避免极端情绪',

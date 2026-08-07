@@ -36,6 +36,7 @@
   "slot.main_cot_judge.title": "Judgement CoT Protocol",
   "slot.cot_masquerade.title": "CoT Masquerade History",
   "slot.write_style.title": "Writing Style",
+  "slot.write_anti_cliche.title": "Anti-Slop",
   "slot.write_emotion_guard.title": "Extreme Emotion Guard",
   "slot.write_no_control.title": "No Player Control",
   "slot.narrative_constraints.title": "Narrative Constraints",

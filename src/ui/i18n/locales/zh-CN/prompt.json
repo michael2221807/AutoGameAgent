@@ -112,6 +112,7 @@
   "prompt.display.perspectiveSecond": "写作·第二人称",
   "prompt.display.perspectiveThird": "写作·第三人称",
   "prompt.display.writeStyle": "写作·文风指导",
+  "prompt.display.antiCliche": "写作·反八股文",
   "prompt.display.emotionGuard": "写作·避免极端情绪",
   "prompt.display.noControl": "写作·禁止操控玩家 (NoControl)",
   "prompt.display.narrativeConstraints": "写作·叙事总约束",

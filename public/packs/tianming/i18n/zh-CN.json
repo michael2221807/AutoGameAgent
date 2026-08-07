@@ -36,6 +36,7 @@
   "slot.main_cot_judge.title": "判定 COT 协议",
   "slot.cot_masquerade.title": "COT 伪装历史消息",
   "slot.write_style.title": "写作文风",
+  "slot.write_anti_cliche.title": "反八股文",
   "slot.write_emotion_guard.title": "避免极端情绪",
   "slot.write_no_control.title": "禁止操控玩家",
   "slot.narrative_constraints.title": "叙事总约束",

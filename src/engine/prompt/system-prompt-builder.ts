@@ -52,6 +52,7 @@ export const GPROXY_CACHE_MAGIC_STRING =
 export const GPROXY_CACHE_STATIC_PIECE_IDS: ReadonlySet<string> = new Set([
   'ai_role',
   'write_style',
+  'write_anti_cliche',
   'write_emotion_guard',
   'write_no_control',
   'perspective_prompt',
@@ -380,6 +381,7 @@ export function buildSystemPrompt(params: SystemPromptBuildParams): SystemPrompt
 
   // ── 5b. Writing prompts (style, emotion guard, noControl) ──
   push('write_style', '写作文风', '系统', 'system', slot('write_style'));
+  push('write_anti_cliche', '反八股文', '系统', 'system', slot('write_anti_cliche'));
   push('write_emotion_guard', '避免极端情绪', '系统', 'system', slot('write_emotion_guard'));
   if (settings.enableNoControl) {
     push('write_no_control', '禁止操控玩家', '系统', 'system', slot('write_no_control'));

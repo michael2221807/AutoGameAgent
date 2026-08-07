@@ -214,6 +214,7 @@ const BUILDER_I18N_MAP: Record<string, string> = {
   ai_role: 'promptAssembly.builder.aiRole', world_prompt: 'promptAssembly.builder.worldPrompt',
   world_map: 'promptAssembly.builder.worldMap', npc_away: 'promptAssembly.builder.npcAway',
   other_prompts: 'promptAssembly.builder.otherPrompts', write_style: 'promptAssembly.builder.writeStyle',
+  write_anti_cliche: 'promptAssembly.builder.writeAntiCliche',
   write_emotion_guard: 'promptAssembly.builder.writeEmotionGuard', write_no_control: 'promptAssembly.builder.writeNoControl',
   perspective_prompt: 'promptAssembly.builder.perspectivePrompt', length_prompt: 'promptAssembly.builder.lengthPrompt',
   memory_long: 'promptAssembly.builder.memoryLong', memory_mid: 'promptAssembly.builder.memoryMid',

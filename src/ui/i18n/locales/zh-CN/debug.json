@@ -238,6 +238,7 @@
   "promptAssembly.builder.npcAway": "不在场角色",
   "promptAssembly.builder.otherPrompts": "叙事规则",
   "promptAssembly.builder.writeStyle": "写作文风",
+  "promptAssembly.builder.writeAntiCliche": "反八股文",
   "promptAssembly.builder.writeEmotionGuard": "情绪约束",
   "promptAssembly.builder.writeNoControl": "NoControl",
   "promptAssembly.builder.perspectivePrompt": "叙事人称",

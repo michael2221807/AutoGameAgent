@@ -132,8 +132,8 @@ describe('applyGproxyCacheReorder', () => {
   it('static id set includes exactly the intended pieces', () => {
     expect([...GPROXY_CACHE_STATIC_PIECE_IDS].sort()).toEqual(
       ['ai_role', 'cot_core', 'cot_judge', 'format_prompt', 'length_prompt',
-       'narrative_constraints', 'perspective_prompt', 'write_emotion_guard',
-       'write_no_control', 'write_style'].sort(),
+       'narrative_constraints', 'perspective_prompt', 'write_anti_cliche',
+       'write_emotion_guard', 'write_no_control', 'write_style'].sort(),
     );
   });
 
@@ -163,7 +163,7 @@ describe('buildSystemPrompt — gproxyCache gating (control toggle)', () => {
     return buildSystemPrompt({
       stateManager: sm as unknown as StateManager,
       paths: DEFAULT_ENGINE_PATHS,
-      packPrompts: { narratorFrame: 'ROLE', writeStyle: 'STYLE', mainRound: 'FORMAT' },
+      packPrompts: { narratorFrame: 'ROLE', writeStyle: 'STYLE', antiCliche: 'ANTI', mainRound: 'FORMAT' },
       builtinOverrides: [],
       worldBooks: [],
       userInput: 'hello',
@@ -175,6 +175,18 @@ describe('buildSystemPrompt — gproxyCache gating (control toggle)', () => {
       gproxyCache,
     }).messageEntries;
   };
+
+  it('consumes the antiCliche pack prompt as the write_anti_cliche piece (slot → builder wiring)', () => {
+    // Anti-slop preset (2026-08-06): pack prompt `antiCliche` must surface as a
+    // system message via the write_anti_cliche slot, positioned after write_style.
+    const entries = build(false);
+    const anti = entries.find((e) => e.id === 'write_anti_cliche');
+    expect(anti).toBeDefined();
+    expect(anti!.role).toBe('system');
+    expect(anti!.content).toBe('ANTI');
+    const styleIdx = entries.findIndex((e) => e.id === 'write_style');
+    expect(entries.findIndex((e) => e.id === 'write_anti_cliche')).toBe(styleIdx + 1);
+  });
 
   it('OFF (default behavior): no magic string; static format_prompt still trails volatile state_role', () => {
     const off = build(false);

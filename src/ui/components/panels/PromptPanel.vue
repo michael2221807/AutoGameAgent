@@ -253,6 +253,7 @@ const PROMPT_DISPLAY_KEY_MAP: Record<string, string> = {
   perspectiveSecond: 'prompt.display.perspectiveSecond',
   perspectiveThird: 'prompt.display.perspectiveThird',
   writeStyle: 'prompt.display.writeStyle',
+  antiCliche: 'prompt.display.antiCliche',
   emotionGuard: 'prompt.display.emotionGuard',
   noControl: 'prompt.display.noControl',
   narrativeConstraints: 'prompt.display.narrativeConstraints',
